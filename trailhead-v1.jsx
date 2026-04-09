@@ -9000,6 +9000,90 @@ function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotificatio
   const [convoyInviteInput, setConvoyInviteInput] = useState("");
   const convoyPhotoRef = useRef(null);
   const [recovery, setRecovery] = useState({ title: "", vehicle: "", description: "", urgency: "HIGH", location: "", coords: "" });
+  const convoyPinMapInst = useRef(null);
+
+  // Google Places Autocomplete for convoy meeting point
+  useEffect(() => {
+    if (postType !== "convoy") return;
+    if (convoyPin && !showPinMap) return; // pin is set and not editing — input not visible
+    if (convoyPinAutocompleteRef.current) return;
+    let cancelled = false;
+    const tryAttach = () => {
+      if (cancelled) return;
+      if (!window.google || !window.google.maps || !window.google.maps.places || !convoyPinInputRef.current) {
+        setTimeout(tryAttach, 300);
+        return;
+      }
+      const ac = new window.google.maps.places.Autocomplete(convoyPinInputRef.current, { fields: ["geometry", "formatted_address", "name"] });
+      convoyPinAutocompleteRef.current = ac;
+      ac.addListener("place_changed", () => {
+        const place = ac.getPlace();
+        if (place && place.geometry && place.geometry.location) {
+          const lat = place.geometry.location.lat();
+          const lng = place.geometry.location.lng();
+          const label = place.name ? `${place.name} — ${place.formatted_address}` : place.formatted_address;
+          setConvoyPin({ lat, lng, label });
+          setShowPinMap(false);
+          if (convoyPinInputRef.current) convoyPinInputRef.current.value = "";
+        }
+      });
+    };
+    setTimeout(tryAttach, 100); // slight delay so DOM mounts the input ref
+    return () => { cancelled = true; };
+  }, [postType, convoyPin, showPinMap]);
+
+  // Init convoy pin map when shown
+  useEffect(() => {
+    if (!showPinMap || !convoyPinMapRef.current) return;
+    if (convoyPinMapInst.current) return;
+    const tryInit = () => {
+      if (!window.google || !window.google.maps) { setTimeout(tryInit, 300); return; }
+      const center = convoyPin ? { lat: convoyPin.lat, lng: convoyPin.lng } : { lat: 39.5, lng: -111.0 };
+      const zoom = convoyPin ? 14 : 5;
+      const map = new window.google.maps.Map(convoyPinMapRef.current, {
+        center, zoom,
+        disableDefaultUI: true,
+        zoomControl: true,
+        gestureHandling: "greedy",
+        styles: [
+          { elementType: "geometry", stylers: [{ color: "#1d1d1d" }] },
+          { elementType: "labels.text.fill", stylers: [{ color: "#999" }] },
+          { elementType: "labels.text.stroke", stylers: [{ color: "#1d1d1d" }] },
+          { featureType: "road", elementType: "geometry", stylers: [{ color: "#333" }] },
+          { featureType: "water", elementType: "geometry", stylers: [{ color: "#0e1626" }] },
+          { featureType: "poi", stylers: [{ visibility: "off" }] },
+        ],
+      });
+      convoyPinMapInst.current = map;
+      if (convoyPin) {
+        convoyPinMarkerRef.current = new window.google.maps.Marker({
+          position: { lat: convoyPin.lat, lng: convoyPin.lng },
+          map,
+          icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 12, fillColor: T.green, fillOpacity: 1, strokeColor: T.white, strokeWeight: 2 },
+        });
+      }
+      map.addListener("click", (e) => {
+        const lat = e.latLng.lat();
+        const lng = e.latLng.lng();
+        const geocoder = new window.google.maps.Geocoder();
+        geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+          const label = status === "OK" && results[0] ? results[0].formatted_address : `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+          setConvoyPin({ lat, lng, label });
+          if (convoyPinMarkerRef.current) {
+            convoyPinMarkerRef.current.setPosition({ lat, lng });
+          } else {
+            convoyPinMarkerRef.current = new window.google.maps.Marker({
+              position: { lat, lng },
+              map,
+              icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 12, fillColor: T.green, fillOpacity: 1, strokeColor: T.white, strokeWeight: 2 },
+            });
+          }
+        });
+      });
+    };
+    tryInit();
+    return () => { convoyPinMapInst.current = null; };
+  }, [showPinMap]);
 
   const inputStyle = {
     width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 8,
@@ -9407,101 +9491,35 @@ function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotificatio
                       <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>{convoyPin.label || "Meeting Point"}</span>
                       <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, display: "block" }}>{convoyPin.lat.toFixed(5)}, {convoyPin.lng.toFixed(5)}</span>
                     </div>
-                    <button onClick={() => { setShowPinMap(true); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }} title="Edit pin">
+                    <button onClick={() => { convoyPinMapInst.current = null; setShowPinMap(true); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }} title="Edit pin">
                       <Edit3 size={14} color={T.copper} />
                     </button>
-                    <button onClick={() => setConvoyPin(null)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+                    <button onClick={() => { setConvoyPin(null); convoyPinAutocompleteRef.current = null; }} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
                       <X size={14} color={T.tertiary} />
                     </button>
                   </div>
                 </div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {/* Google Places Autocomplete search */}
+                  {/* Google Places Autocomplete search — bound via useEffect */}
                   <div style={{ position: "relative" }}>
                     <Search size={14} color={T.tertiary} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", zIndex: 2 }} />
                     <input
                       ref={convoyPinInputRef}
                       placeholder="Search Google Maps for a place..."
                       style={{ ...inputStyle, paddingLeft: 34 }}
-                      onFocus={(e) => {
-                        e.target.style.borderColor = T.copper;
-                        // Attach Google Places Autocomplete once
-                        if (window.google && window.google.maps && window.google.maps.places && !convoyPinAutocompleteRef.current) {
-                          const ac = new window.google.maps.places.Autocomplete(e.target, { fields: ["geometry", "formatted_address", "name"] });
-                          convoyPinAutocompleteRef.current = ac;
-                          ac.addListener("place_changed", () => {
-                            const place = ac.getPlace();
-                            if (place && place.geometry && place.geometry.location) {
-                              const lat = place.geometry.location.lat();
-                              const lng = place.geometry.location.lng();
-                              const label = place.name ? `${place.name} — ${place.formatted_address}` : place.formatted_address;
-                              setConvoyPin({ lat, lng, label });
-                              setShowPinMap(false);
-                              if (convoyPinInputRef.current) convoyPinInputRef.current.value = "";
-                            }
-                          });
-                        }
-                      }}
+                      onFocus={(e) => e.target.style.borderColor = T.copper}
                       onBlur={(e) => e.target.style.borderColor = T.charcoal}
                     />
                   </div>
-                  {/* Tap-to-pin map */}
-                  <button onClick={() => setShowPinMap(!showPinMap)} style={{ width: "100%", padding: "10px", borderRadius: 8, background: T.darkCard, border: `1px dashed ${showPinMap ? T.copper : T.charcoal}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                  {/* Tap-to-pin map toggle */}
+                  <button onClick={() => { convoyPinMapInst.current = null; setShowPinMap(!showPinMap); }} style={{ width: "100%", padding: "10px", borderRadius: 8, background: T.darkCard, border: `1px dashed ${showPinMap ? T.copper : T.charcoal}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
                     <Map size={14} color={T.copper} />
                     <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600 }}>{showPinMap ? "HIDE MAP" : "DROP PIN ON MAP"}</span>
                   </button>
                   {showPinMap && (
                     <div style={{ borderRadius: 10, overflow: "hidden", border: `1px solid ${T.charcoal}`, position: "relative" }}>
-                      <div ref={convoyPinMapRef} style={{ width: "100%", height: 220 }} />
-                      {/* Init map */}
-                      {(() => {
-                        if (convoyPinMapRef.current && window.google && !convoyPinMapRef.current._mapInit) {
-                          convoyPinMapRef.current._mapInit = true;
-                          const center = convoyPin ? { lat: convoyPin.lat, lng: convoyPin.lng } : { lat: 39.5, lng: -111.0 };
-                          const zoom = convoyPin ? 14 : 5;
-                          const map = new window.google.maps.Map(convoyPinMapRef.current, {
-                            center, zoom,
-                            disableDefaultUI: true,
-                            zoomControl: true,
-                            styles: [
-                              { elementType: "geometry", stylers: [{ color: "#1d1d1d" }] },
-                              { elementType: "labels.text.fill", stylers: [{ color: "#999" }] },
-                              { elementType: "labels.text.stroke", stylers: [{ color: "#1d1d1d" }] },
-                              { featureType: "road", elementType: "geometry", stylers: [{ color: "#333" }] },
-                              { featureType: "water", elementType: "geometry", stylers: [{ color: "#0e1626" }] },
-                            ],
-                          });
-                          if (convoyPin) {
-                            convoyPinMarkerRef.current = new window.google.maps.Marker({
-                              position: { lat: convoyPin.lat, lng: convoyPin.lng },
-                              map,
-                              icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 12, fillColor: T.green, fillOpacity: 1, strokeColor: T.white, strokeWeight: 2 },
-                            });
-                          }
-                          map.addListener("click", (e) => {
-                            const lat = e.latLng.lat();
-                            const lng = e.latLng.lng();
-                            // Reverse geocode
-                            const geocoder = new window.google.maps.Geocoder();
-                            geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-                              const label = status === "OK" && results[0] ? results[0].formatted_address : `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-                              setConvoyPin({ lat, lng, label });
-                              // Update marker
-                              if (convoyPinMarkerRef.current) {
-                                convoyPinMarkerRef.current.setPosition({ lat, lng });
-                              } else {
-                                convoyPinMarkerRef.current = new window.google.maps.Marker({
-                                  position: { lat, lng },
-                                  map,
-                                  icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 12, fillColor: T.green, fillOpacity: 1, strokeColor: T.white, strokeWeight: 2 },
-                                });
-                              }
-                            });
-                          });
-                        }
-                        return null;
-                      })()}
+                      <div ref={convoyPinMapRef} style={{ width: "100%", height: 250 }} />
                       <div style={{ position: "absolute", bottom: 8, left: 8, right: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <span style={{ fontFamily: sans, fontSize: 10, color: T.white, background: `${T.darkBg}CC`, padding: "4px 10px", borderRadius: 6 }}>Tap map to drop pin</span>
                         {convoyPin && (
