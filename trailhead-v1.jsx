@@ -4608,8 +4608,9 @@ function RoutePinMap({ pins, setPins, linkingPhotoIdx, onLinkPin, onRoutePoints 
       markersRef.current.push(marker);
     });
 
-    // Route polyline: use Directions API for road-snapping when >= 2 non-photo pins
-    const routePins = pins.filter(p => !p.photo);
+    // Route polyline: use Directions API for road-snapping when >= 2 route pins
+    // Pins with photos linked to them are still route pins — only exclude photo-only pins (from GPS camera capture)
+    const routePins = pins.filter(p => !p.isPhotoOnly);
     if (routePins.length >= 2 && dirServiceRef.current && dirRendererRef.current) {
       // Hide simple polyline, use directions renderer
       if (polyRef.current) polyRef.current.setPath([]);
@@ -4641,16 +4642,17 @@ function RoutePinMap({ pins, setPins, linkingPhotoIdx, onLinkPin, onRoutePoints 
           // Fallback to straight polyline if directions fail
           dirRendererRef.current.setDirections({ routes: [] });
           if (polyRef.current) {
-            polyRef.current.setPath(pins.map(p => ({ lat: p.lat, lng: p.lng })));
+            polyRef.current.setPath(routePins.map(p => ({ lat: p.lat, lng: p.lng })));
           }
           onRoutePoints && onRoutePoints([]);
         }
       });
     } else {
-      // Less than 2 pins or only photo pins — use simple polyline
+      // Less than 2 route pins — use simple polyline
       if (dirRendererRef.current) dirRendererRef.current.setDirections({ routes: [] });
       if (polyRef.current) {
-        polyRef.current.setPath(pins.map(p => ({ lat: p.lat, lng: p.lng })));
+        const linePins = pins.filter(p => !p.isPhotoOnly);
+        polyRef.current.setPath(linePins.map(p => ({ lat: p.lat, lng: p.lng })));
       }
     }
   }, [pins, ready, linkingPhotoIdx]);
@@ -4779,7 +4781,7 @@ function RouteDetailsForm({ autoStats, onBack, onPublish, isManual, initialPhoto
           const photo = { url: ev.target.result, name: file.name, type: "image", ...(gps || {}) };
           setRoutePhotos(prev => [...prev, photo]);
           if (gps) {
-            setPins(prev => [...prev, { lat: gps.lat, lng: gps.lng, photo: ev.target.result, label: file.name }]);
+            setPins(prev => [...prev, { lat: gps.lat, lng: gps.lng, photo: ev.target.result, label: file.name, isPhotoOnly: true }]);
           }
         };
         photoReader.readAsDataURL(file);
