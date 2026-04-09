@@ -4496,19 +4496,11 @@ function RouteRecorder({ onClose, onSave }) {
                 <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>PAUSE</span>
               </button>
             )}
-            <input ref={recCamRef} type="file" accept="image/*,video/*" capture="environment" onChange={handleRecPhoto} style={{ display: "none" }} />
             {/* Waypoint button */}
             <button onClick={addWaypoint} style={{ padding: "14px 18px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.copper}40`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
               <MapPin size={16} color={T.copper} />
               {routeWaypoints.length > 0 && (
                 <span style={{ position: "absolute", top: -4, right: -4, width: 16, height: 16, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: sans, fontSize: 9, color: T.white, fontWeight: 700 }}>{routeWaypoints.length}</span>
-              )}
-            </button>
-            {/* Camera button */}
-            <button onClick={() => recCamRef.current && recCamRef.current.click()} style={{ padding: "14px 18px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
-              <Camera size={16} color={T.white} />
-              {routePhotos.length > 0 && (
-                <span style={{ position: "absolute", top: -4, right: -4, width: 16, height: 16, borderRadius: "50%", background: T.green, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: sans, fontSize: 9, color: T.white, fontWeight: 700 }}>{routePhotos.length}</span>
               )}
             </button>
             {/* Stop button */}
