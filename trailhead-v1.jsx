@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
-import { Heart, MessageCircle, MapPin, Clock, Mountain, ChevronRight, ChevronLeft, ChevronDown, Search, Plus, Home, Compass, Map, Wrench, Trophy, AlertTriangle, Navigation, Star, Share2, Bookmark, MoreHorizontal, ArrowUp, Users, Radio, CloudSun, CheckCircle, Target, Gift, ChevronUp, ExternalLink, Lock, Globe, Shield, UserPlus, UserCheck, Settings, Camera, Eye, EyeOff, X, Bell, ThumbsUp, UserPlus as UserPlusIcon, AtSign, Mail, Send, Image, Smartphone, Trash2, Edit3, Award, Zap, TrendingUp, Flame, DollarSign, Route, Video, Play } from "lucide-react";
+import { Heart, MessageCircle, MapPin, Clock, Mountain, ChevronRight, ChevronLeft, ChevronDown, Search, Plus, Home, Compass, Map, Wrench, Trophy, AlertTriangle, Navigation, Star, Share2, Bookmark, MoreHorizontal, ArrowUp, Users, Radio, CloudSun, CheckCircle, Target, Gift, ChevronUp, ExternalLink, Lock, Globe, Shield, UserPlus, UserCheck, Settings, Camera, Eye, EyeOff, X, Bell, ThumbsUp, UserPlus as UserPlusIcon, AtSign, Mail, Send, Image, Smartphone, Trash2, Edit3, Award, Zap, TrendingUp, Flame, DollarSign, Route, Video, Play, Maximize2, Minimize2 } from "lucide-react";
 
 /* ─── Design Tokens from Lone Peak Concept ─── */
 const T = {
@@ -1487,6 +1487,8 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, 
   const [expandedBuildPost, setExpandedBuildPost] = useState(null);
   const [expandedRoutePost, setExpandedRoutePost] = useState(null);
   const [routeShareMenu, setRouteShareMenu] = useState(null); // item.id when share/save dropdown open
+  const [fullscreenMapItem, setFullscreenMapItem] = useState(null); // route item for fullscreen map
+  const [highlightedPinIdx, setHighlightedPinIdx] = useState(null); // pin index to highlight when photo clicked
   const [carouselImages, setCarouselImages] = useState(null);
   const [carouselIndex, setCarouselIndex] = useState(0);
 
@@ -1821,7 +1823,11 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, 
       const rdiffColor = (d) => d === "Expert" ? T.red : d === "Hard" ? T.copper : d === "Moderate" ? T.tertiary : T.green;
       return (
         <div key={item.id} style={cardStyle}>
-          <div onClick={() => setExpandedRoutePost(isRouteExp ? null : item.id)} style={{ height: 160, background: T.charcoal, position: "relative", cursor: "pointer", overflow: "hidden" }}>
+          <div onClick={() => {
+            const hasMap = (item.pins && item.pins.length > 0) || (item.points && item.points.length > 0);
+            if (hasMap) { setFullscreenMapItem(item); setHighlightedPinIdx(null); }
+            else { setExpandedRoutePost(isRouteExp ? null : item.id); }
+          }} style={{ height: 160, background: T.charcoal, position: "relative", cursor: "pointer", overflow: "hidden" }}>
             {/* Show live map if route has pins/points, otherwise fallback */}
             {((item.pins && item.pins.length > 0) || (item.points && item.points.length > 0)) ? (
               <RouteMapPreview pins={item.pins} points={item.points} photos={item.photos} />
@@ -1835,8 +1841,9 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, 
                 <span style={{ fontFamily: sans, fontSize: 9, color: T.warmBg, letterSpacing: 1, fontWeight: 600 }}>{item.badge}</span>
               </div>
             )}
-            <div style={{ position: "absolute", top: 12, left: 12, zIndex: 5 }}>
-              <ChevronDown size={14} color={T.white} style={{ transform: isRouteExp ? "rotate(180deg)" : "none", transition: "transform 0.2s", filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.6))" }} />
+            <div style={{ position: "absolute", top: 12, left: 12, zIndex: 5, display: "flex", alignItems: "center", gap: 4, background: `${T.darkBg}80`, padding: "4px 8px", borderRadius: 6, backdropFilter: "blur(4px)" }}>
+              <Maximize2 size={12} color={T.white} style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.6))" }} />
+              <span style={{ fontFamily: sans, fontSize: 8, color: T.white, letterSpacing: 0.5, fontWeight: 600 }}>VIEW MAP</span>
             </div>
             <div style={{ position: "absolute", bottom: 10, left: 10, display: "flex", alignItems: "center", gap: 6, background: `${T.darkBg}CC`, padding: "5px 10px 5px 5px", borderRadius: 20, zIndex: 5, backdropFilter: "blur(4px)" }}>
               <div style={{ width: 22, height: 22, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -1863,9 +1870,15 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, 
               {/* Map preview */}
               {((item.pins && item.pins.length > 0) || (item.points && item.points.length > 0)) && (
                 <div style={{ marginBottom: 12 }}>
-                  <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>ROUTE MAP</span>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                    <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600 }}>ROUTE MAP</span>
+                    <button onClick={() => { setFullscreenMapItem(item); setHighlightedPinIdx(null); }} style={{ background: `${T.charcoal}`, border: `1px solid ${T.tertiary}30`, borderRadius: 6, padding: "4px 8px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+                      <Maximize2 size={10} color={T.copper} />
+                      <span style={{ fontFamily: sans, fontSize: 8, color: T.copper, fontWeight: 600, letterSpacing: 0.5 }}>FULL SCREEN</span>
+                    </button>
+                  </div>
                   <div style={{ width: "100%", height: 180, borderRadius: 10, overflow: "hidden", position: "relative", background: T.charcoal }}>
-                    <RouteMapPreview pins={item.pins} points={item.points} photos={item.photos} />
+                    <RouteMapPreview pins={item.pins} points={item.points} photos={item.photos} highlightedPinIdx={highlightedPinIdx} />
                   </div>
                 </div>
               )}
@@ -1911,16 +1924,47 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, 
                   </div>
                 </div>
               )}
-              {/* Photos / Videos */}
+              {/* Photos / Videos — click photo to highlight pin on map */}
               {item.photos && item.photos.length > 0 && (
                 <div style={{ marginBottom: 12 }}>
-                  <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>MEDIA</span>
+                  <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>MEDIA — TAP TO LOCATE ON MAP</span>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     {item.photos.map((p, pi) => {
                       const url = p.url || p;
                       const isVideo = p.type === "video";
+                      const isHighlighted = highlightedPinIdx !== null && (() => {
+                        // Find which pin this photo matches
+                        const pinList = item.pins || [];
+                        let photoCounter = 0;
+                        for (let pIdx = 0; pIdx < pinList.length; pIdx++) {
+                          if (pinList[pIdx].photo) {
+                            if (photoCounter === pi) return highlightedPinIdx === pIdx;
+                            photoCounter++;
+                          }
+                        }
+                        return false;
+                      })();
+                      // Find pin index for this photo
+                      const findPinForPhoto = () => {
+                        const pinList = item.pins || [];
+                        let photoCounter = 0;
+                        for (let pIdx = 0; pIdx < pinList.length; pIdx++) {
+                          if (pinList[pIdx].photo) {
+                            if (photoCounter === pi) return pIdx;
+                            photoCounter++;
+                          }
+                        }
+                        return null;
+                      };
                       return (
-                        <div key={pi} style={{ borderRadius: 10, overflow: "hidden", border: `1px solid ${T.charcoal}`, position: "relative" }}>
+                        <div key={pi} onClick={(e) => {
+                          if (isVideo) return; // don't interfere with video controls
+                          e.stopPropagation();
+                          const pinIdx = findPinForPhoto();
+                          if (pinIdx !== null) {
+                            setHighlightedPinIdx(prev => prev === pinIdx ? null : pinIdx);
+                          }
+                        }} style={{ borderRadius: 10, overflow: "hidden", border: `2px solid ${isHighlighted ? T.red : T.charcoal}`, position: "relative", cursor: isVideo ? "default" : "pointer", transition: "border-color 0.2s" }}>
                           {isVideo ? (
                             <div style={{ position: "relative" }}>
                               <video src={url} preload="metadata" playsInline controls style={{ width: "100%", maxHeight: 300, objectFit: "contain", display: "block", background: "#000", borderRadius: 0 }} />
@@ -1930,7 +1974,13 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, 
                               </div>
                             </div>
                           ) : (
-                            <img src={url} alt="" onClick={() => openCarousel(item.photos.filter(ph => (ph.type || "image") === "image").map(ph => ph.url || ph), 0)} style={{ width: "100%", height: 200, objectFit: "cover", display: "block", cursor: "pointer" }} />
+                            <div style={{ position: "relative" }}>
+                              <img src={url} alt="" style={{ width: "100%", height: 200, objectFit: "cover", display: "block" }} />
+                              <div style={{ position: "absolute", bottom: 8, right: 8, background: `${T.darkBg}CC`, borderRadius: 6, padding: "4px 8px", display: "flex", alignItems: "center", gap: 4, backdropFilter: "blur(4px)" }}>
+                                <MapPin size={10} color={T.copper} />
+                                <span style={{ fontFamily: sans, fontSize: 8, color: T.copper, fontWeight: 600 }}>LOCATE</span>
+                              </div>
+                            </div>
                           )}
                           {p.caption && (
                             <div style={{ padding: "6px 10px", background: T.darkCard }}>
@@ -2283,6 +2333,36 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, 
 
   return (
     <div style={{ position: "relative" }}>
+      {/* Fullscreen Route Map Overlay */}
+      {fullscreenMapItem && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 1000, background: T.darkBg, display: "flex", flexDirection: "column" }}>
+          {/* Header bar */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: T.darkCard, borderBottom: `1px solid ${T.charcoal}`, flexShrink: 0 }}>
+            <div style={{ flex: 1 }}>
+              <h3 style={{ fontFamily: serif, fontSize: 16, color: T.white, margin: 0 }}>{fullscreenMapItem.title}</h3>
+              <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+                {fullscreenMapItem.distance && <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600 }}>{fullscreenMapItem.distance}</span>}
+                {fullscreenMapItem.duration && <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600 }}>{fullscreenMapItem.duration}</span>}
+                {fullscreenMapItem.difficulty && <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{fullscreenMapItem.difficulty}</span>}
+              </div>
+            </div>
+            <button onClick={() => { setFullscreenMapItem(null); setHighlightedPinIdx(null); }} style={{ background: `${T.charcoal}`, border: `1px solid ${T.tertiary}30`, borderRadius: 8, padding: "8px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+              <Minimize2 size={14} color={T.white} />
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 600, letterSpacing: 0.5 }}>CLOSE</span>
+            </button>
+          </div>
+          {/* Map area */}
+          <div style={{ flex: 1, position: "relative" }}>
+            <RouteMapPreview pins={fullscreenMapItem.pins} points={fullscreenMapItem.points} photos={fullscreenMapItem.photos} isFullscreen={true} />
+            {/* Photo pin hint */}
+            {fullscreenMapItem.pins && fullscreenMapItem.pins.some(p => p.photo) && (
+              <div style={{ position: "absolute", bottom: 16, left: "50%", transform: "translateX(-50%)", background: `${T.darkBg}DD`, borderRadius: 20, padding: "8px 16px", backdropFilter: "blur(8px)", border: `1px solid ${T.charcoal}` }}>
+                <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600, letterSpacing: 0.5 }}>TAP PHOTO PINS TO VIEW PHOTOS</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       {/* Image Carousel */}
       {carouselImages && (
         <ImageCarousel images={carouselImages} startIndex={carouselIndex} onClose={() => setCarouselImages(null)} />
@@ -4181,15 +4261,16 @@ const rdLabel = { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpaci
 const rdStatBox = { textAlign: "center", padding: "10px 0", background: T.darkCard, borderRadius: 8 };
 
 /* ─── Route Map Preview (read-only, for expanded route cards) ─── */
-function RouteMapPreview({ pins, points, photos }) {
+function RouteMapPreview({ pins, points, photos, highlightedPinIdx, onPhotoSelect, isFullscreen }) {
   const mapRef = useRef(null);
   const mapInst = useRef(null);
   const markersRef = useRef([]);
   const polyRef = useRef(null);
-  const infoRef = useRef(null);
   const [ready, setReady] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState(null);
+  const prevHighlightRef = useRef(null);
 
+  // Build the map
   useEffect(() => {
     if ((!pins || pins.length === 0) && (!points || points.length === 0)) return;
     if (!mapRef.current) return;
@@ -4220,7 +4301,6 @@ function RouteMapPreview({ pins, points, photos }) {
       });
       map.fitBounds(bounds, 30);
       mapInst.current = map;
-      // Build photo lookup by lat/lng for matching pins to photos
       const photoList = photos || [];
       let photoIdx = 0;
       // Draw pin markers
@@ -4241,20 +4321,35 @@ function RouteMapPreview({ pins, points, photos }) {
             label: isPhoto ? { text: "\uD83D\uDCF7", fontSize: "12px" } : null,
             zIndex: isPhoto ? 100 : 10,
           });
+          // Store pin index on marker for highlight matching
+          marker._pinIdx = i;
+          marker._isPhoto = isPhoto;
           // Match photo pin to a photo from the photos array
           if (isPhoto && photoList.length > 0) {
-            // Find matching photo by lat/lng proximity or use sequential index
             let matchedPhoto = null;
-            const pPhoto = photoList.find(ph => ph.lat && ph.lng && Math.abs(ph.lat - p.lat) < 0.0005 && Math.abs(ph.lng - p.lng) < 0.0005);
+            let matchedPhotoIdx = -1;
+            const pPhoto = photoList.find((ph, phIdx) => {
+              if (ph.lat && ph.lng && Math.abs(ph.lat - p.lat) < 0.0005 && Math.abs(ph.lng - p.lng) < 0.0005) {
+                matchedPhotoIdx = phIdx;
+                return true;
+              }
+              return false;
+            });
             if (pPhoto) {
               matchedPhoto = pPhoto.url || pPhoto;
             } else if (photoIdx < photoList.length) {
               matchedPhoto = photoList[photoIdx].url || photoList[photoIdx];
+              matchedPhotoIdx = photoIdx;
               photoIdx++;
             }
             if (matchedPhoto) {
+              marker._photoUrl = matchedPhoto;
+              marker._photoIdx = matchedPhotoIdx;
               marker.addListener("click", () => {
-                setSelectedPhoto(matchedPhoto);
+                if (isFullscreen) {
+                  setSelectedPhoto(matchedPhoto);
+                }
+                if (onPhotoSelect) onPhotoSelect(matchedPhotoIdx);
               });
               marker.setCursor("pointer");
             }
@@ -4262,7 +4357,7 @@ function RouteMapPreview({ pins, points, photos }) {
           markersRef.current.push(marker);
         });
       }
-      // Draw polyline — use full GPS track if available, otherwise connect pins
+      // Draw polyline
       const polyPath = points && points.length > 1 ? points.map(p => ({ lat: p.lat, lng: p.lng })) : (pins && pins.length > 1 ? pins.map(p => ({ lat: p.lat, lng: p.lng })) : []);
       if (polyPath.length > 1) {
         polyRef.current = new window.google.maps.Polyline({
@@ -4282,17 +4377,57 @@ function RouteMapPreview({ pins, points, photos }) {
       if (polyRef.current) { polyRef.current.setMap(null); polyRef.current = null; }
       mapInst.current = null;
     };
-  }, [pins]);
+  }, [pins, isFullscreen]);
+
+  // Handle highlighted pin from photo selection (bounce + pan)
+  useEffect(() => {
+    if (!ready || !mapInst.current) return;
+    // Reset previous highlight
+    if (prevHighlightRef.current !== null) {
+      const prevMarker = markersRef.current.find(m => m._pinIdx === prevHighlightRef.current);
+      if (prevMarker) {
+        prevMarker.setAnimation(null);
+        prevMarker.setIcon({
+          path: window.google.maps.SymbolPath.CIRCLE,
+          scale: prevMarker._isPhoto ? 10 : 6,
+          fillColor: prevMarker._isPhoto ? "#4A7C59" : (prevMarker._pinIdx === 0 ? T.green : prevMarker._pinIdx === (pins || []).length - 1 ? T.red : T.copper),
+          fillOpacity: 1,
+          strokeColor: T.white,
+          strokeWeight: prevMarker._isPhoto ? 2 : 1.5,
+        });
+      }
+    }
+    if (typeof highlightedPinIdx === "number" && highlightedPinIdx >= 0) {
+      const marker = markersRef.current.find(m => m._pinIdx === highlightedPinIdx);
+      if (marker) {
+        marker.setAnimation(window.google.maps.Animation.BOUNCE);
+        marker.setIcon({
+          path: window.google.maps.SymbolPath.CIRCLE,
+          scale: 14,
+          fillColor: T.red,
+          fillOpacity: 1,
+          strokeColor: T.white,
+          strokeWeight: 3,
+        });
+        mapInst.current.panTo(marker.getPosition());
+        // Stop bounce after 2 seconds
+        setTimeout(() => { marker.setAnimation(null); }, 2000);
+      }
+      prevHighlightRef.current = highlightedPinIdx;
+    } else {
+      prevHighlightRef.current = null;
+    }
+  }, [highlightedPinIdx, ready]);
 
   if (!pins || pins.length === 0) return null;
   return (
     <>
       <div ref={mapRef} style={{ width: "100%", height: "100%" }} />
-      {selectedPhoto && (
-        <div onClick={() => setSelectedPhoto(null)} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, cursor: "pointer", borderRadius: 10 }}>
+      {selectedPhoto && isFullscreen && (
+        <div onClick={() => setSelectedPhoto(null)} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, cursor: "pointer", borderRadius: 0 }}>
           <img src={selectedPhoto} alt="" style={{ maxWidth: "90%", maxHeight: "90%", borderRadius: 10, objectFit: "contain" }} />
-          <button onClick={() => setSelectedPhoto(null)} style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,0.6)", border: "none", borderRadius: "50%", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-            <X size={14} color="#fff" />
+          <button onClick={() => setSelectedPhoto(null)} style={{ position: "absolute", top: 16, right: 16, background: "rgba(0,0,0,0.6)", border: "none", borderRadius: "50%", width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+            <X size={18} color="#fff" />
           </button>
         </div>
       )}
@@ -5027,6 +5162,8 @@ function RoutesScreen({ onRecordRoute, onManualEntry, userRoutes, onUpdateRoute,
   const [routeTab, setRouteTab] = useState("all"); // "all" or "saved"
   const [routeShareMenu, setRouteShareMenu] = useState(null);
   const [editingRoute, setEditingRoute] = useState(null); // route object being edited
+  const [fullscreenMapRoute, setFullscreenMapRoute] = useState(null);
+  const [highlightedPinIdx, setHighlightedPinIdx] = useState(null);
 
   const diffColor = (d) => d === "Expert" ? T.red : d === "Hard" ? T.copper : d === "Moderate" ? T.tertiary : T.green;
   const displayRoutes = routeTab === "saved" ? (savedRoutes || []) : routes;
@@ -5144,9 +5281,15 @@ function RoutesScreen({ onRecordRoute, onManualEntry, userRoutes, onUpdateRoute,
                   {/* Map preview */}
                   {hasMap && (
                     <div style={{ marginBottom: 12 }}>
-                      <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>ROUTE MAP</span>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                        <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600 }}>ROUTE MAP</span>
+                        <button onClick={() => { setFullscreenMapRoute({ ...r, pins: rPins, points: rPoints, photos: rPhotos }); setHighlightedPinIdx(null); }} style={{ background: T.charcoal, border: `1px solid ${T.tertiary}30`, borderRadius: 6, padding: "4px 8px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+                          <Maximize2 size={10} color={T.copper} />
+                          <span style={{ fontFamily: sans, fontSize: 8, color: T.copper, fontWeight: 600, letterSpacing: 0.5 }}>FULL SCREEN</span>
+                        </button>
+                      </div>
                       <div style={{ width: "100%", height: 180, borderRadius: 10, overflow: "hidden", position: "relative", background: T.charcoal }}>
-                        <RouteMapPreview pins={rPins} points={rPoints} photos={rPhotos} />
+                        <RouteMapPreview pins={rPins} points={rPoints} photos={rPhotos} highlightedPinIdx={highlightedPinIdx} />
                       </div>
                     </div>
                   )}
@@ -5179,14 +5322,35 @@ function RoutesScreen({ onRecordRoute, onManualEntry, userRoutes, onUpdateRoute,
                       </div>
                     </div>
                   )}
-                  {/* Photos */}
+                  {/* Photos — tap to locate on map */}
                   {rPhotos.length > 0 && (
                     <div style={{ marginBottom: 12 }}>
-                      <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>PHOTOS</span>
+                      <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>PHOTOS — TAP TO LOCATE ON MAP</span>
                       <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
-                        {rPhotos.map((p, pi) => (
-                          <img key={pi} src={p.url || p} alt="" style={{ width: 80, height: 80, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
-                        ))}
+                        {rPhotos.map((p, pi) => {
+                          const findPinForPhoto = () => {
+                            let photoCounter = 0;
+                            for (let pIdx = 0; pIdx < rPins.length; pIdx++) {
+                              if (rPins[pIdx].photo) {
+                                if (photoCounter === pi) return pIdx;
+                                photoCounter++;
+                              }
+                            }
+                            return null;
+                          };
+                          const pinIdx = findPinForPhoto();
+                          const isHL = highlightedPinIdx !== null && highlightedPinIdx === pinIdx;
+                          return (
+                            <div key={pi} onClick={() => { if (pinIdx !== null) setHighlightedPinIdx(prev => prev === pinIdx ? null : pinIdx); }} style={{ position: "relative", flexShrink: 0, cursor: pinIdx !== null ? "pointer" : "default", borderRadius: 8, overflow: "hidden", border: `2px solid ${isHL ? T.red : "transparent"}`, transition: "border-color 0.2s" }}>
+                              <img src={p.url || p} alt="" style={{ width: 80, height: 80, objectFit: "cover", display: "block" }} />
+                              {pinIdx !== null && (
+                                <div style={{ position: "absolute", bottom: 2, right: 2, background: `${T.darkBg}CC`, borderRadius: 4, padding: "2px 4px" }}>
+                                  <MapPin size={8} color={T.copper} />
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -5257,6 +5421,33 @@ function RoutesScreen({ onRecordRoute, onManualEntry, userRoutes, onUpdateRoute,
           })}
         </div>
       </div>
+      {/* Fullscreen Route Map Overlay */}
+      {fullscreenMapRoute && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 1000, background: T.darkBg, display: "flex", flexDirection: "column" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: T.darkCard, borderBottom: `1px solid ${T.charcoal}`, flexShrink: 0 }}>
+            <div style={{ flex: 1 }}>
+              <h3 style={{ fontFamily: serif, fontSize: 16, color: T.white, margin: 0 }}>{fullscreenMapRoute.name || fullscreenMapRoute.title}</h3>
+              <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+                {fullscreenMapRoute.distance && <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600 }}>{fullscreenMapRoute.distance}</span>}
+                {(fullscreenMapRoute.time || fullscreenMapRoute.duration) && <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600 }}>{fullscreenMapRoute.time || fullscreenMapRoute.duration}</span>}
+                {fullscreenMapRoute.difficulty && <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{fullscreenMapRoute.difficulty}</span>}
+              </div>
+            </div>
+            <button onClick={() => { setFullscreenMapRoute(null); setHighlightedPinIdx(null); }} style={{ background: T.charcoal, border: `1px solid ${T.tertiary}30`, borderRadius: 8, padding: "8px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+              <Minimize2 size={14} color={T.white} />
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 600, letterSpacing: 0.5 }}>CLOSE</span>
+            </button>
+          </div>
+          <div style={{ flex: 1, position: "relative" }}>
+            <RouteMapPreview pins={fullscreenMapRoute.pins} points={fullscreenMapRoute.points} photos={fullscreenMapRoute.photos} isFullscreen={true} />
+            {fullscreenMapRoute.pins && fullscreenMapRoute.pins.some(p => p.photo) && (
+              <div style={{ position: "absolute", bottom: 16, left: "50%", transform: "translateX(-50%)", background: `${T.darkBg}DD`, borderRadius: 20, padding: "8px 16px", backdropFilter: "blur(8px)", border: `1px solid ${T.charcoal}` }}>
+                <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600, letterSpacing: 0.5 }}>TAP PHOTO PINS TO VIEW PHOTOS</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       {/* Edit Route overlay */}
       {editingRoute && (
         <RouteDetailsForm
@@ -6780,6 +6971,39 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp })
   );
 }
 
+/* ─── Mod Field Photo (extracted to avoid hook-count mismatch) ─── */
+function ModFieldPhoto({ mod, setMod }) {
+  const fRef = useRef(null);
+  const handleF = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    if (fRef.current) fRef.current.value = "";
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setMod({ ...mod, photo: [{ id: Date.now(), url: ev.target.result, name: file.name }] });
+    };
+    reader.readAsDataURL(file);
+  };
+  return (
+    <>
+      <input ref={fRef} type="file" accept="image/*" onChange={handleF} style={{ display: "none" }} />
+      {mod.photo.length > 0 ? (
+        <div style={{ position: "relative", flexShrink: 0 }}>
+          <img src={mod.photo[0].url} alt="" style={{ width: 52, height: 52, borderRadius: 6, objectFit: "cover", display: "block", border: `1px solid ${T.charcoal}` }} />
+          <button onClick={() => setMod({ ...mod, photo: [] })} style={{ position: "absolute", top: -5, right: -5, width: 18, height: 18, borderRadius: "50%", background: T.red, border: `2px solid ${T.darkBg}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+            <X size={8} color={T.white} />
+          </button>
+        </div>
+      ) : (
+        <button onClick={() => fRef.current && fRef.current.click()} style={{ width: 52, height: 52, borderRadius: 6, background: T.darkCard, border: `1px dashed ${T.charcoal}`, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, flexShrink: 0, padding: 0 }}>
+          <Camera size={14} color={T.tertiary} />
+          <span style={{ fontFamily: sans, fontSize: 7, color: T.tertiary, letterSpacing: 0.3 }}>PHOTO</span>
+        </button>
+      )}
+    </>
+  );
+}
+
 /* ─── ADD BUILD FORM ─── */
 function AddBuildForm({ onClose, onSave, initialData }) {
   const d = initialData || {};
@@ -6831,39 +7055,6 @@ function AddBuildForm({ onClose, onSave, initialData }) {
       )}
     </div>
   );
-
-  // Mod field with photo + link
-  const ModFieldPhoto = ({ mod, setMod }) => {
-    const fRef = useRef(null);
-    const handleF = (e) => {
-      const file = e.target.files && e.target.files[0];
-      if (!file) return;
-      if (fRef.current) fRef.current.value = "";
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        setMod({ ...mod, photo: [{ id: Date.now(), url: ev.target.result, name: file.name }] });
-      };
-      reader.readAsDataURL(file);
-    };
-    return (
-      <>
-        <input ref={fRef} type="file" accept="image/*" onChange={handleF} style={{ display: "none" }} />
-        {mod.photo.length > 0 ? (
-          <div style={{ position: "relative", flexShrink: 0 }}>
-            <img src={mod.photo[0].url} alt="" style={{ width: 52, height: 52, borderRadius: 6, objectFit: "cover", display: "block", border: `1px solid ${T.charcoal}` }} />
-            <button onClick={() => setMod({ ...mod, photo: [] })} style={{ position: "absolute", top: -5, right: -5, width: 18, height: 18, borderRadius: "50%", background: T.red, border: `2px solid ${T.darkBg}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
-              <X size={8} color={T.white} />
-            </button>
-          </div>
-        ) : (
-          <button onClick={() => fRef.current && fRef.current.click()} style={{ width: 52, height: 52, borderRadius: 6, background: T.darkCard, border: `1px dashed ${T.charcoal}`, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, flexShrink: 0, padding: 0 }}>
-            <Camera size={14} color={T.tertiary} />
-            <span style={{ fontFamily: sans, fontSize: 7, color: T.tertiary, letterSpacing: 0.3 }}>PHOTO</span>
-          </button>
-        )}
-      </>
-    );
-  };
 
   const modField = (label, mod, setMod, placeholder) => (
     <div style={{ marginBottom: 16 }}>
