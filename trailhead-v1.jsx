@@ -4535,6 +4535,7 @@ function RouteMapPreview({ pins, points, photos, highlightedPinIdx, onPhotoSelec
   const polyRef = useRef(null);
   const [ready, setReady] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState(null);
+  const [selectedWaypoint, setSelectedWaypoint] = useState(null); // { desc, photo, lat, lng }
   const prevHighlightRef = useRef(null);
 
   // Build the map
@@ -4600,6 +4601,13 @@ function RouteMapPreview({ pins, points, photos, highlightedPinIdx, onPhotoSelec
           // Store pin index on marker for highlight matching
           marker._pinIdx = i;
           marker._isPhoto = isPhoto;
+          // Waypoint click — show detail popup
+          if (isWaypoint) {
+            marker.setCursor("pointer");
+            marker.addListener("click", () => {
+              setSelectedWaypoint({ desc: p.desc || "", photo: p.photo || null, lat: p.lat, lng: p.lng });
+            });
+          }
           // Match photo pin to a photo from the photos array
           if (isPhoto && photoList.length > 0) {
             let matchedPhoto = null;
@@ -4705,6 +4713,30 @@ function RouteMapPreview({ pins, points, photos, highlightedPinIdx, onPhotoSelec
           <button onClick={() => setSelectedPhoto(null)} style={{ position: "absolute", top: 16, right: 16, background: "rgba(0,0,0,0.6)", border: "none", borderRadius: "50%", width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
             <X size={18} color="#fff" />
           </button>
+        </div>
+      )}
+      {selectedWaypoint && (
+        <div onClick={() => setSelectedWaypoint(null)} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 55, cursor: "pointer" }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: T.darkCard, borderRadius: 14, border: `1px solid ${T.copper}40`, maxWidth: 320, width: "85%", overflow: "hidden", cursor: "default" }}>
+            {selectedWaypoint.photo && (
+              <img src={selectedWaypoint.photo} alt="" style={{ width: "100%", height: 200, objectFit: "cover" }} />
+            )}
+            <div style={{ padding: "14px 16px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: selectedWaypoint.desc ? 8 : 0 }}>
+                <MapPin size={14} color={T.copper} />
+                <span style={{ fontFamily: sans, fontSize: 12, color: T.copper, fontWeight: 700, letterSpacing: 0.5 }}>WAYPOINT</span>
+              </div>
+              {selectedWaypoint.desc ? (
+                <p style={{ fontFamily: serif, fontSize: 14, color: T.white, margin: 0, lineHeight: 1.5 }}>{selectedWaypoint.desc}</p>
+              ) : !selectedWaypoint.photo ? (
+                <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, margin: 0, fontStyle: "italic" }}>No description added</p>
+              ) : null}
+              <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, marginTop: 8, display: "block" }}>{selectedWaypoint.lat.toFixed(5)}, {selectedWaypoint.lng.toFixed(5)}</span>
+            </div>
+            <button onClick={() => setSelectedWaypoint(null)} style={{ position: "absolute", top: 10, right: 10, background: "rgba(0,0,0,0.6)", border: "none", borderRadius: "50%", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+              <X size={16} color="#fff" />
+            </button>
+          </div>
         </div>
       )}
     </>
