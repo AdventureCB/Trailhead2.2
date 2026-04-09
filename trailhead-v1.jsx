@@ -1486,6 +1486,7 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, 
   const [copiedToast, setCopiedToast] = useState(false);
   const [expandedBuildPost, setExpandedBuildPost] = useState(null);
   const [expandedRoutePost, setExpandedRoutePost] = useState(null);
+  const [expandedConvoyPost, setExpandedConvoyPost] = useState(null);
   const [routeShareMenu, setRouteShareMenu] = useState(null); // item.id when share/save dropdown open
   const [fullscreenMapItem, setFullscreenMapItem] = useState(null); // route item for fullscreen map
   const [highlightedPinIdx, setHighlightedPinIdx] = useState(null); // pin index to highlight when photo clicked
@@ -2214,6 +2215,8 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, 
         const updated = feedItems.map(fi => fi.id === item.id ? { ...fi, rsvps: { ...(fi.rsvps || {}), "@KyleLPO": status } } : fi);
         onUpdateFeed(updated);
       };
+      const isConvExp = expandedConvoyPost === item.id;
+      const hasPin = item.pin && item.pin.lat != null;
       return (
         <div key={item.id} style={cardStyle}>
           {/* Convoy photos */}
@@ -2237,7 +2240,8 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, 
               </div>
             );
           })()}
-          <div style={{ padding: 16, display: "flex", gap: 14 }}>
+          {/* Compact info — tap to expand */}
+          <div onClick={() => setExpandedConvoyPost(isConvExp ? null : item.id)} style={{ padding: 16, display: "flex", gap: 14, cursor: "pointer" }}>
             <div style={{ width: 56, background: T.charcoal, borderRadius: 8, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "8px 0", flexShrink: 0 }}>
               <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1 }}>{item.month}</span>
               <span style={{ fontFamily: sans, fontSize: 28, color: T.white, fontWeight: 700 }}>{item.day}</span>
@@ -2246,58 +2250,134 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, 
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
                 <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, background: `${T.copper}20`, padding: "3px 8px", borderRadius: 4, letterSpacing: 1, fontWeight: 600 }}>CONVOY GROUP</span>
                 <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{formatPostTime(item.time)}</span>
+                <ChevronDown size={14} color={T.tertiary} style={{ marginLeft: "auto", transform: isConvExp ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
               </div>
-              <p style={{ fontFamily: serif, fontSize: 14, color: T.white, margin: "0 0 6px" }}>{item.title}</p>
-              <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 8px", lineHeight: 1.5 }}>{item.body}</p>
-              {item.location && (
-                <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 4 }}>
-                  <MapPin size={12} color={T.copper} />
-                  <span style={{ fontFamily: sans, fontSize: 11, color: T.copper }}>{item.location}</span>
-                </div>
-              )}
-              {item.pin && item.pin.label && (
-                <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 8 }}>
-                  <Target size={11} color={T.green} />
-                  <span style={{ fontFamily: sans, fontSize: 10, color: T.green }}>Meeting: {item.pin.label}</span>
-                </div>
-              )}
-              <div style={{ display: "flex", gap: 12, marginBottom: 8 }}>
+              <p style={{ fontFamily: serif, fontSize: 14, color: T.white, margin: "0 0 4px" }}>{item.title}</p>
+              {!isConvExp && item.body && <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 6px", lineHeight: 1.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.body}</p>}
+              <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
                 <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 0.5 }}>DEPARTS {item.departs}</span>
-                <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 0.5 }}>{item.slots} SLOTS LEFT</span>
+                <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 0.5 }}>{item.slots} SLOTS</span>
+                {rsvpCounts.going && <span style={{ fontFamily: sans, fontSize: 10, color: T.green, letterSpacing: 0.5 }}>{rsvpCounts.going} GOING</span>}
               </div>
-              {/* Invites */}
-              {item.invites && item.invites.length > 0 && (
-                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
-                  <Users size={12} color={T.tertiary} />
-                  <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>Invited:</span>
-                  {item.invites.map((h, idx) => (
-                    <span key={idx} onClick={() => onViewUser && onViewUser(h.replace(/^@/, ""))} style={{ fontFamily: sans, fontSize: 10, color: T.copper, cursor: "pointer" }}>@{h.replace(/^@/, "")}{idx < item.invites.length - 1 ? "," : ""}</span>
-                  ))}
-                </div>
-              )}
-              {/* RSVP counts */}
-              {(rsvpCounts.going || rsvpCounts.maybe) && (
-                <div style={{ display: "flex", gap: 10, marginBottom: 8 }}>
-                  {rsvpCounts.going && <span style={{ fontFamily: sans, fontSize: 10, color: T.green, letterSpacing: 0.5 }}>{rsvpCounts.going} GOING</span>}
-                  {rsvpCounts.maybe && <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 0.5 }}>{rsvpCounts.maybe} MAYBE</span>}
-                </div>
-              )}
-              {/* RSVP buttons */}
-              <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                {[{ label: "GOING", value: "going", color: T.green }, { label: "MAYBE", value: "maybe", color: T.copper }, { label: "CAN'T", value: "declined", color: T.tertiary }].map(opt => (
-                  <button key={opt.value} onClick={() => handleRsvp(myRsvp === opt.value ? null : opt.value)} style={{ fontFamily: sans, fontSize: 9, letterSpacing: 0.8, fontWeight: 600, padding: "5px 12px", borderRadius: 4, border: `1px solid ${myRsvp === opt.value ? opt.color : T.charcoal}`, background: myRsvp === opt.value ? `${opt.color}25` : "transparent", color: myRsvp === opt.value ? opt.color : T.tertiary, cursor: "pointer", transition: "all 0.15s" }}>
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8 }}>
                 <div style={{ width: 20, height: 20, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <span style={{ fontFamily: sans, fontSize: 8, fontWeight: 700, color: T.white }}>{item.initial}</span>
                 </div>
-                <span onClick={() => onViewUser && onViewUser(item.user.replace(/\s/g, "_"))} style={{ fontFamily: sans, fontSize: 11, color: T.white, cursor: "pointer" }}>{item.user}</span>
+                <span onClick={(e) => { e.stopPropagation(); onViewUser && onViewUser(item.user.replace(/\s/g, "_")); }} style={{ fontFamily: sans, fontSize: 11, color: T.white, cursor: "pointer" }}>{item.user}</span>
               </div>
             </div>
           </div>
+          {/* Expanded details */}
+          {isConvExp && (
+            <div style={{ borderTop: `1px solid ${T.charcoal}` }}>
+              {/* Meeting point map */}
+              {hasPin && (
+                <div style={{ height: 180 }}>
+                  <RouteMapPreview pins={[{ lat: item.pin.lat, lng: item.pin.lng }]} points={[]} photos={[]} />
+                </div>
+              )}
+              <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+                {/* Full description */}
+                {item.body && (
+                  <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, margin: 0, lineHeight: 1.6 }}>{item.body}</p>
+                )}
+                {/* Location & meeting point */}
+                {item.location && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <MapPin size={13} color={T.copper} />
+                    <span style={{ fontFamily: sans, fontSize: 12, color: T.copper }}>{item.location}</span>
+                  </div>
+                )}
+                {item.pin && item.pin.label && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <Target size={13} color={T.green} />
+                    <span style={{ fontFamily: sans, fontSize: 12, color: T.green }}>Meeting Point: {item.pin.label}</span>
+                  </div>
+                )}
+                {/* Departure & return info */}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  <div style={{ padding: "8px 12px", background: T.charcoal, borderRadius: 6 }}>
+                    <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.5, display: "block" }}>DEPARTS</span>
+                    <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600 }}>{item.month} {item.day} — {item.departs}</span>
+                  </div>
+                  {item.returnDate && (
+                    <div style={{ padding: "8px 12px", background: T.charcoal, borderRadius: 6 }}>
+                      <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.5, display: "block" }}>RETURNS</span>
+                      <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600 }}>{item.returnDate}{item.returnTime ? ` — ${item.returnTime}` : ""}</span>
+                    </div>
+                  )}
+                  <div style={{ padding: "8px 12px", background: T.charcoal, borderRadius: 6 }}>
+                    <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.5, display: "block" }}>MAX RIGS</span>
+                    <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600 }}>{item.slots}</span>
+                  </div>
+                </div>
+                {/* Invites with RSVP status */}
+                {item.invites && item.invites.length > 0 && (
+                  <div>
+                    <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>INVITED ({item.invites.length})</span>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      {item.invites.map((h, idx) => {
+                        const handle = h.replace(/^@/, "");
+                        const rsvpStatus = item.rsvps ? item.rsvps["@" + handle] : null;
+                        return (
+                          <div key={idx} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", background: T.charcoal, borderRadius: 6 }}>
+                            <div style={{ width: 24, height: 24, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                              <span style={{ fontFamily: sans, fontSize: 9, fontWeight: 700, color: T.white }}>{handle.charAt(0).toUpperCase()}</span>
+                            </div>
+                            <span onClick={(e) => { e.stopPropagation(); onViewUser && onViewUser(handle); }} style={{ fontFamily: sans, fontSize: 12, color: T.white, cursor: "pointer", flex: 1 }}>@{handle}</span>
+                            <span style={{ fontFamily: sans, fontSize: 9, fontWeight: 600, letterSpacing: 0.5, color: rsvpStatus === "going" ? T.green : rsvpStatus === "maybe" ? T.copper : rsvpStatus === "declined" ? T.tertiary : `${T.tertiary}80`, textTransform: "uppercase" }}>{rsvpStatus || "pending"}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                {/* RSVP summary */}
+                {(rsvpCounts.going || rsvpCounts.maybe || rsvpCounts.declined) && (
+                  <div style={{ display: "flex", gap: 12 }}>
+                    {rsvpCounts.going && <span style={{ fontFamily: sans, fontSize: 11, color: T.green, fontWeight: 600 }}>{rsvpCounts.going} Going</span>}
+                    {rsvpCounts.maybe && <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600 }}>{rsvpCounts.maybe} Maybe</span>}
+                    {rsvpCounts.declined && <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{rsvpCounts.declined} Can't make it</span>}
+                  </div>
+                )}
+                {/* RSVP buttons */}
+                <div style={{ display: "flex", gap: 8 }}>
+                  {[{ label: "GOING", value: "going", color: T.green }, { label: "MAYBE", value: "maybe", color: T.copper }, { label: "CAN'T", value: "declined", color: T.tertiary }].map(opt => (
+                    <button key={opt.value} onClick={(e) => { e.stopPropagation(); handleRsvp(myRsvp === opt.value ? null : opt.value); }} style={{ flex: 1, fontFamily: sans, fontSize: 10, letterSpacing: 0.8, fontWeight: 600, padding: "8px 0", borderRadius: 6, border: `1px solid ${myRsvp === opt.value ? opt.color : T.charcoal}`, background: myRsvp === opt.value ? `${opt.color}20` : "transparent", color: myRsvp === opt.value ? opt.color : T.tertiary, cursor: "pointer", transition: "all 0.15s" }}>
+                      {myRsvp === opt.value ? `\u2713 ${opt.label}` : opt.label}
+                    </button>
+                  ))}
+                </div>
+                {/* Additional photos */}
+                {item.photoUrls && item.photoUrls.length > 1 && (
+                  <div>
+                    <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>PHOTOS ({item.photoUrls.length})</span>
+                    <div style={{ display: "flex", gap: 6, overflowX: "auto" }}>
+                      {item.photoUrls.map((p, pi) => {
+                        const url = typeof p === "string" ? p : p.url;
+                        const isVid = typeof p === "object" && p.type === "video";
+                        return isVid ? (
+                          <video key={pi} src={url} preload="metadata" playsInline controls style={{ width: 120, height: 90, borderRadius: 6, objectFit: "cover", flexShrink: 0, background: "#000" }} />
+                        ) : (
+                          <img key={pi} src={url} alt="" onClick={() => openCarousel(item.photoUrls.filter(x => (typeof x === "string") || x.type !== "video").map(x => typeof x === "string" ? x : x.url), pi)} style={{ width: 120, height: 90, borderRadius: 6, objectFit: "cover", flexShrink: 0, cursor: "pointer" }} />
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          {/* Compact RSVP buttons when collapsed */}
+          {!isConvExp && (
+            <div style={{ padding: "0 16px 12px", display: "flex", gap: 8 }}>
+              {[{ label: "GOING", value: "going", color: T.green }, { label: "MAYBE", value: "maybe", color: T.copper }, { label: "CAN'T", value: "declined", color: T.tertiary }].map(opt => (
+                <button key={opt.value} onClick={() => handleRsvp(myRsvp === opt.value ? null : opt.value)} style={{ fontFamily: sans, fontSize: 9, letterSpacing: 0.8, fontWeight: 600, padding: "5px 12px", borderRadius: 4, border: `1px solid ${myRsvp === opt.value ? opt.color : T.charcoal}`, background: myRsvp === opt.value ? `${opt.color}25` : "transparent", color: myRsvp === opt.value ? opt.color : T.tertiary, cursor: "pointer", transition: "all 0.15s" }}>
+                  {myRsvp === opt.value ? `\u2713 ${opt.label}` : opt.label}
+                </button>
+              ))}
+            </div>
+          )}
           {actionBar(item)}
         </div>
       );
