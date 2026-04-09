@@ -1,3 +1,21 @@
+#!/bin/bash
+# Trailhead build script with cache busting
+# Usage: bash build.sh
+
+set -e
+
+DEPLOY_DIR="deploy-v2.2"
+HASH=$(date +%s | md5sum | head -c 8)
+BUNDLE_NAME="trailhead-bundle.${HASH}.js"
+
+# Remove old bundles
+rm -f ${DEPLOY_DIR}/trailhead-bundle.*.js
+
+# Build new bundle
+npx esbuild entry.jsx --bundle --format=iife --loader:.jsx=jsx --outfile=${DEPLOY_DIR}/${BUNDLE_NAME}
+
+# Update index.html to reference new bundle
+cat > ${DEPLOY_DIR}/index.html << HTMLEOF
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -13,7 +31,7 @@
 </style>
 <script>
 window.onerror = function(msg, url, line, col, err) {
-  document.getElementById("root").innerHTML = '<pre style="color:red;padding:20px;word-wrap:break-word;font-size:12px">ERROR: ' + msg + '\nLine: ' + line + '\n' + (err && err.stack ? err.stack : '') + '</pre>';
+  document.getElementById("root").innerHTML = '<pre style="color:red;padding:20px;word-wrap:break-word;font-size:12px">ERROR: ' + msg + '\\nLine: ' + line + '\\n' + (err && err.stack ? err.stack : '') + '</pre>';
 };
 </script>
 </head>
@@ -21,6 +39,9 @@ window.onerror = function(msg, url, line, col, err) {
 <div id="root">
   <p style="color:#999;padding:20px;font-family:sans-serif">Loading Trailhead...</p>
 </div>
-<script src="trailhead-bundle.e02dacb4.js"></script>
+<script src="${BUNDLE_NAME}"></script>
 </body>
 </html>
+HTMLEOF
+
+echo "Built: ${BUNDLE_NAME}"
