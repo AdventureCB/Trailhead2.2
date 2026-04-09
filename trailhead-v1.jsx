@@ -8196,7 +8196,7 @@ export default function Trailhead() {
         onGoToRecovery={() => { setShowRecovery(true); setProfileStack([]); }}
         onOpenMap={openMap}
         onSearch={() => setShowGlobalSearch(true)}
-        onOpenDM={() => openDM()}
+        onOpenDM={(user) => openDM(user)}
         dmUnread={dmUnreadCount}
         bellNotifs={bellNotifs}
         setBellNotifs={setBellNotifs}

@@ -26314,7 +26314,7 @@
         },
         onOpenMap: openMap,
         onSearch: () => setShowGlobalSearch(true),
-        onOpenDM: () => openDM(),
+        onOpenDM: (user) => openDM(user),
         dmUnread: dmUnreadCount,
         bellNotifs,
         setBellNotifs,
