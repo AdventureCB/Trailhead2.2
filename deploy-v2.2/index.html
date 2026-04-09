@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Trailhead</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #111111; overflow-x: hidden; }
+  #root { width: 100%; min-height: 100vh; }
+</style>
+<script>
+window.onerror = function(msg, url, line, col, err) {
+  document.getElementById("root").innerHTML = '<pre style="color:red;padding:20px;word-wrap:break-word;font-size:12px">ERROR: ' + msg + '\nLine: ' + line + '\n' + (err && err.stack ? err.stack : '') + '</pre>';
+};
+</script>
+</head>
+<body>
+<div id="root">
+  <p style="color:#999;padding:20px;font-family:sans-serif">Loading Trailhead...</p>
+</div>
+<script src="trailhead-bundle.js"></script>
+</body>
+</html>
