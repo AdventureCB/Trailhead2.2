@@ -7409,6 +7409,7 @@ function ProfileScreen({ onViewUser, onLogout, userBuilds, onAddBuild, onUpdateB
   const [editingPost, setEditingPost] = useState(null);
   const [editPostText, setEditPostText] = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+  const [tappedBadge, setTappedBadge] = useState(null);
 
   const userPosts = (feedItems || []).filter(p => p.user === "KyleLPO");
   const staticActivity = [
@@ -7727,7 +7728,6 @@ function ProfileScreen({ onViewUser, onLogout, userBuilds, onAddBuild, onUpdateB
 
         {/* Earned Badges */}
         {(() => {
-          const [tappedBadge, setTappedBadge] = React.useState(null);
           const earned = BADGE_CATEGORIES.map(cat => {
             const info = getBadgeTierForCategory(cat.name);
             if (info.tier < 0) return null;
@@ -8087,6 +8087,7 @@ function ProfileScreen({ onViewUser, onLogout, userBuilds, onAddBuild, onUpdateB
 function OtherProfileScreen({ userId, onBack, onMessage }) {
   const [followState, setFollowState] = useState("none"); // none | requested | following
   const [activeTab, setActiveTab] = useState("builds");
+  const [tappedBadge, setTappedBadge] = useState(null);
 
   // Mock different user based on userId
   const profiles = {
@@ -8180,7 +8181,6 @@ function OtherProfileScreen({ userId, onBack, onMessage }) {
 
         {/* Earned Badges */}
         {(() => {
-          const [tappedBadge, setTappedBadge] = React.useState(null);
           // Simulate other user badge progress based on their points
           const pts = p.points || 1500;
           const simBadges = BADGE_CATEGORIES.map(cat => {
