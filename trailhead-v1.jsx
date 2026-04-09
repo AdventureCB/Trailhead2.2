@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Heart, MessageCircle, MapPin, Clock, Mountain, ChevronRight, ChevronLeft, ChevronDown, Search, Plus, Home, Compass, Map, Wrench, Trophy, AlertTriangle, Navigation, Star, Share2, Bookmark, MoreHorizontal, ArrowUp, Users, Radio, CloudSun, CheckCircle, Target, Gift, ChevronUp, ExternalLink, Lock, Globe, Shield, UserPlus, UserCheck, Settings, Camera, Eye, EyeOff, X, Bell, ThumbsUp, UserPlus as UserPlusIcon, AtSign, Mail, Send, Image, Smartphone, Trash2, Edit3 } from "lucide-react";
+import { Heart, MessageCircle, MapPin, Clock, Mountain, ChevronRight, ChevronLeft, ChevronDown, Search, Plus, Home, Compass, Map, Wrench, Trophy, AlertTriangle, Navigation, Star, Share2, Bookmark, MoreHorizontal, ArrowUp, Users, Radio, CloudSun, CheckCircle, Target, Gift, ChevronUp, ExternalLink, Lock, Globe, Shield, UserPlus, UserCheck, Settings, Camera, Eye, EyeOff, X, Bell, ThumbsUp, UserPlus as UserPlusIcon, AtSign, Mail, Send, Image, Smartphone, Trash2, Edit3, Award, Zap, TrendingUp, Flame, DollarSign, Route } from "lucide-react";
 
 /* ─── Design Tokens from Lone Peak Concept ─── */
 const T = {
@@ -5371,99 +5371,470 @@ function BuildsScreen({ onViewUser, userBuilds }) {
 
 /* ─── RANKS / LEADERBOARD SCREEN ─── */
 function RanksScreen() {
-  const leaderboard = [
-    { rank: "01", name: "Sierra_Tactical", badge: "Expedition Lead", points: "48,900", isYou: false },
-    { rank: "02", name: "Nomad_Queen", badge: "Master Builder", points: "32,100", isYou: false },
-    { rank: "03", name: "Peak_Finder", badge: "Navigator", points: "28,750", isYou: false },
-    { rank: "42", name: "You", badge: "Pathfinder Rank", points: "12,450", isYou: true },
-    { rank: "43", name: "Nomad_Mike", badge: "Wilderness Guide", points: "11,200", isYou: false },
+  const [tab, setTab] = useState("overview"); // overview | leaderboard | bounty | badges
+
+  // ── Community Rank Tiers (based on total points) ──
+  const rankTiers = [
+    { name: "Scout", min: 0, max: 999, color: T.tertiary, icon: Compass },
+    { name: "Explorer", min: 1000, max: 4999, color: T.green, icon: Map },
+    { name: "Pathfinder", min: 5000, max: 14999, color: T.copper, icon: Navigation },
+    { name: "Trailblazer", min: 15000, max: 29999, color: T.copper, icon: Flame },
+    { name: "Navigator", min: 30000, max: 49999, color: "#C0A060", icon: Star },
+    { name: "Expedition Lead", min: 50000, max: 99999, color: T.red, icon: Shield },
+    { name: "Legend", min: 100000, max: Infinity, color: "#FFD700", icon: Trophy },
   ];
 
-  const missions = [
-    { title: "Share a New Route", desc: "Upload a verified GPS track with at least 3 photos and a terrain rating.", pts: "+150 PTS", expiry: "EXPIRES IN 2D", action: "START MISSION" },
-    { title: "Technical Advisor", desc: "Answer a technical question in the Gear Forum that gets marked as 'Helpful'.", pts: "+50 PTS", expiry: "DAILY TASK", action: "GO TO FORUM" },
-    { title: "Full Build Profile", desc: "Complete your vehicle build profile with a full gear list and weight measurements.", pts: "+300 PTS", expiry: "ONE-TIME BONUS", action: "UPDATE BUILD" },
+  // ── Points breakdown (automated) ──
+  const pointsConfig = {
+    dailyLogin: 5,
+    feedPost: 10,
+    forumThread: 25,
+    forumReply: 10,
+    routeLogged: 30,
+    buildAdded: 40,
+    profileComplete: 100,
+    receiveLike: 2,
+    receiveComment: 3,
+    receiveBookmark: 5,
+    convoyJoined: 20,
+    recoveryRespond: 50,
+    photoUploaded: 5,
+  };
+
+  // ── Current user stats (simulated) ──
+  const myPoints = 12450;
+  const myBountyEarnings = 124000; // cents
+  const myRank = rankTiers.find(r => myPoints >= r.min && myPoints <= r.max) || rankTiers[0];
+  const nextRank = rankTiers[rankTiers.indexOf(myRank) + 1] || null;
+  const rankProgress = nextRank ? ((myPoints - myRank.min) / (nextRank.min - myRank.min)) * 100 : 100;
+  const RankIcon = myRank.icon;
+
+  const myPointsBreakdown = [
+    { label: "Forum Threads", pts: 3750, icon: MessageCircle },
+    { label: "Routes Logged", pts: 2700, icon: Map },
+    { label: "Builds Added", pts: 2000, icon: Wrench },
+    { label: "Likes Received", pts: 1840, icon: Heart },
+    { label: "Feed Posts", pts: 1200, icon: Edit3 },
+    { label: "Daily Logins", pts: 560, icon: Zap },
+    { label: "Other", pts: 400, icon: Star },
+  ];
+
+  // ── Leaderboard ──
+  const leaderboardData = [
+    { rank: 1, name: "Sierra_Tactical", initial: "S", badge: "Expedition Lead", points: 48900, streak: 47 },
+    { rank: 2, name: "Nomad_Queen", initial: "N", badge: "Trailblazer", points: 32100, streak: 31 },
+    { rank: 3, name: "Peak_Finder", initial: "P", badge: "Navigator", points: 28750, streak: 22 },
+    { rank: 4, name: "TrailBoss_88", initial: "T", badge: "Pathfinder", points: 26200, streak: 18 },
+    { rank: 5, name: "DirtRoadDave", initial: "D", badge: "Pathfinder", points: 22800, streak: 15 },
+    { rank: 6, name: "MountainGoat", initial: "M", badge: "Pathfinder", points: 19400, streak: 12 },
+    { rank: 7, name: "FoxFanatic", initial: "F", badge: "Pathfinder", points: 17600, streak: 9 },
+    { rank: 8, name: "BajaBound", initial: "B", badge: "Explorer", points: 14200, streak: 6 },
+    { rank: 9, name: "StockHero", initial: "S", badge: "Explorer", points: 13100, streak: 11 },
+    { rank: 10, name: "LiftKing", initial: "L", badge: "Explorer", points: 12800, streak: 8 },
+    { rank: 42, name: "KyleLPO", initial: "K", badge: myRank.name, points: myPoints, isYou: true, streak: 5 },
+    { rank: 43, name: "Nomad_Mike", initial: "N", badge: "Explorer", points: 11200, streak: 3 },
+  ];
+
+  const [lbFilter, setLbFilter] = useState("ALL TIME");
+  const lbFilters = ["ALL TIME", "THIS MONTH", "THIS WEEK"];
+
+  // ── Bounty Board (admin-set, monetary value) ──
+  const bounties = [
+    { id: "b1", title: "Trail Report: Black Bear Pass", desc: "Complete a detailed route report with 10+ photos, GPS track, difficulty rating, and current trail conditions for Black Bear Pass.", reward: 7500, rewardPts: 500, category: "Route Report", difficulty: "Hard", deadline: "Apr 30, 2026", slots: 3, claimed: 1, status: "open" },
+    { id: "b2", title: "Gear Review: Recovery Boards", desc: "Write a detailed forum review comparing at least 3 recovery board brands with photos of real-world use.", reward: 5000, rewardPts: 300, category: "Gear Review", difficulty: "Medium", deadline: "May 15, 2026", slots: 5, claimed: 2, status: "open" },
+    { id: "b3", title: "Build Feature: Overland Tacoma", desc: "Create a complete build profile for your Tacoma build with full mod list, photos of each mod, and product links.", reward: 3500, rewardPts: 200, category: "Build Feature", difficulty: "Easy", deadline: "May 1, 2026", slots: 10, claimed: 7, status: "open" },
+    { id: "b4", title: "Video: Campsite Setup Walkthrough", desc: "Post a forum thread with video walkthrough of your camp setup process, including gear list and tips.", reward: 10000, rewardPts: 750, category: "Content Creation", difficulty: "Hard", deadline: "May 20, 2026", slots: 2, claimed: 0, status: "open" },
+    { id: "b5", title: "Trail Report: Rubicon Trail", desc: "Complete a detailed route report for the Rubicon Trail with obstacle descriptions and bypass info.", reward: 7500, rewardPts: 500, category: "Route Report", difficulty: "Hard", deadline: "Apr 15, 2026", slots: 3, claimed: 3, status: "completed" },
+  ];
+
+  const [bountyFilter, setBountyFilter] = useState("OPEN");
+  const [expandedBounty, setExpandedBounty] = useState(null);
+
+  // ── Activity Badges ──
+  const badgeCategories = [
+    { name: "Trail Mastery", badges: [
+      { name: "First Trail", desc: "Log your first route", icon: MapPin, earned: true, progress: 1, goal: 1 },
+      { name: "Trail Runner", desc: "Log 5 routes", icon: MapPin, earned: true, progress: 5, goal: 5 },
+      { name: "Pathmaker", desc: "Log 15 routes", icon: Route, earned: false, progress: 9, goal: 15 },
+      { name: "Trail Legend", desc: "Log 50 routes", icon: Mountain, earned: false, progress: 9, goal: 50 },
+    ]},
+    { name: "Community", badges: [
+      { name: "First Post", desc: "Create your first feed post", icon: Edit3, earned: true, progress: 1, goal: 1 },
+      { name: "Storyteller", desc: "Create 10 forum threads", icon: MessageCircle, earned: true, progress: 15, goal: 10 },
+      { name: "Helpful Hand", desc: "Get 50 likes on your posts", icon: ThumbsUp, earned: true, progress: 92, goal: 50 },
+      { name: "Community Pillar", desc: "Get 500 likes on your posts", icon: Heart, earned: false, progress: 92, goal: 500 },
+    ]},
+    { name: "Builder", badges: [
+      { name: "Garage Started", desc: "Add your first build", icon: Wrench, earned: true, progress: 1, goal: 1 },
+      { name: "Master Builder", desc: "Add 3 complete builds", icon: Wrench, earned: false, progress: 2, goal: 3 },
+      { name: "Mod Guru", desc: "Log 20 modifications", icon: Settings, earned: false, progress: 14, goal: 20 },
+    ]},
+    { name: "Explorer", badges: [
+      { name: "Daily Driver", desc: "Log in 7 days in a row", icon: Zap, earned: true, progress: 7, goal: 7 },
+      { name: "Dedicated", desc: "Log in 30 days in a row", icon: Flame, earned: false, progress: 5, goal: 30 },
+      { name: "Shutterbug", desc: "Upload 50 photos", icon: Camera, earned: false, progress: 23, goal: 50 },
+      { name: "First Responder", desc: "Respond to 5 recovery requests", icon: AlertTriangle, earned: false, progress: 2, goal: 5 },
+    ]},
+    { name: "Bounty Hunter", badges: [
+      { name: "First Bounty", desc: "Complete your first bounty", icon: Target, earned: true, progress: 1, goal: 1 },
+      { name: "Bounty Pro", desc: "Complete 5 bounties", icon: DollarSign, earned: false, progress: 3, goal: 5 },
+      { name: "Top Contributor", desc: "Earn $500 in bounties", icon: Award, earned: false, progress: 124, goal: 500 },
+    ]},
+  ];
+
+  const totalBadges = badgeCategories.reduce((sum, cat) => sum + cat.badges.length, 0);
+  const earnedBadges = badgeCategories.reduce((sum, cat) => sum + cat.badges.filter(b => b.earned).length, 0);
+
+  const diffColor = (d) => d === "Hard" ? T.red : d === "Medium" ? T.copper : T.green;
+
+  const tabs = [
+    { key: "overview", label: "My Rank", icon: Award },
+    { key: "leaderboard", label: "Leaderboard", icon: TrendingUp },
+    { key: "bounty", label: "Bounties", icon: Target },
+    { key: "badges", label: "Badges", icon: Shield },
   ];
 
   return (
     <div style={{ padding: "0 0 16px" }}>
-      {/* Rank Hero */}
-      <div style={{ padding: "24px 16px", textAlign: "center" }}>
-        <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2 }}>CURRENT STANDING</span>
-        <h1 style={{ fontFamily: sans, fontSize: 36, color: T.white, margin: "4px 0 16px", fontWeight: 700 }}>Rank #42</h1>
+      {/* ── Tab Bar ── */}
+      <div style={{ display: "flex", padding: "0 12px", gap: 2, borderBottom: `1px solid ${T.charcoal}`, marginBottom: 0 }}>
+        {tabs.map(t => {
+          const active = tab === t.key;
+          const Icon = t.icon;
+          return (
+            <button key={t.key} onClick={() => setTab(t.key)} style={{ flex: 1, padding: "12px 0 10px", background: "none", border: "none", borderBottom: active ? `2px solid ${T.red}` : "2px solid transparent", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, transition: "all 0.15s" }}>
+              <Icon size={14} color={active ? T.red : T.tertiary} strokeWidth={1.5} />
+              <span style={{ fontFamily: sans, fontSize: 9, color: active ? T.red : T.tertiary, fontWeight: 600, letterSpacing: 0.8 }}>{t.label.toUpperCase()}</span>
+            </button>
+          );
+        })}
+      </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
-          <div style={{ background: T.darkCard, borderRadius: 10, padding: 16 }}>
-            <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, display: "block", marginBottom: 4 }}>SEASON POINTS</span>
-            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: 4 }}>
-              <span style={{ fontFamily: sans, fontSize: 22, color: T.copper, fontWeight: 700 }}>12,450</span>
-              <span style={{ fontFamily: sans, fontSize: 12, color: T.tertiary }}>pts</span>
+      {/* ═══════════ OVERVIEW TAB ═══════════ */}
+      {tab === "overview" && (
+        <div>
+          {/* Rank Hero */}
+          <div style={{ padding: "24px 16px 16px", textAlign: "center" }}>
+            <div style={{ width: 72, height: 72, borderRadius: "50%", background: `${myRank.color}18`, border: `2px solid ${myRank.color}`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
+              <RankIcon size={30} color={myRank.color} strokeWidth={1.5} />
             </div>
-          </div>
-          <div style={{ background: T.darkCard, borderRadius: 10, padding: 16, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-            <CheckCircle size={18} color={T.copper} strokeWidth={1.5} style={{ marginBottom: 4 }} />
-            <span style={{ fontFamily: sans, fontSize: 12, color: T.copper, fontWeight: 600 }}>Verified Badge</span>
-          </div>
-        </div>
-      </div>
+            <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, display: "block", marginBottom: 4 }}>COMMUNITY RANK</span>
+            <h1 style={{ fontFamily: sans, fontSize: 26, color: myRank.color, margin: "0 0 4px", fontWeight: 700 }}>{myRank.name}</h1>
+            <span style={{ fontFamily: serif, fontSize: 13, color: T.tertiary }}>#{42} Global Ranking</span>
 
-      {/* Credit Card */}
-      <div style={{ padding: "0 16px 16px" }}>
-        <div style={{ background: `linear-gradient(135deg, ${T.copper}, ${T.tertiary})`, borderRadius: 16, padding: 24 }}>
-          <span style={{ fontFamily: sans, fontSize: 12, color: T.white, letterSpacing: 1, opacity: 0.8 }}>Available Credit</span>
-          <h2 style={{ fontFamily: sans, fontSize: 32, color: T.white, margin: "4px 0 16px", fontWeight: 700 }}>$1,240.00</h2>
-          <button style={{ background: T.charcoal, color: T.white, fontFamily: sans, fontSize: 12, fontWeight: 600, padding: "10px 24px", borderRadius: 6, border: "none", cursor: "pointer", letterSpacing: 1 }}>Redeem Credit</button>
-        </div>
-      </div>
-
-      {/* Global Ranks */}
-      <div style={{ padding: "0 16px 16px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 600 }}>Global Ranks</span>
-          <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, background: T.darkCard, padding: "4px 10px", borderRadius: 12, letterSpacing: 1 }}>Season 04</span>
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {leaderboard.map((r, i) => (
-            <div key={i} style={{ background: r.isYou ? `${T.red}15` : T.darkCard, borderRadius: 10, padding: "12px 16px", display: "flex", alignItems: "center", gap: 14, border: r.isYou ? `1px solid ${T.red}30` : "1px solid transparent" }}>
-              <span style={{ fontFamily: sans, fontSize: 18, color: r.rank === "01" ? T.copper : r.isYou ? T.red : T.white, fontWeight: 700, width: 28 }}>{r.rank}</span>
-              <div style={{ width: 36, height: 36, borderRadius: "50%", background: r.isYou ? T.red : T.charcoal, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <span style={{ fontFamily: sans, fontSize: 12, fontWeight: 700, color: T.white }}>{r.name[0]}</span>
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ fontFamily: sans, fontSize: 13, color: r.isYou ? T.red : T.white, fontWeight: 600, display: "block" }}>{r.name}</span>
-                <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{r.badge}</span>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <span style={{ fontFamily: sans, fontSize: 14, color: T.copper, fontWeight: 600, display: "block" }}>{r.points}</span>
-                <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>Points</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Active Missions */}
-      <div style={{ padding: "0 16px" }}>
-        <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 12 }}>ACTIVE MISSIONS</span>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {missions.map((m, i) => (
-            <div key={i} style={{ ...cardStyle, padding: 16 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                <div style={{ width: 32, height: 32, borderRadius: 8, background: i === 2 ? `${T.red}15` : T.warmBg + "15", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <Target size={16} color={i === 2 ? T.red : T.tertiary} />
+            {/* Progress to next rank */}
+            {nextRank && (
+              <div style={{ marginTop: 16, padding: "0 12px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                  <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.5 }}>{myPoints.toLocaleString()} pts</span>
+                  <span style={{ fontFamily: sans, fontSize: 10, color: nextRank.color, letterSpacing: 0.5 }}>{nextRank.name} — {nextRank.min.toLocaleString()} pts</span>
                 </div>
-                <span style={{ fontFamily: sans, fontSize: 12, color: T.red, fontWeight: 700 }}>{m.pts}</span>
+                <div style={{ height: 6, background: T.charcoal, borderRadius: 3, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${rankProgress}%`, background: `linear-gradient(90deg, ${myRank.color}, ${nextRank.color})`, borderRadius: 3, transition: "width 0.5s ease" }} />
+                </div>
+                <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, display: "block", marginTop: 4 }}>{(nextRank.min - myPoints).toLocaleString()} pts to next rank</span>
               </div>
-              <h3 style={{ fontFamily: sans, fontSize: 17, color: T.white, margin: "0 0 6px", fontWeight: 600 }}>{m.title}</h3>
-              <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "0 0 12px", lineHeight: 1.5 }}>{m.desc}</p>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1 }}>{m.expiry}</span>
-                <button style={{ fontFamily: sans, fontSize: 10, color: T.charcoal, background: T.warmBg, padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", letterSpacing: 1, fontWeight: 600 }}>{m.action}</button>
+            )}
+          </div>
+
+          {/* Stats Grid */}
+          <div style={{ padding: "0 16px 16px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+            <div style={{ background: T.darkCard, borderRadius: 10, padding: "14px 10px", textAlign: "center" }}>
+              <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block", marginBottom: 4 }}>TOTAL POINTS</span>
+              <span style={{ fontFamily: sans, fontSize: 20, color: T.copper, fontWeight: 700 }}>{myPoints.toLocaleString()}</span>
+            </div>
+            <div style={{ background: T.darkCard, borderRadius: 10, padding: "14px 10px", textAlign: "center" }}>
+              <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block", marginBottom: 4 }}>BADGES</span>
+              <span style={{ fontFamily: sans, fontSize: 20, color: T.green, fontWeight: 700 }}>{earnedBadges}/{totalBadges}</span>
+            </div>
+            <div style={{ background: T.darkCard, borderRadius: 10, padding: "14px 10px", textAlign: "center" }}>
+              <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block", marginBottom: 4 }}>STREAK</span>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 3 }}>
+                <Flame size={14} color={T.red} />
+                <span style={{ fontFamily: sans, fontSize: 20, color: T.red, fontWeight: 700 }}>5</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Bounty Credit Card */}
+          <div style={{ padding: "0 16px 16px" }}>
+            <div style={{ background: `linear-gradient(135deg, ${T.charcoal}, #333330)`, borderRadius: 14, padding: "20px 20px", border: `1px solid ${T.copper}30`, position: "relative", overflow: "hidden" }}>
+              <div style={{ position: "absolute", top: -20, right: -20, width: 100, height: 100, borderRadius: "50%", background: `${T.copper}08` }} />
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                <DollarSign size={14} color={T.copper} />
+                <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.5, fontWeight: 600 }}>BOUNTY EARNINGS</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginBottom: 4 }}>
+                <span style={{ fontFamily: sans, fontSize: 28, color: T.white, fontWeight: 700 }}>${(myBountyEarnings / 100).toFixed(2)}</span>
+                <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>available</span>
+              </div>
+              <span style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, display: "block", marginBottom: 14 }}>Earned from completed bounty board tasks</span>
+              <button style={{ background: T.copper, color: T.charcoal, fontFamily: sans, fontSize: 11, fontWeight: 700, padding: "10px 24px", borderRadius: 6, border: "none", cursor: "pointer", letterSpacing: 1 }}>REDEEM CREDIT</button>
+            </div>
+          </div>
+
+          {/* Points Breakdown */}
+          <div style={{ padding: "0 16px 16px" }}>
+            <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 12 }}>POINTS BREAKDOWN</span>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {myPointsBreakdown.map((bp, i) => {
+                const pct = (bp.pts / myPoints) * 100;
+                const BpIcon = bp.icon;
+                return (
+                  <div key={i} style={{ background: T.darkCard, borderRadius: 8, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+                    <BpIcon size={14} color={T.copper} strokeWidth={1.5} />
+                    <span style={{ fontFamily: sans, fontSize: 12, color: T.white, flex: 1 }}>{bp.label}</span>
+                    <div style={{ width: 80, height: 4, background: T.charcoal, borderRadius: 2, overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${pct}%`, background: T.copper, borderRadius: 2 }} />
+                    </div>
+                    <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600, width: 50, textAlign: "right" }}>{bp.pts.toLocaleString()}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* How Points Work */}
+          <div style={{ padding: "0 16px" }}>
+            <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 12 }}>HOW TO EARN POINTS</span>
+            <div style={{ background: T.darkCard, borderRadius: 10, overflow: "hidden" }}>
+              {[
+                { action: "Daily Login", pts: pointsConfig.dailyLogin },
+                { action: "Feed Post", pts: pointsConfig.feedPost },
+                { action: "Forum Thread", pts: pointsConfig.forumThread },
+                { action: "Forum Reply", pts: pointsConfig.forumReply },
+                { action: "Log a Route", pts: pointsConfig.routeLogged },
+                { action: "Add a Build", pts: pointsConfig.buildAdded },
+                { action: "Complete Profile", pts: pointsConfig.profileComplete },
+                { action: "Receive a Like", pts: pointsConfig.receiveLike },
+                { action: "Receive a Comment", pts: pointsConfig.receiveComment },
+                { action: "Upload a Photo", pts: pointsConfig.photoUploaded },
+                { action: "Recovery Response", pts: pointsConfig.recoveryRespond },
+              ].map((item, i, arr) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderBottom: i < arr.length - 1 ? `1px solid ${T.charcoal}44` : "none" }}>
+                  <span style={{ fontFamily: sans, fontSize: 12, color: T.white }}>{item.action}</span>
+                  <span style={{ fontFamily: sans, fontSize: 12, color: T.green, fontWeight: 600 }}>+{item.pts} pts</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Rank Tiers */}
+          <div style={{ padding: "16px 16px 0" }}>
+            <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 12 }}>COMMUNITY RANK TIERS</span>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {rankTiers.map((tier, i) => {
+                const TierIcon = tier.icon;
+                const isCurrent = tier.name === myRank.name;
+                return (
+                  <div key={i} style={{ background: isCurrent ? `${tier.color}12` : T.darkCard, borderRadius: 8, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, border: isCurrent ? `1px solid ${tier.color}30` : "1px solid transparent" }}>
+                    <TierIcon size={16} color={tier.color} strokeWidth={1.5} />
+                    <span style={{ fontFamily: sans, fontSize: 13, color: isCurrent ? tier.color : T.white, fontWeight: isCurrent ? 700 : 500, flex: 1 }}>{tier.name}</span>
+                    <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{tier.max === Infinity ? `${tier.min.toLocaleString()}+` : `${tier.min.toLocaleString()} – ${tier.max.toLocaleString()}`}</span>
+                    {isCurrent && <span style={{ fontFamily: sans, fontSize: 8, color: tier.color, background: `${tier.color}20`, padding: "2px 6px", borderRadius: 4, fontWeight: 700, letterSpacing: 0.5 }}>YOU</span>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════ LEADERBOARD TAB ═══════════ */}
+      {tab === "leaderboard" && (
+        <div>
+          {/* Filter */}
+          <div style={{ display: "flex", gap: 6, padding: "14px 16px 10px" }}>
+            {lbFilters.map(f => (
+              <button key={f} onClick={() => setLbFilter(f)} style={{ padding: "6px 12px", borderRadius: 14, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 10, fontWeight: 600, letterSpacing: 0.5, background: lbFilter === f ? T.red : T.darkCard, color: lbFilter === f ? T.white : T.tertiary, transition: "all 0.15s" }}>{f}</button>
+            ))}
+          </div>
+
+          {/* Top 3 Podium */}
+          <div style={{ display: "flex", justifyContent: "center", alignItems: "flex-end", gap: 8, padding: "8px 16px 20px" }}>
+            {[leaderboardData[1], leaderboardData[0], leaderboardData[2]].map((u, i) => {
+              const podiumOrder = [2, 1, 3];
+              const heights = [90, 110, 75];
+              const medalColors = ["#C0C0C0", "#FFD700", "#CD7F32"];
+              return (
+                <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center" }}>
+                  <div style={{ width: i === 1 ? 52 : 44, height: i === 1 ? 52 : 44, borderRadius: "50%", background: T.charcoal, border: `2px solid ${medalColors[i]}`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 6 }}>
+                    <span style={{ fontFamily: sans, fontSize: i === 1 ? 16 : 14, fontWeight: 700, color: T.white }}>{u.initial}</span>
+                  </div>
+                  <span style={{ fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 600, marginBottom: 2, textAlign: "center" }}>{u.name.length > 12 ? u.name.slice(0, 11) + "…" : u.name}</span>
+                  <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600, marginBottom: 6 }}>{u.points.toLocaleString()}</span>
+                  <div style={{ width: "100%", height: heights[i], borderRadius: "10px 10px 0 0", background: `linear-gradient(180deg, ${medalColors[i]}30, ${medalColors[i]}08)`, display: "flex", alignItems: "center", justifyContent: "center", border: `1px solid ${medalColors[i]}30`, borderBottom: "none" }}>
+                    <span style={{ fontFamily: sans, fontSize: 22, fontWeight: 700, color: medalColors[i] }}>#{podiumOrder[i]}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Full List */}
+          <div style={{ padding: "0 16px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {leaderboardData.map((r, i) => {
+                const userRank = rankTiers.find(t => r.points >= t.min && r.points <= t.max) || rankTiers[0];
+                return (
+                  <div key={i} style={{ background: r.isYou ? `${T.red}12` : T.darkCard, borderRadius: 10, padding: "11px 14px", display: "flex", alignItems: "center", gap: 12, border: r.isYou ? `1px solid ${T.red}25` : "1px solid transparent" }}>
+                    <span style={{ fontFamily: sans, fontSize: 14, color: r.rank <= 3 ? "#FFD700" : r.isYou ? T.red : T.tertiary, fontWeight: 700, width: 26, textAlign: "center" }}>{r.rank}</span>
+                    <div style={{ width: 34, height: 34, borderRadius: "50%", background: r.isYou ? T.red : T.charcoal, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <span style={{ fontFamily: sans, fontSize: 12, fontWeight: 700, color: T.white }}>{r.initial}</span>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ fontFamily: sans, fontSize: 13, color: r.isYou ? T.red : T.white, fontWeight: 600, display: "block" }}>{r.isYou ? "You" : r.name}</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontFamily: sans, fontSize: 10, color: userRank.color }}>{userRank.name}</span>
+                        {r.streak >= 7 && <span style={{ display: "flex", alignItems: "center", gap: 2 }}><Flame size={9} color={T.red} /><span style={{ fontFamily: sans, fontSize: 9, color: T.red }}>{r.streak}d</span></span>}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <span style={{ fontFamily: sans, fontSize: 14, color: T.copper, fontWeight: 600, display: "block" }}>{r.points.toLocaleString()}</span>
+                      <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>pts</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════ BOUNTY BOARD TAB ═══════════ */}
+      {tab === "bounty" && (
+        <div>
+          {/* Header */}
+          <div style={{ padding: "16px 16px 8px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+              <Target size={18} color={T.red} />
+              <h2 style={{ fontFamily: sans, fontSize: 18, color: T.white, margin: 0, fontWeight: 700 }}>Bounty Board</h2>
+            </div>
+            <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: 0, lineHeight: 1.5 }}>Complete bounties to earn cash credit and bonus points. All submissions are reviewed by admins before rewards are issued.</p>
+          </div>
+
+          {/* Filter */}
+          <div style={{ display: "flex", gap: 6, padding: "10px 16px" }}>
+            {["OPEN", "COMPLETED", "ALL"].map(f => (
+              <button key={f} onClick={() => setBountyFilter(f)} style={{ padding: "6px 12px", borderRadius: 14, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 10, fontWeight: 600, letterSpacing: 0.5, background: bountyFilter === f ? T.red : T.darkCard, color: bountyFilter === f ? T.white : T.tertiary }}>{f}</button>
+            ))}
+          </div>
+
+          {/* Bounty Cards */}
+          <div style={{ padding: "0 16px", display: "flex", flexDirection: "column", gap: 8 }}>
+            {bounties.filter(b => bountyFilter === "ALL" ? true : bountyFilter === "OPEN" ? b.status === "open" : b.status === "completed").map(b => {
+              const expanded = expandedBounty === b.id;
+              const slotsLeft = b.slots - b.claimed;
+              return (
+                <div key={b.id} onClick={() => setExpandedBounty(expanded ? null : b.id)} style={{ background: T.darkCard, borderRadius: 12, overflow: "hidden", cursor: "pointer", border: b.status === "completed" ? `1px solid ${T.green}20` : `1px solid ${T.charcoal}` }}>
+                  <div style={{ padding: "14px 16px" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: diffColor(b.difficulty), padding: "2px 7px", borderRadius: 3, letterSpacing: 0.5, fontWeight: 600 }}>{b.difficulty.toUpperCase()}</span>
+                        <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, background: `${T.charcoal}`, padding: "2px 7px", borderRadius: 3, letterSpacing: 0.5 }}>{b.category.toUpperCase()}</span>
+                      </div>
+                      {b.status === "completed" ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <CheckCircle size={12} color={T.green} />
+                          <span style={{ fontFamily: sans, fontSize: 9, color: T.green, fontWeight: 600 }}>COMPLETED</span>
+                        </div>
+                      ) : (
+                        <span style={{ fontFamily: sans, fontSize: 9, color: slotsLeft <= 1 ? T.red : T.tertiary, fontWeight: 600 }}>{slotsLeft} SLOT{slotsLeft !== 1 ? "S" : ""} LEFT</span>
+                      )}
+                    </div>
+                    <h3 style={{ fontFamily: sans, fontSize: 15, color: T.white, margin: "0 0 6px", fontWeight: 600 }}>{b.title}</h3>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <DollarSign size={13} color={T.green} />
+                        <span style={{ fontFamily: sans, fontSize: 14, color: T.green, fontWeight: 700 }}>${(b.reward / 100).toFixed(0)}</span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <Zap size={12} color={T.copper} />
+                        <span style={{ fontFamily: sans, fontSize: 12, color: T.copper, fontWeight: 600 }}>+{b.rewardPts} pts</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Expanded Details */}
+                  {expanded && (
+                    <div style={{ padding: "0 16px 14px", borderTop: `1px solid ${T.charcoal}44` }}>
+                      <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "12px 0", lineHeight: 1.6 }}>{b.desc}</p>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <Clock size={11} color={T.tertiary} />
+                          <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>Due {b.deadline}</span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <Users size={11} color={T.tertiary} />
+                          <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{b.claimed}/{b.slots} claimed</span>
+                        </div>
+                      </div>
+                      {b.status === "open" && slotsLeft > 0 && (
+                        <button onClick={(e) => e.stopPropagation()} style={{ width: "100%", padding: "12px", background: T.red, color: T.white, fontFamily: sans, fontSize: 12, fontWeight: 700, borderRadius: 8, border: "none", cursor: "pointer", letterSpacing: 1 }}>CLAIM BOUNTY</button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════ BADGES TAB ═══════════ */}
+      {tab === "badges" && (
+        <div>
+          {/* Summary */}
+          <div style={{ padding: "16px 16px 8px", textAlign: "center" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 4 }}>
+              <Shield size={18} color={T.copper} />
+              <span style={{ fontFamily: sans, fontSize: 22, color: T.white, fontWeight: 700 }}>{earnedBadges}</span>
+              <span style={{ fontFamily: sans, fontSize: 14, color: T.tertiary }}>/ {totalBadges} Badges Earned</span>
+            </div>
+            <div style={{ width: "60%", height: 6, background: T.charcoal, borderRadius: 3, overflow: "hidden", margin: "8px auto 0" }}>
+              <div style={{ height: "100%", width: `${(earnedBadges / totalBadges) * 100}%`, background: T.copper, borderRadius: 3 }} />
+            </div>
+          </div>
+
+          {/* Badge Categories */}
+          {badgeCategories.map((cat, ci) => (
+            <div key={ci} style={{ padding: "12px 16px 4px" }}>
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 10 }}>{cat.name.toUpperCase()}</span>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                {cat.badges.map((b, bi) => {
+                  const BIcon = b.icon;
+                  const pct = Math.min((b.progress / b.goal) * 100, 100);
+                  return (
+                    <div key={bi} style={{ background: b.earned ? `${T.copper}10` : T.darkCard, borderRadius: 10, padding: "14px 12px", border: b.earned ? `1px solid ${T.copper}25` : `1px solid ${T.charcoal}`, position: "relative", overflow: "hidden" }}>
+                      {b.earned && (
+                        <div style={{ position: "absolute", top: 8, right: 8 }}>
+                          <CheckCircle size={14} color={T.copper} />
+                        </div>
+                      )}
+                      <div style={{ width: 36, height: 36, borderRadius: "50%", background: b.earned ? `${T.copper}20` : `${T.charcoal}`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 8 }}>
+                        <BIcon size={16} color={b.earned ? T.copper : T.tertiary} strokeWidth={1.5} />
+                      </div>
+                      <span style={{ fontFamily: sans, fontSize: 12, color: b.earned ? T.white : T.tertiary, fontWeight: 600, display: "block", marginBottom: 2 }}>{b.name}</span>
+                      <span style={{ fontFamily: serif, fontSize: 10, color: T.tertiary, display: "block", marginBottom: 8, lineHeight: 1.4 }}>{b.desc}</span>
+                      {!b.earned && (
+                        <div>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                            <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>{b.progress}/{b.goal}</span>
+                            <span style={{ fontFamily: sans, fontSize: 9, color: T.copper }}>{Math.round(pct)}%</span>
+                          </div>
+                          <div style={{ height: 4, background: T.charcoal, borderRadius: 2, overflow: "hidden" }}>
+                            <div style={{ height: "100%", width: `${pct}%`, background: T.copper, borderRadius: 2 }} />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ))}
         </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -21574,8 +21574,21 @@
   ];
   var AtSign = createLucideIcon("at-sign", __iconNode2);
 
-  // ../../node_modules/lucide-react/dist/esm/icons/bell.js
+  // ../../node_modules/lucide-react/dist/esm/icons/award.js
   var __iconNode3 = [
+    [
+      "path",
+      {
+        d: "m15.477 12.89 1.515 8.526a.5.5 0 0 1-.81.47l-3.58-2.687a1 1 0 0 0-1.197 0l-3.586 2.686a.5.5 0 0 1-.81-.469l1.514-8.526",
+        key: "1yiouv"
+      }
+    ],
+    ["circle", { cx: "12", cy: "8", r: "6", key: "1vp47v" }]
+  ];
+  var Award = createLucideIcon("award", __iconNode3);
+
+  // ../../node_modules/lucide-react/dist/esm/icons/bell.js
+  var __iconNode4 = [
     ["path", { d: "M10.268 21a2 2 0 0 0 3.464 0", key: "vwvbt9" }],
     [
       "path",
@@ -21585,10 +21598,10 @@
       }
     ]
   ];
-  var Bell = createLucideIcon("bell", __iconNode3);
+  var Bell = createLucideIcon("bell", __iconNode4);
 
   // ../../node_modules/lucide-react/dist/esm/icons/bookmark.js
-  var __iconNode4 = [
+  var __iconNode5 = [
     [
       "path",
       {
@@ -21597,10 +21610,10 @@
       }
     ]
   ];
-  var Bookmark = createLucideIcon("bookmark", __iconNode4);
+  var Bookmark = createLucideIcon("bookmark", __iconNode5);
 
   // ../../node_modules/lucide-react/dist/esm/icons/camera.js
-  var __iconNode5 = [
+  var __iconNode6 = [
     [
       "path",
       {
@@ -21610,40 +21623,40 @@
     ],
     ["circle", { cx: "12", cy: "13", r: "3", key: "1vg3eu" }]
   ];
-  var Camera = createLucideIcon("camera", __iconNode5);
+  var Camera = createLucideIcon("camera", __iconNode6);
 
   // ../../node_modules/lucide-react/dist/esm/icons/chevron-down.js
-  var __iconNode6 = [["path", { d: "m6 9 6 6 6-6", key: "qrunsl" }]];
-  var ChevronDown = createLucideIcon("chevron-down", __iconNode6);
+  var __iconNode7 = [["path", { d: "m6 9 6 6 6-6", key: "qrunsl" }]];
+  var ChevronDown = createLucideIcon("chevron-down", __iconNode7);
 
   // ../../node_modules/lucide-react/dist/esm/icons/chevron-left.js
-  var __iconNode7 = [["path", { d: "m15 18-6-6 6-6", key: "1wnfg3" }]];
-  var ChevronLeft = createLucideIcon("chevron-left", __iconNode7);
+  var __iconNode8 = [["path", { d: "m15 18-6-6 6-6", key: "1wnfg3" }]];
+  var ChevronLeft = createLucideIcon("chevron-left", __iconNode8);
 
   // ../../node_modules/lucide-react/dist/esm/icons/chevron-right.js
-  var __iconNode8 = [["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]];
-  var ChevronRight = createLucideIcon("chevron-right", __iconNode8);
+  var __iconNode9 = [["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]];
+  var ChevronRight = createLucideIcon("chevron-right", __iconNode9);
 
   // ../../node_modules/lucide-react/dist/esm/icons/chevron-up.js
-  var __iconNode9 = [["path", { d: "m18 15-6-6-6 6", key: "153udz" }]];
-  var ChevronUp = createLucideIcon("chevron-up", __iconNode9);
+  var __iconNode10 = [["path", { d: "m18 15-6-6-6 6", key: "153udz" }]];
+  var ChevronUp = createLucideIcon("chevron-up", __iconNode10);
 
   // ../../node_modules/lucide-react/dist/esm/icons/circle-check-big.js
-  var __iconNode10 = [
+  var __iconNode11 = [
     ["path", { d: "M21.801 10A10 10 0 1 1 17 3.335", key: "yps3ct" }],
     ["path", { d: "m9 11 3 3L22 4", key: "1pflzl" }]
   ];
-  var CircleCheckBig = createLucideIcon("circle-check-big", __iconNode10);
+  var CircleCheckBig = createLucideIcon("circle-check-big", __iconNode11);
 
   // ../../node_modules/lucide-react/dist/esm/icons/clock.js
-  var __iconNode11 = [
+  var __iconNode12 = [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["path", { d: "M12 6v6l4 2", key: "mmk7yg" }]
   ];
-  var Clock = createLucideIcon("clock", __iconNode11);
+  var Clock = createLucideIcon("clock", __iconNode12);
 
   // ../../node_modules/lucide-react/dist/esm/icons/compass.js
-  var __iconNode12 = [
+  var __iconNode13 = [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     [
       "path",
@@ -21653,18 +21666,25 @@
       }
     ]
   ];
-  var Compass = createLucideIcon("compass", __iconNode12);
+  var Compass = createLucideIcon("compass", __iconNode13);
+
+  // ../../node_modules/lucide-react/dist/esm/icons/dollar-sign.js
+  var __iconNode14 = [
+    ["line", { x1: "12", x2: "12", y1: "2", y2: "22", key: "7eqyqh" }],
+    ["path", { d: "M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6", key: "1b0p4s" }]
+  ];
+  var DollarSign = createLucideIcon("dollar-sign", __iconNode14);
 
   // ../../node_modules/lucide-react/dist/esm/icons/external-link.js
-  var __iconNode13 = [
+  var __iconNode15 = [
     ["path", { d: "M15 3h6v6", key: "1q9fwt" }],
     ["path", { d: "M10 14 21 3", key: "gplh6r" }],
     ["path", { d: "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6", key: "a6xqqp" }]
   ];
-  var ExternalLink = createLucideIcon("external-link", __iconNode13);
+  var ExternalLink = createLucideIcon("external-link", __iconNode15);
 
   // ../../node_modules/lucide-react/dist/esm/icons/eye-off.js
-  var __iconNode14 = [
+  var __iconNode16 = [
     [
       "path",
       {
@@ -21682,10 +21702,10 @@
     ],
     ["path", { d: "m2 2 20 20", key: "1ooewy" }]
   ];
-  var EyeOff = createLucideIcon("eye-off", __iconNode14);
+  var EyeOff = createLucideIcon("eye-off", __iconNode16);
 
   // ../../node_modules/lucide-react/dist/esm/icons/eye.js
-  var __iconNode15 = [
+  var __iconNode17 = [
     [
       "path",
       {
@@ -21695,18 +21715,30 @@
     ],
     ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
   ];
-  var Eye = createLucideIcon("eye", __iconNode15);
+  var Eye = createLucideIcon("eye", __iconNode17);
+
+  // ../../node_modules/lucide-react/dist/esm/icons/flame.js
+  var __iconNode18 = [
+    [
+      "path",
+      {
+        d: "M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4",
+        key: "1slcih"
+      }
+    ]
+  ];
+  var Flame = createLucideIcon("flame", __iconNode18);
 
   // ../../node_modules/lucide-react/dist/esm/icons/globe.js
-  var __iconNode16 = [
+  var __iconNode19 = [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["path", { d: "M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20", key: "13o1zl" }],
     ["path", { d: "M2 12h20", key: "9i4pu4" }]
   ];
-  var Globe = createLucideIcon("globe", __iconNode16);
+  var Globe = createLucideIcon("globe", __iconNode19);
 
   // ../../node_modules/lucide-react/dist/esm/icons/heart.js
-  var __iconNode17 = [
+  var __iconNode20 = [
     [
       "path",
       {
@@ -21715,10 +21747,10 @@
       }
     ]
   ];
-  var Heart = createLucideIcon("heart", __iconNode17);
+  var Heart = createLucideIcon("heart", __iconNode20);
 
   // ../../node_modules/lucide-react/dist/esm/icons/house.js
-  var __iconNode18 = [
+  var __iconNode21 = [
     ["path", { d: "M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8", key: "5wwlr5" }],
     [
       "path",
@@ -21728,32 +21760,32 @@
       }
     ]
   ];
-  var House = createLucideIcon("house", __iconNode18);
+  var House = createLucideIcon("house", __iconNode21);
 
   // ../../node_modules/lucide-react/dist/esm/icons/image.js
-  var __iconNode19 = [
+  var __iconNode22 = [
     ["rect", { width: "18", height: "18", x: "3", y: "3", rx: "2", ry: "2", key: "1m3agn" }],
     ["circle", { cx: "9", cy: "9", r: "2", key: "af1f0g" }],
     ["path", { d: "m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21", key: "1xmnt7" }]
   ];
-  var Image = createLucideIcon("image", __iconNode19);
+  var Image = createLucideIcon("image", __iconNode22);
 
   // ../../node_modules/lucide-react/dist/esm/icons/lock.js
-  var __iconNode20 = [
+  var __iconNode23 = [
     ["rect", { width: "18", height: "11", x: "3", y: "11", rx: "2", ry: "2", key: "1w4ew1" }],
     ["path", { d: "M7 11V7a5 5 0 0 1 10 0v4", key: "fwvmzm" }]
   ];
-  var Lock = createLucideIcon("lock", __iconNode20);
+  var Lock = createLucideIcon("lock", __iconNode23);
 
   // ../../node_modules/lucide-react/dist/esm/icons/mail.js
-  var __iconNode21 = [
+  var __iconNode24 = [
     ["path", { d: "m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7", key: "132q7q" }],
     ["rect", { x: "2", y: "4", width: "20", height: "16", rx: "2", key: "izxlao" }]
   ];
-  var Mail = createLucideIcon("mail", __iconNode21);
+  var Mail = createLucideIcon("mail", __iconNode24);
 
   // ../../node_modules/lucide-react/dist/esm/icons/map-pin.js
-  var __iconNode22 = [
+  var __iconNode25 = [
     [
       "path",
       {
@@ -21763,10 +21795,10 @@
     ],
     ["circle", { cx: "12", cy: "10", r: "3", key: "ilqhr7" }]
   ];
-  var MapPin = createLucideIcon("map-pin", __iconNode22);
+  var MapPin = createLucideIcon("map-pin", __iconNode25);
 
   // ../../node_modules/lucide-react/dist/esm/icons/map.js
-  var __iconNode23 = [
+  var __iconNode26 = [
     [
       "path",
       {
@@ -21777,10 +21809,10 @@
     ["path", { d: "M15 5.764v15", key: "1pn4in" }],
     ["path", { d: "M9 3.236v15", key: "1uimfh" }]
   ];
-  var Map2 = createLucideIcon("map", __iconNode23);
+  var Map2 = createLucideIcon("map", __iconNode26);
 
   // ../../node_modules/lucide-react/dist/esm/icons/message-circle.js
-  var __iconNode24 = [
+  var __iconNode27 = [
     [
       "path",
       {
@@ -21789,20 +21821,20 @@
       }
     ]
   ];
-  var MessageCircle = createLucideIcon("message-circle", __iconNode24);
+  var MessageCircle = createLucideIcon("message-circle", __iconNode27);
 
   // ../../node_modules/lucide-react/dist/esm/icons/mountain.js
-  var __iconNode25 = [["path", { d: "m8 3 4 8 5-5 5 15H2L8 3z", key: "otkl63" }]];
-  var Mountain = createLucideIcon("mountain", __iconNode25);
+  var __iconNode28 = [["path", { d: "m8 3 4 8 5-5 5 15H2L8 3z", key: "otkl63" }]];
+  var Mountain = createLucideIcon("mountain", __iconNode28);
 
   // ../../node_modules/lucide-react/dist/esm/icons/navigation.js
-  var __iconNode26 = [
+  var __iconNode29 = [
     ["polygon", { points: "3 11 22 2 13 21 11 13 3 11", key: "1ltx0t" }]
   ];
-  var Navigation = createLucideIcon("navigation", __iconNode26);
+  var Navigation = createLucideIcon("navigation", __iconNode29);
 
   // ../../node_modules/lucide-react/dist/esm/icons/pen-line.js
-  var __iconNode27 = [
+  var __iconNode30 = [
     ["path", { d: "M13 21h8", key: "1jsn5i" }],
     [
       "path",
@@ -21812,34 +21844,42 @@
       }
     ]
   ];
-  var PenLine = createLucideIcon("pen-line", __iconNode27);
+  var PenLine = createLucideIcon("pen-line", __iconNode30);
 
   // ../../node_modules/lucide-react/dist/esm/icons/plus.js
-  var __iconNode28 = [
+  var __iconNode31 = [
     ["path", { d: "M5 12h14", key: "1ays0h" }],
     ["path", { d: "M12 5v14", key: "s699le" }]
   ];
-  var Plus = createLucideIcon("plus", __iconNode28);
+  var Plus = createLucideIcon("plus", __iconNode31);
 
   // ../../node_modules/lucide-react/dist/esm/icons/radio.js
-  var __iconNode29 = [
+  var __iconNode32 = [
     ["path", { d: "M16.247 7.761a6 6 0 0 1 0 8.478", key: "1fwjs5" }],
     ["path", { d: "M19.075 4.933a10 10 0 0 1 0 14.134", key: "ehdyv1" }],
     ["path", { d: "M4.925 19.067a10 10 0 0 1 0-14.134", key: "1q22gi" }],
     ["path", { d: "M7.753 16.239a6 6 0 0 1 0-8.478", key: "r2q7qm" }],
     ["circle", { cx: "12", cy: "12", r: "2", key: "1c9p78" }]
   ];
-  var Radio = createLucideIcon("radio", __iconNode29);
+  var Radio = createLucideIcon("radio", __iconNode32);
+
+  // ../../node_modules/lucide-react/dist/esm/icons/route.js
+  var __iconNode33 = [
+    ["circle", { cx: "6", cy: "19", r: "3", key: "1kj8tv" }],
+    ["path", { d: "M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15", key: "1d8sl" }],
+    ["circle", { cx: "18", cy: "5", r: "3", key: "gq8acd" }]
+  ];
+  var Route = createLucideIcon("route", __iconNode33);
 
   // ../../node_modules/lucide-react/dist/esm/icons/search.js
-  var __iconNode30 = [
+  var __iconNode34 = [
     ["path", { d: "m21 21-4.34-4.34", key: "14j7rj" }],
     ["circle", { cx: "11", cy: "11", r: "8", key: "4ej97u" }]
   ];
-  var Search = createLucideIcon("search", __iconNode30);
+  var Search = createLucideIcon("search", __iconNode34);
 
   // ../../node_modules/lucide-react/dist/esm/icons/send.js
-  var __iconNode31 = [
+  var __iconNode35 = [
     [
       "path",
       {
@@ -21849,10 +21889,10 @@
     ],
     ["path", { d: "m21.854 2.147-10.94 10.939", key: "12cjpa" }]
   ];
-  var Send = createLucideIcon("send", __iconNode31);
+  var Send = createLucideIcon("send", __iconNode35);
 
   // ../../node_modules/lucide-react/dist/esm/icons/settings.js
-  var __iconNode32 = [
+  var __iconNode36 = [
     [
       "path",
       {
@@ -21862,20 +21902,20 @@
     ],
     ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
   ];
-  var Settings = createLucideIcon("settings", __iconNode32);
+  var Settings = createLucideIcon("settings", __iconNode36);
 
   // ../../node_modules/lucide-react/dist/esm/icons/share-2.js
-  var __iconNode33 = [
+  var __iconNode37 = [
     ["circle", { cx: "18", cy: "5", r: "3", key: "gq8acd" }],
     ["circle", { cx: "6", cy: "12", r: "3", key: "w7nqdw" }],
     ["circle", { cx: "18", cy: "19", r: "3", key: "1xt0gg" }],
     ["line", { x1: "8.59", x2: "15.42", y1: "13.51", y2: "17.49", key: "47mynk" }],
     ["line", { x1: "15.41", x2: "8.59", y1: "6.51", y2: "10.49", key: "1n3mei" }]
   ];
-  var Share2 = createLucideIcon("share-2", __iconNode33);
+  var Share2 = createLucideIcon("share-2", __iconNode37);
 
   // ../../node_modules/lucide-react/dist/esm/icons/shield.js
-  var __iconNode34 = [
+  var __iconNode38 = [
     [
       "path",
       {
@@ -21884,17 +21924,17 @@
       }
     ]
   ];
-  var Shield = createLucideIcon("shield", __iconNode34);
+  var Shield = createLucideIcon("shield", __iconNode38);
 
   // ../../node_modules/lucide-react/dist/esm/icons/smartphone.js
-  var __iconNode35 = [
+  var __iconNode39 = [
     ["rect", { width: "14", height: "20", x: "5", y: "2", rx: "2", ry: "2", key: "1yt0o3" }],
     ["path", { d: "M12 18h.01", key: "mhygvu" }]
   ];
-  var Smartphone = createLucideIcon("smartphone", __iconNode35);
+  var Smartphone = createLucideIcon("smartphone", __iconNode39);
 
   // ../../node_modules/lucide-react/dist/esm/icons/star.js
-  var __iconNode36 = [
+  var __iconNode40 = [
     [
       "path",
       {
@@ -21903,28 +21943,48 @@
       }
     ]
   ];
-  var Star = createLucideIcon("star", __iconNode36);
+  var Star = createLucideIcon("star", __iconNode40);
 
   // ../../node_modules/lucide-react/dist/esm/icons/target.js
-  var __iconNode37 = [
+  var __iconNode41 = [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["circle", { cx: "12", cy: "12", r: "6", key: "1vlfrh" }],
     ["circle", { cx: "12", cy: "12", r: "2", key: "1c9p78" }]
   ];
-  var Target = createLucideIcon("target", __iconNode37);
+  var Target = createLucideIcon("target", __iconNode41);
+
+  // ../../node_modules/lucide-react/dist/esm/icons/thumbs-up.js
+  var __iconNode42 = [
+    [
+      "path",
+      {
+        d: "M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z",
+        key: "emmmcr"
+      }
+    ],
+    ["path", { d: "M7 10v12", key: "1qc93n" }]
+  ];
+  var ThumbsUp = createLucideIcon("thumbs-up", __iconNode42);
 
   // ../../node_modules/lucide-react/dist/esm/icons/trash-2.js
-  var __iconNode38 = [
+  var __iconNode43 = [
     ["path", { d: "M10 11v6", key: "nco0om" }],
     ["path", { d: "M14 11v6", key: "outv1u" }],
     ["path", { d: "M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6", key: "miytrc" }],
     ["path", { d: "M3 6h18", key: "d0wm0j" }],
     ["path", { d: "M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2", key: "e791ji" }]
   ];
-  var Trash2 = createLucideIcon("trash-2", __iconNode38);
+  var Trash2 = createLucideIcon("trash-2", __iconNode43);
+
+  // ../../node_modules/lucide-react/dist/esm/icons/trending-up.js
+  var __iconNode44 = [
+    ["path", { d: "M16 7h6v6", key: "box55l" }],
+    ["path", { d: "m22 7-8.5 8.5-5-5L2 17", key: "1t1m79" }]
+  ];
+  var TrendingUp = createLucideIcon("trending-up", __iconNode44);
 
   // ../../node_modules/lucide-react/dist/esm/icons/triangle-alert.js
-  var __iconNode39 = [
+  var __iconNode45 = [
     [
       "path",
       {
@@ -21935,10 +21995,10 @@
     ["path", { d: "M12 9v4", key: "juzpu7" }],
     ["path", { d: "M12 17h.01", key: "p32p05" }]
   ];
-  var TriangleAlert = createLucideIcon("triangle-alert", __iconNode39);
+  var TriangleAlert = createLucideIcon("triangle-alert", __iconNode45);
 
   // ../../node_modules/lucide-react/dist/esm/icons/trophy.js
-  var __iconNode40 = [
+  var __iconNode46 = [
     ["path", { d: "M10 14.66v1.626a2 2 0 0 1-.976 1.696A5 5 0 0 0 7 21.978", key: "1n3hpd" }],
     ["path", { d: "M14 14.66v1.626a2 2 0 0 0 .976 1.696A5 5 0 0 1 17 21.978", key: "rfe1zi" }],
     ["path", { d: "M18 9h1.5a1 1 0 0 0 0-5H18", key: "7xy6bh" }],
@@ -21946,36 +22006,36 @@
     ["path", { d: "M6 9a6 6 0 0 0 12 0V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1z", key: "1mhfuq" }],
     ["path", { d: "M6 9H4.5a1 1 0 0 1 0-5H6", key: "tex48p" }]
   ];
-  var Trophy = createLucideIcon("trophy", __iconNode40);
+  var Trophy = createLucideIcon("trophy", __iconNode46);
 
   // ../../node_modules/lucide-react/dist/esm/icons/user-check.js
-  var __iconNode41 = [
+  var __iconNode47 = [
     ["path", { d: "m16 11 2 2 4-4", key: "9rsbq5" }],
     ["path", { d: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2", key: "1yyitq" }],
     ["circle", { cx: "9", cy: "7", r: "4", key: "nufk8" }]
   ];
-  var UserCheck = createLucideIcon("user-check", __iconNode41);
+  var UserCheck = createLucideIcon("user-check", __iconNode47);
 
   // ../../node_modules/lucide-react/dist/esm/icons/user-plus.js
-  var __iconNode42 = [
+  var __iconNode48 = [
     ["path", { d: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2", key: "1yyitq" }],
     ["circle", { cx: "9", cy: "7", r: "4", key: "nufk8" }],
     ["line", { x1: "19", x2: "19", y1: "8", y2: "14", key: "1bvyxn" }],
     ["line", { x1: "22", x2: "16", y1: "11", y2: "11", key: "1shjgl" }]
   ];
-  var UserPlus = createLucideIcon("user-plus", __iconNode42);
+  var UserPlus = createLucideIcon("user-plus", __iconNode48);
 
   // ../../node_modules/lucide-react/dist/esm/icons/users.js
-  var __iconNode43 = [
+  var __iconNode49 = [
     ["path", { d: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2", key: "1yyitq" }],
     ["path", { d: "M16 3.128a4 4 0 0 1 0 7.744", key: "16gr8j" }],
     ["path", { d: "M22 21v-2a4 4 0 0 0-3-3.87", key: "kshegd" }],
     ["circle", { cx: "9", cy: "7", r: "4", key: "nufk8" }]
   ];
-  var Users = createLucideIcon("users", __iconNode43);
+  var Users = createLucideIcon("users", __iconNode49);
 
   // ../../node_modules/lucide-react/dist/esm/icons/wrench.js
-  var __iconNode44 = [
+  var __iconNode50 = [
     [
       "path",
       {
@@ -21984,14 +22044,26 @@
       }
     ]
   ];
-  var Wrench = createLucideIcon("wrench", __iconNode44);
+  var Wrench = createLucideIcon("wrench", __iconNode50);
 
   // ../../node_modules/lucide-react/dist/esm/icons/x.js
-  var __iconNode45 = [
+  var __iconNode51 = [
     ["path", { d: "M18 6 6 18", key: "1bl5f8" }],
     ["path", { d: "m6 6 12 12", key: "d8bk6v" }]
   ];
-  var X = createLucideIcon("x", __iconNode45);
+  var X = createLucideIcon("x", __iconNode51);
+
+  // ../../node_modules/lucide-react/dist/esm/icons/zap.js
+  var __iconNode52 = [
+    [
+      "path",
+      {
+        d: "M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z",
+        key: "1xq2db"
+      }
+    ]
+  ];
+  var Zap = createLucideIcon("zap", __iconNode52);
 
   // trailhead-v1.jsx
   var T = {
@@ -25152,19 +25224,151 @@
     })()))));
   }
   function RanksScreen() {
-    const leaderboard = [
-      { rank: "01", name: "Sierra_Tactical", badge: "Expedition Lead", points: "48,900", isYou: false },
-      { rank: "02", name: "Nomad_Queen", badge: "Master Builder", points: "32,100", isYou: false },
-      { rank: "03", name: "Peak_Finder", badge: "Navigator", points: "28,750", isYou: false },
-      { rank: "42", name: "You", badge: "Pathfinder Rank", points: "12,450", isYou: true },
-      { rank: "43", name: "Nomad_Mike", badge: "Wilderness Guide", points: "11,200", isYou: false }
+    const [tab, setTab] = (0, import_react4.useState)("overview");
+    const rankTiers = [
+      { name: "Scout", min: 0, max: 999, color: T.tertiary, icon: Compass },
+      { name: "Explorer", min: 1e3, max: 4999, color: T.green, icon: Map2 },
+      { name: "Pathfinder", min: 5e3, max: 14999, color: T.copper, icon: Navigation },
+      { name: "Trailblazer", min: 15e3, max: 29999, color: T.copper, icon: Flame },
+      { name: "Navigator", min: 3e4, max: 49999, color: "#C0A060", icon: Star },
+      { name: "Expedition Lead", min: 5e4, max: 99999, color: T.red, icon: Shield },
+      { name: "Legend", min: 1e5, max: Infinity, color: "#FFD700", icon: Trophy }
     ];
-    const missions = [
-      { title: "Share a New Route", desc: "Upload a verified GPS track with at least 3 photos and a terrain rating.", pts: "+150 PTS", expiry: "EXPIRES IN 2D", action: "START MISSION" },
-      { title: "Technical Advisor", desc: "Answer a technical question in the Gear Forum that gets marked as 'Helpful'.", pts: "+50 PTS", expiry: "DAILY TASK", action: "GO TO FORUM" },
-      { title: "Full Build Profile", desc: "Complete your vehicle build profile with a full gear list and weight measurements.", pts: "+300 PTS", expiry: "ONE-TIME BONUS", action: "UPDATE BUILD" }
+    const pointsConfig = {
+      dailyLogin: 5,
+      feedPost: 10,
+      forumThread: 25,
+      forumReply: 10,
+      routeLogged: 30,
+      buildAdded: 40,
+      profileComplete: 100,
+      receiveLike: 2,
+      receiveComment: 3,
+      receiveBookmark: 5,
+      convoyJoined: 20,
+      recoveryRespond: 50,
+      photoUploaded: 5
+    };
+    const myPoints = 12450;
+    const myBountyEarnings = 124e3;
+    const myRank = rankTiers.find((r) => myPoints >= r.min && myPoints <= r.max) || rankTiers[0];
+    const nextRank = rankTiers[rankTiers.indexOf(myRank) + 1] || null;
+    const rankProgress = nextRank ? (myPoints - myRank.min) / (nextRank.min - myRank.min) * 100 : 100;
+    const RankIcon = myRank.icon;
+    const myPointsBreakdown = [
+      { label: "Forum Threads", pts: 3750, icon: MessageCircle },
+      { label: "Routes Logged", pts: 2700, icon: Map2 },
+      { label: "Builds Added", pts: 2e3, icon: Wrench },
+      { label: "Likes Received", pts: 1840, icon: Heart },
+      { label: "Feed Posts", pts: 1200, icon: PenLine },
+      { label: "Daily Logins", pts: 560, icon: Zap },
+      { label: "Other", pts: 400, icon: Star }
     ];
-    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 0 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "24px 16px", textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2 } }, "CURRENT STANDING"), /* @__PURE__ */ import_react4.default.createElement("h1", { style: { fontFamily: sans, fontSize: 36, color: T.white, margin: "4px 0 16px", fontWeight: 700 } }, "Rank #42"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkCard, borderRadius: 10, padding: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, display: "block", marginBottom: 4 } }, "SEASON POINTS"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "baseline", justifyContent: "center", gap: 4 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 22, color: T.copper, fontWeight: 700 } }, "12,450"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.tertiary } }, "pts"))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkCard, borderRadius: 10, padding: 16, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement(CircleCheckBig, { size: 18, color: T.copper, strokeWidth: 1.5, style: { marginBottom: 4 } }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.copper, fontWeight: 600 } }, "Verified Badge")))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: `linear-gradient(135deg, ${T.copper}, ${T.tertiary})`, borderRadius: 16, padding: 24 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, letterSpacing: 1, opacity: 0.8 } }, "Available Credit"), /* @__PURE__ */ import_react4.default.createElement("h2", { style: { fontFamily: sans, fontSize: 32, color: T.white, margin: "4px 0 16px", fontWeight: 700 } }, "$1,240.00"), /* @__PURE__ */ import_react4.default.createElement("button", { style: { background: T.charcoal, color: T.white, fontFamily: sans, fontSize: 12, fontWeight: 600, padding: "10px 24px", borderRadius: 6, border: "none", cursor: "pointer", letterSpacing: 1 } }, "Redeem Credit"))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 600 } }, "Global Ranks"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, background: T.darkCard, padding: "4px 10px", borderRadius: 12, letterSpacing: 1 } }, "Season 04")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 6 } }, leaderboard.map((r, i) => /* @__PURE__ */ import_react4.default.createElement("div", { key: i, style: { background: r.isYou ? `${T.red}15` : T.darkCard, borderRadius: 10, padding: "12px 16px", display: "flex", alignItems: "center", gap: 14, border: r.isYou ? `1px solid ${T.red}30` : "1px solid transparent" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 18, color: r.rank === "01" ? T.copper : r.isYou ? T.red : T.white, fontWeight: 700, width: 28 } }, r.rank), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 36, height: 36, borderRadius: "50%", background: r.isYou ? T.red : T.charcoal, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, fontWeight: 700, color: T.white } }, r.name[0])), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, color: r.isYou ? T.red : T.white, fontWeight: 600, display: "block" } }, r.name), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, r.badge)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "right" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 14, color: T.copper, fontWeight: 600, display: "block" } }, r.points), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, "Points")))))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 12 } }, "ACTIVE MISSIONS"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8 } }, missions.map((m, i) => /* @__PURE__ */ import_react4.default.createElement("div", { key: i, style: { ...cardStyle, padding: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 32, height: 32, borderRadius: 8, background: i === 2 ? `${T.red}15` : T.warmBg + "15", display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Target, { size: 16, color: i === 2 ? T.red : T.tertiary })), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.red, fontWeight: 700 } }, m.pts)), /* @__PURE__ */ import_react4.default.createElement("h3", { style: { fontFamily: sans, fontSize: 17, color: T.white, margin: "0 0 6px", fontWeight: 600 } }, m.title), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "0 0 12px", lineHeight: 1.5 } }, m.desc), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1 } }, m.expiry), /* @__PURE__ */ import_react4.default.createElement("button", { style: { fontFamily: sans, fontSize: 10, color: T.charcoal, background: T.warmBg, padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", letterSpacing: 1, fontWeight: 600 } }, m.action)))))));
+    const leaderboardData = [
+      { rank: 1, name: "Sierra_Tactical", initial: "S", badge: "Expedition Lead", points: 48900, streak: 47 },
+      { rank: 2, name: "Nomad_Queen", initial: "N", badge: "Trailblazer", points: 32100, streak: 31 },
+      { rank: 3, name: "Peak_Finder", initial: "P", badge: "Navigator", points: 28750, streak: 22 },
+      { rank: 4, name: "TrailBoss_88", initial: "T", badge: "Pathfinder", points: 26200, streak: 18 },
+      { rank: 5, name: "DirtRoadDave", initial: "D", badge: "Pathfinder", points: 22800, streak: 15 },
+      { rank: 6, name: "MountainGoat", initial: "M", badge: "Pathfinder", points: 19400, streak: 12 },
+      { rank: 7, name: "FoxFanatic", initial: "F", badge: "Pathfinder", points: 17600, streak: 9 },
+      { rank: 8, name: "BajaBound", initial: "B", badge: "Explorer", points: 14200, streak: 6 },
+      { rank: 9, name: "StockHero", initial: "S", badge: "Explorer", points: 13100, streak: 11 },
+      { rank: 10, name: "LiftKing", initial: "L", badge: "Explorer", points: 12800, streak: 8 },
+      { rank: 42, name: "KyleLPO", initial: "K", badge: myRank.name, points: myPoints, isYou: true, streak: 5 },
+      { rank: 43, name: "Nomad_Mike", initial: "N", badge: "Explorer", points: 11200, streak: 3 }
+    ];
+    const [lbFilter, setLbFilter] = (0, import_react4.useState)("ALL TIME");
+    const lbFilters = ["ALL TIME", "THIS MONTH", "THIS WEEK"];
+    const bounties = [
+      { id: "b1", title: "Trail Report: Black Bear Pass", desc: "Complete a detailed route report with 10+ photos, GPS track, difficulty rating, and current trail conditions for Black Bear Pass.", reward: 7500, rewardPts: 500, category: "Route Report", difficulty: "Hard", deadline: "Apr 30, 2026", slots: 3, claimed: 1, status: "open" },
+      { id: "b2", title: "Gear Review: Recovery Boards", desc: "Write a detailed forum review comparing at least 3 recovery board brands with photos of real-world use.", reward: 5e3, rewardPts: 300, category: "Gear Review", difficulty: "Medium", deadline: "May 15, 2026", slots: 5, claimed: 2, status: "open" },
+      { id: "b3", title: "Build Feature: Overland Tacoma", desc: "Create a complete build profile for your Tacoma build with full mod list, photos of each mod, and product links.", reward: 3500, rewardPts: 200, category: "Build Feature", difficulty: "Easy", deadline: "May 1, 2026", slots: 10, claimed: 7, status: "open" },
+      { id: "b4", title: "Video: Campsite Setup Walkthrough", desc: "Post a forum thread with video walkthrough of your camp setup process, including gear list and tips.", reward: 1e4, rewardPts: 750, category: "Content Creation", difficulty: "Hard", deadline: "May 20, 2026", slots: 2, claimed: 0, status: "open" },
+      { id: "b5", title: "Trail Report: Rubicon Trail", desc: "Complete a detailed route report for the Rubicon Trail with obstacle descriptions and bypass info.", reward: 7500, rewardPts: 500, category: "Route Report", difficulty: "Hard", deadline: "Apr 15, 2026", slots: 3, claimed: 3, status: "completed" }
+    ];
+    const [bountyFilter, setBountyFilter] = (0, import_react4.useState)("OPEN");
+    const [expandedBounty, setExpandedBounty] = (0, import_react4.useState)(null);
+    const badgeCategories = [
+      { name: "Trail Mastery", badges: [
+        { name: "First Trail", desc: "Log your first route", icon: MapPin, earned: true, progress: 1, goal: 1 },
+        { name: "Trail Runner", desc: "Log 5 routes", icon: MapPin, earned: true, progress: 5, goal: 5 },
+        { name: "Pathmaker", desc: "Log 15 routes", icon: Route, earned: false, progress: 9, goal: 15 },
+        { name: "Trail Legend", desc: "Log 50 routes", icon: Mountain, earned: false, progress: 9, goal: 50 }
+      ] },
+      { name: "Community", badges: [
+        { name: "First Post", desc: "Create your first feed post", icon: PenLine, earned: true, progress: 1, goal: 1 },
+        { name: "Storyteller", desc: "Create 10 forum threads", icon: MessageCircle, earned: true, progress: 15, goal: 10 },
+        { name: "Helpful Hand", desc: "Get 50 likes on your posts", icon: ThumbsUp, earned: true, progress: 92, goal: 50 },
+        { name: "Community Pillar", desc: "Get 500 likes on your posts", icon: Heart, earned: false, progress: 92, goal: 500 }
+      ] },
+      { name: "Builder", badges: [
+        { name: "Garage Started", desc: "Add your first build", icon: Wrench, earned: true, progress: 1, goal: 1 },
+        { name: "Master Builder", desc: "Add 3 complete builds", icon: Wrench, earned: false, progress: 2, goal: 3 },
+        { name: "Mod Guru", desc: "Log 20 modifications", icon: Settings, earned: false, progress: 14, goal: 20 }
+      ] },
+      { name: "Explorer", badges: [
+        { name: "Daily Driver", desc: "Log in 7 days in a row", icon: Zap, earned: true, progress: 7, goal: 7 },
+        { name: "Dedicated", desc: "Log in 30 days in a row", icon: Flame, earned: false, progress: 5, goal: 30 },
+        { name: "Shutterbug", desc: "Upload 50 photos", icon: Camera, earned: false, progress: 23, goal: 50 },
+        { name: "First Responder", desc: "Respond to 5 recovery requests", icon: TriangleAlert, earned: false, progress: 2, goal: 5 }
+      ] },
+      { name: "Bounty Hunter", badges: [
+        { name: "First Bounty", desc: "Complete your first bounty", icon: Target, earned: true, progress: 1, goal: 1 },
+        { name: "Bounty Pro", desc: "Complete 5 bounties", icon: DollarSign, earned: false, progress: 3, goal: 5 },
+        { name: "Top Contributor", desc: "Earn $500 in bounties", icon: Award, earned: false, progress: 124, goal: 500 }
+      ] }
+    ];
+    const totalBadges = badgeCategories.reduce((sum, cat) => sum + cat.badges.length, 0);
+    const earnedBadges = badgeCategories.reduce((sum, cat) => sum + cat.badges.filter((b) => b.earned).length, 0);
+    const diffColor = (d) => d === "Hard" ? T.red : d === "Medium" ? T.copper : T.green;
+    const tabs = [
+      { key: "overview", label: "My Rank", icon: Award },
+      { key: "leaderboard", label: "Leaderboard", icon: TrendingUp },
+      { key: "bounty", label: "Bounties", icon: Target },
+      { key: "badges", label: "Badges", icon: Shield }
+    ];
+    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 0 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", padding: "0 12px", gap: 2, borderBottom: `1px solid ${T.charcoal}`, marginBottom: 0 } }, tabs.map((t) => {
+      const active = tab === t.key;
+      const Icon2 = t.icon;
+      return /* @__PURE__ */ import_react4.default.createElement("button", { key: t.key, onClick: () => setTab(t.key), style: { flex: 1, padding: "12px 0 10px", background: "none", border: "none", borderBottom: active ? `2px solid ${T.red}` : "2px solid transparent", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, transition: "all 0.15s" } }, /* @__PURE__ */ import_react4.default.createElement(Icon2, { size: 14, color: active ? T.red : T.tertiary, strokeWidth: 1.5 }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: active ? T.red : T.tertiary, fontWeight: 600, letterSpacing: 0.8 } }, t.label.toUpperCase()));
+    })), tab === "overview" && /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "24px 16px 16px", textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 72, height: 72, borderRadius: "50%", background: `${myRank.color}18`, border: `2px solid ${myRank.color}`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" } }, /* @__PURE__ */ import_react4.default.createElement(RankIcon, { size: 30, color: myRank.color, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, display: "block", marginBottom: 4 } }, "COMMUNITY RANK"), /* @__PURE__ */ import_react4.default.createElement("h1", { style: { fontFamily: sans, fontSize: 26, color: myRank.color, margin: "0 0 4px", fontWeight: 700 } }, myRank.name), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary } }, "#", 42, " Global Ranking"), nextRank && /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginTop: 16, padding: "0 12px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: 6 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.5 } }, myPoints.toLocaleString(), " pts"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: nextRank.color, letterSpacing: 0.5 } }, nextRank.name, " \u2014 ", nextRank.min.toLocaleString(), " pts")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { height: 6, background: T.charcoal, borderRadius: 3, overflow: "hidden" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { height: "100%", width: `${rankProgress}%`, background: `linear-gradient(90deg, ${myRank.color}, ${nextRank.color})`, borderRadius: 3, transition: "width 0.5s ease" } })), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, display: "block", marginTop: 4 } }, (nextRank.min - myPoints).toLocaleString(), " pts to next rank"))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 16px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkCard, borderRadius: 10, padding: "14px 10px", textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block", marginBottom: 4 } }, "TOTAL POINTS"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 20, color: T.copper, fontWeight: 700 } }, myPoints.toLocaleString())), /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkCard, borderRadius: 10, padding: "14px 10px", textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block", marginBottom: 4 } }, "BADGES"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 20, color: T.green, fontWeight: 700 } }, earnedBadges, "/", totalBadges)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkCard, borderRadius: 10, padding: "14px 10px", textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block", marginBottom: 4 } }, "STREAK"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "center", gap: 3 } }, /* @__PURE__ */ import_react4.default.createElement(Flame, { size: 14, color: T.red }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 20, color: T.red, fontWeight: 700 } }, "5")))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: `linear-gradient(135deg, ${T.charcoal}, #333330)`, borderRadius: 14, padding: "20px 20px", border: `1px solid ${T.copper}30`, position: "relative", overflow: "hidden" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: -20, right: -20, width: 100, height: 100, borderRadius: "50%", background: `${T.copper}08` } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 12 } }, /* @__PURE__ */ import_react4.default.createElement(DollarSign, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.5, fontWeight: 600 } }, "BOUNTY EARNINGS")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 4, marginBottom: 4 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 28, color: T.white, fontWeight: 700 } }, "$", (myBountyEarnings / 100).toFixed(2)), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, "available")), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 11, color: T.tertiary, display: "block", marginBottom: 14 } }, "Earned from completed bounty board tasks"), /* @__PURE__ */ import_react4.default.createElement("button", { style: { background: T.copper, color: T.charcoal, fontFamily: sans, fontSize: 11, fontWeight: 700, padding: "10px 24px", borderRadius: 6, border: "none", cursor: "pointer", letterSpacing: 1 } }, "REDEEM CREDIT"))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 12 } }, "POINTS BREAKDOWN"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 4 } }, myPointsBreakdown.map((bp, i) => {
+      const pct = bp.pts / myPoints * 100;
+      const BpIcon = bp.icon;
+      return /* @__PURE__ */ import_react4.default.createElement("div", { key: i, style: { background: T.darkCard, borderRadius: 8, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement(BpIcon, { size: 14, color: T.copper, strokeWidth: 1.5 }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, flex: 1 } }, bp.label), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 80, height: 4, background: T.charcoal, borderRadius: 2, overflow: "hidden" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { height: "100%", width: `${pct}%`, background: T.copper, borderRadius: 2 } })), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600, width: 50, textAlign: "right" } }, bp.pts.toLocaleString()));
+    }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 12 } }, "HOW TO EARN POINTS"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkCard, borderRadius: 10, overflow: "hidden" } }, [
+      { action: "Daily Login", pts: pointsConfig.dailyLogin },
+      { action: "Feed Post", pts: pointsConfig.feedPost },
+      { action: "Forum Thread", pts: pointsConfig.forumThread },
+      { action: "Forum Reply", pts: pointsConfig.forumReply },
+      { action: "Log a Route", pts: pointsConfig.routeLogged },
+      { action: "Add a Build", pts: pointsConfig.buildAdded },
+      { action: "Complete Profile", pts: pointsConfig.profileComplete },
+      { action: "Receive a Like", pts: pointsConfig.receiveLike },
+      { action: "Receive a Comment", pts: pointsConfig.receiveComment },
+      { action: "Upload a Photo", pts: pointsConfig.photoUploaded },
+      { action: "Recovery Response", pts: pointsConfig.recoveryRespond }
+    ].map((item, i, arr) => /* @__PURE__ */ import_react4.default.createElement("div", { key: i, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderBottom: i < arr.length - 1 ? `1px solid ${T.charcoal}44` : "none" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white } }, item.action), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.green, fontWeight: 600 } }, "+", item.pts, " pts"))))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "16px 16px 0" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 12 } }, "COMMUNITY RANK TIERS"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 4 } }, rankTiers.map((tier, i) => {
+      const TierIcon = tier.icon;
+      const isCurrent = tier.name === myRank.name;
+      return /* @__PURE__ */ import_react4.default.createElement("div", { key: i, style: { background: isCurrent ? `${tier.color}12` : T.darkCard, borderRadius: 8, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, border: isCurrent ? `1px solid ${tier.color}30` : "1px solid transparent" } }, /* @__PURE__ */ import_react4.default.createElement(TierIcon, { size: 16, color: tier.color, strokeWidth: 1.5 }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, color: isCurrent ? tier.color : T.white, fontWeight: isCurrent ? 700 : 500, flex: 1 } }, tier.name), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, tier.max === Infinity ? `${tier.min.toLocaleString()}+` : `${tier.min.toLocaleString()} \u2013 ${tier.max.toLocaleString()}`), isCurrent && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 8, color: tier.color, background: `${tier.color}20`, padding: "2px 6px", borderRadius: 4, fontWeight: 700, letterSpacing: 0.5 } }, "YOU"));
+    })))), tab === "leaderboard" && /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, padding: "14px 16px 10px" } }, lbFilters.map((f) => /* @__PURE__ */ import_react4.default.createElement("button", { key: f, onClick: () => setLbFilter(f), style: { padding: "6px 12px", borderRadius: 14, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 10, fontWeight: 600, letterSpacing: 0.5, background: lbFilter === f ? T.red : T.darkCard, color: lbFilter === f ? T.white : T.tertiary, transition: "all 0.15s" } }, f))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", justifyContent: "center", alignItems: "flex-end", gap: 8, padding: "8px 16px 20px" } }, [leaderboardData[1], leaderboardData[0], leaderboardData[2]].map((u, i) => {
+      const podiumOrder = [2, 1, 3];
+      const heights = [90, 110, 75];
+      const medalColors = ["#C0C0C0", "#FFD700", "#CD7F32"];
+      return /* @__PURE__ */ import_react4.default.createElement("div", { key: i, style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: i === 1 ? 52 : 44, height: i === 1 ? 52 : 44, borderRadius: "50%", background: T.charcoal, border: `2px solid ${medalColors[i]}`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 6 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: i === 1 ? 16 : 14, fontWeight: 700, color: T.white } }, u.initial)), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 600, marginBottom: 2, textAlign: "center" } }, u.name.length > 12 ? u.name.slice(0, 11) + "\u2026" : u.name), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600, marginBottom: 6 } }, u.points.toLocaleString()), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: "100%", height: heights[i], borderRadius: "10px 10px 0 0", background: `linear-gradient(180deg, ${medalColors[i]}30, ${medalColors[i]}08)`, display: "flex", alignItems: "center", justifyContent: "center", border: `1px solid ${medalColors[i]}30`, borderBottom: "none" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 22, fontWeight: 700, color: medalColors[i] } }, "#", podiumOrder[i])));
+    })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 4 } }, leaderboardData.map((r, i) => {
+      const userRank = rankTiers.find((t) => r.points >= t.min && r.points <= t.max) || rankTiers[0];
+      return /* @__PURE__ */ import_react4.default.createElement("div", { key: i, style: { background: r.isYou ? `${T.red}12` : T.darkCard, borderRadius: 10, padding: "11px 14px", display: "flex", alignItems: "center", gap: 12, border: r.isYou ? `1px solid ${T.red}25` : "1px solid transparent" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 14, color: r.rank <= 3 ? "#FFD700" : r.isYou ? T.red : T.tertiary, fontWeight: 700, width: 26, textAlign: "center" } }, r.rank), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 34, height: 34, borderRadius: "50%", background: r.isYou ? T.red : T.charcoal, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, fontWeight: 700, color: T.white } }, r.initial)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, color: r.isYou ? T.red : T.white, fontWeight: 600, display: "block" } }, r.isYou ? "You" : r.name), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: userRank.color } }, userRank.name), r.streak >= 7 && /* @__PURE__ */ import_react4.default.createElement("span", { style: { display: "flex", alignItems: "center", gap: 2 } }, /* @__PURE__ */ import_react4.default.createElement(Flame, { size: 9, color: T.red }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.red } }, r.streak, "d")))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "right" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 14, color: T.copper, fontWeight: 600, display: "block" } }, r.points.toLocaleString()), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary } }, "pts")));
+    })))), tab === "bounty" && /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "16px 16px 8px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4 } }, /* @__PURE__ */ import_react4.default.createElement(Target, { size: 18, color: T.red }), /* @__PURE__ */ import_react4.default.createElement("h2", { style: { fontFamily: sans, fontSize: 18, color: T.white, margin: 0, fontWeight: 700 } }, "Bounty Board")), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, margin: 0, lineHeight: 1.5 } }, "Complete bounties to earn cash credit and bonus points. All submissions are reviewed by admins before rewards are issued.")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, padding: "10px 16px" } }, ["OPEN", "COMPLETED", "ALL"].map((f) => /* @__PURE__ */ import_react4.default.createElement("button", { key: f, onClick: () => setBountyFilter(f), style: { padding: "6px 12px", borderRadius: 14, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 10, fontWeight: 600, letterSpacing: 0.5, background: bountyFilter === f ? T.red : T.darkCard, color: bountyFilter === f ? T.white : T.tertiary } }, f))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px", display: "flex", flexDirection: "column", gap: 8 } }, bounties.filter((b) => bountyFilter === "ALL" ? true : bountyFilter === "OPEN" ? b.status === "open" : b.status === "completed").map((b) => {
+      const expanded = expandedBounty === b.id;
+      const slotsLeft = b.slots - b.claimed;
+      return /* @__PURE__ */ import_react4.default.createElement("div", { key: b.id, onClick: () => setExpandedBounty(expanded ? null : b.id), style: { background: T.darkCard, borderRadius: 12, overflow: "hidden", cursor: "pointer", border: b.status === "completed" ? `1px solid ${T.green}20` : `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "14px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.white, background: diffColor(b.difficulty), padding: "2px 7px", borderRadius: 3, letterSpacing: 0.5, fontWeight: 600 } }, b.difficulty.toUpperCase()), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, background: `${T.charcoal}`, padding: "2px 7px", borderRadius: 3, letterSpacing: 0.5 } }, b.category.toUpperCase())), b.status === "completed" ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, /* @__PURE__ */ import_react4.default.createElement(CircleCheckBig, { size: 12, color: T.green }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.green, fontWeight: 600 } }, "COMPLETED")) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: slotsLeft <= 1 ? T.red : T.tertiary, fontWeight: 600 } }, slotsLeft, " SLOT", slotsLeft !== 1 ? "S" : "", " LEFT")), /* @__PURE__ */ import_react4.default.createElement("h3", { style: { fontFamily: sans, fontSize: 15, color: T.white, margin: "0 0 6px", fontWeight: 600 } }, b.title), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, /* @__PURE__ */ import_react4.default.createElement(DollarSign, { size: 13, color: T.green }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 14, color: T.green, fontWeight: 700 } }, "$", (b.reward / 100).toFixed(0))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, /* @__PURE__ */ import_react4.default.createElement(Zap, { size: 12, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.copper, fontWeight: 600 } }, "+", b.rewardPts, " pts")))), expanded && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 14px", borderTop: `1px solid ${T.charcoal}44` } }, /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "12px 0", lineHeight: 1.6 } }, b.desc), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, /* @__PURE__ */ import_react4.default.createElement(Clock, { size: 11, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, "Due ", b.deadline)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, /* @__PURE__ */ import_react4.default.createElement(Users, { size: 11, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, b.claimed, "/", b.slots, " claimed"))), b.status === "open" && slotsLeft > 0 && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: (e) => e.stopPropagation(), style: { width: "100%", padding: "12px", background: T.red, color: T.white, fontFamily: sans, fontSize: 12, fontWeight: 700, borderRadius: 8, border: "none", cursor: "pointer", letterSpacing: 1 } }, "CLAIM BOUNTY")));
+    }))), tab === "badges" && /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "16px 16px 8px", textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 4 } }, /* @__PURE__ */ import_react4.default.createElement(Shield, { size: 18, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 22, color: T.white, fontWeight: 700 } }, earnedBadges), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 14, color: T.tertiary } }, "/ ", totalBadges, " Badges Earned")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: "60%", height: 6, background: T.charcoal, borderRadius: 3, overflow: "hidden", margin: "8px auto 0" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { height: "100%", width: `${earnedBadges / totalBadges * 100}%`, background: T.copper, borderRadius: 3 } }))), badgeCategories.map((cat, ci) => /* @__PURE__ */ import_react4.default.createElement("div", { key: ci, style: { padding: "12px 16px 4px" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 10 } }, cat.name.toUpperCase()), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 } }, cat.badges.map((b, bi) => {
+      const BIcon = b.icon;
+      const pct = Math.min(b.progress / b.goal * 100, 100);
+      return /* @__PURE__ */ import_react4.default.createElement("div", { key: bi, style: { background: b.earned ? `${T.copper}10` : T.darkCard, borderRadius: 10, padding: "14px 12px", border: b.earned ? `1px solid ${T.copper}25` : `1px solid ${T.charcoal}`, position: "relative", overflow: "hidden" } }, b.earned && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: 8, right: 8 } }, /* @__PURE__ */ import_react4.default.createElement(CircleCheckBig, { size: 14, color: T.copper })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 36, height: 36, borderRadius: "50%", background: b.earned ? `${T.copper}20` : `${T.charcoal}`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 8 } }, /* @__PURE__ */ import_react4.default.createElement(BIcon, { size: 16, color: b.earned ? T.copper : T.tertiary, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: b.earned ? T.white : T.tertiary, fontWeight: 600, display: "block", marginBottom: 2 } }, b.name), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 10, color: T.tertiary, display: "block", marginBottom: 8, lineHeight: 1.4 } }, b.desc), !b.earned && /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: 3 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary } }, b.progress, "/", b.goal), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.copper } }, Math.round(pct), "%")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { height: 4, background: T.charcoal, borderRadius: 2, overflow: "hidden" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { height: "100%", width: `${pct}%`, background: T.copper, borderRadius: 2 } }))));
+    }))))));
   }
   function AddBuildForm({ onClose, onSave, initialData }) {
     const d = initialData || {};
@@ -26579,6 +26783,7 @@ lucide-react/dist/esm/Icon.js:
 lucide-react/dist/esm/createLucideIcon.js:
 lucide-react/dist/esm/icons/arrow-up.js:
 lucide-react/dist/esm/icons/at-sign.js:
+lucide-react/dist/esm/icons/award.js:
 lucide-react/dist/esm/icons/bell.js:
 lucide-react/dist/esm/icons/bookmark.js:
 lucide-react/dist/esm/icons/camera.js:
@@ -26589,9 +26794,11 @@ lucide-react/dist/esm/icons/chevron-up.js:
 lucide-react/dist/esm/icons/circle-check-big.js:
 lucide-react/dist/esm/icons/clock.js:
 lucide-react/dist/esm/icons/compass.js:
+lucide-react/dist/esm/icons/dollar-sign.js:
 lucide-react/dist/esm/icons/external-link.js:
 lucide-react/dist/esm/icons/eye-off.js:
 lucide-react/dist/esm/icons/eye.js:
+lucide-react/dist/esm/icons/flame.js:
 lucide-react/dist/esm/icons/globe.js:
 lucide-react/dist/esm/icons/heart.js:
 lucide-react/dist/esm/icons/house.js:
@@ -26606,6 +26813,7 @@ lucide-react/dist/esm/icons/navigation.js:
 lucide-react/dist/esm/icons/pen-line.js:
 lucide-react/dist/esm/icons/plus.js:
 lucide-react/dist/esm/icons/radio.js:
+lucide-react/dist/esm/icons/route.js:
 lucide-react/dist/esm/icons/search.js:
 lucide-react/dist/esm/icons/send.js:
 lucide-react/dist/esm/icons/settings.js:
@@ -26614,7 +26822,9 @@ lucide-react/dist/esm/icons/shield.js:
 lucide-react/dist/esm/icons/smartphone.js:
 lucide-react/dist/esm/icons/star.js:
 lucide-react/dist/esm/icons/target.js:
+lucide-react/dist/esm/icons/thumbs-up.js:
 lucide-react/dist/esm/icons/trash-2.js:
+lucide-react/dist/esm/icons/trending-up.js:
 lucide-react/dist/esm/icons/triangle-alert.js:
 lucide-react/dist/esm/icons/trophy.js:
 lucide-react/dist/esm/icons/user-check.js:
@@ -26622,6 +26832,7 @@ lucide-react/dist/esm/icons/user-plus.js:
 lucide-react/dist/esm/icons/users.js:
 lucide-react/dist/esm/icons/wrench.js:
 lucide-react/dist/esm/icons/x.js:
+lucide-react/dist/esm/icons/zap.js:
 lucide-react/dist/esm/lucide-react.js:
   (**
    * @license lucide-react v1.7.0 - ISC
