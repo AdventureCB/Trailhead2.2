@@ -9244,6 +9244,7 @@ function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotificatio
             tags: routeData.tags || [],
             photos: routeData.photos || [],
             pins: routeData.pins || [],
+            points: routeData.points || [],
           };
           if (routeData.shareToFeed) {
             onSubmit && onSubmit(newPost);
@@ -9260,6 +9261,7 @@ function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotificatio
             terrains: routeData.terrains || [],
             tags: routeData.tags || [],
             pins: routeData.pins || [],
+            points: routeData.points || [],
             photos: routeData.photos || [],
             rating: null,
             reviews: 0,
