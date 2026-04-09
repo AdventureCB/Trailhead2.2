@@ -26199,10 +26199,12 @@
     const addRecoveryAlert = (alert) => {
       setRecoveryAlerts((prev) => [alert, ...prev]);
     };
+    const [dmKey, setDmKey] = (0, import_react4.useState)(0);
     const openDM = (user, prefillMsg, sharedPost) => {
       setDmInitialUser(user || null);
       setDmInitialMessage(prefillMsg || "");
       setDmSharedPost(sharedPost || null);
+      setDmKey((k) => k + 1);
       setShowDM(true);
     };
     const addBuild = (data) => {
@@ -26480,6 +26482,7 @@
     ), showDM && /* @__PURE__ */ import_react4.default.createElement(
       DMScreen,
       {
+        key: dmKey,
         onClose: () => {
           setShowDM(false);
           setDmInitialUser(null);

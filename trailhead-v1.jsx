@@ -8083,7 +8083,8 @@ export default function Trailhead() {
     setRecoveryAlerts(prev => [alert, ...prev]);
   };
 
-  const openDM = (user, prefillMsg, sharedPost) => { setDmInitialUser(user || null); setDmInitialMessage(prefillMsg || ""); setDmSharedPost(sharedPost || null); setShowDM(true); };
+  const [dmKey, setDmKey] = useState(0);
+  const openDM = (user, prefillMsg, sharedPost) => { setDmInitialUser(user || null); setDmInitialMessage(prefillMsg || ""); setDmSharedPost(sharedPost || null); setDmKey(k => k + 1); setShowDM(true); };
 
   const addBuild = (data) => {
     const displayName = data.buildName || `${data.year} ${data.make} ${data.model}`;
@@ -8361,6 +8362,7 @@ export default function Trailhead() {
       )}
       {showDM && (
         <DMScreen
+          key={dmKey}
           onClose={() => { setShowDM(false); setDmInitialUser(null); setDmInitialMessage(""); setDmSharedPost(null); }}
           onViewUser={(handle) => { setShowDM(false); setDmInitialUser(null); setDmInitialMessage(""); setDmSharedPost(null); openUserProfile(handle); }}
           initialUser={dmInitialUser}
