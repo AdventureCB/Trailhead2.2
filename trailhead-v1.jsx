@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { createRoot } from "react-dom/client";
 import { Heart, MessageCircle, MapPin, Clock, Mountain, ChevronRight, ChevronLeft, ChevronDown, Search, Plus, Home, Compass, Map, Wrench, Trophy, AlertTriangle, Navigation, Star, Share2, Bookmark, MoreHorizontal, ArrowUp, Users, Radio, CloudSun, CheckCircle, Target, Gift, ChevronUp, ExternalLink, Lock, Globe, Shield, UserPlus, UserCheck, Settings, Camera, Eye, EyeOff, X, Bell, ThumbsUp, UserPlus as UserPlusIcon, AtSign, Mail, Send, Image, Smartphone, Trash2, Edit3, Award, Zap, TrendingUp, Flame, DollarSign, Route, Video, Play } from "lucide-react";
 
 /* ─── Design Tokens from Lone Peak Concept ─── */
@@ -9876,3 +9877,6 @@ export default function Trailhead() {
     </div>
   );
 }
+
+/* ─── Mount ─── */
+createRoot(document.getElementById("root")).render(React.createElement(Trailhead));
