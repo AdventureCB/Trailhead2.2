@@ -1567,7 +1567,8 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, 
 
   const sendShareToUser = (recipientHandle, item) => {
     const shareText = "";
-    const sharedPost = { id: item.id, title: item.title, user: item.user, initial: item.initial, type: item.type, image: (item.photoUrls && item.photoUrls[0]) || null, threadId: item.threadId, forumCat: item.forumCat, forumSub: item.forumSub };
+    const firstP = item.photoUrls && item.photoUrls[0];
+    const sharedPost = { id: item.id, title: item.title, user: item.user, initial: item.initial, type: item.type, image: firstP ? (typeof firstP === "string" ? firstP : firstP.url) : null, threadId: item.threadId, forumCat: item.forumCat, forumSub: item.forumSub };
     setShareMenuId(null);
     setSharePickerId(null);
     setShareSearch("");
@@ -1764,10 +1765,32 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, 
               </div>
             )}
             {item.photoUrls && item.photoUrls.length > 0 && (
-              <div style={{ display: "flex", gap: 6, marginBottom: 12, overflowX: "auto" }}>
-                {item.photoUrls.map((url, pi) => (
-                  <img key={pi} src={url} alt="" onClick={() => openCarousel(item.photoUrls, pi)} style={{ width: item.photoUrls.length === 1 ? "100%" : 140, height: item.photoUrls.length === 1 ? 180 : 100, borderRadius: 8, objectFit: "cover", cursor: "pointer", flexShrink: 0 }} />
-                ))}
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+                {item.photoUrls.map((p, pi) => {
+                  const pUrl = typeof p === "string" ? p : p.url;
+                  const isVid = typeof p === "object" && p.type === "video";
+                  const caption = typeof p === "object" ? p.caption : "";
+                  return (
+                    <div key={pi} style={{ borderRadius: 10, overflow: "hidden", border: `1px solid ${T.charcoal}` }}>
+                      {isVid ? (
+                        <div style={{ position: "relative" }}>
+                          <video src={pUrl} preload="metadata" playsInline controls style={{ width: "100%", maxHeight: 300, objectFit: "contain", display: "block", background: "#000" }} />
+                          <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(0,0,0,0.6)", borderRadius: 4, padding: "2px 8px", display: "flex", alignItems: "center", gap: 4, pointerEvents: "none" }}>
+                            <Video size={10} color={T.white} />
+                            <span style={{ fontFamily: sans, fontSize: 9, color: T.white, fontWeight: 600 }}>VIDEO</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <img src={pUrl} alt="" onClick={() => openCarousel(item.photoUrls.filter(x => (typeof x === "string") || x.type !== "video").map(x => typeof x === "string" ? x : x.url), 0)} style={{ width: "100%", height: 200, objectFit: "cover", display: "block", cursor: "pointer" }} />
+                      )}
+                      {caption && (
+                        <div style={{ padding: "6px 10px", background: T.darkCard }}>
+                          <span style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, fontStyle: "italic" }}>{caption}</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
             <div style={{ display: "flex", gap: 16, marginBottom: 12 }}>
@@ -2015,9 +2038,17 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, 
           </div>
           {/* Hero image or gradient placeholder */}
           <div style={{ position: "relative" }}>
-            {item.photoUrls && item.photoUrls[0] ? (
+            {item.photoUrls && item.photoUrls[0] ? (() => {
+              const firstP = item.photoUrls[0];
+              const firstUrl = typeof firstP === "string" ? firstP : firstP.url;
+              const firstIsVid = typeof firstP === "object" && firstP.type === "video";
+              return (
               <div style={{ position: "relative" }}>
-                <img src={item.photoUrls[0]} alt="" onClick={() => { const imgs = bd ? collectBuildImages(bd) : item.photoUrls; openCarousel(imgs, 0); }} style={{ width: "100%", height: 220, objectFit: "cover", display: "block", cursor: "pointer" }} />
+                {firstIsVid ? (
+                  <video src={firstUrl} preload="metadata" playsInline controls style={{ width: "100%", maxHeight: 300, objectFit: "contain", display: "block", background: "#000" }} />
+                ) : (
+                  <img src={firstUrl} alt="" onClick={() => { const imgs = bd ? collectBuildImages(bd) : item.photoUrls.map(x => typeof x === "string" ? x : x.url); openCarousel(imgs, 0); }} style={{ width: "100%", height: 220, objectFit: "cover", display: "block", cursor: "pointer" }} />
+                )}
                 <div style={{ position: "absolute", inset: 0, background: "linear-gradient(transparent 40%, rgba(0,0,0,0.8))", pointerEvents: "none" }} />
                 <div style={{ position: "absolute", bottom: 12, left: 14, right: 14, pointerEvents: "none" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
@@ -2028,7 +2059,7 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, 
                   {item.vehicle && <span style={{ fontFamily: serif, fontSize: 12, color: T.warmBg, opacity: 0.8 }}>{item.vehicle}</span>}
                 </div>
               </div>
-            ) : (
+              ); })() : (
               <div onClick={() => setExpandedBuildPost(isExpanded ? null : item.id)} style={{ height: 180, background: `linear-gradient(135deg, ${T.charcoal} 0%, ${T.tertiary}30 100%)`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", position: "relative", cursor: "pointer" }}>
                 <Wrench size={40} color={T.tertiary} strokeWidth={0.5} style={{ opacity: 0.3 }} />
                 <div style={{ position: "absolute", bottom: 12, left: 14 }}>
@@ -2171,9 +2202,17 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, 
             </div>
             <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{formatPostTime(item.time)}</span>
           </div>
-          {item.photoUrls && item.photoUrls.length > 0 ? (
+          {item.photoUrls && item.photoUrls.length > 0 ? (() => {
+            const firstP = item.photoUrls[0];
+            const firstUrl = typeof firstP === "string" ? firstP : firstP.url;
+            const firstIsVid = typeof firstP === "object" && firstP.type === "video";
+            return (
             <div style={{ position: "relative" }}>
-              <img src={item.photoUrls[0]} alt="" onClick={() => openCarousel(item.photoUrls, 0)} style={{ width: "100%", height: 220, objectFit: "cover", display: "block", cursor: "pointer" }} />
+              {firstIsVid ? (
+                <video src={firstUrl} preload="metadata" playsInline controls style={{ width: "100%", maxHeight: 300, objectFit: "contain", display: "block", background: "#000" }} />
+              ) : (
+                <img src={firstUrl} alt="" onClick={() => openCarousel(item.photoUrls.filter(x => (typeof x === "string") || x.type !== "video").map(x => typeof x === "string" ? x : x.url), 0)} style={{ width: "100%", height: 220, objectFit: "cover", display: "block", cursor: "pointer" }} />
+              )}
               {item.photoCount > 1 && (
                 <div style={{ position: "absolute", bottom: 10, right: 10, background: `${T.darkBg}CC`, padding: "4px 10px", borderRadius: 12, display: "flex", alignItems: "center", gap: 4 }}>
                   <Camera size={11} color={T.warmBg} />
@@ -2181,7 +2220,7 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, 
                 </div>
               )}
             </div>
-          ) : (
+            ); })() : (
             <div style={{ height: 220, background: `linear-gradient(135deg, ${T.charcoal} 0%, ${T.copper}15 100%)`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
               <Camera size={48} color={T.tertiary} strokeWidth={0.5} style={{ opacity: 0.25 }} />
               <div style={{ position: "absolute", bottom: 10, right: 10, background: `${T.darkBg}CC`, padding: "4px 10px", borderRadius: 12, display: "flex", alignItems: "center", gap: 4 }}>
@@ -8558,7 +8597,7 @@ function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotificatio
         id, type: hasPhotos ? "PHOTOS" : "POST", user: "KyleLPO", initial: "K", time: Date.now(),
         title: general.text.trim() || "New post",
         body: null,
-        ...(hasPhotos ? { photoCount: general.photos.length, photoUrls: general.photos.map(p => p.url) } : {}),
+        ...(hasPhotos ? { photoCount: general.photos.length, photoUrls: general.photos.map(p => ({ url: p.url, type: p.type || "image", caption: p.caption || "" })) } : {}),
         ...(general.location ? { location: general.location } : {}),
         likes: 0, comments: 0,
       };
@@ -8590,7 +8629,7 @@ function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotificatio
         title: recovery.title, body: recovery.description || null,
         location: recovery.location || "Unknown", urgency: recovery.urgency,
         coords: recovery.coords || "—",
-        ...(hasRecPhotos ? { photoCount: recoveryPhotos.length, photoUrls: recoveryPhotos.map(p => p.url) } : {}),
+        ...(hasRecPhotos ? { photoCount: recoveryPhotos.length, photoUrls: recoveryPhotos.map(p => ({ url: p.url, type: p.type || "image", caption: p.caption || "" })) } : {}),
         ...(recovery.vehicle ? { vehicle: recovery.vehicle } : {}),
         likes: 0, comments: 0,
       };
