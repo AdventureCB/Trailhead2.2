@@ -7432,7 +7432,7 @@ function AddBuildForm({ onClose, onSave, initialData }) {
 }
 
 /* ─── PROFILE SCREEN (Own Profile) ─── */
-function ProfileScreen({ onViewUser, onLogout, userBuilds, onAddBuild, onUpdateBuild, onDeleteBuild, profilePic, onSetProfilePic, notifPrefs, onSetNotifPrefs, feedItems, onDeletePost, onEditPost, onGoToPost, myPoints: myPointsProp }) {
+function ProfileScreen({ onViewUser, onLogout, userBuilds, onAddBuild, onUpdateBuild, onDeleteBuild, profilePic, onSetProfilePic, notifPrefs, onSetNotifPrefs, feedItems, onDeletePost, onEditPost, onUpdateConvoy, onGoToPost, myPoints: myPointsProp }) {
   const [isPublic, setIsPublic] = useState(true);
   const [activeTab, setActiveTab] = useState("builds");
   const [activeBuild, setActiveBuild] = useState(0);
@@ -7506,6 +7506,8 @@ function ProfileScreen({ onViewUser, onLogout, userBuilds, onAddBuild, onUpdateB
   const builds = [...defaultBuilds, ...mappedUserBuilds];
 
   const [tripFilter, setTripFilter] = useState("all");
+  const [editingConvoy, setEditingConvoy] = useState(null); // feedItem or null
+  const [convoyEditData, setConvoyEditData] = useState({});
 
   const staticTrips = [
     { name: "Shadow Peak Traverse", date: "Oct 12, 2025", distance: "42.5 mi", grade: 7, build: "THE HIGHLANDER", role: "went" },
@@ -8109,6 +8111,78 @@ function ProfileScreen({ onViewUser, onLogout, userBuilds, onAddBuild, onUpdateB
       {/* TRIPS TAB */}
       {activeTab === "trips" && (
         <div style={{ padding: "0 16px" }}>
+          {/* Convoy edit overlay */}
+          {editingConvoy && (
+            <div style={{ position: "fixed", top: 0, bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 430, zIndex: 1000, background: T.darkBg, display: "flex", flexDirection: "column" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", background: T.charcoal, borderBottom: `1px solid ${T.darkCard}`, flexShrink: 0 }}>
+                <button onClick={() => setEditingConvoy(null)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" }}>
+                  <ChevronLeft size={22} color={T.white} strokeWidth={1.5} />
+                </button>
+                <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, letterSpacing: 1 }}>EDIT CONVOY</span>
+                <button onClick={() => {
+                  if (onUpdateConvoy && editingConvoy.id) {
+                    const d = convoyEditData.departDate ? new Date(convoyEditData.departDate) : null;
+                    onUpdateConvoy(editingConvoy.id, {
+                      title: convoyEditData.title || editingConvoy.title,
+                      body: convoyEditData.description != null ? convoyEditData.description : editingConvoy.body,
+                      location: convoyEditData.location != null ? convoyEditData.location : editingConvoy.location,
+                      month: d ? d.toLocaleString("en", { month: "short" }).toUpperCase() : editingConvoy.month,
+                      day: d ? String(d.getDate()) : editingConvoy.day,
+                      departs: convoyEditData.departTime || editingConvoy.departs,
+                      slots: convoyEditData.slots != null ? parseInt(convoyEditData.slots) || 0 : editingConvoy.slots,
+                    });
+                  }
+                  setEditingConvoy(null);
+                  setConvoyEditData({});
+                }} style={{ fontFamily: sans, fontSize: 12, fontWeight: 700, color: T.white, background: T.green, border: "none", padding: "8px 18px", borderRadius: 6, cursor: "pointer", letterSpacing: 0.5 }}>
+                  SAVE
+                </button>
+              </div>
+              <div className="th-scroll" style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 14 }}>
+                <div>
+                  <label style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, marginBottom: 6, display: "block" }}>TITLE</label>
+                  <input value={convoyEditData.title != null ? convoyEditData.title : editingConvoy.title} onChange={(e) => setConvoyEditData(d => ({ ...d, title: e.target.value }))} style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none" }} />
+                </div>
+                <div>
+                  <label style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, marginBottom: 6, display: "block" }}>LOCATION</label>
+                  <input value={convoyEditData.location != null ? convoyEditData.location : (editingConvoy.location || "")} onChange={(e) => setConvoyEditData(d => ({ ...d, location: e.target.value }))} style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none" }} />
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  <div>
+                    <label style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, marginBottom: 6, display: "block" }}>DEPARTURE DATE</label>
+                    <input type="date" value={convoyEditData.departDate || ""} onChange={(e) => setConvoyEditData(d => ({ ...d, departDate: e.target.value }))} style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, outline: "none", colorScheme: "dark" }} />
+                  </div>
+                  <div>
+                    <label style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, marginBottom: 6, display: "block" }}>DEPARTURE TIME</label>
+                    <input type="time" value={convoyEditData.departTime || editingConvoy.departs || ""} onChange={(e) => setConvoyEditData(d => ({ ...d, departTime: e.target.value }))} style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, outline: "none", colorScheme: "dark" }} />
+                  </div>
+                </div>
+                <div>
+                  <label style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, marginBottom: 6, display: "block" }}>MAX RIGS</label>
+                  <input value={convoyEditData.slots != null ? convoyEditData.slots : editingConvoy.slots} onChange={(e) => setConvoyEditData(d => ({ ...d, slots: e.target.value }))} style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none" }} />
+                </div>
+                <div>
+                  <label style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, marginBottom: 6, display: "block" }}>DETAILS</label>
+                  <textarea value={convoyEditData.description != null ? convoyEditData.description : (editingConvoy.body || "")} onChange={(e) => setConvoyEditData(d => ({ ...d, description: e.target.value }))} style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none", resize: "vertical", minHeight: 80, lineHeight: 1.5 }} />
+                </div>
+                {/* RSVP summary */}
+                {editingConvoy.rsvps && Object.keys(editingConvoy.rsvps).length > 0 && (
+                  <div>
+                    <label style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, marginBottom: 8, display: "block" }}>RSVPs</label>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      {Object.entries(editingConvoy.rsvps).map(([handle, status]) => (
+                        <div key={handle} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: T.darkCard, borderRadius: 6 }}>
+                          <span style={{ fontFamily: sans, fontSize: 12, color: T.copper, fontWeight: 600 }}>{handle}</span>
+                          <span style={{ fontFamily: sans, fontSize: 10, color: status === "going" ? T.green : status === "maybe" ? T.copper : T.tertiary, marginLeft: "auto", textTransform: "uppercase", letterSpacing: 0.5 }}>{status}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 6, display: "block" }}>Saving will notify all Going and Maybe users of changes</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
           {/* Trip filter sub-tabs */}
           <div style={{ display: "flex", gap: 6, marginBottom: 12, overflowX: "auto", paddingBottom: 2 }}>
             {[{ label: "ALL", value: "all" }, { label: "ORGANIZED", value: "organized" }, { label: "ATTENDING", value: "attending" }, { label: "COMPLETED", value: "went" }].map(f => (
@@ -8142,7 +8216,17 @@ function ProfileScreen({ onViewUser, onLogout, userBuilds, onAddBuild, onUpdateB
                     <span style={{ fontFamily: sans, fontSize: 11, color: T.copper }}>{t.distance}</span>
                   </div>
                 </div>
-                <span style={{ fontFamily: sans, fontSize: 9, color: t.role === "organized" ? T.copper : t.role === "attending" ? T.green : T.tertiary, background: T.charcoal, padding: "4px 8px", borderRadius: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>{t.build || (t.role === "organized" ? "Organized" : t.role === "attending" ? "Attending" : "Completed")}</span>
+                {t.isConvoy && t.role === "organized" ? (
+                  <button onClick={() => {
+                    const convoyItem = (feedItems || []).find(fi => fi.id === t.convoyId);
+                    if (convoyItem) { setEditingConvoy(convoyItem); setConvoyEditData({}); }
+                  }} style={{ background: "none", border: `1px solid ${T.charcoal}`, borderRadius: 6, padding: "6px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+                    <Edit3 size={11} color={T.copper} />
+                    <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 600, letterSpacing: 0.5 }}>EDIT</span>
+                  </button>
+                ) : (
+                  <span style={{ fontFamily: sans, fontSize: 9, color: t.role === "organized" ? T.copper : t.role === "attending" ? T.green : T.tertiary, background: T.charcoal, padding: "4px 8px", borderRadius: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>{t.build || (t.role === "attending" ? "Attending" : "Completed")}</span>
+                )}
               </div>
             ))}
           </div>
@@ -8907,6 +8991,11 @@ function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotificatio
   const [convoyPhotos, setConvoyPhotos] = useState([]);
   const [convoyPin, setConvoyPin] = useState(null); // { lat, lng, label }
   const [convoyPinSearch, setConvoyPinSearch] = useState("");
+  const [showPinMap, setShowPinMap] = useState(false);
+  const convoyPinInputRef = useRef(null);
+  const convoyPinMapRef = useRef(null);
+  const convoyPinMarkerRef = useRef(null);
+  const convoyPinAutocompleteRef = useRef(null);
   const [convoyInvites, setConvoyInvites] = useState([]); // ["@handle1", "@handle2"]
   const [convoyInviteInput, setConvoyInviteInput] = useState("");
   const convoyPhotoRef = useRef(null);
@@ -9310,91 +9399,118 @@ function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotificatio
             {/* Meeting Point Pin */}
             <div>
               <label style={labelStyle}>MEETING POINT</label>
-              {convoyPin ? (
-                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: T.darkCard, borderRadius: 8, border: `1px solid ${T.green}30` }}>
-                  <MapPin size={16} color={T.green} />
-                  <div style={{ flex: 1 }}>
-                    <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>{convoyPin.label || "Meeting Point"}</span>
-                    <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, display: "block" }}>{convoyPin.lat.toFixed(5)}, {convoyPin.lng.toFixed(5)}</span>
+              {convoyPin && !showPinMap ? (
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: T.darkCard, borderRadius: 8, border: `1px solid ${T.green}30`, marginBottom: 6 }}>
+                    <MapPin size={16} color={T.green} />
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>{convoyPin.label || "Meeting Point"}</span>
+                      <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, display: "block" }}>{convoyPin.lat.toFixed(5)}, {convoyPin.lng.toFixed(5)}</span>
+                    </div>
+                    <button onClick={() => { setShowPinMap(true); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }} title="Edit pin">
+                      <Edit3 size={14} color={T.copper} />
+                    </button>
+                    <button onClick={() => setConvoyPin(null)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+                      <X size={14} color={T.tertiary} />
+                    </button>
                   </div>
-                  <button onClick={() => setConvoyPin(null)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
-                    <X size={14} color={T.tertiary} />
-                  </button>
                 </div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {/* Google Places Autocomplete search */}
                   <div style={{ position: "relative" }}>
-                    <Search size={14} color={T.tertiary} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
+                    <Search size={14} color={T.tertiary} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", zIndex: 2 }} />
                     <input
-                      value={convoyPinSearch || ""}
-                      onChange={(e) => setConvoyPinSearch(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && convoyPinSearch.trim()) {
-                          // Geocode via Google Maps Geocoder if available, else use a preset
-                          if (window.google && window.google.maps) {
-                            const geocoder = new window.google.maps.Geocoder();
-                            geocoder.geocode({ address: convoyPinSearch.trim() }, (results, status) => {
-                              if (status === "OK" && results[0]) {
-                                const loc = results[0].geometry.location;
-                                setConvoyPin({ lat: loc.lat(), lng: loc.lng(), label: results[0].formatted_address });
-                                setConvoyPinSearch("");
-                              }
-                            });
-                          } else {
-                            // Fallback: parse "lat, lng" manually or set a default
-                            const parts = convoyPinSearch.split(",").map(s => parseFloat(s.trim()));
-                            if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-                              setConvoyPin({ lat: parts[0], lng: parts[1], label: convoyPinSearch.trim() });
-                              setConvoyPinSearch("");
+                      ref={convoyPinInputRef}
+                      placeholder="Search Google Maps for a place..."
+                      style={{ ...inputStyle, paddingLeft: 34 }}
+                      onFocus={(e) => {
+                        e.target.style.borderColor = T.copper;
+                        // Attach Google Places Autocomplete once
+                        if (window.google && window.google.maps && window.google.maps.places && !convoyPinAutocompleteRef.current) {
+                          const ac = new window.google.maps.places.Autocomplete(e.target, { fields: ["geometry", "formatted_address", "name"] });
+                          convoyPinAutocompleteRef.current = ac;
+                          ac.addListener("place_changed", () => {
+                            const place = ac.getPlace();
+                            if (place && place.geometry && place.geometry.location) {
+                              const lat = place.geometry.location.lat();
+                              const lng = place.geometry.location.lng();
+                              const label = place.name ? `${place.name} — ${place.formatted_address}` : place.formatted_address;
+                              setConvoyPin({ lat, lng, label });
+                              setShowPinMap(false);
+                              if (convoyPinInputRef.current) convoyPinInputRef.current.value = "";
                             }
-                          }
+                          });
                         }
                       }}
-                      placeholder="Search address or place name..."
-                      style={{ ...inputStyle, paddingLeft: 34 }}
-                      onFocus={(e) => e.target.style.borderColor = T.copper}
                       onBlur={(e) => e.target.style.borderColor = T.charcoal}
                     />
                   </div>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button onClick={() => {
-                      if (convoyPinSearch.trim() && window.google && window.google.maps) {
-                        const geocoder = new window.google.maps.Geocoder();
-                        geocoder.geocode({ address: convoyPinSearch.trim() }, (results, status) => {
-                          if (status === "OK" && results[0]) {
-                            const loc = results[0].geometry.location;
-                            setConvoyPin({ lat: loc.lat(), lng: loc.lng(), label: results[0].formatted_address });
-                            setConvoyPinSearch("");
+                  {/* Tap-to-pin map */}
+                  <button onClick={() => setShowPinMap(!showPinMap)} style={{ width: "100%", padding: "10px", borderRadius: 8, background: T.darkCard, border: `1px dashed ${showPinMap ? T.copper : T.charcoal}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                    <Map size={14} color={T.copper} />
+                    <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600 }}>{showPinMap ? "HIDE MAP" : "DROP PIN ON MAP"}</span>
+                  </button>
+                  {showPinMap && (
+                    <div style={{ borderRadius: 10, overflow: "hidden", border: `1px solid ${T.charcoal}`, position: "relative" }}>
+                      <div ref={convoyPinMapRef} style={{ width: "100%", height: 220 }} />
+                      {/* Init map */}
+                      {(() => {
+                        if (convoyPinMapRef.current && window.google && !convoyPinMapRef.current._mapInit) {
+                          convoyPinMapRef.current._mapInit = true;
+                          const center = convoyPin ? { lat: convoyPin.lat, lng: convoyPin.lng } : { lat: 39.5, lng: -111.0 };
+                          const zoom = convoyPin ? 14 : 5;
+                          const map = new window.google.maps.Map(convoyPinMapRef.current, {
+                            center, zoom,
+                            disableDefaultUI: true,
+                            zoomControl: true,
+                            styles: [
+                              { elementType: "geometry", stylers: [{ color: "#1d1d1d" }] },
+                              { elementType: "labels.text.fill", stylers: [{ color: "#999" }] },
+                              { elementType: "labels.text.stroke", stylers: [{ color: "#1d1d1d" }] },
+                              { featureType: "road", elementType: "geometry", stylers: [{ color: "#333" }] },
+                              { featureType: "water", elementType: "geometry", stylers: [{ color: "#0e1626" }] },
+                            ],
+                          });
+                          if (convoyPin) {
+                            convoyPinMarkerRef.current = new window.google.maps.Marker({
+                              position: { lat: convoyPin.lat, lng: convoyPin.lng },
+                              map,
+                              icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 12, fillColor: T.green, fillOpacity: 1, strokeColor: T.white, strokeWeight: 2 },
+                            });
                           }
-                        });
-                      } else if (convoyPinSearch.trim()) {
-                        const parts = convoyPinSearch.split(",").map(s => parseFloat(s.trim()));
-                        if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-                          setConvoyPin({ lat: parts[0], lng: parts[1], label: convoyPinSearch.trim() });
-                          setConvoyPinSearch("");
+                          map.addListener("click", (e) => {
+                            const lat = e.latLng.lat();
+                            const lng = e.latLng.lng();
+                            // Reverse geocode
+                            const geocoder = new window.google.maps.Geocoder();
+                            geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+                              const label = status === "OK" && results[0] ? results[0].formatted_address : `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+                              setConvoyPin({ lat, lng, label });
+                              // Update marker
+                              if (convoyPinMarkerRef.current) {
+                                convoyPinMarkerRef.current.setPosition({ lat, lng });
+                              } else {
+                                convoyPinMarkerRef.current = new window.google.maps.Marker({
+                                  position: { lat, lng },
+                                  map,
+                                  icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 12, fillColor: T.green, fillOpacity: 1, strokeColor: T.white, strokeWeight: 2 },
+                                });
+                              }
+                            });
+                          });
                         }
-                      }
-                    }} style={{ flex: 1, padding: "10px", borderRadius: 8, background: T.darkCard, border: `1px dashed ${T.charcoal}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                      <Search size={14} color={T.copper} />
-                      <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600 }}>SEARCH</span>
-                    </button>
-                    <button onClick={() => {
-                      // Manual pin: open a mini map to tap-place a pin
-                      if (navigator.geolocation) {
-                        navigator.geolocation.getCurrentPosition(
-                          (pos) => setConvoyPin({ lat: pos.coords.latitude, lng: pos.coords.longitude, label: "Current Location" }),
-                          () => setConvoyPin({ lat: 39.5, lng: -98.35, label: "Manual Pin" }),
-                          { enableHighAccuracy: true, timeout: 5000 }
-                        );
-                      } else {
-                        setConvoyPin({ lat: 39.5, lng: -98.35, label: "Manual Pin" });
-                      }
-                    }} style={{ padding: "10px 14px", borderRadius: 8, background: T.darkCard, border: `1px dashed ${T.charcoal}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                      <Target size={14} color={T.tertiary} />
-                      <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, fontWeight: 600 }}>USE GPS</span>
-                    </button>
-                  </div>
-                  <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>Search for a location, enter coordinates (lat, lng), or use GPS</span>
+                        return null;
+                      })()}
+                      <div style={{ position: "absolute", bottom: 8, left: 8, right: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontFamily: sans, fontSize: 10, color: T.white, background: `${T.darkBg}CC`, padding: "4px 10px", borderRadius: 6 }}>Tap map to drop pin</span>
+                        {convoyPin && (
+                          <button onClick={() => setShowPinMap(false)} style={{ fontFamily: sans, fontSize: 10, fontWeight: 600, color: T.white, background: T.green, padding: "6px 14px", borderRadius: 6, border: "none", cursor: "pointer" }}>CONFIRM PIN</button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>Search for a place or tap the map to set your meeting point</span>
                 </div>
               )}
             </div>
@@ -10319,7 +10435,18 @@ export default function Trailhead() {
           isOtherProfile ? (
             <OtherProfileScreen userId={profileStack[1]} onBack={goBack} onMessage={(user) => openDM(user)} />
           ) : (
-            <ProfileScreen onViewUser={openUserProfile} onLogout={() => { setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={(id) => { setUserBuilds(prev => prev.filter(b => b.id !== id)); setFeedItems(prev => prev.filter(p => p.buildId !== id && p.id !== id)); }} profilePic={profilePic} onSetProfilePic={setProfilePic} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => setFeedItems(prev => prev.filter(p => p.id !== id))} onEditPost={(id, newText) => setFeedItems(prev => prev.map(p => p.id === id ? { ...p, title: newText } : p))} onGoToPost={(id) => { setProfileStack([]); setScreen("feed"); }} myPoints={myTotalPoints} />
+            <ProfileScreen onViewUser={openUserProfile} onLogout={() => { setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={(id) => { setUserBuilds(prev => prev.filter(b => b.id !== id)); setFeedItems(prev => prev.filter(p => p.buildId !== id && p.id !== id)); }} profilePic={profilePic} onSetProfilePic={setProfilePic} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => setFeedItems(prev => prev.filter(p => p.id !== id))} onEditPost={(id, newText) => setFeedItems(prev => prev.map(p => p.id === id ? { ...p, title: newText } : p))} onUpdateConvoy={(convoyId, updates) => {
+              setFeedItems(prev => prev.map(p => p.id === convoyId ? { ...p, ...updates } : p));
+              // Notify going/maybe RSVPs
+              const convoy = feedItems.find(p => p.id === convoyId);
+              if (convoy && convoy.rsvps) {
+                const notifyHandles = Object.entries(convoy.rsvps).filter(([_, v]) => v === "going" || v === "maybe").map(([h]) => h.replace(/^@/, ""));
+                notifyHandles.forEach(handle => {
+                  openDM(handle, `The convoy "${updates.title || convoy.title}" has been updated. Check the new details!`, { type: "convoy_invite", convoyId, title: updates.title || convoy.title, location: updates.location || convoy.location || "TBD", date: updates.month && updates.day ? `${updates.month} ${updates.day}` : "TBD", time: updates.departs || convoy.departs || "TBD", slots: updates.slots != null ? updates.slots : convoy.slots, from: "KyleLPO" });
+                });
+                addNotification({ type: "convoy", user: "KyleLPO", text: `updated convoy`, title: updates.title || convoy.title, time: Date.now() });
+              }
+            }} onGoToPost={(id) => { setProfileStack([]); setScreen("feed"); }} myPoints={myTotalPoints} />
           )
         ) : (
           <>
