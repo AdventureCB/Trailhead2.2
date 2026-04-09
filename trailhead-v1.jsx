@@ -1853,8 +1853,8 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, 
               <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{formatPostTime(item.time)}</span>
             </div>
           </div>
-          <div style={{ padding: 16 }}>
-            <h3 onClick={() => setExpandedRoutePost(isRouteExp ? null : item.id)} style={{ fontFamily: serif, fontSize: 15, color: T.white, margin: "0 0 8px", cursor: "pointer" }}>{item.title}</h3>
+          <div onClick={() => setExpandedRoutePost(isRouteExp ? null : item.id)} style={{ padding: 16, cursor: "pointer" }}>
+            <h3 style={{ fontFamily: serif, fontSize: 15, color: T.white, margin: "0 0 8px" }}>{item.title}</h3>
             <div style={{ display: "flex", gap: 16, marginBottom: 8 }}>
               <span style={{ fontFamily: sans, fontSize: 12, color: T.copper, fontWeight: 600 }}>{item.distance}</span>
               <span style={{ fontFamily: sans, fontSize: 12, color: T.copper, fontWeight: 600 }}>{item.duration}</span>
@@ -1862,7 +1862,10 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, 
                 <span style={{ fontFamily: sans, fontSize: 10, color: rdiffColor(item.difficulty), background: `${rdiffColor(item.difficulty)}20`, padding: "3px 8px", borderRadius: 4, letterSpacing: 0.5 }}>{item.difficulty.toUpperCase()}</span>
               )}
             </div>
-            <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, marginBottom: 4 }}>+{item.verified} Verified This Week</span>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>+{item.verified} Verified This Week</span>
+              <ChevronDown size={14} color={T.tertiary} style={{ transform: isRouteExp ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
+            </div>
           </div>
           {/* Expanded route details */}
           {isRouteExp && (
@@ -5232,8 +5235,8 @@ function RoutesScreen({ onRecordRoute, onManualEntry, userRoutes, onUpdateRoute,
           {displayRoutes.map((r, i) => {
             const isExp = expandedRoute === i;
             return (
-            <div key={i} onClick={() => setExpandedRoute(isExp ? null : i)} style={{ ...cardStyle, cursor: "pointer", overflow: "hidden" }}>
-              <div style={{ padding: 16 }}>
+            <div key={i} style={{ ...cardStyle, overflow: "hidden" }}>
+              <div onClick={() => setExpandedRoute(isExp ? null : i)} style={{ padding: 16, cursor: "pointer" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
                   <h3 style={{ fontFamily: sans, fontSize: 16, color: T.white, margin: 0, fontWeight: 600, flex: 1 }}>{r.name}</h3>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
