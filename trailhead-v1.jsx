@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Heart, MessageCircle, MapPin, Clock, Mountain, ChevronRight, ChevronLeft, ChevronDown, Search, Plus, Home, Compass, Map, Wrench, Trophy, AlertTriangle, Navigation, Star, Share2, Bookmark, MoreHorizontal, ArrowUp, Users, Radio, CloudSun, CheckCircle, Target, Gift, ChevronUp, ExternalLink, Lock, Globe, Shield, UserPlus, UserCheck, Settings, Camera, Eye, EyeOff, X, Bell, ThumbsUp, UserPlus as UserPlusIcon, AtSign, Mail, Send, Image, Smartphone, Trash2, Edit3, Award, Zap, TrendingUp, Flame, DollarSign, Route } from "lucide-react";
+import { Heart, MessageCircle, MapPin, Clock, Mountain, ChevronRight, ChevronLeft, ChevronDown, Search, Plus, Home, Compass, Map, Wrench, Trophy, AlertTriangle, Navigation, Star, Share2, Bookmark, MoreHorizontal, ArrowUp, Users, Radio, CloudSun, CheckCircle, Target, Gift, ChevronUp, ExternalLink, Lock, Globe, Shield, UserPlus, UserCheck, Settings, Camera, Eye, EyeOff, X, Bell, ThumbsUp, UserPlus as UserPlusIcon, AtSign, Mail, Send, Image, Smartphone, Trash2, Edit3, Award, Zap, TrendingUp, Flame, DollarSign, Route, Video, Play } from "lucide-react";
 
 /* ─── Design Tokens from Lone Peak Concept ─── */
 const T = {
@@ -17,6 +17,102 @@ const T = {
   mutedText: "#999999",
   green: "#4A7C59",
 };
+
+/* ─── Community Rank System ─── */
+const RANK_TIERS = [
+  { name: "Scout", min: 0, max: 999, color: "#8B7D6B", icon: "Compass" },
+  { name: "Explorer", min: 1000, max: 4999, color: "#4A7C59", icon: "Map" },
+  { name: "Pathfinder", min: 5000, max: 14999, color: "#C49A6C", icon: "Navigation" },
+  { name: "Trailblazer", min: 15000, max: 29999, color: "#C49A6C", icon: "Flame" },
+  { name: "Navigator", min: 30000, max: 49999, color: "#C0A060", icon: "Star" },
+  { name: "Expedition Lead", min: 50000, max: 99999, color: "#BD472A", icon: "Shield" },
+  { name: "Legend", min: 100000, max: Infinity, color: "#FFD700", icon: "Trophy" },
+];
+const RANK_ICON_MAP = { Compass, Map, Navigation, Flame, Star, Shield, Trophy };
+function getUserRank(points) {
+  return RANK_TIERS.find(r => points >= r.min && points <= r.max) || RANK_TIERS[0];
+}
+function RankBadge({ points, size = 12 }) {
+  const rank = getUserRank(points);
+  const Icon = RANK_ICON_MAP[rank.icon] || Star;
+  return (
+    <span title={rank.name} style={{ display: "inline-flex", alignItems: "center", gap: 2, flexShrink: 0 }}>
+      <Icon size={size} color={rank.color} strokeWidth={1.5} />
+    </span>
+  );
+}
+function RankBadgeWithName({ points, size = 10 }) {
+  const rank = getUserRank(points);
+  const Icon = RANK_ICON_MAP[rank.icon] || Star;
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 3, flexShrink: 0 }}>
+      <Icon size={size} color={rank.color} strokeWidth={1.5} />
+      <span style={{ fontFamily: "Trebuchet MS, Gill Sans, sans-serif", fontSize: size - 1, color: rank.color, fontWeight: 600, letterSpacing: 0.3 }}>{rank.name}</span>
+    </span>
+  );
+}
+
+// Simulated user points lookup
+const USER_POINTS = {
+  "Sierra_Tactical": 48900, "Nomad_Queen": 32100, "Peak_Finder": 28750, "TrailBoss_88": 26200,
+  "DirtRoadDave": 22800, "MountainGoat": 19400, "FoxFanatic": 17600, "BajaBound": 14200,
+  "StockHero": 13100, "LiftKing": 12800, "KyleLPO": 12450, "Nomad_Mike": 11200,
+  "DesertRat_4x4": 8500, "Overland_Expert": 15200, "SteelCraft": 9800, "MudRunner_CO": 6700,
+};
+function getPoints(user) { return USER_POINTS[user] || 1500; }
+
+// ── Badge System (tier colors per level within each category) ──
+const BADGE_TIER_COLORS = ["#8B7D6B", "#C49A6C", "#C0A060", "#FFD700", "#BD472A"]; // grey → bronze → gold → gold-bright → red
+const BADGE_CATEGORIES = [
+  { name: "Trail Mastery", icon: MapPin, tiers: [
+    { name: "First Trail", desc: "Log your first route", goal: 1 },
+    { name: "Trail Runner", desc: "Log 5 routes", goal: 5 },
+    { name: "Pathmaker", desc: "Log 15 routes", goal: 15 },
+    { name: "Trail Legend", desc: "Log 50 routes", goal: 50 },
+  ]},
+  { name: "Community", icon: MessageCircle, tiers: [
+    { name: "First Post", desc: "Create your first feed post", goal: 1 },
+    { name: "Storyteller", desc: "Create 10 forum threads", goal: 10 },
+    { name: "Helpful Hand", desc: "Get 50 likes on your posts", goal: 50 },
+    { name: "Community Pillar", desc: "Get 500 likes on your posts", goal: 500 },
+  ]},
+  { name: "Builder", icon: Wrench, tiers: [
+    { name: "Garage Started", desc: "Add your first build", goal: 1 },
+    { name: "Master Builder", desc: "Add 3 complete builds", goal: 3 },
+    { name: "Mod Guru", desc: "Log 20 modifications", goal: 20 },
+  ]},
+  { name: "Explorer", icon: Compass, tiers: [
+    { name: "Daily Driver", desc: "Log in 7 days in a row", goal: 7 },
+    { name: "Dedicated", desc: "Log in 30 days in a row", goal: 30 },
+    { name: "Shutterbug", desc: "Upload 50 photos", goal: 50 },
+    { name: "First Responder", desc: "Respond to 5 recovery requests", goal: 5 },
+  ]},
+  { name: "Bounty Hunter", icon: Target, tiers: [
+    { name: "First Bounty", desc: "Complete your first bounty", goal: 1 },
+    { name: "Bounty Pro", desc: "Complete 5 bounties", goal: 5 },
+    { name: "Top Contributor", desc: "Earn $500 in bounties", goal: 500 },
+  ]},
+];
+// Simulated user badge progress (would come from backend)
+const MY_BADGE_PROGRESS = {
+  "Trail Mastery": 9,
+  "Community": 92,
+  "Builder": 2,
+  "Explorer": 5,
+  "Bounty Hunter": 3,
+};
+function getBadgeTierForCategory(catName) {
+  const cat = BADGE_CATEGORIES.find(c => c.name === catName);
+  if (!cat) return { tier: -1, color: "#333", name: "Locked", tierIdx: -1 };
+  const progress = MY_BADGE_PROGRESS[catName] || 0;
+  let highestTier = -1;
+  for (let i = cat.tiers.length - 1; i >= 0; i--) {
+    if (progress >= cat.tiers[i].goal) { highestTier = i; break; }
+  }
+  if (highestTier < 0) return { tier: -1, color: "#333", name: "Locked", tierIdx: -1, progress, nextGoal: cat.tiers[0].goal, nextName: cat.tiers[0].name };
+  const color = BADGE_TIER_COLORS[Math.min(highestTier, BADGE_TIER_COLORS.length - 1)];
+  return { tier: highestTier, color, name: cat.tiers[highestTier].name, tierIdx: highestTier, progress, nextGoal: cat.tiers[highestTier + 1] ? cat.tiers[highestTier + 1].goal : null, nextName: cat.tiers[highestTier + 1] ? cat.tiers[highestTier + 1].name : null };
+}
 
 /* ─── Google Fonts import ─── */
 const fontLink = document.createElement("link");
@@ -113,7 +209,7 @@ function stripHtml(html) {
 }
 
 /* ─── Map Overlay (Google Maps JavaScript API) ─── */
-function MapOverlay({ coords, location, title, onClose }) {
+function MapOverlay({ coords, location, title, onClose, recoveryCtx, onRecoveryStartTrip, onRecoveryArrived }) {
   const query = getMapQuery(coords, location);
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
@@ -132,6 +228,9 @@ function MapOverlay({ coords, location, title, onClose }) {
   const [tripSummary, setTripSummary] = useState(null); // { distance, duration }
   const [userPos, setUserPos] = useState(null);
   const [distToNext, setDistToNext] = useState(null);
+  const [recoveryNotified, setRecoveryNotified] = useState(false); // "on the way" sent
+  const [proximityTriggered, setProximityTriggered] = useState(false); // arrival detected
+  const [distToDest, setDistToDest] = useState(null); // meters to destination
 
   // Parse destination coords
   const destCoords = parseCoords(coords);
@@ -296,6 +395,16 @@ function MapOverlay({ coords, location, title, onClose }) {
           }
           return prev;
         });
+
+        // Recovery proximity detection — check distance to destination
+        if (destLatLng && recoveryCtx) {
+          const destDist = haversine(lat, lng, destLatLng.lat, destLatLng.lng);
+          setDistToDest(Math.round(destDist));
+          if (destDist < 500 && !proximityTriggered) {
+            setProximityTriggered(true);
+            if (onRecoveryArrived) onRecoveryArrived(recoveryCtx);
+          }
+        }
       },
       (err) => console.warn("GPS error:", err.message),
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 2000 }
@@ -339,6 +448,11 @@ function MapOverlay({ coords, location, title, onClose }) {
     setCurrentStepIdx(0);
     setMode("navigating");
     if (mapInstance.current) mapInstance.current.setZoom(17);
+    // Notify recovery requester that we're on the way
+    if (recoveryCtx && !recoveryNotified && onRecoveryStartTrip) {
+      onRecoveryStartTrip(recoveryCtx);
+      setRecoveryNotified(true);
+    }
   };
 
   const endTrip = () => {
@@ -491,6 +605,33 @@ function MapOverlay({ coords, location, title, onClose }) {
       <div style={{ padding: "12px 16px", background: T.charcoal, borderTop: `1px solid ${T.darkCard}`, flexShrink: 0 }}>
         {mode === "navigating" ? (
           <div>
+            {/* Recovery banner */}
+            {recoveryCtx && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: `${T.red}15`, borderRadius: 8, border: `1px solid ${T.red}30`, marginBottom: 10 }}>
+                <AlertTriangle size={14} color={T.red} />
+                <div style={{ flex: 1 }}>
+                  <span style={{ fontFamily: sans, fontSize: 10, color: T.red, fontWeight: 600, letterSpacing: 0.5, display: "block" }}>RECOVERY RESPONSE</span>
+                  <span style={{ fontFamily: serif, fontSize: 11, color: T.tertiary }}>Heading to help {recoveryCtx.author}</span>
+                </div>
+                {distToDest !== null && (
+                  <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700 }}>{distToDest > 1609 ? `${(distToDest / 1609).toFixed(1)} mi` : `${distToDest} m`}</span>
+                )}
+              </div>
+            )}
+            {/* Proximity arrived banner */}
+            {recoveryCtx && proximityTriggered && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", background: `${T.green}15`, borderRadius: 8, border: `1px solid ${T.green}30`, marginBottom: 10 }}>
+                <CheckCircle size={14} color={T.green} />
+                <span style={{ fontFamily: sans, fontSize: 11, color: T.green, fontWeight: 600, flex: 1 }}>You've arrived — {recoveryCtx.author} has been notified</span>
+              </div>
+            )}
+            {/* Simulate arrival for testing */}
+            {recoveryCtx && !proximityTriggered && (
+              <button onClick={() => { setProximityTriggered(true); if (onRecoveryArrived) onRecoveryArrived(recoveryCtx); }} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px", borderRadius: 8, background: `${T.green}20`, border: `1px dashed ${T.green}50`, cursor: "pointer", marginBottom: 10 }}>
+                <MapPin size={13} color={T.green} />
+                <span style={{ fontFamily: sans, fontSize: 11, color: T.green, fontWeight: 600, letterSpacing: 0.5 }}>SIMULATE ARRIVAL (TESTING)</span>
+              </button>
+            )}
             {/* Trip info bar */}
             {tripSummary && (
               <div style={{ display: "flex", justifyContent: "center", gap: 20, marginBottom: 10 }}>
@@ -522,9 +663,9 @@ function MapOverlay({ coords, location, title, onClose }) {
               </button>
             ) : (
               <>
-                <button onClick={startTrip} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px", borderRadius: 8, background: T.green, border: "none", cursor: "pointer" }}>
-                  <Navigation size={14} color={T.white} />
-                  <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>START TRIP</span>
+                <button onClick={startTrip} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px", borderRadius: 8, background: recoveryCtx ? T.red : T.green, border: "none", cursor: "pointer" }}>
+                  {recoveryCtx ? <AlertTriangle size={14} color={T.white} /> : <Navigation size={14} color={T.white} />}
+                  <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>{recoveryCtx ? "START RESCUE" : "START TRIP"}</span>
                 </button>
                 <button onClick={clearRoute} style={{ padding: "12px 16px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, cursor: "pointer", display: "flex", alignItems: "center" }}>
                   <X size={14} color={T.tertiary} />
@@ -695,8 +836,8 @@ function RecoveryNotifPanel({ onClose, onGoToRecovery, alerts, onDismiss, onClea
               <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{a.vehicle}</span>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => { onClose(); onOpenDM && onOpenDM(a.author); }} style={{ background: T.red, color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 600, padding: "7px 14px", borderRadius: 6, border: "none", cursor: "pointer", letterSpacing: 0.5 }}>RESPOND</button>
-              <button onClick={() => { onClose(); onOpenMap && onOpenMap(a.coords, a.location, a.title); }} style={{ background: "none", color: T.tertiary, fontFamily: sans, fontSize: 10, padding: "7px 14px", borderRadius: 6, border: `1px solid ${T.charcoal}`, cursor: "pointer", letterSpacing: 0.5 }}>VIEW ON MAP</button>
+              <button onClick={() => { onClose(); onOpenDM && onOpenDM(a.author, "I'm responding to your recovery request — on my way to help!", { title: `🚨 Recovery: ${a.title}`, user: a.author, initial: a.author.charAt(0).toUpperCase(), type: "recovery", location: a.location, urgency: a.urgency }); }} style={{ background: T.red, color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 600, padding: "7px 14px", borderRadius: 6, border: "none", cursor: "pointer", letterSpacing: 0.5 }}>RESPOND</button>
+              <button onClick={() => { onClose(); onOpenMap && onOpenMap(a.coords, a.location, a.title, { author: a.author, alertId: a.id, title: a.title }); }} style={{ background: "none", color: T.tertiary, fontFamily: sans, fontSize: 10, padding: "7px 14px", borderRadius: 6, border: `1px solid ${T.charcoal}`, cursor: "pointer", letterSpacing: 0.5 }}>VIEW ON MAP</button>
             </div>
           </div>
         ))}
@@ -780,7 +921,7 @@ function TopBar({ onProfile, onBack, showBack, title, onViewUser, onGoToRecovery
           onDismiss={(id) => setRecoveryAlerts(prev => prev.filter(a => a.id !== id))}
           onClearAll={() => setRecoveryAlerts([])}
           onOpenMap={onOpenMap}
-          onOpenDM={(user) => { setOpenPanel(null); onOpenDM && onOpenDM(user); }}
+          onOpenDM={(user, prefill, shared) => { setOpenPanel(null); onOpenDM && onOpenDM(user, prefill, shared); }}
         />
       )}
 
@@ -1329,7 +1470,7 @@ const defaultFeedItems = [
     },
   ];
 
-function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, onUpdateFeed, onAddNotification, forumUserReplies, forumViewCounts, savedRoutes, onSaveRoute, onUnsaveRoute, onStartNav }) {
+function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, onUpdateFeed, onAddNotification, forumUserReplies, forumViewCounts, savedRoutes, onSaveRoute, onUnsaveRoute, onStartNav, onAwardPoints }) {
   const [activeFilter, setActiveFilter] = useState("ALL");
   const filters = ["ALL", "BUILDS", "CONVOYS", "ROUTES", "PHOTOS", "FORUM"];
   const [likedPosts, setLikedPosts] = useState({});
@@ -1406,6 +1547,8 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, 
         onAddNotification && onAddNotification({ type: "mention", user: "KyleLPO", text: "mentioned you in a comment", target: post ? post.title : "", icon: AtSign, iconColor: T.copper });
       }
     });
+    // Award points for commenting
+    onAwardPoints && onAwardPoints(3, "Comment Posted");
     setCommentText("");
   };
 
@@ -1532,6 +1675,7 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, 
                       <div style={{ flex: 1 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                           <span onClick={() => onViewUser && onViewUser(c.user.replace(/\s/g, "_"))} style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, cursor: "pointer" }}>@{c.user}</span>
+                          <RankBadge points={getPoints(c.user)} size={10} />
                           <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>{formatPostTime(c.time)}</span>
                         </div>
                         <p style={{ fontFamily: serif, fontSize: 13, color: T.warmStone, margin: "2px 0 0", lineHeight: 1.4 }}>{c.text}</p>
@@ -1571,7 +1715,10 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, 
               <span style={{ fontFamily: sans, fontSize: 11, fontWeight: 700, color: T.white }}>{item.initial}</span>
             </div>
             <div style={{ flex: 1 }}>
-              <span onClick={() => onViewUser && onViewUser(item.user.replace(/\s/g, "_"))} style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, cursor: "pointer" }}>{item.user}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                <span onClick={() => onViewUser && onViewUser(item.user.replace(/\s/g, "_"))} style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, cursor: "pointer" }}>{item.user}</span>
+                <RankBadge points={getPoints(item.user)} size={12} />
+              </div>
               <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, display: "block" }}>{formatPostTime(item.time)}</span>
             </div>
           </div>
@@ -1605,6 +1752,7 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, 
                 <span style={{ fontFamily: sans, fontSize: 9, fontWeight: 700, color: T.white }}>{item.initial}</span>
               </div>
               <span onClick={() => onViewUser && onViewUser(item.user.replace(/\s/g, "_"))} style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, cursor: "pointer" }}>{item.user}</span>
+              <RankBadge points={getPoints(item.user)} size={11} />
             </div>
             <p style={{ fontFamily: serif, fontSize: 15, color: T.white, margin: "0 0 8px", lineHeight: 1.5 }}>{item.title}</p>
             {item.body && <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 12px", lineHeight: 1.6 }}>{item.body}</p>}
@@ -1636,10 +1784,10 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, 
                 <Navigation size={12} color={T.tertiary} />
                 <span style={{ fontFamily: serif, fontSize: 11, color: T.tertiary }}>{item.coords}</span>
               </div>
-              <button onClick={() => onOpenMap && onOpenMap(item.coords, item.location, item.title)} style={{ fontFamily: sans, fontSize: 11, color: T.red, background: "none", border: "none", cursor: "pointer", letterSpacing: 0.5 }}>Open in Maps</button>
+              <button onClick={() => onOpenMap && onOpenMap(item.coords, item.location, item.title, { author: item.user, alertId: item.id, title: item.title })} style={{ fontFamily: sans, fontSize: 11, color: T.red, background: "none", border: "none", cursor: "pointer", letterSpacing: 0.5 }}>Open in Maps</button>
             </div>
           </div>
-          {actionBar(item, <button onClick={() => onOpenDM && onOpenDM(item.user)} style={{ background: T.red, color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 600, padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", letterSpacing: 0.5 }}>Respond</button>)}
+          {actionBar(item, <button onClick={() => { onOpenDM && onOpenDM(item.user, "I'm responding to your recovery request — on my way to help!", { title: `🚨 Recovery: ${item.title}`, user: item.user, initial: item.initial, type: "recovery", location: item.location, urgency: item.urgency }); }} style={{ background: T.red, color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 600, padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", letterSpacing: 0.5 }}>Respond</button>)}
         </div>
       );
     }
@@ -1739,14 +1887,35 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, 
                   </div>
                 </div>
               )}
-              {/* Photos */}
+              {/* Photos / Videos */}
               {item.photos && item.photos.length > 0 && (
                 <div style={{ marginBottom: 12 }}>
-                  <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>PHOTOS</span>
-                  <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
-                    {item.photos.map((p, pi) => (
-                      <img key={pi} src={p.url || p} alt="" onClick={() => openCarousel(item.photos.map(ph => ph.url || ph), pi)} style={{ width: 80, height: 80, borderRadius: 8, objectFit: "cover", flexShrink: 0, cursor: "pointer" }} />
-                    ))}
+                  <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>MEDIA</span>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {item.photos.map((p, pi) => {
+                      const url = p.url || p;
+                      const isVideo = p.type === "video";
+                      return (
+                        <div key={pi} style={{ borderRadius: 10, overflow: "hidden", border: `1px solid ${T.charcoal}`, position: "relative" }}>
+                          {isVideo ? (
+                            <div style={{ position: "relative" }}>
+                              <video src={url} preload="metadata" playsInline controls style={{ width: "100%", maxHeight: 300, objectFit: "contain", display: "block", background: "#000", borderRadius: 0 }} />
+                              <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(0,0,0,0.6)", borderRadius: 4, padding: "2px 8px", display: "flex", alignItems: "center", gap: 4, pointerEvents: "none" }}>
+                                <Video size={10} color={T.white} />
+                                <span style={{ fontFamily: sans, fontSize: 9, color: T.white, fontWeight: 600 }}>VIDEO</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <img src={url} alt="" onClick={() => openCarousel(item.photos.filter(ph => (ph.type || "image") === "image").map(ph => ph.url || ph), 0)} style={{ width: "100%", height: 200, objectFit: "cover", display: "block", cursor: "pointer" }} />
+                          )}
+                          {p.caption && (
+                            <div style={{ padding: "6px 10px", background: T.darkCard }}>
+                              <span style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, fontStyle: "italic" }}>{p.caption}</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -1830,7 +1999,10 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, 
               <span style={{ fontFamily: sans, fontSize: 11, fontWeight: 700, color: T.white }}>{item.initial}</span>
             </div>
             <div>
-              <span onClick={() => onViewUser && onViewUser(item.user.replace(/\s/g, "_"))} style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, cursor: "pointer" }}>{item.user}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                <span onClick={() => onViewUser && onViewUser(item.user.replace(/\s/g, "_"))} style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, cursor: "pointer" }}>{item.user}</span>
+                <RankBadge points={getPoints(item.user)} size={12} />
+              </div>
               <span style={{ fontFamily: sans, fontSize: 12, color: T.tertiary, display: "block" }}>{item.subtitle}</span>
               {item.location && (
                 <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, display: "flex", alignItems: "center", gap: 4, marginTop: 2 }}>
@@ -1990,7 +2162,10 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, 
               <span style={{ fontFamily: sans, fontSize: 11, fontWeight: 700, color: T.white }}>{item.initial}</span>
             </div>
             <div style={{ flex: 1 }}>
-              <span onClick={() => onViewUser && onViewUser(item.user.replace(/\s/g, "_"))} style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, cursor: "pointer" }}>{item.user}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                <span onClick={() => onViewUser && onViewUser(item.user.replace(/\s/g, "_"))} style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, cursor: "pointer" }}>{item.user}</span>
+                <RankBadge points={getPoints(item.user)} size={12} />
+              </div>
               <span style={{ fontFamily: sans, fontSize: 12, color: T.tertiary, display: "block" }}>Shared {item.photoCount} photos</span>
             </div>
             <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{formatPostTime(item.time)}</span>
@@ -2044,6 +2219,7 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, 
                 <span style={{ fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.white }}>{item.initial}</span>
               </div>
               <span onClick={(e) => { e.stopPropagation(); onViewUser && onViewUser(item.user.replace(/\s/g, "_")); }} style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, cursor: "pointer" }}>{item.user}</span>
+              <RankBadge points={getPoints(item.user)} size={11} />
             </div>
             <h3 style={{ fontFamily: serif, fontSize: 15, color: T.white, margin: "0 0 6px", lineHeight: 1.3 }}>{item.title}</h3>
             {snippet && <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "0 0 12px", lineHeight: 1.5 }}>{snippet}</p>}
@@ -2209,7 +2385,7 @@ forumData.categories.forEach(cat => {
   });
 });
 
-function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpenDM, onAddFeedPost, userThreads, setUserThreads, userReplies, setUserReplies, likedForumItems, setLikedForumItems, forumLikeCounts, setForumLikeCounts, forumViewCounts, setForumViewCounts }) {
+function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpenDM, onAddFeedPost, userThreads, setUserThreads, userReplies, setUserReplies, likedForumItems, setLikedForumItems, forumLikeCounts, setForumLikeCounts, forumViewCounts, setForumViewCounts, onAwardPoints }) {
   const [view, setView] = useState("categories"); // "categories" | "subcategories" | "threads" | "thread" | "newThread"
   const [selectedCat, setSelectedCat] = useState(null);
   const [selectedSub, setSelectedSub] = useState(null);
@@ -2221,9 +2397,15 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
     const files = e.target.files;
     if (!files || files.length === 0) return;
     Array.from(files).forEach(file => {
-      const reader = new FileReader();
-      reader.onload = (ev) => setReplyPhotos(prev => [...prev, { url: ev.target.result, name: file.name }]);
-      reader.readAsDataURL(file);
+      const isVideo = file.type.startsWith("video/");
+      if (isVideo) {
+        const blobUrl = URL.createObjectURL(file);
+        setReplyPhotos(prev => [...prev, { id: Date.now() + Math.random(), url: blobUrl, name: file.name, type: "video", caption: "" }]);
+      } else {
+        const reader = new FileReader();
+        reader.onload = (ev) => setReplyPhotos(prev => [...prev, { id: Date.now() + Math.random(), url: ev.target.result, name: file.name, type: "image", caption: "" }]);
+        reader.readAsDataURL(file);
+      }
     });
     e.target.value = "";
   };
@@ -2407,7 +2589,7 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
         time: Date.now(),
         pinned: false,
         posts: [],
-        ...(ntPhotos.length > 0 ? { photos: ntPhotos.map(p => p.url) } : {}),
+        ...(ntPhotos.length > 0 ? { photos: ntPhotos.map(p => ({ url: p.url, type: p.type || "image", caption: p.caption || "" })) } : {}),
       };
       setUserThreads(prev => ({
         ...prev,
@@ -2423,7 +2605,7 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
           initial: "K",
           title: newThread.title,
           body: null,
-          ...(newThread.photos && newThread.photos.length > 0 ? { image: newThread.photos[0] } : {}),
+          ...(newThread.photos && newThread.photos.length > 0 ? { image: (newThread.photos[0].url || newThread.photos[0]) } : {}),
           time: Date.now(),
           likes: 0,
           comments: 0,
@@ -2442,6 +2624,9 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
           onAddNotification && onAddNotification({ type: "mention", user: "KyleLPO", text: "mentioned you in a forum thread", target: ntTitle.trim(), icon: AtSign, iconColor: T.copper });
         }
       });
+      // Award points for forum thread
+      onAwardPoints && onAwardPoints(25, "Forum Thread");
+      if (ntPhotos.length > 0) onAwardPoints && onAwardPoints(5 * ntPhotos.length, "Photos Uploaded");
       setNtTitle("");
       setNtBody("");
       if (ntBodyRef.current) ntBodyRef.current.innerHTML = "";
@@ -2773,7 +2958,7 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
         body: (replyToReply ? `@${replyToReply.author} ` : "") + forumReplyText.trim(),
         time: Date.now(),
         likes: 0,
-        ...(replyPhotos.length > 0 ? { photos: replyPhotos.map(p => p.url) } : {}),
+        ...(replyPhotos.length > 0 ? { photos: replyPhotos.map(p => ({ url: p.url, type: p.type || "image", caption: p.caption || "" })) } : {}),
         ...(replyToReply ? { replyTo: replyToReply.author, parentIdx: replyToReply.idx } : {}),
       };
       setUserReplies(prev => ({
@@ -2787,6 +2972,9 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
           onAddNotification && onAddNotification({ type: "mention", user: "KyleLPO", text: "mentioned you in a forum reply", target: selectedThread.title, icon: AtSign, iconColor: T.copper });
         }
       });
+      // Award points for forum reply
+      onAwardPoints && onAwardPoints(10, "Forum Reply");
+      if (replyPhotos.length > 0) onAwardPoints && onAwardPoints(5 * replyPhotos.length, "Photos Uploaded");
       setForumReplyText("");
       setReplyPhotos([]);
       setReplyToReply(null);
@@ -2860,7 +3048,11 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
         {/* Hero image + title header */}
         {selectedThread.photos && selectedThread.photos.length > 0 ? (
           <div style={{ position: "relative", width: "100%", height: 220 }}>
-            <img src={selectedThread.photos[0]} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            {(() => { const firstP = selectedThread.photos[0]; const firstUrl = firstP.url || firstP; const isVid = firstP.type === "video"; return isVid ? (
+              <><video src={firstUrl + "#t=0.001"} preload="metadata" playsInline muted style={{ width: "100%", height: "100%", objectFit: "cover" }} /><div style={{ position: "absolute", top: 12, right: 50, background: "rgba(0,0,0,0.6)", borderRadius: 4, padding: "2px 8px", display: "flex", alignItems: "center", gap: 4, zIndex: 2 }}><Video size={10} color={T.white} /><span style={{ fontFamily: sans, fontSize: 9, color: T.white, fontWeight: 600 }}>VIDEO</span></div></>
+            ) : (
+              <img src={firstUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            ); })()}
             {/* Gradient overlay */}
             <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "60%", background: "linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.4) 50%, transparent 100%)" }} />
             {/* Back button */}
@@ -2869,7 +3061,7 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
             </button>
             {/* Edit button for own threads */}
             {isOwnThread && (
-              <button onClick={() => { setEditingThreadId(selectedThread.id); setEditTitle(selectedThread.title); setEditBody(selectedThread.body || ""); setEditPhotos(selectedThread.photos ? selectedThread.photos.map((u, i) => ({ url: u, id: i })) : []); }} style={{ position: "absolute", top: 14, right: 14, background: "rgba(0,0,0,0.5)", border: "none", cursor: "pointer", padding: 6, borderRadius: "50%", display: "flex", backdropFilter: "blur(4px)" }}>
+              <button onClick={() => { setEditingThreadId(selectedThread.id); setEditTitle(selectedThread.title); setEditBody(selectedThread.body || ""); setEditPhotos(selectedThread.photos ? selectedThread.photos.map((u, i) => ({ url: u.url || u, id: i, type: u.type || "image", caption: u.caption || "" })) : []); }} style={{ position: "absolute", top: 14, right: 14, background: "rgba(0,0,0,0.5)", border: "none", cursor: "pointer", padding: 6, borderRadius: "50%", display: "flex", backdropFilter: "blur(4px)" }}>
                 <Edit3 size={16} color={T.white} strokeWidth={1.5} />
               </button>
             )}
@@ -2893,7 +3085,7 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
                 <span style={{ fontFamily: sans, fontSize: 12, color: T.tertiary }}>{selectedSub?.name}</span>
               </div>
               {isOwnThread && (
-                <button onClick={() => { setEditingThreadId(selectedThread.id); setEditTitle(selectedThread.title); setEditBody(selectedThread.body || ""); setEditPhotos(selectedThread.photos ? selectedThread.photos.map((u, i) => ({ url: u, id: i })) : []); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex" }}>
+                <button onClick={() => { setEditingThreadId(selectedThread.id); setEditTitle(selectedThread.title); setEditBody(selectedThread.body || ""); setEditPhotos(selectedThread.photos ? selectedThread.photos.map((u, i) => ({ url: u.url || u, id: i, type: u.type || "image", caption: u.caption || "" })) : []); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex" }}>
                   <Edit3 size={16} color={T.tertiary} strokeWidth={1.5} />
                 </button>
               )}
@@ -2914,8 +3106,11 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
               <span style={{ fontFamily: sans, fontSize: 13, fontWeight: 700, color: T.copper }}>{selectedThread.initial}</span>
             </div>
             <div>
-              <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, display: "block" }}>@{selectedThread.author}</span>
-              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{formatPostTime(selectedThread.time)}{selectedThread.editedAt ? " · edited" : ""}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>@{selectedThread.author}</span>
+                <RankBadgeWithName points={getPoints(selectedThread.author)} size={10} />
+              </div>
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, display: "block" }}>{formatPostTime(selectedThread.time)}{selectedThread.editedAt ? " · edited" : ""}</span>
             </div>
           </div>
           {selectedThread.body && (
@@ -2974,6 +3169,7 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
                   <span style={{ fontFamily: sans, fontSize: isSub ? 9 : 11, fontWeight: 700, color: T.copper }}>{post.initial}</span>
                 </div>
                 <span style={{ fontFamily: sans, fontSize: isSub ? 11 : 12, color: T.white, fontWeight: 600 }}>@{post.author}</span>
+                <RankBadge points={getPoints(post.author)} size={isSub ? 9 : 10} />
                 <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{formatPostTime(post.time)}</span>
               </div>
               {isSub && post.replyTo && (
@@ -2987,10 +3183,31 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
                 <p style={{ fontFamily: serif, fontSize: isSub ? 12 : 13, color: T.warmStone, lineHeight: 1.5, margin: "0 0 4px", paddingLeft: isSub ? 30 : 34 }}>{post.body}</p>
               )}
               {post.photos && post.photos.length > 0 && (
-                <div style={{ display: "flex", gap: 6, marginTop: 6, paddingLeft: isSub ? 30 : 34, overflowX: "auto" }}>
-                  {post.photos.map((url, pi) => (
-                    <img key={pi} src={url} alt="" style={{ width: post.photos.length === 1 ? "100%" : 120, height: post.photos.length === 1 ? 160 : 90, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
-                  ))}
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 6, paddingLeft: isSub ? 30 : 34 }}>
+                  {post.photos.map((p, pi) => {
+                    const pUrl = p.url || p;
+                    const isVid = p.type === "video";
+                    return (
+                      <div key={pi} style={{ borderRadius: 10, overflow: "hidden", border: `1px solid ${T.charcoal}`, position: "relative" }}>
+                        {isVid ? (
+                          <div style={{ position: "relative" }}>
+                            <video src={pUrl} preload="metadata" playsInline controls style={{ width: "100%", maxHeight: 260, objectFit: "contain", display: "block", background: "#000" }} />
+                            <div style={{ position: "absolute", top: 6, left: 6, background: "rgba(0,0,0,0.6)", borderRadius: 4, padding: "2px 6px", display: "flex", alignItems: "center", gap: 3, pointerEvents: "none" }}>
+                              <Video size={9} color={T.white} />
+                              <span style={{ fontFamily: sans, fontSize: 8, color: T.white, fontWeight: 600 }}>VIDEO</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <img src={pUrl} alt="" style={{ width: "100%", height: 180, objectFit: "cover", display: "block" }} />
+                        )}
+                        {p.caption && (
+                          <div style={{ padding: "5px 10px", background: T.darkCard }}>
+                            <span style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, fontStyle: "italic" }}>{p.caption}</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
               <div style={{ paddingLeft: isSub ? 30 : 34 }}>
@@ -3000,7 +3217,7 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
           );
           const renderInlineReplyInput = () => (
             <div style={{ marginLeft: 24, borderLeft: `2px solid ${T.copper}30`, background: `${T.charcoal}25`, padding: "10px 14px" }}>
-              <input ref={replyFileRef} type="file" accept="image/*" multiple onChange={handleReplyPhoto} style={{ display: "none" }} />
+              <input ref={replyFileRef} type="file" accept="image/*,video/*" multiple onChange={handleReplyPhoto} style={{ display: "none" }} />
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
                 <span style={{ fontFamily: sans, fontSize: 11, color: T.copper }}>Replying to @{replyToReply.author}</span>
                 <button onClick={() => setReplyToReply(null)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
@@ -3047,7 +3264,7 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
         {/* Reply input — only at bottom when not replying to a specific reply */}
         {!replyToReply && (
         <div style={{ margin: "16px 16px 0" }}>
-          <input ref={replyFileRef} type="file" accept="image/*" multiple onChange={handleReplyPhoto} style={{ display: "none" }} />
+          <input ref={replyFileRef} type="file" accept="image/*,video/*" multiple onChange={handleReplyPhoto} style={{ display: "none" }} />
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <div style={{ flex: 1, position: "relative", display: "flex", alignItems: "center" }}>
               <MentionInput value={forumReplyText} onChange={setForumReplyText} onKeyDown={e => {
@@ -3083,7 +3300,7 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
               <button onClick={() => {
                 const newBody = editBodyRef.current ? editBodyRef.current.innerHTML : editBody;
                 const cleanBody = (newBody && newBody.replace(/<[^>]+>/g, "").trim()) ? newBody : null;
-                const newPhotos = editPhotos.map(p => p.url);
+                const newPhotos = editPhotos.map(p => ({ url: p.url, type: p.type || "image", caption: p.caption || "" }));
                 const subName = selectedSub?.name;
                 if (subName) {
                   setUserThreads(prev => {
@@ -3537,56 +3754,41 @@ function RouteRecorder({ onClose, onSave }) {
   const handleRecPhoto = (e) => {
     const fileList = e.target.files;
     if (!fileList || fileList.length === 0) return;
-    // Copy files array BEFORE clearing the input (FileList is a live reference)
     const files = Array.from(fileList);
     e.target.value = "";
-    // Get current GPS position for the photo pin
+    const processFile = (file, lat, lng) => {
+      const isVideo = file.type.startsWith("video/");
+      if (isVideo) {
+        const blobUrl = URL.createObjectURL(file);
+        const photo = { url: blobUrl, name: file.name, type: "video", ...(lat != null ? { lat, lng } : {}) };
+        setRoutePhotos(prev => [...prev, photo]);
+      } else {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const photo = { url: ev.target.result, name: file.name, type: "image", ...(lat != null ? { lat, lng } : {}) };
+          setRoutePhotos(prev => [...prev, photo]);
+          if (lat != null && mapInst.current && window.google) {
+            const m = new window.google.maps.Marker({
+              position: { lat, lng },
+              map: mapInst.current,
+              label: { text: "\u{1F4F7}", fontSize: "14px" },
+              icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 16, fillColor: "#4A7C59", fillOpacity: 1, strokeColor: T.white, strokeWeight: 2 },
+              zIndex: 998,
+            });
+            photoMarkersRef.current.push(m);
+          }
+        };
+        reader.readAsDataURL(file);
+      }
+    };
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const lat = pos.coords.latitude;
-          const lng = pos.coords.longitude;
-          files.forEach(file => {
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-              const photo = { url: ev.target.result, name: file.name, lat, lng };
-              setRoutePhotos(prev => [...prev, photo]);
-              // Add marker on map
-              if (mapInst.current && window.google) {
-                const m = new window.google.maps.Marker({
-                  position: { lat, lng },
-                  map: mapInst.current,
-                  label: { text: "\u{1F4F7}", fontSize: "14px" },
-                  icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 16, fillColor: "#4A7C59", fillOpacity: 1, strokeColor: T.white, strokeWeight: 2 },
-                  zIndex: 998,
-                });
-                photoMarkersRef.current.push(m);
-              }
-            };
-            reader.readAsDataURL(file);
-          });
-        },
-        () => {
-          // No GPS — still save photo without location
-          files.forEach(file => {
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-              setRoutePhotos(prev => [...prev, { url: ev.target.result, name: file.name }]);
-            };
-            reader.readAsDataURL(file);
-          });
-        },
+        (pos) => { files.forEach(file => processFile(file, pos.coords.latitude, pos.coords.longitude)); },
+        () => { files.forEach(file => processFile(file)); },
         { enableHighAccuracy: true, timeout: 3000 }
       );
     } else {
-      // No geolocation API — save photos without location
-      files.forEach(file => {
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-          setRoutePhotos(prev => [...prev, { url: ev.target.result, name: file.name }]);
-        };
-        reader.readAsDataURL(file);
-      });
+      files.forEach(file => processFile(file));
     }
   };
 
@@ -3916,7 +4118,7 @@ function RouteRecorder({ onClose, onSave }) {
                 <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>PAUSE</span>
               </button>
             )}
-            <input ref={recCamRef} type="file" accept="image/*" capture="environment" onChange={handleRecPhoto} style={{ display: "none" }} />
+            <input ref={recCamRef} type="file" accept="image/*,video/*" capture="environment" onChange={handleRecPhoto} style={{ display: "none" }} />
             <button onClick={() => recCamRef.current && recCamRef.current.click()} style={{ padding: "14px 18px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
               <Camera size={16} color={T.white} />
               {routePhotos.length > 0 && (
@@ -4526,18 +4728,22 @@ function RouteDetailsForm({ autoStats, onBack, onPublish, isManual, initialPhoto
     const files = e.target.files;
     if (!files || files.length === 0) return;
     for (const file of Array.from(files)) {
-      // Try EXIF GPS first
-      const gps = await extractGPS(file);
-      const photoReader = new FileReader();
-      photoReader.onload = (ev) => {
-        const photo = { url: ev.target.result, name: file.name, ...(gps || {}) };
-        setRoutePhotos(prev => [...prev, photo]);
-        // Auto-add pin if GPS found
-        if (gps) {
-          setPins(prev => [...prev, { lat: gps.lat, lng: gps.lng, photo: ev.target.result, label: file.name }]);
-        }
-      };
-      photoReader.readAsDataURL(file);
+      const isVideo = file.type.startsWith("video/");
+      if (isVideo) {
+        const blobUrl = URL.createObjectURL(file);
+        setRoutePhotos(prev => [...prev, { url: blobUrl, name: file.name, type: "video" }]);
+      } else {
+        const gps = await extractGPS(file);
+        const photoReader = new FileReader();
+        photoReader.onload = (ev) => {
+          const photo = { url: ev.target.result, name: file.name, type: "image", ...(gps || {}) };
+          setRoutePhotos(prev => [...prev, photo]);
+          if (gps) {
+            setPins(prev => [...prev, { lat: gps.lat, lng: gps.lng, photo: ev.target.result, label: file.name }]);
+          }
+        };
+        photoReader.readAsDataURL(file);
+      }
     }
     e.target.value = "";
   };
@@ -4698,7 +4904,7 @@ function RouteDetailsForm({ autoStats, onBack, onPublish, isManual, initialPhoto
         {/* Photos */}
         <div style={{ marginBottom: 16 }}>
           <span style={rdLabel}>PHOTOS</span>
-          <input ref={routePhotoRef} type="file" accept="image/*" multiple onChange={handleRoutePhoto} style={{ display: "none" }} />
+          <input ref={routePhotoRef} type="file" accept="image/*,video/*" multiple onChange={handleRoutePhoto} style={{ display: "none" }} />
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
             {routePhotos.map((p, i) => (
               <div key={i} style={{ position: "relative", width: 72, height: 72, borderRadius: 8, overflow: "hidden", outline: linkingPhotoIdx === i ? `2px solid ${T.copper}` : "none", outlineOffset: 2 }}>
@@ -5369,20 +5575,676 @@ function BuildsScreen({ onViewUser, userBuilds }) {
   );
 }
 
+/* ─── BOUNTY RESPONSE FORM TEMPLATES ─── */
+const BOUNTY_FORM_TEMPLATES = {
+  "Gear Review": {
+    description: "Write a structured gear review for the overlanding community. Fill out each section below — formatting is pre-set for optimal readability.",
+    sections: [
+      { id: "title", label: "Review Title", type: "h1", placeholder: "e.g. Recovery Board Showdown: MAXTRAX vs ARB vs X-Bull", required: true },
+      { id: "hero_image", label: "Hero Image", type: "hero_image", placeholder: "This image appears as the header banner when posted to the forum", required: true },
+      { id: "intro", label: "Introduction", type: "p", placeholder: "Set the scene — what prompted this review? What are you comparing and why does it matter for overlanders?", required: true },
+      { id: "gear_overview", label: "Gear Overview", type: "h2", fixed: true, value: "Gear Overview" },
+      { id: "gear_list", label: "Products Reviewed", type: "p", placeholder: "List each product with brand, model, price point, and where you purchased. Include any relevant specs (weight, dimensions, material)." },
+      { id: "testing_header", label: "Testing & Field Use", type: "h2", fixed: true, value: "Testing & Field Use" },
+      { id: "testing_body", label: "Testing Details", type: "p", placeholder: "Describe real-world testing conditions — trail name, terrain type, weather, vehicle weight. What scenarios did you test each product in?" },
+      { id: "perf_header", label: "Performance Comparison", type: "h2", fixed: true, value: "Performance Comparison" },
+      { id: "perf_body", label: "Performance Details", type: "p", placeholder: "Compare performance across products. Traction, durability, ease of use, weight, packability. Be specific with examples." },
+      { id: "photos_field", label: "Photos", type: "photos", placeholder: "Upload photos of gear in use, comparison shots, detail shots", required: true, min: 3 },
+      { id: "pros_header", label: "Pros & Cons", type: "h2", fixed: true, value: "Pros & Cons" },
+      { id: "pros_list", label: "Pros", type: "bullet_list", icon: "check", color: T.green, placeholder: "Add a pro..." },
+      { id: "cons_list", label: "Cons", type: "bullet_list", icon: "x", color: T.red, placeholder: "Add a con..." },
+      { id: "verdict_header", label: "Final Verdict", type: "h2", fixed: true, value: "Final Verdict" },
+      { id: "verdict_body", label: "Recommendation", type: "p", placeholder: "Who should buy what? Best for budget, best overall, best for hardcore use. Would you buy it again?" },
+      { id: "rating", label: "Overall Rating", type: "rating", max: 5 },
+    ],
+  },
+  "Route Report": {
+    description: "Document a trail with enough detail that another overlander can run it confidently. Each section is pre-formatted for the route database.",
+    publishTo: ["forum", "routes"],
+    sections: [
+      { id: "title", label: "Route Name", type: "h1", placeholder: "e.g. Black Bear Pass — Telluride to Ouray", required: true },
+      { id: "hero_image", label: "Hero Image", type: "hero_image", placeholder: "Best photo of the trail — this becomes the banner when posted", required: true },
+      { id: "intro", label: "Trail Summary", type: "p", placeholder: "One-paragraph overview — where is it, how long, what makes it notable? When did you run it?", required: true },
+      { id: "details_header", label: "Route Details", type: "h2", fixed: true, value: "Route Details" },
+      { id: "location", label: "Location / Region", type: "short", placeholder: "e.g. San Juan Mountains, CO", required: true },
+      { id: "start_coords", label: "Trailhead Coordinates", type: "short", placeholder: "e.g. 37.9375° N, 107.8123° W" },
+      { id: "end_coords", label: "End Point Coordinates", type: "short", placeholder: "e.g. 37.8106° N, 107.6992° W" },
+      { id: "distance", label: "Distance (miles)", type: "short", placeholder: "e.g. 18.5" },
+      { id: "time", label: "Estimated Time", type: "short", placeholder: "e.g. 4–6 hours" },
+      { id: "elev_gain", label: "Elevation Gain (ft)", type: "short", placeholder: "e.g. 3200" },
+      { id: "max_elev", label: "Max Elevation (ft)", type: "short", placeholder: "e.g. 12,840" },
+      { id: "difficulty", label: "Difficulty Rating", type: "select", options: ["Easy — Stock friendly", "Moderate — High clearance recommended", "Hard — 4WD required, some armor", "Expert — Lockers, armor, experience required"] },
+      { id: "terrains", label: "Terrain Types", type: "tag_select", options: ["Rock", "Mud", "Sand", "Gravel", "Snow/Ice", "Water Crossing", "Shelf Road", "Forest", "Desert", "Alpine"] },
+      { id: "map_field", label: "Route Map", type: "map_embed", description: "Map will auto-populate from your coordinates above" },
+      { id: "conditions_header", label: "Current Conditions", type: "h2", fixed: true, value: "Current Trail Conditions" },
+      { id: "conditions_body", label: "Conditions Detail", type: "p", placeholder: "Date of last run, surface conditions, water crossings, obstacles, closures, snow/ice. Be specific — other overlanders depend on this." },
+      { id: "photos_field", label: "Trail Photos", type: "photos", placeholder: "Upload 10+ photos showing key obstacles, scenery, and trail conditions", required: true, min: 10 },
+      { id: "obstacles_header", label: "Key Obstacles", type: "h2", fixed: true, value: "Key Obstacles & Bypass Info" },
+      { id: "obstacles_body", label: "Obstacle Details", type: "p", placeholder: "Describe each major obstacle — location on trail, difficulty, bypass options, vehicle requirements." },
+      { id: "gear_header", label: "Recommended Gear", type: "h2", fixed: true, value: "Recommended Gear & Vehicle Setup" },
+      { id: "gear_body", label: "Gear Details", type: "p", placeholder: "Minimum tire size, recommended mods, recovery gear needed, comms equipment, fuel range considerations." },
+    ],
+  },
+  "Build Feature": {
+    description: "Showcase a complete build with full mod details. This will become a featured build on the platform.",
+    sections: [
+      { id: "title", label: "Build Name", type: "h1", placeholder: "e.g. The Desert Runner — 2021 Tacoma TRD Off-Road", required: true },
+      { id: "hero_image", label: "Hero Image", type: "hero_image", placeholder: "Your best build shot — this becomes the banner when posted", required: true },
+      { id: "intro", label: "Build Story", type: "p", placeholder: "What's the vision behind this build? Daily driver, weekend warrior, full expedition? What drove your choices?", required: true },
+      { id: "specs_header", label: "Vehicle Specs", type: "h2", fixed: true, value: "Base Vehicle & Specs" },
+      { id: "specs_body", label: "Specs Detail", type: "p", placeholder: "Year, make, model, trim, engine, transmission, transfer case. Mileage at time of build." },
+      { id: "mods_header", label: "Modifications", type: "h2", fixed: true, value: "Full Mod List" },
+      { id: "mods_body", label: "Mod Details", type: "p", placeholder: "List every modification with brand, model, and product link where possible. Group by category (suspension, armor, lighting, etc.)." },
+      { id: "photos_field", label: "Build Photos", type: "photos", placeholder: "Photos of each mod, overall build shots, before/after", required: true, min: 5 },
+      { id: "cost_header", label: "Cost Breakdown", type: "h2", fixed: true, value: "Cost Breakdown" },
+      { id: "cost_body", label: "Cost Details", type: "p", placeholder: "Approximate costs by category. Total investment. What was worth it, what wasn't?" },
+      { id: "lessons_header", label: "Lessons Learned", type: "h2", fixed: true, value: "What I'd Do Differently" },
+      { id: "lessons_body", label: "Lessons Detail", type: "p", placeholder: "Hindsight is 20/20 — what would you change? What mods exceeded expectations?" },
+    ],
+  },
+  "Content Creation": {
+    description: "Create engaging content for the community. Structure your post for maximum engagement and value.",
+    sections: [
+      { id: "title", label: "Content Title", type: "h1", placeholder: "e.g. Camp Kitchen Setup: From Trailhead to Table in 10 Minutes", required: true },
+      { id: "hero_image", label: "Hero Image", type: "hero_image", placeholder: "Cover photo — this becomes the banner when posted to the forum", required: true },
+      { id: "intro", label: "Introduction", type: "p", placeholder: "Hook the reader — what will they learn? Why should they care?", required: true },
+      { id: "main_header", label: "Main Content", type: "h2", fixed: true, value: "The Breakdown" },
+      { id: "main_body", label: "Main Content Body", type: "p", placeholder: "Walk through your process, gear, tips, and techniques. Be detailed and actionable." },
+      { id: "photos_field", label: "Photos / Media", type: "photos", placeholder: "Upload photos, screenshots, or supporting visuals", required: true, min: 3 },
+      { id: "tips_header", label: "Tips & Tricks", type: "h2", fixed: true, value: "Pro Tips" },
+      { id: "tips_body", label: "Tips Detail", type: "p", placeholder: "Share specific tips, hacks, or lessons learned that others can use right away." },
+      { id: "gear_header", label: "Gear List", type: "h2", fixed: true, value: "Gear List & Links" },
+      { id: "gear_body", label: "Gear Details", type: "p", placeholder: "List all gear mentioned with brands, models, and links where possible." },
+    ],
+  },
+};
+
+/* ─── BOUNTY RESPONSE FORM ─── */
+function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose }) {
+  const template = BOUNTY_FORM_TEMPLATES[bounty.category] || BOUNTY_FORM_TEMPLATES["Content Creation"];
+  const [fields, setFields] = useState(() => {
+    if (draft) return draft;
+    const init = {};
+    template.sections.forEach(s => {
+      if (s.fixed) { init[s.id] = s.value; }
+      else if (s.type === "photos") { init[s.id] = []; }
+      else if (s.type === "bullet_list") { init[s.id] = [""]; }
+      else if (s.type === "tag_select") { init[s.id] = []; }
+      else if (s.type === "map_embed") { init[s.id] = ""; }
+      else if (s.type === "hero_image") { init[s.id] = null; }
+      else if (s.type === "rating") { init[s.id] = 0; }
+      else { init[s.id] = ""; }
+    });
+    return init;
+  });
+  const [saving, setSaving] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const photoRef = useRef(null);
+  const heroRef = useRef(null);
+  const [activePhotoField, setActivePhotoField] = useState(null);
+
+  const updateField = (id, val) => setFields(prev => ({ ...prev, [id]: val }));
+
+  const handlePhotoUpload = (fieldId, e) => {
+    const files = Array.from(e.target.files || []);
+    files.forEach(file => {
+      const isVideo = file.type.startsWith("video/");
+      if (isVideo) {
+        const blobUrl = URL.createObjectURL(file);
+        setFields(prev => ({ ...prev, [fieldId]: [...(prev[fieldId] || []), { id: Date.now() + Math.random(), url: blobUrl, name: file.name, type: "video", caption: "" }] }));
+      } else {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          setFields(prev => ({ ...prev, [fieldId]: [...(prev[fieldId] || []), { id: Date.now() + Math.random(), url: ev.target.result, name: file.name, type: "image", caption: "" }] }));
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+    if (e.target) e.target.value = "";
+  };
+
+  const removePhoto = (fieldId, photoId) => {
+    setFields(prev => ({ ...prev, [fieldId]: (prev[fieldId] || []).filter(p => p.id !== photoId) }));
+  };
+
+  const handleHeroUpload = (fieldId, e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      updateField(fieldId, { url: ev.target.result, name: file.name });
+    };
+    reader.readAsDataURL(file);
+    if (e.target) e.target.value = "";
+  };
+
+  const handleSave = () => {
+    setSaving(true);
+    onSave && onSave(bounty.id, fields);
+    setTimeout(() => setSaving(false), 1000);
+  };
+
+  const isComplete = () => {
+    return template.sections.filter(s => s.required).every(s => {
+      const val = fields[s.id];
+      if (s.type === "photos") return val && val.length >= (s.min || 1);
+      if (s.type === "hero_image") return val && val.url;
+      return val && String(val).trim().length > 0;
+    });
+  };
+
+  const handleSubmit = () => {
+    if (!isComplete()) return;
+    onSubmit && onSubmit(bounty.id, fields);
+  };
+
+  const blockLabel = (type) => {
+    if (type === "h1") return "H1";
+    if (type === "h2") return "H2";
+    if (type === "h3") return "H3";
+    if (type === "p") return "P";
+    if (type === "short") return "FIELD";
+    return "";
+  };
+
+  const blockLabelColor = (type) => {
+    if (type === "h1") return T.red;
+    if (type === "h2") return T.copper;
+    if (type === "h3") return "#C0A060";
+    return T.tertiary;
+  };
+
+  // ── Preview Mode ──
+  if (showPreview) {
+    return (
+      <div style={{ position: "absolute", inset: 0, background: T.darkBg, zIndex: 600, display: "flex", flexDirection: "column" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", background: T.charcoal, borderBottom: `1px solid ${T.darkCard}`, flexShrink: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <button onClick={() => setShowPreview(false)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" }}>
+              <ChevronLeft size={22} color={T.white} />
+            </button>
+            <span style={{ fontFamily: sans, fontSize: 14, fontWeight: 700, color: T.white, letterSpacing: 1 }}>PREVIEW</span>
+          </div>
+          <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, background: `${T.copper}18`, padding: "3px 8px", borderRadius: 4, fontWeight: 600 }}>{bounty.category.toUpperCase()}</span>
+        </div>
+        <div className="th-scroll" style={{ flex: 1, overflowY: "auto", padding: 16 }}>
+          {template.sections.map(s => {
+            const val = fields[s.id];
+            // Skip standalone h1 title in preview when hero_image displays it overlaid
+            if (s.type === "h1" && template.sections.some(ts => ts.type === "hero_image") && fields["hero_image"]?.url) return null;
+            if (s.type === "photos") {
+              if (!val || val.length === 0) return null;
+              return (
+                <div key={s.id} style={{ display: "flex", flexDirection: "column", gap: 10, margin: "12px 0" }}>
+                  {val.map((p, pi) => (
+                    <div key={pi} style={{ borderRadius: 10, overflow: "hidden", border: `1px solid ${T.charcoal}` }}>
+                      {p.type === "video" ? (
+                        <div style={{ position: "relative" }}>
+                          <video src={p.url} preload="metadata" playsInline controls style={{ width: "100%", maxHeight: 280, objectFit: "contain", display: "block", background: "#000" }} />
+                          <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(0,0,0,0.6)", borderRadius: 4, padding: "2px 8px", display: "flex", alignItems: "center", gap: 4, pointerEvents: "none" }}>
+                            <Video size={10} color={T.white} />
+                            <span style={{ fontFamily: sans, fontSize: 9, color: T.white, fontWeight: 600 }}>VIDEO</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <img src={p.url} alt="" style={{ width: "100%", height: 200, objectFit: "cover", display: "block" }} />
+                      )}
+                      {p.caption && (
+                        <div style={{ padding: "8px 12px", background: T.darkCard }}>
+                          <span style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, fontStyle: "italic", lineHeight: 1.4 }}>{p.caption}</span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              );
+            }
+            if (s.type === "hero_image") {
+              if (!val || !val.url) return null;
+              return (
+                <div key={s.id} style={{ position: "relative", borderRadius: 12, overflow: "hidden", margin: "-16px -16px 16px", width: "calc(100% + 32px)" }}>
+                  <img src={val.url} alt="" style={{ width: "100%", height: 260, objectFit: "cover", display: "block" }} />
+                  <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(transparent, rgba(0,0,0,0.75))", padding: "40px 16px 14px" }}>
+                    <span style={{ fontFamily: sans, fontSize: 20, color: T.white, fontWeight: 800, textShadow: "0 1px 4px rgba(0,0,0,0.5)" }}>{fields["title"] || "Untitled"}</span>
+                  </div>
+                </div>
+              );
+            }
+            if (s.type === "rating") {
+              return val > 0 ? (
+                <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 4, margin: "12px 0" }}>
+                  {[1,2,3,4,5].map(i => <Star key={i} size={18} color={i <= val ? "#FFD700" : T.charcoal} fill={i <= val ? "#FFD700" : "none"} />)}
+                  <span style={{ fontFamily: sans, fontSize: 13, color: T.white, marginLeft: 6, fontWeight: 600 }}>{val}/5</span>
+                </div>
+              ) : null;
+            }
+            if (s.type === "select") {
+              return val ? <p key={s.id} style={{ fontFamily: serif, fontSize: 14, color: T.copper, margin: "4px 0 12px", fontWeight: 600 }}>{val}</p> : null;
+            }
+            if (s.type === "tag_select") {
+              const tags = val || [];
+              if (tags.length === 0) return null;
+              return (
+                <div key={s.id} style={{ display: "flex", flexWrap: "wrap", gap: 6, margin: "8px 0 12px" }}>
+                  {tags.map(t => <span key={t} style={{ fontFamily: sans, fontSize: 11, color: T.copper, background: `${T.copper}18`, padding: "4px 10px", borderRadius: 12, fontWeight: 600 }}>{t}</span>)}
+                </div>
+              );
+            }
+            if (s.type === "map_embed") {
+              const startC = fields["start_coords"] || "";
+              const loc = fields["location"] || "";
+              const mapQ = startC.trim() || loc.trim();
+              if (!mapQ) return null;
+              return (
+                <div key={s.id} style={{ borderRadius: 12, overflow: "hidden", border: `1px solid ${T.charcoal}`, height: 180, margin: "12px 0" }}>
+                  <iframe
+                    src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8&q=${encodeURIComponent(mapQ)}&maptype=terrain&zoom=12`}
+                    style={{ width: "100%", height: "100%", border: "none" }}
+                    allowFullScreen
+                    loading="lazy"
+                  />
+                </div>
+              );
+            }
+            if (s.type === "bullet_list") {
+              const items = (val || []).filter(v => v.trim());
+              if (items.length === 0) return null;
+              const listColor = s.color || T.white;
+              return (
+                <div key={s.id} style={{ margin: "8px 0 12px", paddingLeft: 4 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                    {s.icon === "check" ? <CheckCircle size={13} color={listColor} /> : <X size={13} color={listColor} />}
+                    <span style={{ fontFamily: sans, fontSize: 13, color: listColor, fontWeight: 700 }}>{s.label}</span>
+                  </div>
+                  {items.map((item, ii) => (
+                    <div key={ii} style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 4 }}>
+                      <span style={{ color: listColor, fontSize: 16, lineHeight: 1.4, flexShrink: 0 }}>•</span>
+                      <span style={{ fontFamily: serif, fontSize: 14, color: T.warmStone, lineHeight: 1.5 }}>{item}</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            }
+            if (!val || (typeof val === "string" && !val.trim())) return null;
+            const fontSize = s.type === "h1" ? 22 : s.type === "h2" ? 17 : s.type === "h3" ? 14 : s.type === "short" ? 13 : 14;
+            const fontWeight = s.type === "h1" || s.type === "h2" || s.type === "h3" ? 700 : 400;
+            const margin = s.type === "h1" ? "0 0 8px" : s.type === "h2" ? "16px 0 6px" : "4px 0 10px";
+            const font = s.type === "p" || s.type === "short" ? serif : sans;
+            const color = s.type === "h1" ? T.red : s.type === "h2" ? T.copper : s.type === "short" ? T.tertiary : T.warmStone;
+            return <p key={s.id} style={{ fontFamily: font, fontSize, fontWeight, color, margin, lineHeight: 1.6 }}>{val}</p>;
+          })}
+        </div>
+        <div style={{ padding: "12px 16px", background: T.charcoal, borderTop: `1px solid ${T.darkCard}`, flexShrink: 0, display: "flex", gap: 10 }}>
+          <button onClick={() => setShowPreview(false)} style={{ flex: 1, padding: "12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, cursor: "pointer" }}>
+            <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>BACK TO EDITOR</span>
+          </button>
+          <button onClick={handleSubmit} disabled={!isComplete()} style={{ flex: 1, padding: "12px", borderRadius: 8, background: isComplete() ? T.green : T.charcoal, border: "none", cursor: isComplete() ? "pointer" : "default", opacity: isComplete() ? 1 : 0.5 }}>
+            <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>SUBMIT FOR REVIEW</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Editor Mode ──
+  return (
+    <div style={{ position: "absolute", inset: 0, background: T.darkBg, zIndex: 600, display: "flex", flexDirection: "column" }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", background: T.charcoal, borderBottom: `1px solid ${T.darkCard}`, flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <button onClick={() => { onSave && onSave(bounty.id, fields); onClose(); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" }}>
+            <ChevronLeft size={22} color={T.white} />
+          </button>
+          <div>
+            <span style={{ fontFamily: sans, fontSize: 14, fontWeight: 700, color: T.white, display: "block" }}>Bounty Response</span>
+            <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{bounty.title}</span>
+          </div>
+        </div>
+        <button onClick={handleSave} style={{ display: "flex", alignItems: "center", gap: 5, background: `${T.copper}18`, padding: "6px 12px", borderRadius: 6, border: `1px solid ${T.copper}30`, cursor: "pointer" }}>
+          <Bookmark size={12} color={T.copper} />
+          <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600, letterSpacing: 0.5 }}>{saving ? "SAVED ✓" : "SAVE DRAFT"}</span>
+        </button>
+      </div>
+
+      {/* Bounty Info Banner */}
+      <div style={{ padding: "12px 16px", background: `${T.charcoal}80`, borderBottom: `1px solid ${T.darkCard}`, flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+          <Target size={13} color={T.red} />
+          <span style={{ fontFamily: sans, fontSize: 10, color: T.red, fontWeight: 600, letterSpacing: 0.5 }}>{bounty.category.toUpperCase()}</span>
+          <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>•</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+            <DollarSign size={11} color={T.green} />
+            <span style={{ fontFamily: sans, fontSize: 11, color: T.green, fontWeight: 600 }}>${(bounty.reward / 100).toFixed(0)}</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+            <Zap size={10} color={T.copper} />
+            <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600 }}>+{bounty.rewardPts} pts</span>
+          </div>
+        </div>
+        <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: "0 0 6px", lineHeight: 1.5 }}>{template.description}</p>
+        {template.publishTo && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.5 }}>PUBLISHES TO:</span>
+            {template.publishTo.map(dest => (
+              <span key={dest} style={{ fontFamily: sans, fontSize: 9, color: T.white, background: dest === "forum" ? `${T.copper}30` : `${T.green}30`, padding: "2px 8px", borderRadius: 4, fontWeight: 600, letterSpacing: 0.5 }}>
+                {dest === "forum" ? "📋 FORUM (FULL REPORT)" : dest === "routes" ? "🗺️ ROUTES (TRAIL DATA)" : dest.toUpperCase()}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Form Fields */}
+      <div className="th-scroll" style={{ flex: 1, overflowY: "auto", padding: "16px 16px 100px" }}>
+        <input ref={photoRef} type="file" accept="image/*,video/*" multiple onChange={(e) => { if (activePhotoField) handlePhotoUpload(activePhotoField, e); }} style={{ display: "none" }} />
+        <input ref={heroRef} type="file" accept="image/*" onChange={(e) => { if (activePhotoField) handleHeroUpload(activePhotoField, e); }} style={{ display: "none" }} />
+
+        {template.sections.map((section) => {
+          if (section.fixed) {
+            return (
+              <div key={section.id} style={{ display: "flex", alignItems: "center", gap: 8, margin: "20px 0 8px" }}>
+                <span style={{ fontFamily: sans, fontSize: 8, color: T.white, background: blockLabelColor(section.type), padding: "2px 5px", borderRadius: 3, fontWeight: 700, letterSpacing: 0.5 }}>{blockLabel(section.type)}</span>
+                <span style={{ fontFamily: sans, fontSize: 15, color: T.copper, fontWeight: 700 }}>{section.value}</span>
+              </div>
+            );
+          }
+
+          if (section.type === "photos") {
+            const photos = fields[section.id] || [];
+            const updateCaption = (photoId, caption) => {
+              setFields(prev => ({ ...prev, [section.id]: (prev[section.id] || []).map(p => p.id === photoId ? { ...p, caption } : p) }));
+            };
+            return (
+              <div key={section.id} style={{ margin: "16px 0" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                  <Camera size={14} color={T.copper} />
+                  <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>{section.label}</span>
+                  {section.required && <span style={{ fontFamily: sans, fontSize: 9, color: T.red }}>REQUIRED</span>}
+                  {section.min && <span style={{ fontFamily: sans, fontSize: 9, color: photos.length >= section.min ? T.green : T.tertiary }}>({photos.length}/{section.min}+ media)</span>}
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  {photos.map(p => (
+                    <div key={p.id} style={{ borderRadius: 12, overflow: "hidden", border: `1px solid ${T.charcoal}`, background: T.darkCard }}>
+                      <div style={{ position: "relative" }}>
+                        {p.type === "video" ? (
+                          <div style={{ position: "relative" }}>
+                            <video src={p.url} preload="metadata" playsInline controls style={{ width: "100%", maxHeight: 280, objectFit: "contain", display: "block", background: "#000" }} />
+                            <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(0,0,0,0.6)", borderRadius: 4, padding: "2px 8px", display: "flex", alignItems: "center", gap: 4, pointerEvents: "none" }}>
+                              <Video size={10} color={T.white} />
+                              <span style={{ fontFamily: sans, fontSize: 9, color: T.white, fontWeight: 600 }}>VIDEO</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <img src={p.url} alt="" style={{ width: "100%", height: 220, objectFit: "cover", display: "block" }} />
+                        )}
+                        <button onClick={() => removePhoto(section.id, p.id)} style={{ position: "absolute", top: 8, right: 8, width: 28, height: 28, borderRadius: "50%", background: "rgba(0,0,0,0.6)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2 }}>
+                          <X size={14} color={T.white} />
+                        </button>
+                      </div>
+                      <div style={{ padding: "8px 10px" }}>
+                        <input
+                          value={p.caption || ""}
+                          onChange={e => updateCaption(p.id, e.target.value)}
+                          placeholder="Add a caption..."
+                          style={{ width: "100%", padding: "8px 10px", borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.warmStone, fontFamily: serif, fontSize: 12, outline: "none", boxSizing: "border-box" }}
+                          onFocus={e => e.target.style.borderColor = T.copper + "60"}
+                          onBlur={e => e.target.style.borderColor = T.charcoal}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                  <button onClick={() => { setActivePhotoField(section.id); setTimeout(() => photoRef.current && photoRef.current.click(), 50); }} style={{ width: "100%", padding: "18px 16px", borderRadius: 12, background: T.darkCard, border: `1px dashed ${T.copper}40`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <Camera size={16} color={T.copper} />
+                      <span style={{ fontFamily: sans, fontSize: 12, color: T.copper, fontWeight: 600 }}>Add Photo</span>
+                    </div>
+                    <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>or</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <Video size={16} color={T.copper} />
+                      <span style={{ fontFamily: sans, fontSize: 12, color: T.copper, fontWeight: 600 }}>Add Video</span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            );
+          }
+
+          if (section.type === "hero_image") {
+            const hero = fields[section.id];
+            return (
+              <div key={section.id} style={{ margin: "16px 0" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <Image size={14} color={T.copper} />
+                  <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>{section.label}</span>
+                  {section.required && <span style={{ fontFamily: sans, fontSize: 9, color: T.red }}>REQUIRED</span>}
+                </div>
+                {hero ? (
+                  <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: `1px solid ${T.charcoal}` }}>
+                    <img src={hero.url} alt="" style={{ width: "100%", height: 240, objectFit: "cover", display: "block" }} />
+                    <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(transparent, rgba(0,0,0,0.7))", padding: "24px 14px 12px" }}>
+                      <span style={{ fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 }}>{fields["title"] || "Your Title Here"}</span>
+                    </div>
+                    <div style={{ position: "absolute", top: 8, right: 8, display: "flex", gap: 6 }}>
+                      <button onClick={() => { setActivePhotoField(section.id); setTimeout(() => heroRef.current && heroRef.current.click(), 50); }} style={{ width: 30, height: 30, borderRadius: "50%", background: "rgba(0,0,0,0.6)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <Edit3 size={12} color={T.white} />
+                      </button>
+                      <button onClick={() => updateField(section.id, null)} style={{ width: 30, height: 30, borderRadius: "50%", background: "rgba(0,0,0,0.6)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <X size={12} color={T.white} />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button onClick={() => { setActivePhotoField(section.id); setTimeout(() => heroRef.current && heroRef.current.click(), 50); }} style={{ width: "100%", height: 180, borderRadius: 12, background: T.darkCard, border: `1px dashed ${T.copper}40`, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                    <div style={{ width: 44, height: 44, borderRadius: "50%", background: `${T.copper}15`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <Image size={20} color={T.copper} />
+                    </div>
+                    <span style={{ fontFamily: sans, fontSize: 12, color: T.copper, fontWeight: 600 }}>Upload Hero Image</span>
+                    <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, maxWidth: 240, textAlign: "center", lineHeight: 1.4 }}>{section.placeholder}</span>
+                  </button>
+                )}
+              </div>
+            );
+          }
+
+          if (section.type === "rating") {
+            const val = fields[section.id] || 0;
+            return (
+              <div key={section.id} style={{ margin: "16px 0" }}>
+                <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, display: "block", marginBottom: 8 }}>{section.label}</span>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {[1,2,3,4,5].map(i => (
+                    <button key={i} onClick={() => updateField(section.id, i)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+                      <Star size={28} color={i <= val ? "#FFD700" : T.charcoal} fill={i <= val ? "#FFD700" : "none"} />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          }
+
+          if (section.type === "select") {
+            return (
+              <div key={section.id} style={{ margin: "12px 0" }}>
+                <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, display: "block", marginBottom: 6 }}>{section.label}</span>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {section.options.map(opt => (
+                    <button key={opt} onClick={() => updateField(section.id, opt)} style={{ padding: "10px 12px", borderRadius: 8, background: fields[section.id] === opt ? `${T.copper}18` : T.darkCard, border: fields[section.id] === opt ? `1px solid ${T.copper}40` : `1px solid ${T.charcoal}`, cursor: "pointer", textAlign: "left" }}>
+                      <span style={{ fontFamily: sans, fontSize: 12, color: fields[section.id] === opt ? T.copper : T.tertiary, fontWeight: fields[section.id] === opt ? 600 : 400 }}>{opt}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          }
+
+          if (section.type === "tag_select") {
+            const selected = fields[section.id] || [];
+            const toggle = (tag) => {
+              if (selected.includes(tag)) updateField(section.id, selected.filter(t => t !== tag));
+              else updateField(section.id, [...selected, tag]);
+            };
+            return (
+              <div key={section.id} style={{ margin: "12px 0" }}>
+                <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, display: "block", marginBottom: 8 }}>{section.label}</span>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {section.options.map(tag => {
+                    const active = selected.includes(tag);
+                    return (
+                      <button key={tag} onClick={() => toggle(tag)} style={{ padding: "6px 12px", borderRadius: 16, background: active ? `${T.copper}20` : T.darkCard, border: active ? `1px solid ${T.copper}50` : `1px solid ${T.charcoal}`, cursor: "pointer", fontFamily: sans, fontSize: 11, color: active ? T.copper : T.tertiary, fontWeight: active ? 600 : 400, transition: "all 0.15s" }}>
+                        {tag}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          }
+
+          if (section.type === "map_embed") {
+            const startC = fields["start_coords"] || "";
+            const endC = fields["end_coords"] || "";
+            const loc = fields["location"] || "";
+            const hasCoords = startC.trim().length > 0;
+            const mapQuery = hasCoords ? startC : loc;
+            return (
+              <div key={section.id} style={{ margin: "16px 0" }}>
+                <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, display: "block", marginBottom: 8 }}>{section.label}</span>
+                {mapQuery ? (
+                  <div style={{ borderRadius: 12, overflow: "hidden", border: `1px solid ${T.charcoal}`, height: 200, position: "relative" }}>
+                    <iframe
+                      src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8&q=${encodeURIComponent(mapQuery)}&maptype=terrain&zoom=12`}
+                      style={{ width: "100%", height: "100%", border: "none" }}
+                      allowFullScreen
+                      loading="lazy"
+                    />
+                    {startC && endC && (
+                      <div style={{ position: "absolute", bottom: 8, left: 8, right: 8, display: "flex", gap: 6 }}>
+                        <div style={{ background: `${T.charcoal}E0`, backdropFilter: "blur(8px)", borderRadius: 6, padding: "4px 10px", display: "flex", alignItems: "center", gap: 4 }}>
+                          <div style={{ width: 8, height: 8, borderRadius: "50%", background: T.green }} />
+                          <span style={{ fontFamily: sans, fontSize: 9, color: T.white }}>Start</span>
+                        </div>
+                        <div style={{ background: `${T.charcoal}E0`, backdropFilter: "blur(8px)", borderRadius: 6, padding: "4px 10px", display: "flex", alignItems: "center", gap: 4 }}>
+                          <div style={{ width: 8, height: 8, borderRadius: "50%", background: T.red }} />
+                          <span style={{ fontFamily: sans, fontSize: 9, color: T.white }}>End</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ height: 120, borderRadius: 12, background: T.darkCard, border: `1px dashed ${T.charcoal}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <div style={{ textAlign: "center" }}>
+                      <Map size={24} color={T.tertiary} strokeWidth={1} style={{ marginBottom: 4, opacity: 0.4 }} />
+                      <p style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, margin: 0 }}>Enter coordinates or location above to preview map</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          }
+
+          if (section.type === "bullet_list") {
+            const items = fields[section.id] || [""];
+            const listColor = section.color || T.white;
+            const updateItem = (idx, val) => {
+              const next = [...items];
+              next[idx] = val;
+              updateField(section.id, next);
+            };
+            const addItem = () => updateField(section.id, [...items, ""]);
+            const removeItem = (idx) => { if (items.length > 1) updateField(section.id, items.filter((_, i) => i !== idx)); };
+            return (
+              <div key={section.id} style={{ margin: "12px 0" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  {section.icon === "check" ? <CheckCircle size={14} color={listColor} /> : <X size={14} color={listColor} />}
+                  <span style={{ fontFamily: sans, fontSize: 12, color: listColor, fontWeight: 700 }}>{section.label}</span>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {items.map((item, idx) => (
+                    <div key={idx} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ color: listColor, fontSize: 18, lineHeight: 1, flexShrink: 0 }}>•</span>
+                      <input
+                        value={item}
+                        onChange={e => updateItem(idx, e.target.value)}
+                        placeholder={section.placeholder}
+                        onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addItem(); } }}
+                        style={{ flex: 1, padding: "9px 12px", borderRadius: 6, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                        onFocus={e => e.target.style.borderColor = listColor + "60"}
+                        onBlur={e => e.target.style.borderColor = T.charcoal}
+                      />
+                      {items.length > 1 && (
+                        <button onClick={() => removeItem(idx)} style={{ background: "none", border: "none", cursor: "pointer", padding: 2, flexShrink: 0, opacity: 0.5 }}>
+                          <Trash2 size={12} color={T.tertiary} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <button onClick={addItem} style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 0" }}>
+                  <Plus size={12} color={listColor} />
+                  <span style={{ fontFamily: sans, fontSize: 10, color: listColor, fontWeight: 600 }}>ADD {section.label.toUpperCase().slice(0, -1)}</span>
+                </button>
+              </div>
+            );
+          }
+
+          // Text fields (h1, h2, h3, p, short)
+          const isH1 = section.type === "h1";
+          const isHeading = isH1 || section.type === "h3";
+          const isShort = section.type === "short";
+          const isLong = section.type === "p";
+          return (
+            <div key={section.id} style={{ margin: "12px 0" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                <span style={{ fontFamily: sans, fontSize: 8, color: T.white, background: blockLabelColor(section.type), padding: "2px 5px", borderRadius: 3, fontWeight: 700, letterSpacing: 0.5 }}>{blockLabel(section.type)}</span>
+                <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>{section.label}</span>
+                {section.required && <span style={{ fontFamily: sans, fontSize: 9, color: T.red }}>REQUIRED</span>}
+              </div>
+              {isLong ? (
+                <textarea
+                  value={fields[section.id] || ""}
+                  onChange={e => updateField(section.id, e.target.value)}
+                  placeholder={section.placeholder}
+                  rows={5}
+                  style={{ width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, lineHeight: 1.6, resize: "vertical", outline: "none", boxSizing: "border-box" }}
+                  onFocus={e => e.target.style.borderColor = T.copper}
+                  onBlur={e => e.target.style.borderColor = T.charcoal}
+                />
+              ) : (
+                <input
+                  value={fields[section.id] || ""}
+                  onChange={e => updateField(section.id, e.target.value)}
+                  placeholder={section.placeholder}
+                  style={{ width: "100%", padding: "11px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: isH1 ? T.red : T.white, fontFamily: isHeading ? sans : serif, fontSize: isH1 ? 18 : isHeading ? 16 : 13, fontWeight: isHeading ? 700 : 400, outline: "none", boxSizing: "border-box" }}
+                  onFocus={e => e.target.style.borderColor = T.copper}
+                  onBlur={e => e.target.style.borderColor = T.charcoal}
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Bottom Actions */}
+      <div style={{ padding: "12px 16px", background: T.charcoal, borderTop: `1px solid ${T.darkCard}`, flexShrink: 0, display: "flex", gap: 10 }}>
+        <button onClick={() => setShowPreview(true)} style={{ flex: 1, padding: "12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+          <Eye size={14} color={T.white} />
+          <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>PREVIEW</span>
+        </button>
+        <button onClick={handleSubmit} disabled={!isComplete()} style={{ flex: 1, padding: "12px", borderRadius: 8, background: isComplete() ? T.green : T.charcoal, border: "none", cursor: isComplete() ? "pointer" : "default", opacity: isComplete() ? 1 : 0.5, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+          <Send size={14} color={T.white} />
+          <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>SUBMIT</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ─── RANKS / LEADERBOARD SCREEN ─── */
-function RanksScreen() {
+function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp }) {
   const [tab, setTab] = useState("overview"); // overview | leaderboard | bounty | badges
 
-  // ── Community Rank Tiers (based on total points) ──
-  const rankTiers = [
-    { name: "Scout", min: 0, max: 999, color: T.tertiary, icon: Compass },
-    { name: "Explorer", min: 1000, max: 4999, color: T.green, icon: Map },
-    { name: "Pathfinder", min: 5000, max: 14999, color: T.copper, icon: Navigation },
-    { name: "Trailblazer", min: 15000, max: 29999, color: T.copper, icon: Flame },
-    { name: "Navigator", min: 30000, max: 49999, color: "#C0A060", icon: Star },
-    { name: "Expedition Lead", min: 50000, max: 99999, color: T.red, icon: Shield },
-    { name: "Legend", min: 100000, max: Infinity, color: "#FFD700", icon: Trophy },
-  ];
+  // Use global RANK_TIERS
+  const rankTiers = RANK_TIERS.map(r => ({ ...r, icon: RANK_ICON_MAP[r.icon] || Star }));
 
   // ── Points breakdown (automated) ──
   const pointsConfig = {
@@ -5402,88 +6264,77 @@ function RanksScreen() {
   };
 
   // ── Current user stats (simulated) ──
-  const myPoints = 12450;
+  const myPoints = myPointsProp || 12450;
   const myBountyEarnings = 124000; // cents
   const myRank = rankTiers.find(r => myPoints >= r.min && myPoints <= r.max) || rankTiers[0];
   const nextRank = rankTiers[rankTiers.indexOf(myRank) + 1] || null;
   const rankProgress = nextRank ? ((myPoints - myRank.min) / (nextRank.min - myRank.min)) * 100 : 100;
   const RankIcon = myRank.icon;
 
-  const myPointsBreakdown = [
-    { label: "Forum Threads", pts: 3750, icon: MessageCircle },
-    { label: "Routes Logged", pts: 2700, icon: Map },
-    { label: "Builds Added", pts: 2000, icon: Wrench },
-    { label: "Likes Received", pts: 1840, icon: Heart },
-    { label: "Feed Posts", pts: 1200, icon: Edit3 },
-    { label: "Daily Logins", pts: 560, icon: Zap },
-    { label: "Other", pts: 400, icon: Star },
-  ];
+  const breakdownIcons = { "Forum Threads": MessageCircle, "Routes Logged": Map, "Builds Added": Wrench, "Likes Received": Heart, "Feed Posts": Edit3, "Daily Logins": Zap, "Recovery": AlertTriangle, "Other": Star };
+  const bd = breakdownProp || { "Forum Threads": 3750, "Routes Logged": 2700, "Builds Added": 2000, "Likes Received": 1840, "Feed Posts": 1200, "Daily Logins": 560, "Other": 400 };
+  const myPointsBreakdown = Object.entries(bd).filter(([, pts]) => pts > 0).map(([label, pts]) => ({ label, pts, icon: breakdownIcons[label] || Star })).sort((a, b) => b.pts - a.pts);
 
   // ── Leaderboard ──
-  const leaderboardData = [
-    { rank: 1, name: "Sierra_Tactical", initial: "S", badge: "Expedition Lead", points: 48900, streak: 47 },
-    { rank: 2, name: "Nomad_Queen", initial: "N", badge: "Trailblazer", points: 32100, streak: 31 },
-    { rank: 3, name: "Peak_Finder", initial: "P", badge: "Navigator", points: 28750, streak: 22 },
-    { rank: 4, name: "TrailBoss_88", initial: "T", badge: "Pathfinder", points: 26200, streak: 18 },
-    { rank: 5, name: "DirtRoadDave", initial: "D", badge: "Pathfinder", points: 22800, streak: 15 },
-    { rank: 6, name: "MountainGoat", initial: "M", badge: "Pathfinder", points: 19400, streak: 12 },
-    { rank: 7, name: "FoxFanatic", initial: "F", badge: "Pathfinder", points: 17600, streak: 9 },
-    { rank: 8, name: "BajaBound", initial: "B", badge: "Explorer", points: 14200, streak: 6 },
-    { rank: 9, name: "StockHero", initial: "S", badge: "Explorer", points: 13100, streak: 11 },
-    { rank: 10, name: "LiftKing", initial: "L", badge: "Explorer", points: 12800, streak: 8 },
-    { rank: 42, name: "KyleLPO", initial: "K", badge: myRank.name, points: myPoints, isYou: true, streak: 5 },
-    { rank: 43, name: "Nomad_Mike", initial: "N", badge: "Explorer", points: 11200, streak: 3 },
+  const lbOthers = [
+    { name: "Sierra_Tactical", initial: "S", points: 48900, streak: 47 },
+    { name: "Nomad_Queen", initial: "N", points: 32100, streak: 31 },
+    { name: "Peak_Finder", initial: "P", points: 28750, streak: 22 },
+    { name: "TrailBoss_88", initial: "T", points: 26200, streak: 18 },
+    { name: "DirtRoadDave", initial: "D", points: 22800, streak: 15 },
+    { name: "MountainGoat", initial: "M", points: 19400, streak: 12 },
+    { name: "FoxFanatic", initial: "F", points: 17600, streak: 9 },
+    { name: "BajaBound", initial: "B", points: 14200, streak: 6 },
+    { name: "StockHero", initial: "S", points: 13100, streak: 11 },
+    { name: "LiftKing", initial: "L", points: 12800, streak: 8 },
+    { name: "Nomad_Mike", initial: "N", points: 11200, streak: 3 },
   ];
+  // Insert user and sort by points to compute dynamic rank
+  const lbAll = [...lbOthers, { name: "KyleLPO", initial: "K", points: myPoints, isYou: true, streak: 5 }].sort((a, b) => b.points - a.points);
+  const leaderboardData = lbAll.map((u, i) => ({ ...u, rank: i + 1, badge: (rankTiers.find(r => u.points >= r.min && u.points <= r.max) || rankTiers[0]).name }));
+  const myLeaderboardRank = leaderboardData.find(u => u.isYou)?.rank || "—";
 
   const [lbFilter, setLbFilter] = useState("ALL TIME");
   const lbFilters = ["ALL TIME", "THIS MONTH", "THIS WEEK"];
 
   // ── Bounty Board (admin-set, monetary value) ──
-  const bounties = [
+  const [bounties, setBounties] = useState([
     { id: "b1", title: "Trail Report: Black Bear Pass", desc: "Complete a detailed route report with 10+ photos, GPS track, difficulty rating, and current trail conditions for Black Bear Pass.", reward: 7500, rewardPts: 500, category: "Route Report", difficulty: "Hard", deadline: "Apr 30, 2026", slots: 3, claimed: 1, status: "open" },
     { id: "b2", title: "Gear Review: Recovery Boards", desc: "Write a detailed forum review comparing at least 3 recovery board brands with photos of real-world use.", reward: 5000, rewardPts: 300, category: "Gear Review", difficulty: "Medium", deadline: "May 15, 2026", slots: 5, claimed: 2, status: "open" },
     { id: "b3", title: "Build Feature: Overland Tacoma", desc: "Create a complete build profile for your Tacoma build with full mod list, photos of each mod, and product links.", reward: 3500, rewardPts: 200, category: "Build Feature", difficulty: "Easy", deadline: "May 1, 2026", slots: 10, claimed: 7, status: "open" },
     { id: "b4", title: "Video: Campsite Setup Walkthrough", desc: "Post a forum thread with video walkthrough of your camp setup process, including gear list and tips.", reward: 10000, rewardPts: 750, category: "Content Creation", difficulty: "Hard", deadline: "May 20, 2026", slots: 2, claimed: 0, status: "open" },
     { id: "b5", title: "Trail Report: Rubicon Trail", desc: "Complete a detailed route report for the Rubicon Trail with obstacle descriptions and bypass info.", reward: 7500, rewardPts: 500, category: "Route Report", difficulty: "Hard", deadline: "Apr 15, 2026", slots: 3, claimed: 3, status: "completed" },
-  ];
+  ]);
 
   const [bountyFilter, setBountyFilter] = useState("OPEN");
   const [expandedBounty, setExpandedBounty] = useState(null);
+  const [bountyDrafts, setBountyDrafts] = useState({}); // { bountyId: { ...fieldValues } }
+  const [activeBountyForm, setActiveBountyForm] = useState(null); // bounty object or null
+
+  const startBounty = (bountyId) => {
+    setBounties(prev => prev.map(b => b.id === bountyId ? { ...b, status: "in_progress", claimed: b.claimed + 1 } : b));
+    setActiveBountyForm(bounties.find(b => b.id === bountyId));
+    setExpandedBounty(null);
+  };
+  const resumeBounty = (bountyId) => {
+    setActiveBountyForm(bounties.find(b => b.id === bountyId));
+  };
+  const saveBountyDraft = (bountyId, fields) => {
+    setBountyDrafts(prev => ({ ...prev, [bountyId]: fields }));
+  };
+  const submitBounty = (bountyId, fields) => {
+    setBountyDrafts(prev => ({ ...prev, [bountyId]: fields }));
+    setBounties(prev => prev.map(b => b.id === bountyId ? { ...b, status: "submitted" } : b));
+    setActiveBountyForm(null);
+  };
 
   // ── Activity Badges ──
-  const badgeCategories = [
-    { name: "Trail Mastery", badges: [
-      { name: "First Trail", desc: "Log your first route", icon: MapPin, earned: true, progress: 1, goal: 1 },
-      { name: "Trail Runner", desc: "Log 5 routes", icon: MapPin, earned: true, progress: 5, goal: 5 },
-      { name: "Pathmaker", desc: "Log 15 routes", icon: Route, earned: false, progress: 9, goal: 15 },
-      { name: "Trail Legend", desc: "Log 50 routes", icon: Mountain, earned: false, progress: 9, goal: 50 },
-    ]},
-    { name: "Community", badges: [
-      { name: "First Post", desc: "Create your first feed post", icon: Edit3, earned: true, progress: 1, goal: 1 },
-      { name: "Storyteller", desc: "Create 10 forum threads", icon: MessageCircle, earned: true, progress: 15, goal: 10 },
-      { name: "Helpful Hand", desc: "Get 50 likes on your posts", icon: ThumbsUp, earned: true, progress: 92, goal: 50 },
-      { name: "Community Pillar", desc: "Get 500 likes on your posts", icon: Heart, earned: false, progress: 92, goal: 500 },
-    ]},
-    { name: "Builder", badges: [
-      { name: "Garage Started", desc: "Add your first build", icon: Wrench, earned: true, progress: 1, goal: 1 },
-      { name: "Master Builder", desc: "Add 3 complete builds", icon: Wrench, earned: false, progress: 2, goal: 3 },
-      { name: "Mod Guru", desc: "Log 20 modifications", icon: Settings, earned: false, progress: 14, goal: 20 },
-    ]},
-    { name: "Explorer", badges: [
-      { name: "Daily Driver", desc: "Log in 7 days in a row", icon: Zap, earned: true, progress: 7, goal: 7 },
-      { name: "Dedicated", desc: "Log in 30 days in a row", icon: Flame, earned: false, progress: 5, goal: 30 },
-      { name: "Shutterbug", desc: "Upload 50 photos", icon: Camera, earned: false, progress: 23, goal: 50 },
-      { name: "First Responder", desc: "Respond to 5 recovery requests", icon: AlertTriangle, earned: false, progress: 2, goal: 5 },
-    ]},
-    { name: "Bounty Hunter", badges: [
-      { name: "First Bounty", desc: "Complete your first bounty", icon: Target, earned: true, progress: 1, goal: 1 },
-      { name: "Bounty Pro", desc: "Complete 5 bounties", icon: DollarSign, earned: false, progress: 3, goal: 5 },
-      { name: "Top Contributor", desc: "Earn $500 in bounties", icon: Award, earned: false, progress: 124, goal: 500 },
-    ]},
-  ];
-
-  const totalBadges = badgeCategories.reduce((sum, cat) => sum + cat.badges.length, 0);
-  const earnedBadges = badgeCategories.reduce((sum, cat) => sum + cat.badges.filter(b => b.earned).length, 0);
+  // Badge data derived from global BADGE_CATEGORIES
+  const totalBadges = BADGE_CATEGORIES.reduce((sum, cat) => sum + cat.tiers.length, 0);
+  const earnedBadges = BADGE_CATEGORIES.reduce((sum, cat) => {
+    const info = getBadgeTierForCategory(cat.name);
+    return sum + (info.tier >= 0 ? info.tier + 1 : 0);
+  }, 0);
 
   const diffColor = (d) => d === "Hard" ? T.red : d === "Medium" ? T.copper : T.green;
 
@@ -5520,7 +6371,7 @@ function RanksScreen() {
             </div>
             <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, display: "block", marginBottom: 4 }}>COMMUNITY RANK</span>
             <h1 style={{ fontFamily: sans, fontSize: 26, color: myRank.color, margin: "0 0 4px", fontWeight: 700 }}>{myRank.name}</h1>
-            <span style={{ fontFamily: serif, fontSize: 13, color: T.tertiary }}>#{42} Global Ranking</span>
+            <span style={{ fontFamily: serif, fontSize: 13, color: T.tertiary }}>#{myLeaderboardRank} Global Ranking</span>
 
             {/* Progress to next rank */}
             {nextRank && (
@@ -5715,18 +6566,18 @@ function RanksScreen() {
 
           {/* Filter */}
           <div style={{ display: "flex", gap: 6, padding: "10px 16px" }}>
-            {["OPEN", "COMPLETED", "ALL"].map(f => (
+            {["OPEN", "IN PROGRESS", "SUBMITTED", "COMPLETED", "ALL"].map(f => (
               <button key={f} onClick={() => setBountyFilter(f)} style={{ padding: "6px 12px", borderRadius: 14, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 10, fontWeight: 600, letterSpacing: 0.5, background: bountyFilter === f ? T.red : T.darkCard, color: bountyFilter === f ? T.white : T.tertiary }}>{f}</button>
             ))}
           </div>
 
           {/* Bounty Cards */}
           <div style={{ padding: "0 16px", display: "flex", flexDirection: "column", gap: 8 }}>
-            {bounties.filter(b => bountyFilter === "ALL" ? true : bountyFilter === "OPEN" ? b.status === "open" : b.status === "completed").map(b => {
+            {bounties.filter(b => bountyFilter === "ALL" ? true : bountyFilter === "OPEN" ? b.status === "open" : bountyFilter === "IN PROGRESS" ? b.status === "in_progress" : bountyFilter === "SUBMITTED" ? b.status === "submitted" : b.status === "completed").map(b => {
               const expanded = expandedBounty === b.id;
               const slotsLeft = b.slots - b.claimed;
               return (
-                <div key={b.id} onClick={() => setExpandedBounty(expanded ? null : b.id)} style={{ background: T.darkCard, borderRadius: 12, overflow: "hidden", cursor: "pointer", border: b.status === "completed" ? `1px solid ${T.green}20` : `1px solid ${T.charcoal}` }}>
+                <div key={b.id} onClick={() => setExpandedBounty(expanded ? null : b.id)} style={{ background: T.darkCard, borderRadius: 12, overflow: "hidden", cursor: "pointer", border: b.status === "completed" ? `1px solid ${T.green}20` : b.status === "in_progress" ? `1px solid ${T.copper}25` : b.status === "submitted" ? `1px solid #C0A06025` : `1px solid ${T.charcoal}` }}>
                   <div style={{ padding: "14px 16px" }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -5737,6 +6588,16 @@ function RanksScreen() {
                         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                           <CheckCircle size={12} color={T.green} />
                           <span style={{ fontFamily: sans, fontSize: 9, color: T.green, fontWeight: 600 }}>COMPLETED</span>
+                        </div>
+                      ) : b.status === "in_progress" ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <Edit3 size={11} color={T.copper} />
+                          <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 600 }}>IN PROGRESS</span>
+                        </div>
+                      ) : b.status === "submitted" ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <Clock size={11} color="#C0A060" />
+                          <span style={{ fontFamily: sans, fontSize: 9, color: "#C0A060", fontWeight: 600 }}>UNDER REVIEW</span>
                         </div>
                       ) : (
                         <span style={{ fontFamily: sans, fontSize: 9, color: slotsLeft <= 1 ? T.red : T.tertiary, fontWeight: 600 }}>{slotsLeft} SLOT{slotsLeft !== 1 ? "S" : ""} LEFT</span>
@@ -5770,7 +6631,22 @@ function RanksScreen() {
                         </div>
                       </div>
                       {b.status === "open" && slotsLeft > 0 && (
-                        <button onClick={(e) => e.stopPropagation()} style={{ width: "100%", padding: "12px", background: T.red, color: T.white, fontFamily: sans, fontSize: 12, fontWeight: 700, borderRadius: 8, border: "none", cursor: "pointer", letterSpacing: 1 }}>CLAIM BOUNTY</button>
+                        <button onClick={(e) => { e.stopPropagation(); startBounty(b.id); }} style={{ width: "100%", padding: "12px", background: T.red, color: T.white, fontFamily: sans, fontSize: 12, fontWeight: 700, borderRadius: 8, border: "none", cursor: "pointer", letterSpacing: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                          <Target size={14} color={T.white} />
+                          START BOUNTY
+                        </button>
+                      )}
+                      {b.status === "in_progress" && (
+                        <button onClick={(e) => { e.stopPropagation(); resumeBounty(b.id); }} style={{ width: "100%", padding: "12px", background: T.copper, color: T.white, fontFamily: sans, fontSize: 12, fontWeight: 700, borderRadius: 8, border: "none", cursor: "pointer", letterSpacing: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                          <Edit3 size={14} color={T.white} />
+                          RESUME BOUNTY
+                        </button>
+                      )}
+                      {b.status === "submitted" && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0 0" }}>
+                          <Clock size={14} color="#C0A060" />
+                          <span style={{ fontFamily: serif, fontSize: 12, color: T.tertiary }}>Awaiting admin review — you'll be notified when approved or if edits are needed.</span>
+                        </div>
                       )}
                     </div>
                   )}
@@ -5797,43 +6673,66 @@ function RanksScreen() {
           </div>
 
           {/* Badge Categories */}
-          {badgeCategories.map((cat, ci) => (
-            <div key={ci} style={{ padding: "12px 16px 4px" }}>
-              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 10 }}>{cat.name.toUpperCase()}</span>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-                {cat.badges.map((b, bi) => {
-                  const BIcon = b.icon;
-                  const pct = Math.min((b.progress / b.goal) * 100, 100);
-                  return (
-                    <div key={bi} style={{ background: b.earned ? `${T.copper}10` : T.darkCard, borderRadius: 10, padding: "14px 12px", border: b.earned ? `1px solid ${T.copper}25` : `1px solid ${T.charcoal}`, position: "relative", overflow: "hidden" }}>
-                      {b.earned && (
-                        <div style={{ position: "absolute", top: 8, right: 8 }}>
-                          <CheckCircle size={14} color={T.copper} />
+          {BADGE_CATEGORIES.map((cat, ci) => {
+            const catInfo = getBadgeTierForCategory(cat.name);
+            const CatIcon = cat.icon;
+            const progress = MY_BADGE_PROGRESS[cat.name] || 0;
+            return (
+              <div key={ci} style={{ padding: "12px 16px 4px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                  <CatIcon size={14} color={catInfo.tier >= 0 ? catInfo.color : T.tertiary} strokeWidth={1.5} />
+                  <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600 }}>{cat.name.toUpperCase()}</span>
+                  {catInfo.tier >= 0 && <span style={{ fontFamily: sans, fontSize: 9, color: catInfo.color, background: `${catInfo.color}18`, padding: "2px 7px", borderRadius: 4, fontWeight: 600 }}>{catInfo.name}</span>}
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}>
+                  {cat.tiers.map((tier, ti) => {
+                    const earned = progress >= tier.goal;
+                    const isCurrent = catInfo.tierIdx === ti;
+                    const isNext = catInfo.tierIdx === ti - 1 || (catInfo.tier < 0 && ti === 0);
+                    const tierColor = BADGE_TIER_COLORS[Math.min(ti, BADGE_TIER_COLORS.length - 1)];
+                    const pct = isNext ? Math.min((progress / tier.goal) * 100, 100) : 0;
+                    return (
+                      <div key={ti} style={{ background: earned ? `${tierColor}10` : T.darkCard, borderRadius: 10, padding: "12px 14px", border: isCurrent ? `1px solid ${tierColor}35` : `1px solid ${T.charcoal}`, display: "flex", alignItems: "center", gap: 12 }}>
+                        <div style={{ width: 38, height: 38, borderRadius: "50%", background: earned ? `${tierColor}22` : T.charcoal, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, border: earned ? `2px solid ${tierColor}50` : "2px solid transparent" }}>
+                          <CatIcon size={16} color={earned ? tierColor : `${T.tertiary}60`} strokeWidth={1.5} />
                         </div>
-                      )}
-                      <div style={{ width: 36, height: 36, borderRadius: "50%", background: b.earned ? `${T.copper}20` : `${T.charcoal}`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 8 }}>
-                        <BIcon size={16} color={b.earned ? T.copper : T.tertiary} strokeWidth={1.5} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ fontFamily: sans, fontSize: 12, color: earned ? T.white : T.tertiary, fontWeight: 600 }}>{tier.name}</span>
+                            {earned && <CheckCircle size={12} color={tierColor} />}
+                          </div>
+                          <span style={{ fontFamily: serif, fontSize: 10, color: T.tertiary, display: "block", marginTop: 1 }}>{tier.desc}</span>
+                          {isNext && !earned && (
+                            <div style={{ marginTop: 6 }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
+                                <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>{progress}/{tier.goal}</span>
+                                <span style={{ fontFamily: sans, fontSize: 9, color: tierColor }}>{Math.round(pct)}%</span>
+                              </div>
+                              <div style={{ height: 4, background: T.charcoal, borderRadius: 2, overflow: "hidden" }}>
+                                <div style={{ height: "100%", width: `${pct}%`, background: tierColor, borderRadius: 2 }} />
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <span style={{ fontFamily: sans, fontSize: 12, color: b.earned ? T.white : T.tertiary, fontWeight: 600, display: "block", marginBottom: 2 }}>{b.name}</span>
-                      <span style={{ fontFamily: serif, fontSize: 10, color: T.tertiary, display: "block", marginBottom: 8, lineHeight: 1.4 }}>{b.desc}</span>
-                      {!b.earned && (
-                        <div>
-                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-                            <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>{b.progress}/{b.goal}</span>
-                            <span style={{ fontFamily: sans, fontSize: 9, color: T.copper }}>{Math.round(pct)}%</span>
-                          </div>
-                          <div style={{ height: 4, background: T.charcoal, borderRadius: 2, overflow: "hidden" }}>
-                            <div style={{ height: "100%", width: `${pct}%`, background: T.copper, borderRadius: 2 }} />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
+      )}
+
+      {/* ═══════════ BOUNTY RESPONSE FORM OVERLAY ═══════════ */}
+      {activeBountyForm && (
+        <BountyResponseForm
+          bounty={activeBountyForm}
+          draft={bountyDrafts[activeBountyForm.id] || null}
+          onSave={saveBountyDraft}
+          onSubmit={submitBounty}
+          onClose={() => setActiveBountyForm(null)}
+        />
       )}
     </div>
   );
@@ -6194,7 +7093,7 @@ function AddBuildForm({ onClose, onSave, initialData }) {
 }
 
 /* ─── PROFILE SCREEN (Own Profile) ─── */
-function ProfileScreen({ onViewUser, onLogout, userBuilds, onAddBuild, onUpdateBuild, onDeleteBuild, profilePic, onSetProfilePic, notifPrefs, onSetNotifPrefs, feedItems, onDeletePost, onEditPost, onGoToPost }) {
+function ProfileScreen({ onViewUser, onLogout, userBuilds, onAddBuild, onUpdateBuild, onDeleteBuild, profilePic, onSetProfilePic, notifPrefs, onSetNotifPrefs, feedItems, onDeletePost, onEditPost, onGoToPost, myPoints: myPointsProp }) {
   const [isPublic, setIsPublic] = useState(true);
   const [activeTab, setActiveTab] = useState("builds");
   const [activeBuild, setActiveBuild] = useState(0);
@@ -6243,10 +7142,9 @@ function ProfileScreen({ onViewUser, onLogout, userBuilds, onAddBuild, onUpdateB
   const user = {
     name: userName,
     handle: userHandle,
-    badge: "Verified Explorer",
     followers: 847,
     following: 234,
-    points: 12450,
+    points: myPointsProp || 12450,
     joinDate: "Mar 2025",
   };
 
@@ -6568,10 +7466,13 @@ function ProfileScreen({ onViewUser, onLogout, userBuilds, onAddBuild, onUpdateB
         </div>
         <h2 style={{ fontFamily: sans, fontSize: 20, color: T.white, margin: "0 0 2px", fontWeight: 700 }}>{user.name}</h2>
         <span style={{ fontFamily: sans, fontSize: 13, color: T.tertiary, display: "block", marginBottom: 4 }}>{user.handle}</span>
-        <div style={{ display: "inline-flex", alignItems: "center", gap: 4, background: `${T.red}18`, padding: "4px 10px", borderRadius: 12, marginBottom: 16 }}>
-          <CheckCircle size={12} color={T.red} />
-          <span style={{ fontFamily: sans, fontSize: 10, color: T.red, letterSpacing: 1, fontWeight: 600 }}>{user.badge.toUpperCase()}</span>
-        </div>
+        {(() => { const rank = getUserRank(user.points); const RIcon = RANK_ICON_MAP[rank.icon] || Star; return (
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 5, background: `${rank.color}18`, padding: "4px 12px", borderRadius: 12, marginBottom: 16 }}>
+            <RIcon size={13} color={rank.color} strokeWidth={1.5} />
+            <span style={{ fontFamily: sans, fontSize: 10, color: rank.color, letterSpacing: 1, fontWeight: 600 }}>{rank.name.toUpperCase()}</span>
+            <span style={{ fontFamily: sans, fontSize: 9, color: `${rank.color}90`, marginLeft: 2 }}>{user.points.toLocaleString()} pts</span>
+          </div>
+        ); })()}
 
         {/* Stats Row */}
         <div style={{ display: "flex", justifyContent: "center", gap: 24, marginBottom: 16 }}>
@@ -6590,6 +7491,40 @@ function ProfileScreen({ onViewUser, onLogout, userBuilds, onAddBuild, onUpdateB
             <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1 }}>POINTS</span>
           </div>
         </div>
+
+        {/* Earned Badges */}
+        {(() => {
+          const [tappedBadge, setTappedBadge] = React.useState(null);
+          const earned = BADGE_CATEGORIES.map(cat => {
+            const info = getBadgeTierForCategory(cat.name);
+            if (info.tier < 0) return null;
+            return { cat, info };
+          }).filter(Boolean);
+          if (earned.length === 0) return null;
+          return (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 8 }}>
+                {earned.map(({ cat, info }, i) => {
+                  const CatIcon = cat.icon;
+                  const isActive = tappedBadge === cat.name;
+                  return (
+                    <div key={cat.name} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                      <div
+                        onClick={() => setTappedBadge(isActive ? null : cat.name)}
+                        style={{ width: 38, height: 38, borderRadius: "50%", background: `${info.color}20`, border: `2px solid ${info.color}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "transform 0.15s", transform: isActive ? "scale(1.15)" : "scale(1)" }}
+                      >
+                        <CatIcon size={16} color={info.color} strokeWidth={2} />
+                      </div>
+                      {isActive && (
+                        <span style={{ fontFamily: sans, fontSize: 9, color: info.color, fontWeight: 600, textAlign: "center", maxWidth: 60, lineHeight: 1.2 }}>{info.name}</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Bio */}
         {userBio && (
@@ -6968,10 +7903,13 @@ function OtherProfileScreen({ userId, onBack, onMessage }) {
         </div>
         <h2 style={{ fontFamily: sans, fontSize: 20, color: T.white, margin: "0 0 2px", fontWeight: 700 }}>{p.name}</h2>
         <span style={{ fontFamily: sans, fontSize: 13, color: T.tertiary, display: "block", marginBottom: 4 }}>{p.handle}</span>
-        <div style={{ display: "inline-flex", alignItems: "center", gap: 4, background: `${T.copper}18`, padding: "4px 10px", borderRadius: 12, marginBottom: 14 }}>
-          <CheckCircle size={12} color={T.copper} />
-          <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1, fontWeight: 600 }}>{p.badge.toUpperCase()}</span>
-        </div>
+        {(() => { const rank = getUserRank(p.points); const RIcon = RANK_ICON_MAP[rank.icon] || Star; return (
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 5, background: `${rank.color}18`, padding: "4px 12px", borderRadius: 12, marginBottom: 14 }}>
+            <RIcon size={13} color={rank.color} strokeWidth={1.5} />
+            <span style={{ fontFamily: sans, fontSize: 10, color: rank.color, letterSpacing: 1, fontWeight: 600 }}>{rank.name.toUpperCase()}</span>
+            <span style={{ fontFamily: sans, fontSize: 9, color: `${rank.color}90`, marginLeft: 2 }}>{p.points.toLocaleString()} pts</span>
+          </div>
+        ); })()}
 
         {/* Follow + Message Buttons */}
         <div style={{ display: "flex", justifyContent: "center", gap: 10, marginBottom: 16 }}>
@@ -7006,6 +7944,44 @@ function OtherProfileScreen({ userId, onBack, onMessage }) {
             <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1 }}>POINTS</span>
           </div>
         </div>
+
+        {/* Earned Badges */}
+        {(() => {
+          const [tappedBadge, setTappedBadge] = React.useState(null);
+          // Simulate other user badge progress based on their points
+          const pts = p.points || 1500;
+          const simBadges = BADGE_CATEGORIES.map(cat => {
+            const seed = (p.name || "").length + cat.name.length;
+            const tierIdx = pts > 30000 ? Math.min(seed % 4, cat.tiers.length - 1) : pts > 10000 ? Math.min(seed % 3, cat.tiers.length - 1) : pts > 3000 ? Math.min(seed % 2, cat.tiers.length - 1) : seed % 3 === 0 ? 0 : -1;
+            if (tierIdx < 0) return null;
+            const color = BADGE_TIER_COLORS[Math.min(tierIdx, BADGE_TIER_COLORS.length - 1)];
+            return { cat, tierIdx, color, tierName: cat.tiers[tierIdx].name };
+          }).filter(Boolean);
+          if (simBadges.length === 0) return null;
+          return (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 8 }}>
+                {simBadges.map(({ cat, tierIdx, color, tierName }) => {
+                  const CatIcon = cat.icon;
+                  const isActive = tappedBadge === cat.name;
+                  return (
+                    <div key={cat.name} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                      <div
+                        onClick={() => setTappedBadge(isActive ? null : cat.name)}
+                        style={{ width: 34, height: 34, borderRadius: "50%", background: `${color}20`, border: `2px solid ${color}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "transform 0.15s", transform: isActive ? "scale(1.15)" : "scale(1)" }}
+                      >
+                        <CatIcon size={14} color={color} strokeWidth={2} />
+                      </div>
+                      {isActive && (
+                        <span style={{ fontFamily: sans, fontSize: 9, color, fontWeight: 600, textAlign: "center", maxWidth: 60, lineHeight: 1.2 }}>{tierName}</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Private Account Gate */}
@@ -7452,15 +8428,25 @@ function PhotoUploader({ photos, onChange, maxPhotos = 10, compact = false }) {
     let loaded = 0;
     const results = [];
     allowed.forEach((file, idx) => {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        results[idx] = { id: Date.now() + Math.random(), url: ev.target.result, name: file.name };
+      const isVideo = file.type.startsWith("video/");
+      if (isVideo) {
+        const blobUrl = URL.createObjectURL(file);
+        results[idx] = { id: Date.now() + Math.random(), url: blobUrl, name: file.name, type: "video", caption: "" };
         loaded++;
         if (loaded === allowed.length) {
           onChange([...photos, ...results]);
         }
-      };
-      reader.readAsDataURL(file);
+      } else {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          results[idx] = { id: Date.now() + Math.random(), url: ev.target.result, name: file.name, type: "image", caption: "" };
+          loaded++;
+          if (loaded === allowed.length) {
+            onChange([...photos, ...results]);
+          }
+        };
+        reader.readAsDataURL(file);
+      }
     });
   };
 
@@ -7468,10 +8454,14 @@ function PhotoUploader({ photos, onChange, maxPhotos = 10, compact = false }) {
     onChange(photos.filter(p => p.id !== id));
   };
 
+  const updateCaption = (id, caption) => {
+    onChange(photos.map(p => p.id === id ? { ...p, caption } : p));
+  };
+
   if (compact) {
     return (
       <>
-        <input ref={fileRef} type="file" accept="image/*" multiple onChange={handleFiles} style={{ display: "none" }} />
+        <input ref={fileRef} type="file" accept="image/*,video/*" multiple onChange={handleFiles} style={{ display: "none" }} />
         <button onClick={() => fileRef.current && fileRef.current.click()} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" }}>
           <Image size={20} color={T.tertiary} />
         </button>
@@ -7484,23 +8474,45 @@ function PhotoUploader({ photos, onChange, maxPhotos = 10, compact = false }) {
 
   return (
     <div>
-      <input ref={fileRef} type="file" accept="image/*" multiple onChange={handleFiles} style={{ display: "none" }} />
+      <input ref={fileRef} type="file" accept="image/*,video/*" multiple onChange={handleFiles} style={{ display: "none" }} />
       {photos.length > 0 && (
-        <div style={{ display: "flex", gap: 8, marginBottom: 10, overflowX: "auto", paddingBottom: 4 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 10 }}>
           {photos.map((p) => (
-            <div key={p.id} style={{ position: "relative", flexShrink: 0 }}>
-              <img src={p.url} alt={p.name} style={{ width: 72, height: 72, borderRadius: 8, objectFit: "cover", display: "block", border: `1px solid ${T.charcoal}` }} />
-              <button onClick={() => removePhoto(p.id)} style={{ position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: "50%", background: T.red, border: `2px solid ${T.darkBg}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
-                <X size={10} color={T.white} />
-              </button>
+            <div key={p.id} style={{ borderRadius: 10, overflow: "hidden", border: `1px solid ${T.charcoal}`, background: T.darkCard }}>
+              <div style={{ position: "relative" }}>
+                {p.type === "video" ? (
+                  <div style={{ position: "relative" }}>
+                    <video src={p.url} preload="metadata" playsInline controls style={{ width: "100%", maxHeight: 260, objectFit: "contain", display: "block", background: "#000" }} />
+                    <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(0,0,0,0.6)", borderRadius: 4, padding: "2px 8px", display: "flex", alignItems: "center", gap: 4, pointerEvents: "none" }}>
+                      <Video size={10} color={T.white} />
+                      <span style={{ fontFamily: sans, fontSize: 9, color: T.white, fontWeight: 600 }}>VIDEO</span>
+                    </div>
+                  </div>
+                ) : (
+                  <img src={p.url} alt={p.name} style={{ width: "100%", height: 200, objectFit: "cover", display: "block" }} />
+                )}
+                <button onClick={() => removePhoto(p.id)} style={{ position: "absolute", top: 8, right: 8, width: 26, height: 26, borderRadius: "50%", background: "rgba(0,0,0,0.6)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, zIndex: 2 }}>
+                  <X size={12} color={T.white} />
+                </button>
+              </div>
+              <div style={{ padding: "6px 10px" }}>
+                <input
+                  value={p.caption || ""}
+                  onChange={e => updateCaption(p.id, e.target.value)}
+                  placeholder="Add a caption..."
+                  style={{ width: "100%", padding: "7px 10px", borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.warmStone, fontFamily: serif, fontSize: 12, outline: "none", boxSizing: "border-box" }}
+                  onFocus={e => e.target.style.borderColor = T.copper + "60"}
+                  onBlur={e => e.target.style.borderColor = T.charcoal}
+                />
+              </div>
             </div>
           ))}
         </div>
       )}
-      <button onClick={() => { if (photos.length < maxPhotos && fileRef.current) fileRef.current.click(); }} style={{ display: "flex", alignItems: "center", gap: 8, background: T.darkCard, border: `1px dashed ${T.charcoal}`, borderRadius: 8, padding: "12px 16px", cursor: photos.length < maxPhotos ? "pointer" : "default", width: "100%", boxSizing: "border-box", opacity: photos.length < maxPhotos ? 1 : 0.5 }}>
+      <button onClick={() => { if (photos.length < maxPhotos && fileRef.current) fileRef.current.click(); }} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, background: T.darkCard, border: `1px dashed ${T.charcoal}`, borderRadius: 8, padding: "14px 16px", cursor: photos.length < maxPhotos ? "pointer" : "default", width: "100%", boxSizing: "border-box", opacity: photos.length < maxPhotos ? 1 : 0.5 }}>
         <Camera size={16} color={T.tertiary} />
         <span style={{ fontFamily: sans, fontSize: 12, color: T.tertiary }}>
-          {photos.length > 0 ? `${photos.length} photo${photos.length > 1 ? "s" : ""} added` : "Add photos"}
+          {photos.length > 0 ? `${photos.length} media added` : "Add photos / videos"}
         </span>
         {photos.length < maxPhotos && <Plus size={14} color={T.tertiary} style={{ marginLeft: "auto" }} />}
       </button>
@@ -8017,8 +9029,8 @@ function RecoveryScreen({ onOpenMap, onOpenDM }) {
               </div>
               {a.urgency !== "RESOLVED" ? (
                 <div style={{ display: "flex", gap: 8 }}>
-                  <button onClick={() => onOpenDM && onOpenDM(a.author)} style={{ background: T.red, color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 600, padding: "9px 18px", borderRadius: 6, border: "none", cursor: "pointer", letterSpacing: 0.5 }}>RESPOND</button>
-                  <button onClick={() => onOpenMap && onOpenMap(a.coords, a.location, a.title)} style={{ background: "none", color: T.tertiary, fontFamily: sans, fontSize: 11, padding: "9px 18px", borderRadius: 6, border: `1px solid ${T.charcoal}`, cursor: "pointer", letterSpacing: 0.5 }}>VIEW ON MAP</button>
+                  <button onClick={() => onOpenDM && onOpenDM(a.author, "I'm responding to your recovery request — on my way to help!", { title: `🚨 Recovery: ${a.title}`, user: a.author, initial: a.author.charAt(0).toUpperCase(), type: "recovery", location: a.location, urgency: a.urgency })} style={{ background: T.red, color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 600, padding: "9px 18px", borderRadius: 6, border: "none", cursor: "pointer", letterSpacing: 0.5 }}>RESPOND</button>
+                  <button onClick={() => onOpenMap && onOpenMap(a.coords, a.location, a.title, { author: a.author, alertId: "ra_" + i, title: a.title })} style={{ background: "none", color: T.tertiary, fontFamily: sans, fontSize: 11, padding: "9px 18px", borderRadius: 6, border: `1px solid ${T.charcoal}`, cursor: "pointer", letterSpacing: 0.5 }}>VIEW ON MAP</button>
                 </div>
               ) : (
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -8098,6 +9110,27 @@ function DMScreen({ onClose, onViewUser, initialUser, initialMessage, initialSha
     }
   }, [initialUser]);
 
+  // Auto-send recovery response message
+  const autoSentRef = useRef(false);
+  useEffect(() => {
+    if (autoSentRef.current || !initialUser || !initialMessage || !initialSharedPost || !activeConvo) return;
+    autoSentRef.current = true;
+    const timer = setTimeout(() => {
+      const newMsg = { id: Date.now(), from: "me", text: initialMessage, time: Date.now(), sharedPost: initialSharedPost };
+      const lastMsg = "Shared: " + initialSharedPost.title;
+      const updated = { ...activeConvo, messages: [...activeConvo.messages, newMsg], lastMessage: lastMsg, lastTime: "Just now", unread: 0 };
+      setActiveConvo(updated);
+      setConversations(prev => {
+        const exists = prev.find(c => c.id === updated.id);
+        if (exists) return prev.map(c => c.id === updated.id ? updated : c);
+        return [updated, ...prev];
+      });
+      setMsgText("");
+      setPendingSharedPost(null);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [initialUser, initialMessage, initialSharedPost, activeConvo]);
+
   useEffect(() => {
     if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: "smooth" });
   }, [activeConvo?.messages?.length]);
@@ -8113,11 +9146,17 @@ function DMScreen({ onClose, onViewUser, initialUser, initialMessage, initialSha
     const files = Array.from(e.target.files || []);
     if (chatFileRef.current) chatFileRef.current.value = "";
     files.forEach(file => {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        setChatPhotos(prev => [...prev, { id: Date.now() + Math.random(), url: ev.target.result, name: file.name }]);
-      };
-      reader.readAsDataURL(file);
+      const isVideo = file.type.startsWith("video/");
+      if (isVideo) {
+        const blobUrl = URL.createObjectURL(file);
+        setChatPhotos(prev => [...prev, { id: Date.now() + Math.random(), url: blobUrl, name: file.name, type: "video" }]);
+      } else {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          setChatPhotos(prev => [...prev, { id: Date.now() + Math.random(), url: ev.target.result, name: file.name, type: "image" }]);
+        };
+        reader.readAsDataURL(file);
+      }
     });
   };
 
@@ -8200,8 +9239,15 @@ function DMScreen({ onClose, onViewUser, initialUser, initialMessage, initialSha
                           <span style={{ fontFamily: sans, fontSize: 9, color: isMe ? "rgba(255,255,255,0.45)" : `${T.tertiary}80`, marginLeft: "auto", textTransform: "uppercase", letterSpacing: 0.5 }}>{msg.sharedPost.type}</span>
                         </div>
                         <p style={{ fontFamily: serif, fontSize: 13, color: T.white, margin: 0, lineHeight: 1.4 }}>{msg.sharedPost.title}</p>
+                        {msg.sharedPost.type === "recovery" && msg.sharedPost.location && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4 }}>
+                            <MapPin size={10} color={T.red} />
+                            <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{msg.sharedPost.location}</span>
+                            {msg.sharedPost.urgency && <span style={{ fontFamily: sans, fontSize: 8, color: T.white, background: msg.sharedPost.urgency === "HIGH" ? T.red : T.copper, padding: "1px 5px", borderRadius: 3, fontWeight: 600, marginLeft: 4 }}>{msg.sharedPost.urgency}</span>}
+                          </div>
+                        )}
                         <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 6 }}>
-                          <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600 }}>VIEW POST</span>
+                          <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600 }}>{msg.sharedPost.type === "recovery" ? "VIEW ALERT" : "VIEW POST"}</span>
                           <ChevronRight size={12} color={T.copper} />
                         </div>
                       </div>
@@ -8258,7 +9304,7 @@ function DMScreen({ onClose, onViewUser, initialUser, initialMessage, initialSha
 
         {/* Input bar */}
         <div style={{ padding: "10px 16px max(10px, env(safe-area-inset-bottom))", background: T.charcoal, borderTop: (chatPhotos.length > 0 || pendingSharedPost) ? "none" : `1px solid ${T.darkCard}`, display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-          <input ref={chatFileRef} type="file" accept="image/*" multiple onChange={handleChatFiles} style={{ display: "none" }} />
+          <input ref={chatFileRef} type="file" accept="image/*,video/*" multiple onChange={handleChatFiles} style={{ display: "none" }} />
           <button onClick={() => chatFileRef.current && chatFileRef.current.click()} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" }}>
             <Image size={20} color={T.tertiary} />
           </button>
@@ -8406,7 +9452,8 @@ export default function Trailhead() {
   const [profileStack, setProfileStack] = useState([]);
   const [showRecovery, setShowRecovery] = useState(false);
   const [showCompose, setShowCompose] = useState(false);
-  const [mapData, setMapData] = useState(null); // { coords, location, title }
+  const [mapData, setMapData] = useState(null); // { coords, location, title, recoveryCtx }
+  const [recoveryConfirm, setRecoveryConfirm] = useState(null); // { author, title } — modal for confirming responder arrived
   const [showRecorder, setShowRecorder] = useState(false);
   const [showManualRoute, setShowManualRoute] = useState(false);
   const [pendingThread, setPendingThread] = useState(null); // { threadId, catName, subName }
@@ -8449,6 +9496,36 @@ export default function Trailhead() {
   const addNotification = (notif) => {
     setBellNotifs(prev => [{ id: "bn_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6), time: Date.now(), ...notif }, ...prev]);
   };
+
+  // ── Points System ──
+  const POINTS = { dailyLogin: 5, feedPost: 10, forumThread: 25, forumReply: 10, routeLogged: 30, buildAdded: 40, profileComplete: 100, receiveLike: 2, receiveComment: 3, receiveBookmark: 5, convoyJoined: 20, recoveryRespond: 50, photoUploaded: 5 };
+  const [myTotalPoints, setMyTotalPoints] = useState(12450);
+  const [pointsToasts, setPointsToasts] = useState([]);
+  // Track points breakdown by category — base values + live session additions
+  const REASON_TO_BREAKDOWN = { "Forum Thread": "Forum Threads", "Forum Reply": "Forum Threads", "Route Logged": "Routes Logged", "Build Added": "Builds Added", "Feed Post": "Feed Posts", "Daily Login": "Daily Logins", "Photos Uploaded": "Feed Posts", "Comment Posted": "Feed Posts", "Recovery Response": "Recovery" };
+  const [pointsBreakdown, setPointsBreakdown] = useState({
+    "Forum Threads": 3750, "Routes Logged": 2700, "Builds Added": 2000, "Likes Received": 1840, "Feed Posts": 1200, "Daily Logins": 560, "Other": 400,
+  });
+  const awardPoints = (amount, reason) => {
+    if (!amount || !reason) return;
+    setMyTotalPoints(prev => prev + amount);
+    // Update global lookup so rank badges refresh
+    USER_POINTS["KyleLPO"] = (USER_POINTS["KyleLPO"] || 12450) + amount;
+    // Update breakdown
+    const cat = REASON_TO_BREAKDOWN[reason] || "Other";
+    setPointsBreakdown(prev => ({ ...prev, [cat]: (prev[cat] || 0) + amount }));
+    const toastId = Date.now() + Math.random();
+    setPointsToasts(prev => [...prev, { id: toastId, amount, reason }]);
+    setTimeout(() => setPointsToasts(prev => prev.filter(t => t.id !== toastId)), 2500);
+  };
+  // Daily login points (once per session)
+  const loginPointsAwarded = useRef(false);
+  useEffect(() => {
+    if (!loginPointsAwarded.current && authState === "app") {
+      loginPointsAwarded.current = true;
+      setTimeout(() => awardPoints(POINTS.dailyLogin, "Daily Login"), 1500);
+    }
+  }, [authState]);
 
   const addRecoveryAlert = (alert) => {
     setRecoveryAlerts(prev => [alert, ...prev]);
@@ -8507,6 +9584,7 @@ export default function Trailhead() {
       };
       setFeedItems(prev => [feedPost, ...prev]);
     }
+    awardPoints(POINTS.buildAdded, "Build Added");
   };
 
   const updateBuild = (buildId, data) => {
@@ -8534,7 +9612,7 @@ export default function Trailhead() {
 
   const openProfile = () => setProfileStack(["self"]);
   const openUserProfile = (userId) => setProfileStack(["user", userId]);
-  const openMap = (coords, location, title) => setMapData({ coords, location, title });
+  const openMap = (coords, location, title, recoveryCtx) => setMapData({ coords, location, title, recoveryCtx: recoveryCtx || null });
   const goBack = () => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); };
 
   const handleNav = (key) => {
@@ -8567,7 +9645,7 @@ export default function Trailhead() {
         onGoToRecovery={() => { setShowRecovery(true); setProfileStack([]); }}
         onOpenMap={openMap}
         onSearch={() => setShowGlobalSearch(true)}
-        onOpenDM={(user) => openDM(user)}
+        onOpenDM={(user, prefill, shared) => openDM(user, prefill, shared)}
         dmUnread={dmUnreadCount}
         bellNotifs={bellNotifs}
         setBellNotifs={setBellNotifs}
@@ -8579,22 +9657,22 @@ export default function Trailhead() {
 
       <div className="th-scroll" style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
         {showCompose ? (
-          <ComposeScreen onClose={() => setShowCompose(false)} onSubmit={(newPost) => setFeedItems(prev => [newPost, ...prev])} onAddRecoveryAlert={addRecoveryAlert} onAddNotification={addNotification} onAddRoute={(r) => setUserRoutes(prev => [r, ...prev])} />
+          <ComposeScreen onClose={() => setShowCompose(false)} onSubmit={(newPost) => { setFeedItems(prev => [newPost, ...prev]); awardPoints(newPost.type === "RECOVERY" ? 0 : POINTS.feedPost, newPost.type === "RECOVERY" ? "" : "Feed Post"); if (newPost.photoUrls && newPost.photoUrls.length > 0) awardPoints(POINTS.photoUploaded * newPost.photoUrls.length, "Photos Uploaded"); }} onAddRecoveryAlert={addRecoveryAlert} onAddNotification={addNotification} onAddRoute={(r) => { setUserRoutes(prev => [r, ...prev]); awardPoints(POINTS.routeLogged, "Route Logged"); }} />
         ) : showRecovery ? (
-          <RecoveryScreen onOpenMap={openMap} onOpenDM={(user) => openDM(user)} />
+          <RecoveryScreen onOpenMap={openMap} onOpenDM={openDM} />
         ) : isProfile ? (
           isOtherProfile ? (
             <OtherProfileScreen userId={profileStack[1]} onBack={goBack} onMessage={(user) => openDM(user)} />
           ) : (
-            <ProfileScreen onViewUser={openUserProfile} onLogout={() => { setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={(id) => { setUserBuilds(prev => prev.filter(b => b.id !== id)); setFeedItems(prev => prev.filter(p => p.buildId !== id && p.id !== id)); }} profilePic={profilePic} onSetProfilePic={setProfilePic} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => setFeedItems(prev => prev.filter(p => p.id !== id))} onEditPost={(id, newText) => setFeedItems(prev => prev.map(p => p.id === id ? { ...p, title: newText } : p))} onGoToPost={(id) => { setProfileStack([]); setScreen("feed"); }} />
+            <ProfileScreen onViewUser={openUserProfile} onLogout={() => { setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={(id) => { setUserBuilds(prev => prev.filter(b => b.id !== id)); setFeedItems(prev => prev.filter(p => p.buildId !== id && p.id !== id)); }} profilePic={profilePic} onSetProfilePic={setProfilePic} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => setFeedItems(prev => prev.filter(p => p.id !== id))} onEditPost={(id, newText) => setFeedItems(prev => prev.map(p => p.id === id ? { ...p, title: newText } : p))} onGoToPost={(id) => { setProfileStack([]); setScreen("feed"); }} myPoints={myTotalPoints} />
           )
         ) : (
           <>
-            {screen === "feed" && <FeedScreen onViewUser={openUserProfile} onOpenMap={openMap} onOpenThread={(threadId, catName, subName) => openForumThread(threadId, catName, subName)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} feedItems={feedItems} onUpdateFeed={(items) => setFeedItems(items)} onAddNotification={addNotification} forumUserReplies={forumUserReplies} forumViewCounts={forumViewCounts} savedRoutes={savedRoutes} onSaveRoute={(route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev])} onUnsaveRoute={(routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId))} onStartNav={(route) => setActiveNavRoute(route)} />}
-            {screen === "forum" && <ForumScreen pendingThread={pendingThread} onPendingHandled={() => setPendingThread(null)} onAddNotification={addNotification} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onAddFeedPost={(post) => setFeedItems(prev => [post, ...prev])} userThreads={forumUserThreads} setUserThreads={setForumUserThreads} userReplies={forumUserReplies} setUserReplies={setForumUserReplies} likedForumItems={forumLikedItems} setLikedForumItems={setForumLikedItems} forumLikeCounts={forumLikeCounts} setForumLikeCounts={setForumLikeCounts} forumViewCounts={forumViewCounts} setForumViewCounts={setForumViewCounts} />}
+            {screen === "feed" && <FeedScreen onViewUser={openUserProfile} onOpenMap={openMap} onOpenThread={(threadId, catName, subName) => openForumThread(threadId, catName, subName)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} feedItems={feedItems} onUpdateFeed={(items) => setFeedItems(items)} onAddNotification={addNotification} forumUserReplies={forumUserReplies} forumViewCounts={forumViewCounts} savedRoutes={savedRoutes} onSaveRoute={(route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev])} onUnsaveRoute={(routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId))} onStartNav={(route) => setActiveNavRoute(route)} onAwardPoints={awardPoints} />}
+            {screen === "forum" && <ForumScreen pendingThread={pendingThread} onPendingHandled={() => setPendingThread(null)} onAddNotification={addNotification} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onAddFeedPost={(post) => setFeedItems(prev => [post, ...prev])} userThreads={forumUserThreads} setUserThreads={setForumUserThreads} userReplies={forumUserReplies} setUserReplies={setForumUserReplies} likedForumItems={forumLikedItems} setLikedForumItems={setForumLikedItems} forumLikeCounts={forumLikeCounts} setForumLikeCounts={setForumLikeCounts} forumViewCounts={forumViewCounts} setForumViewCounts={setForumViewCounts} onAwardPoints={awardPoints} />}
             {screen === "routes" && <RoutesScreen onRecordRoute={() => setShowRecorder(true)} onManualEntry={() => setShowManualRoute(true)} userRoutes={userRoutes} onUpdateRoute={(routeId, updates) => setUserRoutes(prev => prev.map(r => r.id === routeId ? { ...r, ...updates } : r))} savedRoutes={savedRoutes} onSaveRoute={(route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev])} onUnsaveRoute={(routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId))} onOpenDM={(user, msg, sharedPost) => openDM(user, msg, sharedPost)} onAddFeedPost={(post) => setFeedItems(prev => [post, ...prev])} onStartNav={(route) => setActiveNavRoute(route)} />}
             {screen === "builds" && <BuildsScreen onViewUser={openUserProfile} userBuilds={userBuilds} />}
-            {screen === "ranks" && <RanksScreen />}
+            {screen === "ranks" && <RanksScreen myPoints={myTotalPoints} pointsBreakdown={pointsBreakdown} />}
           </>
         )}
       </div>
@@ -8615,7 +9693,34 @@ export default function Trailhead() {
           location={mapData.location}
           title={mapData.title}
           onClose={() => setMapData(null)}
+          recoveryCtx={mapData.recoveryCtx}
+          onRecoveryStartTrip={(ctx) => {
+            addNotification({ type: "recovery", user: "KyleLPO", text: "is on the way to help with", target: ctx.title, icon: Navigation, iconColor: T.green });
+          }}
+          onRecoveryArrived={(ctx) => {
+            setRecoveryConfirm(ctx);
+          }}
         />
+      )}
+      {/* Recovery Arrival Confirmation Modal */}
+      {recoveryConfirm && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <div style={{ background: T.darkCard, borderRadius: 16, padding: 24, maxWidth: 340, width: "100%", textAlign: "center", border: `1px solid ${T.charcoal}` }}>
+            <div style={{ width: 56, height: 56, borderRadius: "50%", background: `${T.green}18`, border: `2px solid ${T.green}`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
+              <CheckCircle size={28} color={T.green} />
+            </div>
+            <h3 style={{ fontFamily: sans, fontSize: 18, color: T.white, margin: "0 0 6px", fontWeight: 700 }}>Responder Arrived</h3>
+            <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "0 0 6px", lineHeight: 1.5 }}>
+              <span style={{ color: T.copper, fontWeight: 600 }}>KyleLPO</span> has arrived at your location for:
+            </p>
+            <p style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 600, margin: "0 0 20px" }}>{recoveryConfirm.title}</p>
+            <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 20px", lineHeight: 1.5 }}>Confirm they showed up to award them recovery points.</p>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => { awardPoints(POINTS.recoveryRespond, "Recovery Response"); addNotification({ type: "recovery", user: recoveryConfirm.author, text: "confirmed your recovery response for", target: recoveryConfirm.title, icon: CheckCircle, iconColor: T.green }); setRecoveryConfirm(null); }} style={{ flex: 1, padding: "12px", borderRadius: 8, background: T.green, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 12, fontWeight: 700, color: T.white, letterSpacing: 0.5 }}>CONFIRM ARRIVAL</button>
+              <button onClick={() => setRecoveryConfirm(null)} style={{ padding: "12px 16px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, cursor: "pointer", fontFamily: sans, fontSize: 12, color: T.tertiary, fontWeight: 600 }}>DISMISS</button>
+            </div>
+          </div>
+        </div>
       )}
       {activeNavRoute && (
         <RouteNavigation route={activeNavRoute} onClose={() => setActiveNavRoute(null)} />
@@ -8671,6 +9776,8 @@ export default function Trailhead() {
                 points: routeData.points || [],
               }, ...prev]);
             }
+            awardPoints(POINTS.routeLogged, "Route Logged");
+            if (routeData.photos && routeData.photos.length > 0) awardPoints(POINTS.photoUploaded * routeData.photos.length, "Photos Uploaded");
             setShowRecorder(false);
           }}
         />
@@ -8717,6 +9824,8 @@ export default function Trailhead() {
                 points: routeData.points || [],
               }, ...prev]);
             }
+            awardPoints(POINTS.routeLogged, "Route Logged");
+            if (routeData.photos && routeData.photos.length > 0) awardPoints(POINTS.photoUploaded * routeData.photos.length, "Photos Uploaded");
             setShowManualRoute(false);
           }}
         />
@@ -8750,6 +9859,19 @@ export default function Trailhead() {
             }
           }}
         />
+      )}
+
+      {/* Points Toast Notifications */}
+      {pointsToasts.length > 0 && (
+        <div style={{ position: "fixed", top: 60, left: "50%", transform: "translateX(-50%)", zIndex: 9999, display: "flex", flexDirection: "column", gap: 6, alignItems: "center", pointerEvents: "none" }}>
+          {pointsToasts.map(toast => (
+            <div key={toast.id} style={{ background: `linear-gradient(135deg, ${T.charcoal}, #333330)`, border: `1px solid ${T.copper}40`, borderRadius: 10, padding: "8px 16px", display: "flex", alignItems: "center", gap: 8, animation: "fadeInUp 0.3s ease", boxShadow: "0 4px 20px rgba(0,0,0,0.5)" }}>
+              <Zap size={14} color={T.copper} fill={T.copper} />
+              <span style={{ fontFamily: sans, fontSize: 13, color: T.copper, fontWeight: 700 }}>+{toast.amount}</span>
+              <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{toast.reason}</span>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
