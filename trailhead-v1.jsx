@@ -4015,8 +4015,14 @@ function RouteRecorder({ onClose, onSave }) {
   const pausedTimeRef = useRef(0);
   const pauseStartRef = useRef(null);
   const [routePhotos, setRoutePhotos] = useState([]); // [{ url, name, lat?, lng? }]
+  const [routeWaypoints, setRouteWaypoints] = useState([]); // [{ lat, lng, desc, photo?, id }]
+  const [showWaypointPopup, setShowWaypointPopup] = useState(null); // { lat, lng, id } while editing new waypoint
+  const [wpDesc, setWpDesc] = useState("");
+  const [wpPhoto, setWpPhoto] = useState(null); // { url, name }
+  const wpPhotoRef = useRef(null);
   const recCamRef = useRef(null);
   const photoMarkersRef = useRef([]);
+  const waypointMarkersRef = useRef([]);
 
   const handleRecPhoto = (e) => {
     const fileList = e.target.files;
@@ -4061,6 +4067,68 @@ function RouteRecorder({ onClose, onSave }) {
     } else {
       files.forEach(file => processFile(file));
     }
+  };
+
+  const addWaypoint = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const wp = { lat: pos.coords.latitude, lng: pos.coords.longitude, id: Date.now(), desc: "", photo: null };
+          setShowWaypointPopup(wp);
+          setWpDesc("");
+          setWpPhoto(null);
+          // Drop marker immediately
+          if (mapInst.current && window.google) {
+            const m = new window.google.maps.Marker({
+              position: { lat: wp.lat, lng: wp.lng },
+              map: mapInst.current,
+              icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 12, fillColor: T.copper, fillOpacity: 1, strokeColor: T.white, strokeWeight: 2 },
+              label: { text: "\u{1F4CD}", fontSize: "12px" },
+              zIndex: 999,
+            });
+            waypointMarkersRef.current.push(m);
+          }
+        },
+        () => {
+          // Fallback — use last known track point
+          const lastPt = trackPoints.length > 0 ? trackPoints[trackPoints.length - 1] : null;
+          if (lastPt) {
+            const wp = { lat: lastPt.lat, lng: lastPt.lng, id: Date.now(), desc: "", photo: null };
+            setShowWaypointPopup(wp);
+            setWpDesc("");
+            setWpPhoto(null);
+          }
+        },
+        { enableHighAccuracy: true, timeout: 3000 }
+      );
+    }
+  };
+
+  const saveWaypoint = () => {
+    if (!showWaypointPopup) return;
+    const wp = { ...showWaypointPopup, desc: wpDesc.trim(), photo: wpPhoto };
+    setRouteWaypoints(prev => [...prev, wp]);
+    setShowWaypointPopup(null);
+    setWpDesc("");
+    setWpPhoto(null);
+  };
+
+  const skipWaypoint = () => {
+    if (!showWaypointPopup) return;
+    const wp = { ...showWaypointPopup, desc: "", photo: null };
+    setRouteWaypoints(prev => [...prev, wp]);
+    setShowWaypointPopup(null);
+    setWpDesc("");
+    setWpPhoto(null);
+  };
+
+  const handleWpPhoto = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    e.target.value = "";
+    const reader = new FileReader();
+    reader.onload = (ev) => setWpPhoto({ url: ev.target.result, name: file.name });
+    reader.readAsDataURL(file);
   };
 
   // Init map
@@ -4298,6 +4366,7 @@ function RouteRecorder({ onClose, onSave }) {
         onBack={() => setShowDetails(false)}
         onPublish={handlePublish}
         initialPhotos={routePhotos}
+        initialWaypoints={routeWaypoints}
       />
     );
   }
@@ -4369,6 +4438,44 @@ function RouteRecorder({ onClose, onSave }) {
         </div>
       )}
 
+      {/* Waypoint popup overlay */}
+      {showWaypointPopup && (
+        <div style={{ position: "absolute", bottom: 80, left: 16, right: 16, background: T.darkCard, borderRadius: 12, border: `1px solid ${T.copper}40`, padding: 16, zIndex: 400, boxShadow: `0 8px 32px rgba(0,0,0,0.6)` }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <MapPin size={14} color={T.copper} />
+              <span style={{ fontFamily: sans, fontSize: 12, color: T.copper, fontWeight: 700, letterSpacing: 0.5 }}>WAYPOINT ADDED</span>
+            </div>
+            <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{showWaypointPopup.lat.toFixed(5)}, {showWaypointPopup.lng.toFixed(5)}</span>
+          </div>
+          <input value={wpDesc} onChange={(e) => setWpDesc(e.target.value)} placeholder="Add description (optional)..." style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", marginBottom: 8 }} onFocus={(e) => e.target.style.borderColor = T.copper} onBlur={(e) => e.target.style.borderColor = T.charcoal} />
+          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+            <input ref={wpPhotoRef} type="file" accept="image/*" onChange={handleWpPhoto} style={{ display: "none" }} />
+            {wpPhoto ? (
+              <div style={{ position: "relative", width: 64, height: 64, borderRadius: 8, overflow: "hidden", flexShrink: 0 }}>
+                <img src={wpPhoto.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                <button onClick={() => setWpPhoto(null)} style={{ position: "absolute", top: 2, right: 2, width: 18, height: 18, borderRadius: "50%", background: `${T.darkBg}CC`, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+                  <X size={10} color={T.white} />
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => wpPhotoRef.current && wpPhotoRef.current.click()} style={{ padding: "8px 14px", borderRadius: 8, background: T.darkBg, border: `1px dashed ${T.charcoal}`, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                <Camera size={13} color={T.tertiary} />
+                <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>Add photo</span>
+              </button>
+            )}
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={skipWaypoint} style={{ flex: 1, padding: "10px", borderRadius: 8, background: T.charcoal, border: "none", cursor: "pointer" }}>
+              <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 600 }}>SKIP</span>
+            </button>
+            <button onClick={saveWaypoint} style={{ flex: 1, padding: "10px", borderRadius: 8, background: T.copper, border: "none", cursor: "pointer" }}>
+              <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>SAVE</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Controls */}
       <div style={{ padding: "12px 16px", background: T.charcoal, borderTop: recording ? "none" : `1px solid ${T.darkCard}`, flexShrink: 0, display: "flex", gap: 10 }}>
         {!recording ? (
@@ -4390,12 +4497,21 @@ function RouteRecorder({ onClose, onSave }) {
               </button>
             )}
             <input ref={recCamRef} type="file" accept="image/*,video/*" capture="environment" onChange={handleRecPhoto} style={{ display: "none" }} />
+            {/* Waypoint button */}
+            <button onClick={addWaypoint} style={{ padding: "14px 18px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.copper}40`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+              <MapPin size={16} color={T.copper} />
+              {routeWaypoints.length > 0 && (
+                <span style={{ position: "absolute", top: -4, right: -4, width: 16, height: 16, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: sans, fontSize: 9, color: T.white, fontWeight: 700 }}>{routeWaypoints.length}</span>
+              )}
+            </button>
+            {/* Camera button */}
             <button onClick={() => recCamRef.current && recCamRef.current.click()} style={{ padding: "14px 18px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
               <Camera size={16} color={T.white} />
               {routePhotos.length > 0 && (
                 <span style={{ position: "absolute", top: -4, right: -4, width: 16, height: 16, borderRadius: "50%", background: T.green, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: sans, fontSize: 9, color: T.white, fontWeight: 700 }}>{routePhotos.length}</span>
               )}
             </button>
+            {/* Stop button */}
             <button onClick={stopRecording} style={{ padding: "14px 18px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <span style={{ width: 14, height: 14, borderRadius: 2, background: T.white, display: "block" }} />
             </button>
@@ -4457,11 +4573,19 @@ function RouteMapPreview({ pins, points, photos, highlightedPinIdx, onPhotoSelec
       // Draw pin markers
       if (pins && pins.length > 0) {
         pins.forEach((p, i) => {
-          const isPhoto = !!p.photo;
+          const isPhoto = !!p.photo && !p.isWaypoint;
+          const isWaypoint = !!p.isWaypoint;
           const marker = new window.google.maps.Marker({
             position: { lat: p.lat, lng: p.lng },
             map,
-            icon: {
+            icon: isWaypoint ? {
+              path: "M 0,-8 L 6,0 L 0,8 L -6,0 Z",
+              scale: 1.2,
+              fillColor: T.copper,
+              fillOpacity: 1,
+              strokeColor: T.white,
+              strokeWeight: 2,
+            } : {
               path: window.google.maps.SymbolPath.CIRCLE,
               scale: isPhoto ? 10 : 6,
               fillColor: isPhoto ? "#4A7C59" : (i === 0 ? T.green : i === pins.length - 1 ? T.red : T.copper),
@@ -4469,8 +4593,9 @@ function RouteMapPreview({ pins, points, photos, highlightedPinIdx, onPhotoSelec
               strokeColor: T.white,
               strokeWeight: isPhoto ? 2 : 1.5,
             },
-            label: isPhoto ? { text: "\uD83D\uDCF7", fontSize: "12px" } : null,
-            zIndex: isPhoto ? 100 : 10,
+            label: isWaypoint ? { text: "◆", fontSize: "8px", color: T.white } : (isPhoto ? { text: "\uD83D\uDCF7", fontSize: "12px" } : null),
+            zIndex: isWaypoint ? 90 : (isPhoto ? 100 : 10),
+            title: isWaypoint && p.desc ? p.desc : undefined,
           });
           // Store pin index on marker for highlight matching
           marker._pinIdx = i;
@@ -4977,7 +5102,7 @@ function RoutePinMap({ pins, setPins, linkingPhotoIdx, onLinkPin, onRoutePoints 
   );
 }
 
-function RouteDetailsForm({ autoStats, onBack, onPublish, isManual, initialPhotos, isEdit, initialData, initialPins }) {
+function RouteDetailsForm({ autoStats, onBack, onPublish, isManual, initialPhotos, isEdit, initialData, initialPins, initialWaypoints }) {
   const d = initialData || {};
   const [name, setName] = useState(d.name || "");
   const [desc, setDesc] = useState(d.desc || "");
@@ -4989,6 +5114,9 @@ function RouteDetailsForm({ autoStats, onBack, onPublish, isManual, initialPhoto
   const [pins, setPins] = useState(initialPins || []);
   const [routePhotos, setRoutePhotos] = useState(initialPhotos || []); // [{ url, name, lat?, lng? }]
   const routePhotoRef = useRef(null);
+  // Waypoints from live recording
+  const [waypoints, setWaypoints] = useState(initialWaypoints || []);
+  const wpPhotoRefs = useRef({});
   // Manual-only fields
   const [manualDistance, setManualDistance] = useState(d.distance ? d.distance.replace(/[^0-9.]/g, "") : "");
   const [manualTime, setManualTime] = useState(d.time || "");
@@ -5103,10 +5231,26 @@ function RouteDetailsForm({ autoStats, onBack, onPublish, isManual, initialPhoto
     setTerrains(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
   };
 
+  const handleWpPhotoChange = (wpId, e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setWaypoints(prev => prev.map(w => w.id === wpId ? { ...w, photo: ev.target.result } : w));
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
   const handleSubmit = () => {
     if (!name.trim()) return;
+    // Merge waypoints into pins array with isWaypoint flag
+    const waypointPins = waypoints.map(w => ({
+      lat: w.lat, lng: w.lng, isWaypoint: true, desc: w.desc || "", ...(w.photo ? { photo: w.photo } : {}),
+    }));
+    const allPins = [...pins, ...waypointPins];
     onPublish({
-      name, desc, difficulty, region, terrains, tags: tags.split(",").map(t => t.trim()).filter(Boolean), shareToFeed, pins, photos: routePhotos,
+      name, desc, difficulty, region, terrains, tags: tags.split(",").map(t => t.trim()).filter(Boolean), shareToFeed, pins: allPins, photos: routePhotos, waypoints,
       ...(roadPoints.length > 0 ? { points: roadPoints } : {}),
       ...(isManual ? { distance: manualDistance, time: manualTime, elevGain: manualElevGain, maxElev: manualMaxElev, location: manualLocation } : {}),
     });
@@ -5271,6 +5415,50 @@ function RouteDetailsForm({ autoStats, onBack, onPublish, isManual, initialPhoto
             <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, display: "block" }}>Tap "Link Pin" on a photo, then tap a map pin to associate them</span>
           )}
         </div>
+
+        {/* Waypoints */}
+        {waypoints.length > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <span style={rdLabel}>WAYPOINTS ({waypoints.length})</span>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {waypoints.map((wp, i) => (
+                <div key={wp.id} style={{ background: T.darkCard, borderRadius: 10, border: `1px solid ${T.copper}30`, padding: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <MapPin size={14} color={T.copper} />
+                      <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600 }}>WAYPOINT {i + 1}</span>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>{wp.lat.toFixed(4)}, {wp.lng.toFixed(4)}</span>
+                      <button onClick={() => setWaypoints(prev => prev.filter(w => w.id !== wp.id))} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" }}>
+                        <X size={14} color={T.tertiary} />
+                      </button>
+                    </div>
+                  </div>
+                  <input value={wp.desc || ""} onChange={e => setWaypoints(prev => prev.map(w => w.id === wp.id ? { ...w, desc: e.target.value } : w))} placeholder="Add description..." style={{ ...rdInput, marginBottom: 8, fontSize: 12 }} />
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    {wp.photo ? (
+                      <div style={{ position: "relative", width: 56, height: 56, borderRadius: 8, overflow: "hidden" }}>
+                        <img src={wp.photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        <button onClick={() => setWaypoints(prev => prev.map(w => w.id === wp.id ? { ...w, photo: null } : w))} style={{ position: "absolute", top: 2, right: 2, width: 16, height: 16, borderRadius: "50%", background: `${T.darkBg}CC`, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+                          <X size={8} color={T.white} />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <input ref={el => wpPhotoRefs.current[wp.id] = el} type="file" accept="image/*" onChange={e => handleWpPhotoChange(wp.id, e)} style={{ display: "none" }} />
+                        <button onClick={() => wpPhotoRefs.current[wp.id] && wpPhotoRefs.current[wp.id].click()} style={{ padding: "6px 12px", borderRadius: 6, background: T.charcoal, border: `1px solid ${T.copper}40`, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+                          <Camera size={12} color={T.copper} />
+                          <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600 }}>ADD PHOTO</span>
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Tags */}
         <div style={{ marginBottom: 16 }}>
