@@ -2208,8 +2208,35 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, 
     }
 
     if (item.type === "CONVOYS") {
+      const myRsvp = item.rsvps ? item.rsvps["@KyleLPO"] : null;
+      const rsvpCounts = item.rsvps ? Object.values(item.rsvps).reduce((acc, v) => { acc[v] = (acc[v] || 0) + 1; return acc; }, {}) : {};
+      const handleRsvp = (status) => {
+        const updated = feedItems.map(fi => fi.id === item.id ? { ...fi, rsvps: { ...(fi.rsvps || {}), "@KyleLPO": status } } : fi);
+        onUpdateFeed(updated);
+      };
       return (
         <div key={item.id} style={cardStyle}>
+          {/* Convoy photos */}
+          {item.photoUrls && item.photoUrls.length > 0 && (() => {
+            const firstP = item.photoUrls[0];
+            const firstUrl = typeof firstP === "string" ? firstP : firstP.url;
+            const firstIsVid = typeof firstP === "object" && firstP.type === "video";
+            return (
+              <div style={{ position: "relative" }}>
+                {firstIsVid ? (
+                  <video src={firstUrl} preload="metadata" playsInline controls style={{ width: "100%", maxHeight: 240, objectFit: "contain", display: "block", background: "#000" }} />
+                ) : (
+                  <img src={firstUrl} alt="" onClick={() => openCarousel(item.photoUrls.filter(x => (typeof x === "string") || x.type !== "video").map(x => typeof x === "string" ? x : x.url), 0)} style={{ width: "100%", height: 200, objectFit: "cover", display: "block", cursor: "pointer" }} />
+                )}
+                {item.photoUrls.length > 1 && (
+                  <div style={{ position: "absolute", bottom: 10, right: 10, background: `${T.darkBg}CC`, padding: "4px 10px", borderRadius: 12, display: "flex", alignItems: "center", gap: 4 }}>
+                    <Camera size={11} color={T.warmBg} />
+                    <span style={{ fontFamily: sans, fontSize: 10, color: T.warmBg }}>1 / {item.photoUrls.length}</span>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
           <div style={{ padding: 16, display: "flex", gap: 14 }}>
             <div style={{ width: 56, background: T.charcoal, borderRadius: 8, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "8px 0", flexShrink: 0 }}>
               <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1 }}>{item.month}</span>
@@ -2222,9 +2249,46 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, 
               </div>
               <p style={{ fontFamily: serif, fontSize: 14, color: T.white, margin: "0 0 6px" }}>{item.title}</p>
               <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 8px", lineHeight: 1.5 }}>{item.body}</p>
+              {item.location && (
+                <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 4 }}>
+                  <MapPin size={12} color={T.copper} />
+                  <span style={{ fontFamily: sans, fontSize: 11, color: T.copper }}>{item.location}</span>
+                </div>
+              )}
+              {item.pin && item.pin.label && (
+                <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 8 }}>
+                  <Target size={11} color={T.green} />
+                  <span style={{ fontFamily: sans, fontSize: 10, color: T.green }}>Meeting: {item.pin.label}</span>
+                </div>
+              )}
               <div style={{ display: "flex", gap: 12, marginBottom: 8 }}>
                 <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 0.5 }}>DEPARTS {item.departs}</span>
                 <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 0.5 }}>{item.slots} SLOTS LEFT</span>
+              </div>
+              {/* Invites */}
+              {item.invites && item.invites.length > 0 && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
+                  <Users size={12} color={T.tertiary} />
+                  <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>Invited:</span>
+                  {item.invites.map((h, idx) => (
+                    <span key={idx} onClick={() => onViewUser && onViewUser(h.replace(/^@/, ""))} style={{ fontFamily: sans, fontSize: 10, color: T.copper, cursor: "pointer" }}>@{h.replace(/^@/, "")}{idx < item.invites.length - 1 ? "," : ""}</span>
+                  ))}
+                </div>
+              )}
+              {/* RSVP counts */}
+              {(rsvpCounts.going || rsvpCounts.maybe) && (
+                <div style={{ display: "flex", gap: 10, marginBottom: 8 }}>
+                  {rsvpCounts.going && <span style={{ fontFamily: sans, fontSize: 10, color: T.green, letterSpacing: 0.5 }}>{rsvpCounts.going} GOING</span>}
+                  {rsvpCounts.maybe && <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 0.5 }}>{rsvpCounts.maybe} MAYBE</span>}
+                </div>
+              )}
+              {/* RSVP buttons */}
+              <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                {[{ label: "GOING", value: "going", color: T.green }, { label: "MAYBE", value: "maybe", color: T.copper }, { label: "CAN'T", value: "declined", color: T.tertiary }].map(opt => (
+                  <button key={opt.value} onClick={() => handleRsvp(myRsvp === opt.value ? null : opt.value)} style={{ fontFamily: sans, fontSize: 9, letterSpacing: 0.8, fontWeight: 600, padding: "5px 12px", borderRadius: 4, border: `1px solid ${myRsvp === opt.value ? opt.color : T.charcoal}`, background: myRsvp === opt.value ? `${opt.color}25` : "transparent", color: myRsvp === opt.value ? opt.color : T.tertiary, cursor: "pointer", transition: "all 0.15s" }}>
+                    {opt.label}
+                  </button>
+                ))}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <div style={{ width: 20, height: 20, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -5492,7 +5556,7 @@ function RoutesScreen({ onRecordRoute, onManualEntry, userRoutes, onUpdateRoute,
 }
 
 /* ─── BUILDS / PROFILE SCREEN ─── */
-function BuildsScreen({ onViewUser, userBuilds }) {
+function BuildsScreen({ onViewUser, userBuilds, onAddBuild }) {
   const [filter, setFilter] = useState("all"); // "all" | "mine" | "following"
   const [search, setSearch] = useState("");
   const [expandedBuild, setExpandedBuild] = useState(null);
@@ -5500,6 +5564,7 @@ function BuildsScreen({ onViewUser, userBuilds }) {
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [likedBuilds, setLikedBuilds] = useState({});
   const [likeBonuses, setLikeBonuses] = useState({});
+  const [showAddBuildForm, setShowAddBuildForm] = useState(false);
 
   const toggleLikeBuild = (id) => {
     const wasLiked = !!likedBuilds[id];
@@ -5594,6 +5659,30 @@ function BuildsScreen({ onViewUser, userBuilds }) {
     `linear-gradient(135deg, ${T.charcoal} 0%, ${T.green}20 100%)`,
   ];
 
+  // Show add build form overlay
+  if (showAddBuildForm) {
+    return (
+      <div style={{ padding: "0 0 16px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 16px 0" }}>
+          <button onClick={() => setShowAddBuildForm(false)} style={{ background: T.darkCard, border: "none", borderRadius: 8, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+            <ChevronLeft size={18} color={T.white} />
+          </button>
+          <div>
+            <h2 style={{ fontFamily: sans, fontSize: 18, color: T.white, margin: 0, fontWeight: 700 }}>Add New Build</h2>
+            <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>Enter your vehicle and mod details</span>
+          </div>
+        </div>
+        <AddBuildForm
+          onClose={() => setShowAddBuildForm(false)}
+          onSave={(data) => {
+            onAddBuild && onAddBuild(data);
+            setShowAddBuildForm(false);
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
     <div style={{ padding: "0 0 16px" }}>
       {/* Image Carousel */}
@@ -5602,8 +5691,16 @@ function BuildsScreen({ onViewUser, userBuilds }) {
       )}
       {/* Header */}
       <div style={{ padding: "16px 16px 0" }}>
-        <h2 style={{ fontFamily: sans, fontSize: 22, color: T.white, margin: "0 0 4px", fontWeight: 700 }}>Build Gallery</h2>
-        <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "0 0 16px" }}>Explore rigs from the Trailhead community</p>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
+          <div>
+            <h2 style={{ fontFamily: sans, fontSize: 22, color: T.white, margin: "0 0 4px", fontWeight: 700 }}>Build Gallery</h2>
+            <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "0 0 16px" }}>Explore rigs from the Trailhead community</p>
+          </div>
+          <button onClick={() => setShowAddBuildForm(true)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 14px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer", flexShrink: 0 }}>
+            <Plus size={14} color={T.white} />
+            <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>ADD BUILD</span>
+          </button>
+        </div>
 
         {/* Search Bar */}
         <div style={{ position: "relative", marginBottom: 14 }}>
@@ -7408,12 +7505,28 @@ function ProfileScreen({ onViewUser, onLogout, userBuilds, onAddBuild, onUpdateB
   }));
   const builds = [...defaultBuilds, ...mappedUserBuilds];
 
-  const trips = [
-    { name: "Shadow Peak Traverse", date: "Oct 12, 2025", distance: "42.5 mi", grade: 7, build: "THE HIGHLANDER" },
-    { name: "Eagle Rim Loop", date: "Oct 8, 2025", distance: "38.0 mi", grade: 5, build: "THE HIGHLANDER" },
-    { name: "Baja Norte Expedition", date: "Sep 22, 2025", distance: "286 mi", grade: 4, build: "DESERT HAWK" },
-    { name: "Rubicon Trail", date: "Sep 5, 2025", distance: "22 mi", grade: 9, build: "THE HIGHLANDER" },
+  const [tripFilter, setTripFilter] = useState("all");
+
+  const staticTrips = [
+    { name: "Shadow Peak Traverse", date: "Oct 12, 2025", distance: "42.5 mi", grade: 7, build: "THE HIGHLANDER", role: "went" },
+    { name: "Eagle Rim Loop", date: "Oct 8, 2025", distance: "38.0 mi", grade: 5, build: "THE HIGHLANDER", role: "went" },
+    { name: "Baja Norte Expedition", date: "Sep 22, 2025", distance: "286 mi", grade: 4, build: "DESERT HAWK", role: "organized" },
+    { name: "Rubicon Trail", date: "Sep 5, 2025", distance: "22 mi", grade: 9, build: "THE HIGHLANDER", role: "went" },
   ];
+
+  // Build trips from convoy feed items
+  const convoyTrips = (feedItems || []).filter(p => p.type === "CONVOYS").map(c => {
+    const isOrganizer = c.user === "KyleLPO";
+    const myRsvp = c.rsvps ? c.rsvps["@KyleLPO"] : null;
+    let role = "none";
+    if (isOrganizer) role = "organized";
+    else if (myRsvp === "going") role = "attending";
+    else if (myRsvp === "maybe") role = "attending";
+    return { name: c.title, date: c.month && c.day ? `${c.month} ${c.day}` : "TBD", distance: c.location || "—", grade: null, build: null, role, convoyId: c.id, rsvp: myRsvp, isConvoy: true, slots: c.slots, invites: c.invites };
+  }).filter(t => t.role !== "none");
+
+  const allTrips = [...convoyTrips, ...staticTrips];
+  const filteredTrips = tripFilter === "all" ? allTrips : allTrips.filter(t => t.role === tripFilter);
 
   const [editingPost, setEditingPost] = useState(null);
   const [editPostText, setEditPostText] = useState("");
@@ -7996,12 +8109,31 @@ function ProfileScreen({ onViewUser, onLogout, userBuilds, onAddBuild, onUpdateB
       {/* TRIPS TAB */}
       {activeTab === "trips" && (
         <div style={{ padding: "0 16px" }}>
+          {/* Trip filter sub-tabs */}
+          <div style={{ display: "flex", gap: 6, marginBottom: 12, overflowX: "auto", paddingBottom: 2 }}>
+            {[{ label: "ALL", value: "all" }, { label: "ORGANIZED", value: "organized" }, { label: "ATTENDING", value: "attending" }, { label: "COMPLETED", value: "went" }].map(f => (
+              <button key={f.value} onClick={() => setTripFilter(f.value)} style={{ fontFamily: sans, fontSize: 10, letterSpacing: 0.8, fontWeight: 600, padding: "6px 14px", borderRadius: 16, border: `1px solid ${tripFilter === f.value ? T.copper : T.charcoal}`, background: tripFilter === f.value ? `${T.copper}20` : "transparent", color: tripFilter === f.value ? T.copper : T.tertiary, cursor: "pointer", whiteSpace: "nowrap", transition: "all 0.15s" }}>
+                {f.label}
+              </button>
+            ))}
+          </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {trips.map((t, i) => (
-              <div key={i} style={{ ...cardStyle, padding: "14px 16px", display: "flex", alignItems: "center", gap: 14 }}>
+            {filteredTrips.length === 0 && (
+              <div style={{ textAlign: "center", padding: 32 }}>
+                <Users size={32} color={T.tertiary} strokeWidth={1} style={{ marginBottom: 8, opacity: 0.4 }} />
+                <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary }}>No trips in this category yet</p>
+              </div>
+            )}
+            {filteredTrips.map((t, i) => (
+              <div key={t.convoyId || i} style={{ ...cardStyle, padding: "14px 16px", display: "flex", alignItems: "center", gap: 14 }}>
                 <div style={{ width: 44, height: 44, borderRadius: 10, background: T.charcoal, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <Mountain size={16} color={T.copper} strokeWidth={1.5} />
-                  <span style={{ fontFamily: sans, fontSize: 8, color: T.tertiary, marginTop: 2 }}>G{t.grade}</span>
+                  {t.isConvoy ? (
+                    <Users size={16} color={t.role === "organized" ? T.copper : t.role === "attending" ? T.green : T.tertiary} strokeWidth={1.5} />
+                  ) : (
+                    <Mountain size={16} color={T.copper} strokeWidth={1.5} />
+                  )}
+                  {t.grade != null && <span style={{ fontFamily: sans, fontSize: 8, color: T.tertiary, marginTop: 2 }}>G{t.grade}</span>}
+                  {t.isConvoy && <span style={{ fontFamily: sans, fontSize: 7, color: T.tertiary, marginTop: 1, textTransform: "uppercase" }}>{t.role === "organized" ? "HOST" : t.rsvp === "going" ? "GOING" : "MAYBE"}</span>}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 600, display: "block", marginBottom: 2 }}>{t.name}</span>
@@ -8010,7 +8142,7 @@ function ProfileScreen({ onViewUser, onLogout, userBuilds, onAddBuild, onUpdateB
                     <span style={{ fontFamily: sans, fontSize: 11, color: T.copper }}>{t.distance}</span>
                   </div>
                 </div>
-                <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, background: T.charcoal, padding: "4px 8px", borderRadius: 4 }}>{t.build}</span>
+                <span style={{ fontFamily: sans, fontSize: 9, color: t.role === "organized" ? T.copper : t.role === "attending" ? T.green : T.tertiary, background: T.charcoal, padding: "4px 8px", borderRadius: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>{t.build || (t.role === "organized" ? "Organized" : t.role === "attending" ? "Attending" : "Completed")}</span>
               </div>
             ))}
           </div>
@@ -8763,7 +8895,7 @@ function PhotoUploader({ photos, onChange, maxPhotos = 10, compact = false }) {
 }
 
 /* ─── COMPOSE / CREATE POST SCREEN ─── */
-function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotification, onAddRoute }) {
+function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotification, onAddRoute, onOpenDM }) {
   const [postType, setPostType] = useState(null); // null = picker, "general" | "route" | "convoy" | "recovery"
   const [general, setGeneral] = useState({ text: "", photos: [], location: "" });
   const [showLocationInput, setShowLocationInput] = useState(false);
@@ -8772,6 +8904,12 @@ function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotificatio
   const [showRouteForm, setShowRouteForm] = useState(false);
   const [route, setRoute] = useState({ name: "", distance: "", time: "", elevation: "", difficulty: "Moderate", description: "", photos: [] });
   const [convoy, setConvoy] = useState({ title: "", location: "", departDate: "", departTime: "", returnDate: "", returnTime: "", slots: "", description: "" });
+  const [convoyPhotos, setConvoyPhotos] = useState([]);
+  const [convoyPin, setConvoyPin] = useState(null); // { lat, lng, label }
+  const [convoyPinSearch, setConvoyPinSearch] = useState("");
+  const [convoyInvites, setConvoyInvites] = useState([]); // ["@handle1", "@handle2"]
+  const [convoyInviteInput, setConvoyInviteInput] = useState("");
+  const convoyPhotoRef = useRef(null);
   const [recovery, setRecovery] = useState({ title: "", vehicle: "", description: "", urgency: "HIGH", location: "", coords: "" });
 
   const inputStyle = {
@@ -8815,14 +8953,50 @@ function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotificatio
     } else if (postType === "convoy") {
       if (!convoy.title.trim()) return;
       const d = convoy.departDate ? new Date(convoy.departDate) : null;
+      const hasConvoyPhotos = convoyPhotos.length > 0;
       newPost = {
         id, type: "CONVOYS", user: "KyleLPO", initial: "K", time: Date.now(),
         title: convoy.title, body: convoy.description || null,
         month: d ? d.toLocaleString("en", { month: "short" }).toUpperCase() : "TBD",
         day: d ? String(d.getDate()) : "—",
         departs: convoy.departTime || "TBD", slots: parseInt(convoy.slots) || 0,
+        location: convoy.location || "",
+        ...(hasConvoyPhotos ? { photoCount: convoyPhotos.length, photoUrls: convoyPhotos.map(p => ({ url: p.url, type: p.type || "image", caption: p.caption || "" })) } : {}),
+        ...(convoyPin ? { pin: convoyPin } : {}),
+        returnDate: convoy.returnDate || "",
+        returnTime: convoy.returnTime || "",
+        invites: convoyInvites.length > 0 ? convoyInvites : [],
+        rsvps: {}, // { "@handle": "going" | "maybe" | "declined" }
         likes: 0, comments: 0,
       };
+      // Send DM invites to each invited user
+      if (convoyInvites.length > 0 && onOpenDM) {
+        const dateStr = d ? d.toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" }) : "TBD";
+        convoyInvites.forEach(handle => {
+          const cleanHandle = handle.replace(/^@/, "");
+          onOpenDM(cleanHandle, null, {
+            type: "convoy_invite",
+            convoyId: id,
+            title: convoy.title,
+            location: convoy.location || "TBD",
+            date: dateStr,
+            time: convoy.departTime || "TBD",
+            slots: parseInt(convoy.slots) || 0,
+            from: "KyleLPO",
+          });
+        });
+      }
+      // Notification for invites
+      if (convoyInvites.length > 0) {
+        onAddNotification && onAddNotification({
+          type: "convoy",
+          user: "KyleLPO",
+          text: `invited ${convoyInvites.length} user${convoyInvites.length > 1 ? "s" : ""} to`,
+          target: convoy.title,
+          icon: Users,
+          iconColor: T.copper,
+        });
+      }
     } else if (postType === "recovery") {
       if (!recovery.title.trim()) return;
       const hasRecPhotos = recoveryPhotos.length > 0;
@@ -9076,6 +9250,55 @@ function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotificatio
               <label style={labelStyle}>TRIP NAME</label>
               <input value={convoy.title} onChange={(e) => setConvoy({ ...convoy, title: e.target.value })} placeholder="e.g. Alpine Summit Chase" style={inputStyle} onFocus={(e) => e.target.style.borderColor = T.copper} onBlur={(e) => e.target.style.borderColor = T.charcoal} />
             </div>
+
+            {/* Cover Photo */}
+            <div>
+              <label style={labelStyle}>COVER PHOTO / VIDEO</label>
+              <input ref={convoyPhotoRef} type="file" accept="image/*,video/*" multiple onChange={(e) => {
+                const files = Array.from(e.target.files || []);
+                e.target.value = "";
+                files.forEach(file => {
+                  const isVideo = file.type.startsWith("video/");
+                  if (isVideo) {
+                    const blobUrl = URL.createObjectURL(file);
+                    setConvoyPhotos(prev => [...prev, { id: Date.now() + Math.random(), url: blobUrl, name: file.name, type: "video", caption: "" }]);
+                  } else {
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                      setConvoyPhotos(prev => [...prev, { id: Date.now() + Math.random(), url: ev.target.result, name: file.name, type: "image", caption: "" }]);
+                    };
+                    reader.readAsDataURL(file);
+                  }
+                });
+              }} style={{ display: "none" }} />
+              {convoyPhotos.length > 0 ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {convoyPhotos.map((p, pi) => (
+                    <div key={p.id} style={{ position: "relative", borderRadius: 10, overflow: "hidden", border: `1px solid ${T.charcoal}` }}>
+                      {p.type === "video" ? (
+                        <video src={p.url} preload="metadata" playsInline controls style={{ width: "100%", height: 160, objectFit: "cover", display: "block", background: "#000" }} />
+                      ) : (
+                        <img src={p.url} alt="" style={{ width: "100%", height: 160, objectFit: "cover", display: "block" }} />
+                      )}
+                      <button onClick={() => setConvoyPhotos(prev => prev.filter((_, i) => i !== pi))} style={{ position: "absolute", top: 8, right: 8, width: 28, height: 28, borderRadius: "50%", background: `${T.darkBg}CC`, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <X size={14} color={T.white} />
+                      </button>
+                      <input value={p.caption} onChange={(e) => setConvoyPhotos(prev => prev.map((ph, i) => i === pi ? { ...ph, caption: e.target.value } : ph))} placeholder="Add caption..." style={{ width: "100%", boxSizing: "border-box", padding: "8px 12px", background: T.darkCard, border: "none", borderTop: `1px solid ${T.charcoal}`, color: T.tertiary, fontFamily: serif, fontSize: 12, fontStyle: "italic", outline: "none" }} />
+                    </div>
+                  ))}
+                  <button onClick={() => convoyPhotoRef.current && convoyPhotoRef.current.click()} style={{ padding: "10px", borderRadius: 8, background: T.darkCard, border: `1px dashed ${T.charcoal}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                    <Plus size={14} color={T.copper} />
+                    <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600 }}>ADD MORE</span>
+                  </button>
+                </div>
+              ) : (
+                <button onClick={() => convoyPhotoRef.current && convoyPhotoRef.current.click()} style={{ width: "100%", padding: "24px", borderRadius: 10, background: T.darkCard, border: `1px dashed ${T.charcoal}`, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                  <Camera size={24} color={T.tertiary} />
+                  <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>Add photos or video</span>
+                </button>
+              )}
+            </div>
+
             <div>
               <label style={labelStyle}>LOCATION</label>
               <div style={{ position: "relative" }}>
@@ -9083,6 +9306,99 @@ function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotificatio
                 <input value={convoy.location} onChange={(e) => setConvoy({ ...convoy, location: e.target.value })} placeholder="Gerlach, Nevada" style={{ ...inputStyle, paddingLeft: 36 }} onFocus={(e) => e.target.style.borderColor = T.copper} onBlur={(e) => e.target.style.borderColor = T.charcoal} />
               </div>
             </div>
+
+            {/* Meeting Point Pin */}
+            <div>
+              <label style={labelStyle}>MEETING POINT</label>
+              {convoyPin ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: T.darkCard, borderRadius: 8, border: `1px solid ${T.green}30` }}>
+                  <MapPin size={16} color={T.green} />
+                  <div style={{ flex: 1 }}>
+                    <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>{convoyPin.label || "Meeting Point"}</span>
+                    <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, display: "block" }}>{convoyPin.lat.toFixed(5)}, {convoyPin.lng.toFixed(5)}</span>
+                  </div>
+                  <button onClick={() => setConvoyPin(null)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+                    <X size={14} color={T.tertiary} />
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <div style={{ position: "relative" }}>
+                    <Search size={14} color={T.tertiary} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
+                    <input
+                      value={convoyPinSearch || ""}
+                      onChange={(e) => setConvoyPinSearch(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && convoyPinSearch.trim()) {
+                          // Geocode via Google Maps Geocoder if available, else use a preset
+                          if (window.google && window.google.maps) {
+                            const geocoder = new window.google.maps.Geocoder();
+                            geocoder.geocode({ address: convoyPinSearch.trim() }, (results, status) => {
+                              if (status === "OK" && results[0]) {
+                                const loc = results[0].geometry.location;
+                                setConvoyPin({ lat: loc.lat(), lng: loc.lng(), label: results[0].formatted_address });
+                                setConvoyPinSearch("");
+                              }
+                            });
+                          } else {
+                            // Fallback: parse "lat, lng" manually or set a default
+                            const parts = convoyPinSearch.split(",").map(s => parseFloat(s.trim()));
+                            if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                              setConvoyPin({ lat: parts[0], lng: parts[1], label: convoyPinSearch.trim() });
+                              setConvoyPinSearch("");
+                            }
+                          }
+                        }
+                      }}
+                      placeholder="Search address or place name..."
+                      style={{ ...inputStyle, paddingLeft: 34 }}
+                      onFocus={(e) => e.target.style.borderColor = T.copper}
+                      onBlur={(e) => e.target.style.borderColor = T.charcoal}
+                    />
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button onClick={() => {
+                      if (convoyPinSearch.trim() && window.google && window.google.maps) {
+                        const geocoder = new window.google.maps.Geocoder();
+                        geocoder.geocode({ address: convoyPinSearch.trim() }, (results, status) => {
+                          if (status === "OK" && results[0]) {
+                            const loc = results[0].geometry.location;
+                            setConvoyPin({ lat: loc.lat(), lng: loc.lng(), label: results[0].formatted_address });
+                            setConvoyPinSearch("");
+                          }
+                        });
+                      } else if (convoyPinSearch.trim()) {
+                        const parts = convoyPinSearch.split(",").map(s => parseFloat(s.trim()));
+                        if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                          setConvoyPin({ lat: parts[0], lng: parts[1], label: convoyPinSearch.trim() });
+                          setConvoyPinSearch("");
+                        }
+                      }
+                    }} style={{ flex: 1, padding: "10px", borderRadius: 8, background: T.darkCard, border: `1px dashed ${T.charcoal}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                      <Search size={14} color={T.copper} />
+                      <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600 }}>SEARCH</span>
+                    </button>
+                    <button onClick={() => {
+                      // Manual pin: open a mini map to tap-place a pin
+                      if (navigator.geolocation) {
+                        navigator.geolocation.getCurrentPosition(
+                          (pos) => setConvoyPin({ lat: pos.coords.latitude, lng: pos.coords.longitude, label: "Current Location" }),
+                          () => setConvoyPin({ lat: 39.5, lng: -98.35, label: "Manual Pin" }),
+                          { enableHighAccuracy: true, timeout: 5000 }
+                        );
+                      } else {
+                        setConvoyPin({ lat: 39.5, lng: -98.35, label: "Manual Pin" });
+                      }
+                    }} style={{ padding: "10px 14px", borderRadius: 8, background: T.darkCard, border: `1px dashed ${T.charcoal}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                      <Target size={14} color={T.tertiary} />
+                      <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, fontWeight: 600 }}>USE GPS</span>
+                    </button>
+                  </div>
+                  <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>Search for a location, enter coordinates (lat, lng), or use GPS</span>
+                </div>
+              )}
+            </div>
+
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
               <div>
                 <label style={labelStyle}>DEPARTURE DATE</label>
@@ -9110,6 +9426,67 @@ function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotificatio
             <div>
               <label style={labelStyle}>DETAILS</label>
               <textarea value={convoy.description} onChange={(e) => setConvoy({ ...convoy, description: e.target.value })} placeholder="Describe the trip — terrain difficulty, what to bring, stock-friendly or not..." style={textareaStyle} onFocus={(e) => e.target.style.borderColor = T.copper} onBlur={(e) => e.target.style.borderColor = T.charcoal} />
+            </div>
+
+            {/* Invite Users */}
+            <div>
+              <label style={labelStyle}>INVITE USERS</label>
+              <div style={{ position: "relative" }}>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <div style={{ position: "relative", flex: 1 }}>
+                    <AtSign size={14} color={T.tertiary} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
+                    <input value={convoyInviteInput} onChange={(e) => setConvoyInviteInput(e.target.value)} onKeyDown={(e) => {
+                      if (e.key === "Enter" && convoyInviteInput.trim()) {
+                        const handle = convoyInviteInput.trim().replace(/^@/, "");
+                        if (handle && !convoyInvites.includes("@" + handle)) {
+                          setConvoyInvites(prev => [...prev, "@" + handle]);
+                        }
+                        setConvoyInviteInput("");
+                      }
+                    }} placeholder="Search users by handle..." style={{ ...inputStyle, paddingLeft: 34 }} onFocus={(e) => e.target.style.borderColor = T.copper} onBlur={(e) => e.target.style.borderColor = T.charcoal} />
+                  </div>
+                </div>
+                {/* User search dropdown */}
+                {convoyInviteInput.trim().length > 0 && (() => {
+                  const q = convoyInviteInput.trim().replace(/^@/, "").toLowerCase();
+                  const matches = globalSearchUsers.filter(u => u.handle !== "KyleLPO" && (u.handle.toLowerCase().includes(q) || u.name.toLowerCase().includes(q)) && !convoyInvites.includes("@" + u.handle));
+                  if (matches.length === 0) return null;
+                  return (
+                    <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 50, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8, marginTop: 4, maxHeight: 200, overflowY: "auto", boxShadow: `0 8px 24px rgba(0,0,0,0.5)` }}>
+                      {matches.slice(0, 6).map(u => (
+                        <div key={u.handle} onClick={() => {
+                          if (!convoyInvites.includes("@" + u.handle)) {
+                            setConvoyInvites(prev => [...prev, "@" + u.handle]);
+                          }
+                          setConvoyInviteInput("");
+                        }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", cursor: "pointer", borderBottom: `1px solid ${T.charcoal}40`, transition: "background 0.1s" }} onMouseEnter={e => e.currentTarget.style.background = `${T.charcoal}80`} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                          <div style={{ width: 32, height: 32, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            <span style={{ fontFamily: sans, fontSize: 12, fontWeight: 700, color: T.white }}>{u.initial}</span>
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, display: "block" }}>@{u.handle}</span>
+                            <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{u.name}</span>
+                          </div>
+                          <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, background: `${T.copper}18`, padding: "3px 8px", borderRadius: 4, letterSpacing: 0.5 }}>{u.badge}</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+              {convoyInvites.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                  {convoyInvites.map((handle, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 10px", borderRadius: 16, background: `${T.copper}20`, border: `1px solid ${T.copper}30` }}>
+                      <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600 }}>{handle}</span>
+                      <button onClick={() => setConvoyInvites(prev => prev.filter((_, j) => j !== i))} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" }}>
+                        <X size={10} color={T.copper} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 4, display: "block" }}>Invites will be sent as DMs with RSVP options</span>
             </div>
           </>
         )}
@@ -9327,7 +9704,7 @@ const dmConversations = [
   },
 ];
 
-function DMScreen({ onClose, onViewUser, initialUser, initialMessage, initialSharedPost, conversations, setConversations, onOpenPost }) {
+function DMScreen({ onClose, onViewUser, initialUser, initialMessage, initialSharedPost, conversations, setConversations, onOpenPost, onRsvpConvoy }) {
   const [view, setView] = useState(initialUser ? "chat" : "inbox"); // "inbox" | "chat" | "new"
   const [activeConvo, setActiveConvo] = useState(() => {
     if (initialUser) {
@@ -9467,7 +9844,43 @@ function DMScreen({ onClose, onViewUser, initialUser, initialMessage, initialSha
             return (
               <div key={msg.id} style={{ display: "flex", justifyContent: isMe ? "flex-end" : "flex-start" }}>
                 <div style={{ maxWidth: "78%", padding: "10px 14px", borderRadius: isMe ? "14px 14px 4px 14px" : "14px 14px 14px 4px", background: isMe ? T.red : T.darkCard, border: isMe ? "none" : `1px solid ${T.charcoal}` }}>
-                  {msg.sharedPost && (
+                  {msg.sharedPost && msg.sharedPost.type === "convoy_invite" ? (
+                    <div style={{ borderRadius: 8, overflow: "hidden", border: `1px solid ${T.copper}40`, marginBottom: msg.text ? 8 : 0, background: isMe ? "rgba(0,0,0,0.15)" : `${T.charcoal}80` }}>
+                      <div style={{ padding: "10px 12px 0" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                          <Users size={14} color={T.copper} />
+                          <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1, fontWeight: 600 }}>CONVOY INVITE</span>
+                        </div>
+                        <p style={{ fontFamily: serif, fontSize: 14, color: T.white, margin: "0 0 6px", fontWeight: 600, lineHeight: 1.3 }}>{msg.sharedPost.title}</p>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 8 }}>
+                          {msg.sharedPost.location && (
+                            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                              <MapPin size={11} color={T.copper} />
+                              <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{msg.sharedPost.location}</span>
+                            </div>
+                          )}
+                          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                            <Clock size={11} color={T.copper} />
+                            <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{msg.sharedPost.date} at {msg.sharedPost.time}</span>
+                          </div>
+                          {msg.sharedPost.slots > 0 && (
+                            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                              <Users size={11} color={T.copper} />
+                              <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{msg.sharedPost.slots} slots available</span>
+                            </div>
+                          )}
+                          <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>From @{msg.sharedPost.from}</span>
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", borderTop: `1px solid ${isMe ? "rgba(255,255,255,0.1)" : T.charcoal}` }}>
+                        {[{ label: "GOING", value: "going", color: T.green }, { label: "MAYBE", value: "maybe", color: T.copper }, { label: "CAN'T", value: "declined", color: T.tertiary }].map((opt, oi) => (
+                          <button key={opt.value} onClick={(e) => { e.stopPropagation(); const convoyId = msg.sharedPost.convoyId; onRsvpConvoy && onRsvpConvoy(convoyId, msg.rsvpStatus === opt.value ? null : opt.value); const updatedMsgs = activeConvo.messages.map(m => m.id === msg.id ? { ...m, rsvpStatus: m.rsvpStatus === opt.value ? null : opt.value } : m); setConversations(prev => prev.map(c => c.id === activeConvo.id ? { ...c, messages: updatedMsgs } : c)); }} style={{ flex: 1, fontFamily: sans, fontSize: 10, letterSpacing: 0.8, fontWeight: 600, padding: "10px 0", background: msg.rsvpStatus === opt.value ? `${opt.color}25` : "transparent", color: msg.rsvpStatus === opt.value ? opt.color : T.tertiary, border: "none", borderRight: oi < 2 ? `1px solid ${isMe ? "rgba(255,255,255,0.1)" : T.charcoal}` : "none", cursor: "pointer", transition: "all 0.15s" }}>
+                            {msg.rsvpStatus === opt.value ? `\u2713 ${opt.label}` : opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : msg.sharedPost ? (
                     <div onClick={() => onOpenPost && onOpenPost(msg.sharedPost)} style={{ borderRadius: 8, overflow: "hidden", border: `1px solid ${isMe ? "rgba(255,255,255,0.15)" : T.charcoal}`, marginBottom: msg.text ? 8 : 0, background: isMe ? "rgba(0,0,0,0.15)" : `${T.charcoal}80`, cursor: "pointer", transition: "opacity 0.15s" }} onMouseEnter={e => e.currentTarget.style.opacity = "0.85"} onMouseLeave={e => e.currentTarget.style.opacity = "1"}>
                       {msg.sharedPost.image && (
                         <img src={msg.sharedPost.image} alt="" style={{ width: "100%", height: 120, objectFit: "cover", display: "block" }} />
@@ -9494,7 +9907,7 @@ function DMScreen({ onClose, onViewUser, initialUser, initialMessage, initialSha
                         </div>
                       </div>
                     </div>
-                  )}
+                  ) : null}
                   {msg.photos && msg.photos.length > 0 && (
                     <div style={{ display: "flex", gap: 4, marginBottom: msg.text ? 8 : 0, flexWrap: "wrap" }}>
                       {msg.photos.map((url, pi) => (
@@ -9899,7 +10312,7 @@ export default function Trailhead() {
 
       <div className="th-scroll" style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
         {showCompose ? (
-          <ComposeScreen onClose={() => setShowCompose(false)} onSubmit={(newPost) => { setFeedItems(prev => [newPost, ...prev]); awardPoints(newPost.type === "RECOVERY" ? 0 : POINTS.feedPost, newPost.type === "RECOVERY" ? "" : "Feed Post"); if (newPost.photoUrls && newPost.photoUrls.length > 0) awardPoints(POINTS.photoUploaded * newPost.photoUrls.length, "Photos Uploaded"); }} onAddRecoveryAlert={addRecoveryAlert} onAddNotification={addNotification} onAddRoute={(r) => { setUserRoutes(prev => [r, ...prev]); awardPoints(POINTS.routeLogged, "Route Logged"); }} />
+          <ComposeScreen onClose={() => setShowCompose(false)} onSubmit={(newPost) => { setFeedItems(prev => [newPost, ...prev]); awardPoints(newPost.type === "RECOVERY" ? 0 : POINTS.feedPost, newPost.type === "RECOVERY" ? "" : "Feed Post"); if (newPost.photoUrls && newPost.photoUrls.length > 0) awardPoints(POINTS.photoUploaded * newPost.photoUrls.length, "Photos Uploaded"); }} onAddRecoveryAlert={addRecoveryAlert} onAddNotification={addNotification} onAddRoute={(r) => { setUserRoutes(prev => [r, ...prev]); awardPoints(POINTS.routeLogged, "Route Logged"); }} onOpenDM={openDM} />
         ) : showRecovery ? (
           <RecoveryScreen onOpenMap={openMap} onOpenDM={openDM} />
         ) : isProfile ? (
@@ -9913,7 +10326,7 @@ export default function Trailhead() {
             {screen === "feed" && <FeedScreen onViewUser={openUserProfile} onOpenMap={openMap} onOpenThread={(threadId, catName, subName) => openForumThread(threadId, catName, subName)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} feedItems={feedItems} onUpdateFeed={(items) => setFeedItems(items)} onAddNotification={addNotification} forumUserReplies={forumUserReplies} forumViewCounts={forumViewCounts} savedRoutes={savedRoutes} onSaveRoute={(route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev])} onUnsaveRoute={(routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId))} onStartNav={(route) => setActiveNavRoute(route)} onAwardPoints={awardPoints} />}
             {screen === "forum" && <ForumScreen pendingThread={pendingThread} onPendingHandled={() => setPendingThread(null)} onAddNotification={addNotification} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onAddFeedPost={(post) => setFeedItems(prev => [post, ...prev])} userThreads={forumUserThreads} setUserThreads={setForumUserThreads} userReplies={forumUserReplies} setUserReplies={setForumUserReplies} likedForumItems={forumLikedItems} setLikedForumItems={setForumLikedItems} forumLikeCounts={forumLikeCounts} setForumLikeCounts={setForumLikeCounts} forumViewCounts={forumViewCounts} setForumViewCounts={setForumViewCounts} onAwardPoints={awardPoints} />}
             {screen === "routes" && <RoutesScreen onRecordRoute={() => setShowRecorder(true)} onManualEntry={() => setShowManualRoute(true)} userRoutes={userRoutes} onUpdateRoute={(routeId, updates) => setUserRoutes(prev => prev.map(r => r.id === routeId ? { ...r, ...updates } : r))} savedRoutes={savedRoutes} onSaveRoute={(route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev])} onUnsaveRoute={(routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId))} onOpenDM={(user, msg, sharedPost) => openDM(user, msg, sharedPost)} onAddFeedPost={(post) => setFeedItems(prev => [post, ...prev])} onStartNav={(route) => setActiveNavRoute(route)} />}
-            {screen === "builds" && <BuildsScreen onViewUser={openUserProfile} userBuilds={userBuilds} />}
+            {screen === "builds" && <BuildsScreen onViewUser={openUserProfile} userBuilds={userBuilds} onAddBuild={(data) => { const id = "build_" + Date.now(); const bd = { id, name: data.buildName || `${data.year} ${data.make} ${data.model}`, year: data.year, make: data.make, model: data.model, trim: data.trim, heroImg: data.mainPhotos && data.mainPhotos.length > 0 ? data.mainPhotos[0].url : null, buildData: data, tags: [], createdAt: Date.now() }; setUserBuilds(prev => [...prev, bd]); if (data.shareToFeed) { setFeedItems(prev => [{ id, type: "BUILDS", user: "KyleLPO", initial: "K", time: Date.now(), title: data.buildName || `${data.year} ${data.make} ${data.model}`, body: `${data.year} ${data.make} ${data.model}${data.trim ? " " + data.trim : ""}`, image: data.mainPhotos && data.mainPhotos.length > 0 ? data.mainPhotos[0].url : null, likes: 0, comments: 0, buildData: data }, ...prev]); } awardPoints(POINTS.feedPost, "Build Added"); }} />}
             {screen === "ranks" && <RanksScreen myPoints={myTotalPoints} pointsBreakdown={pointsBreakdown} />}
           </>
         )}
@@ -10100,6 +10513,9 @@ export default function Trailhead() {
           initialSharedPost={dmSharedPost}
           conversations={dmConvos}
           setConversations={setDmConvos}
+          onRsvpConvoy={(convoyId, status) => {
+            setFeedItems(prev => prev.map(fi => fi.id === convoyId ? { ...fi, rsvps: { ...(fi.rsvps || {}), "@KyleLPO": status } } : fi));
+          }}
           onOpenPost={(sp) => {
             setShowDM(false); setDmInitialUser(null); setDmInitialMessage(""); setDmSharedPost(null);
             if (sp.type === "FORUM" && sp.threadId) {
