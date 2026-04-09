@@ -1871,21 +1871,6 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, 
           {/* Expanded route details */}
           {isRouteExp && (
             <div style={{ borderTop: `1px solid ${T.charcoal}`, padding: 16 }}>
-              {/* Map preview */}
-              {((item.pins && item.pins.length > 0) || (item.points && item.points.length > 0)) && (
-                <div style={{ marginBottom: 12 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                    <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600 }}>ROUTE MAP</span>
-                    <button onClick={() => { setFullscreenMapItem(item); setHighlightedPinIdx(null); }} style={{ background: `${T.charcoal}`, border: `1px solid ${T.tertiary}30`, borderRadius: 6, padding: "4px 8px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
-                      <Maximize2 size={10} color={T.copper} />
-                      <span style={{ fontFamily: sans, fontSize: 8, color: T.copper, fontWeight: 600, letterSpacing: 0.5 }}>FULL SCREEN</span>
-                    </button>
-                  </div>
-                  <div style={{ width: "100%", height: 180, borderRadius: 10, overflow: "hidden", position: "relative", background: T.charcoal }}>
-                    <RouteMapPreview pins={item.pins} points={item.points} photos={item.photos} highlightedPinIdx={highlightedPinIdx} />
-                  </div>
-                </div>
-              )}
               {/* Description */}
               {item.body && (
                 <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "0 0 12px", lineHeight: 1.5 }}>{item.body}</p>
