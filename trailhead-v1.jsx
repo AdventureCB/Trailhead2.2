@@ -2338,7 +2338,7 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, 
     <div style={{ position: "relative" }}>
       {/* Fullscreen Route Map Overlay */}
       {fullscreenMapItem && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 1000, background: T.darkBg, display: "flex", flexDirection: "column" }}>
+        <div style={{ position: "fixed", top: 0, bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 430, zIndex: 1000, background: T.darkBg, display: "flex", flexDirection: "column" }}>
           {/* Header bar */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: T.darkCard, borderBottom: `1px solid ${T.charcoal}`, flexShrink: 0 }}>
             <div style={{ flex: 1 }}>
@@ -5430,7 +5430,7 @@ function RoutesScreen({ onRecordRoute, onManualEntry, userRoutes, onUpdateRoute,
       </div>
       {/* Fullscreen Route Map Overlay */}
       {fullscreenMapRoute && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 1000, background: T.darkBg, display: "flex", flexDirection: "column" }}>
+        <div style={{ position: "fixed", top: 0, bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 430, zIndex: 1000, background: T.darkBg, display: "flex", flexDirection: "column" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: T.darkCard, borderBottom: `1px solid ${T.charcoal}`, flexShrink: 0 }}>
             <div style={{ flex: 1 }}>
               <h3 style={{ fontFamily: serif, fontSize: 16, color: T.white, margin: 0 }}>{fullscreenMapRoute.name || fullscreenMapRoute.title}</h3>
