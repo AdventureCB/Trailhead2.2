@@ -3879,27 +3879,31 @@ function RouteRecorder({ onClose, onSave }) {
     if (!fileList || fileList.length === 0) return;
     const files = Array.from(fileList);
     e.target.value = "";
+    const addMarkerToMap = (lat, lng) => {
+      if (lat != null && mapInst.current && window.google) {
+        const m = new window.google.maps.Marker({
+          position: { lat, lng },
+          map: mapInst.current,
+          label: { text: "\u{1F4F7}", fontSize: "14px" },
+          icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 16, fillColor: "#4A7C59", fillOpacity: 1, strokeColor: T.white, strokeWeight: 2 },
+          zIndex: 998,
+        });
+        photoMarkersRef.current.push(m);
+      }
+    };
     const processFile = (file, lat, lng) => {
       const isVideo = file.type.startsWith("video/");
       if (isVideo) {
         const blobUrl = URL.createObjectURL(file);
         const photo = { url: blobUrl, name: file.name, type: "video", ...(lat != null ? { lat, lng } : {}) };
         setRoutePhotos(prev => [...prev, photo]);
+        addMarkerToMap(lat, lng);
       } else {
         const reader = new FileReader();
         reader.onload = (ev) => {
           const photo = { url: ev.target.result, name: file.name, type: "image", ...(lat != null ? { lat, lng } : {}) };
           setRoutePhotos(prev => [...prev, photo]);
-          if (lat != null && mapInst.current && window.google) {
-            const m = new window.google.maps.Marker({
-              position: { lat, lng },
-              map: mapInst.current,
-              label: { text: "\u{1F4F7}", fontSize: "14px" },
-              icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 16, fillColor: "#4A7C59", fillOpacity: 1, strokeColor: T.white, strokeWeight: 2 },
-              zIndex: 998,
-            });
-            photoMarkersRef.current.push(m);
-          }
+          addMarkerToMap(lat, lng);
         };
         reader.readAsDataURL(file);
       }
@@ -5471,6 +5475,8 @@ function RoutesScreen({ onRecordRoute, onManualEntry, userRoutes, onUpdateRoute,
                 tags: updatedData.tags,
                 pins: updatedData.pins,
                 photos: updatedData.photos,
+                // Preserve original GPS track if it exists (recorded routes), or use road-snapped points from edit
+                points: updatedData.points && updatedData.points.length > 0 ? updatedData.points : (editingRoute.points || []),
                 ...(updatedData.distance ? { distance: updatedData.distance + " MI" } : {}),
                 ...(updatedData.time ? { time: updatedData.time } : {}),
                 ...(updatedData.elevGain ? { elevation: "+" + Number(updatedData.elevGain).toLocaleString() + " FT" } : {}),
@@ -9972,11 +9978,19 @@ export default function Trailhead() {
             const recPins = [];
             if (routeData.points && routeData.points.length > 0) {
               recPins.push({ lat: routeData.points[0].lat, lng: routeData.points[0].lng });
-              // Add photo pins
-              if (routeData.photos) routeData.photos.filter(p => p.lat && p.lng).forEach(p => recPins.push({ lat: p.lat, lng: p.lng, photo: true }));
+              // Add photo pins with isPhotoOnly so they don't break the polyline
+              if (routeData.photos) routeData.photos.filter(p => p.lat && p.lng).forEach(p => recPins.push({ lat: p.lat, lng: p.lng, photo: p.url || true, isPhotoOnly: true }));
               if (routeData.points.length > 1) recPins.push({ lat: routeData.points[routeData.points.length - 1].lat, lng: routeData.points[routeData.points.length - 1].lng });
             }
-            const allPins = routeData.pins && routeData.pins.length > 0 ? routeData.pins : recPins;
+            // Merge: if RouteDetailsForm added manual pins, combine them with photo pins from recording
+            let allPins;
+            if (routeData.pins && routeData.pins.length > 0) {
+              // User added manual pins in details form — keep them, but also add photo pins from recording
+              const photoPins = recPins.filter(p => p.isPhotoOnly);
+              allPins = [...routeData.pins, ...photoPins];
+            } else {
+              allPins = recPins;
+            }
             setUserRoutes(prev => [{
               id,
               name: routeData.name,
