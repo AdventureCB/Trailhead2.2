@@ -4106,7 +4106,7 @@ function RouteRecorder({ onClose, onSave }) {
 
   const saveWaypoint = () => {
     if (!showWaypointPopup) return;
-    const wp = { ...showWaypointPopup, desc: wpDesc.trim(), photo: wpPhoto };
+    const wp = { ...showWaypointPopup, desc: wpDesc.trim(), photo: wpPhoto ? wpPhoto.url : null };
     setRouteWaypoints(prev => [...prev, wp]);
     setShowWaypointPopup(null);
     setWpDesc("");
