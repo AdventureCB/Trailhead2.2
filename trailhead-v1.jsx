@@ -10522,6 +10522,20 @@ function OnboardingScreen({ session, onComplete, onSetProfilePic, onAddBuild }) 
           first_build: buildName || model ? { name: buildName, year, make, model } : null,
         },
       });
+      // Option A: explicit client-side profile row update so that
+      // public.profiles reflects the chosen handle/name/avatar. The
+      // signup trigger creates the row with a placeholder handle; this
+      // update replaces it with the user's real one.
+      if (session && session.user && session.user.id) {
+        try {
+          await supabase.from("profiles").update({
+            handle: cleanHandle,
+            full_name: prefillName || null,
+            avatar_url: prefillAvatar || null,
+            updated_at: new Date().toISOString(),
+          }).eq("id", session.user.id);
+        } catch (e) { /* best-effort */ }
+      }
     } catch (e) { /* best-effort — handle is the only blocker */ }
     // Persist the build to local state so it shows up on the Profile screen.
     // onAddBuild expects the full AddBuildForm shape; stub out the mod fields
@@ -12146,6 +12160,59 @@ const __INITIAL_SHARED_LINK = (function() {
   return null;
 })();
 
+// ─── Supabase data shape helpers ──────────────────────────────────────────
+// The app was originally wired against hardcoded mock data, so screens expect
+// a specific "local" build shape with fields like owner/handle/initial/tags.
+// These helpers let us keep that shape intact while the source of truth moves
+// to the `public.builds` table — we just translate at the edge.
+function dbRowToLocalBuild(row, profile) {
+  if (!row) return null;
+  const bd = row.build_data || {};
+  const displayName = (row.name || `${row.year || ""} ${row.make || ""} ${row.model || ""}`.trim() || "UNNAMED BUILD").toUpperCase();
+  const profileHandle = profile && profile.handle ? "@" + profile.handle : "";
+  const profileName = (profile && profile.full_name) || "You";
+  return {
+    id: row.id,
+    rawId: row.id,
+    name: displayName,
+    owner: profileName,
+    handle: profileHandle,
+    initial: (profileName || "U").charAt(0).toUpperCase(),
+    year: row.year,
+    make: row.make || "",
+    model: row.model || "",
+    tags: [row.trim ? row.trim.toUpperCase() : (row.make || "").toUpperCase(), "BUILD"].filter(Boolean),
+    suspension: (bd.suspension && bd.suspension.value) || "",
+    tires: (bd.tires && bd.tires.value) || "",
+    bumpers: (bd.bumpers && bd.bumpers.value) || "",
+    miles: "0",
+    elevation: "0 ft",
+    routes: 0,
+    hasCamper: !!bd.hasCamper,
+    camperMake: bd.camperMake || "",
+    camperModel: bd.camperModel || "",
+    isMine: true,
+    isFollowing: true,
+    likes: 0,
+    heroImg: row.hero_img,
+    image: row.hero_img,
+    buildData: bd,
+  };
+}
+
+function clientDataToDbBuild(data, userId) {
+  return {
+    user_id: userId,
+    name: (data.buildName || `${data.year || ""} ${data.make || ""} ${data.model || ""}`.trim()) || null,
+    year: data.year ? (parseInt(data.year) || null) : null,
+    make: data.make || null,
+    model: data.model || null,
+    trim: data.trim || null,
+    hero_img: (data.mainPhotos && data.mainPhotos[0] && data.mainPhotos[0].url) || null,
+    build_data: data,
+  };
+}
+
 export default function Trailhead() {
   // Seed from cached module-scope URL parse so LoginScreen never mounts for shared links.
   const initialSharedLink = __INITIAL_SHARED_LINK;
@@ -12154,6 +12221,28 @@ export default function Trailhead() {
   // show the login screen (unless we're in guest/shared-link mode).
   const [supabaseSession, setSupabaseSession] = useState(null);
   const [sessionHydrated, setSessionHydrated] = useState(false);
+  // Profile row from public.profiles, fetched after sign-in. Source of truth
+  // for handle / full_name / avatar_url — supersedes user_metadata reads.
+  const [currentProfile, setCurrentProfile] = useState(null);
+  // Hydrates profile + builds from Supabase for a given signed-in session.
+  // Safe to call multiple times — idempotent for the same user.
+  const hydrateUserData = async (session) => {
+    if (!session || !session.user || !session.user.id) return;
+    const uid = session.user.id;
+    try {
+      const { data: profileRow } = await supabase
+        .from("profiles").select("*").eq("id", uid).maybeSingle();
+      if (profileRow) setCurrentProfile(profileRow);
+      const { data: buildRows } = await supabase
+        .from("builds").select("*").eq("user_id", uid).order("created_at", { ascending: false });
+      if (Array.isArray(buildRows)) {
+        setUserBuilds(buildRows.map(r => dbRowToLocalBuild(r, profileRow)));
+      }
+      if (profileRow && profileRow.avatar_url) {
+        setProfilePic(prev => prev || profileRow.avatar_url);
+      }
+    } catch (e) { /* best-effort; UI stays functional on empty state */ }
+  };
   useEffect(() => {
     let cancelled = false;
     // 1) Hydrate any existing session on first mount.
@@ -12168,6 +12257,7 @@ export default function Trailhead() {
         // route them into the onboarding flow instead of the app.
         const hasHandle = !!(session.user && session.user.user_metadata && session.user.user_metadata.handle);
         setAuthState(hasHandle ? "app" : "onboarding");
+        if (hasHandle) hydrateUserData(session);
       }
     });
     // 2) Subscribe to auth state changes (sign-in, sign-out, token refresh, OAuth callback).
@@ -12185,8 +12275,11 @@ export default function Trailhead() {
           return hasHandle ? "app" : "onboarding";
         });
         setIsGuest(false);
+        if (hasHandle) hydrateUserData(session);
       }
       if (event === "SIGNED_OUT") {
+        setCurrentProfile(null);
+        setUserBuilds([]);
         setAuthState("login");
       }
       // USER_UPDATED fires after supabase.auth.updateUser() — session object
@@ -12324,35 +12417,50 @@ export default function Trailhead() {
     setDmInitialUser(user || null); setDmInitialMessage(prefillMsg || ""); setDmSharedPost(sharedPost || null); setDmKey(k => k + 1); setShowDM(true);
   };
 
-  const addBuild = (data) => {
+  const addBuild = async (data) => {
     const displayName = data.buildName || `${data.year} ${data.make} ${data.model}`;
     const heroImg = data.mainPhotos && data.mainPhotos.length > 0 ? data.mainPhotos[0].url : null;
-    // Add to userBuilds for profile & gallery
-    const newBuild = {
-      id: Date.now(),
-      name: displayName.toUpperCase(),
-      owner: "Kyle Morrison",
-      handle: "@KyleLPO",
-      initial: "K",
-      year: parseInt(data.year) || 2024,
-      make: data.make,
-      model: data.model,
-      tags: [data.trim ? data.trim.toUpperCase() : data.make.toUpperCase(), "NEW BUILD"],
-      suspension: data.suspension.value || "",
-      tires: data.tires.value || "",
-      bumpers: data.bumpers.value || "",
-      miles: "0",
-      elevation: "0 ft",
-      routes: 0,
-      hasCamper: data.hasCamper,
-      camperMake: data.camperMake || "",
-      camperModel: data.camperModel || "",
-      isMine: true,
-      isFollowing: true,
-      likes: 0,
-      heroImg,
-      buildData: data,
-    };
+    // Persist to Supabase (public.builds) when signed in. Falls back to
+    // local-only state when not — this keeps the guest/demo paths working.
+    let newBuild = null;
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (uid) {
+      try {
+        const dbRow = clientDataToDbBuild(data, uid);
+        const { data: inserted, error } = await supabase
+          .from("builds").insert(dbRow).select().single();
+        if (!error && inserted) {
+          newBuild = dbRowToLocalBuild(inserted, currentProfile);
+        }
+      } catch (e) { /* fall through to local-only */ }
+    }
+    if (!newBuild) {
+      newBuild = {
+        id: Date.now(),
+        name: displayName.toUpperCase(),
+        owner: (currentProfile && currentProfile.full_name) || "You",
+        handle: currentProfile && currentProfile.handle ? "@" + currentProfile.handle : "",
+        initial: ((currentProfile && currentProfile.full_name) || "U").charAt(0).toUpperCase(),
+        year: parseInt(data.year) || 2024,
+        make: data.make,
+        model: data.model,
+        tags: [data.trim ? data.trim.toUpperCase() : (data.make || "").toUpperCase(), "NEW BUILD"],
+        suspension: data.suspension.value || "",
+        tires: data.tires.value || "",
+        bumpers: data.bumpers.value || "",
+        miles: "0",
+        elevation: "0 ft",
+        routes: 0,
+        hasCamper: data.hasCamper,
+        camperMake: data.camperMake || "",
+        camperModel: data.camperModel || "",
+        isMine: true,
+        isFollowing: true,
+        likes: 0,
+        heroImg,
+        buildData: data,
+      };
+    }
     setUserBuilds(prev => [newBuild, ...prev]);
     // Post to feed if share enabled
     if (data.shareToFeed) {
@@ -12378,22 +12486,43 @@ export default function Trailhead() {
     awardPoints(POINTS.buildAdded, "Build Added");
   };
 
-  const updateBuild = (buildId, data) => {
+  const updateBuild = async (buildId, data) => {
     const displayName = data.buildName || `${data.year} ${data.make} ${data.model}`;
     const heroImg = data.mainPhotos && data.mainPhotos.length > 0 ? data.mainPhotos[0].url : null;
+    // Persist changes for Supabase-backed builds (buildId will be a uuid string).
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (uid && typeof buildId === "string" && buildId.length > 20) {
+      try {
+        const dbRow = clientDataToDbBuild(data, uid);
+        await supabase.from("builds").update({
+          ...dbRow,
+          updated_at: new Date().toISOString(),
+        }).eq("id", buildId).eq("user_id", uid);
+      } catch (e) { /* best-effort */ }
+    }
     setUserBuilds(prev => prev.map(b => b.id === buildId ? {
       ...b,
       name: displayName.toUpperCase(),
       year: parseInt(data.year) || b.year,
       make: data.make || b.make,
       model: data.model || b.model,
-      tags: [data.trim ? data.trim.toUpperCase() : data.make.toUpperCase(), "UPDATED"],
+      tags: [data.trim ? data.trim.toUpperCase() : (data.make || "").toUpperCase(), "UPDATED"],
       heroImg,
       buildData: data,
       hasCamper: data.hasCamper,
       camperMake: data.camperMake || "",
       camperModel: data.camperModel || "",
     } : b));
+  };
+  const deleteBuild = async (buildId) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (uid && typeof buildId === "string" && buildId.length > 20) {
+      try {
+        await supabase.from("builds").delete().eq("id", buildId).eq("user_id", uid);
+      } catch (e) { /* best-effort */ }
+    }
+    setUserBuilds(prev => prev.filter(b => b.id !== buildId));
+    setFeedItems(prev => prev.filter(p => p.buildId !== buildId && p.buildRawId !== buildId));
   };
 
   const openForumThread = (threadId, catName, subName) => {
@@ -12478,7 +12607,7 @@ export default function Trailhead() {
           isOtherProfile ? (
             <OtherProfileScreen userId={profileStack[1]} onBack={goBack} onMessage={(user) => openDM(user)} />
           ) : (
-            <ProfileScreen initialUserName={(supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name) || null} initialUserHandle={(supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle) || null} onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={(id) => { setUserBuilds(prev => prev.filter(b => b.id !== id)); setFeedItems(prev => prev.filter(p => p.buildId !== id && p.id !== id)); }} profilePic={profilePic} onSetProfilePic={setProfilePic} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => setFeedItems(prev => prev.filter(p => p.id !== id))} onEditPost={(id, newText) => setFeedItems(prev => prev.map(p => p.id === id ? { ...p, title: newText } : p))} onUpdateConvoy={(convoyId, updates) => {
+            <ProfileScreen initialUserName={(currentProfile && currentProfile.full_name) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name) || null} initialUserHandle={(currentProfile && currentProfile.handle) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle) || null} onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={deleteBuild} profilePic={profilePic} onSetProfilePic={setProfilePic} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => setFeedItems(prev => prev.filter(p => p.id !== id))} onEditPost={(id, newText) => setFeedItems(prev => prev.map(p => p.id === id ? { ...p, title: newText } : p))} onUpdateConvoy={(convoyId, updates) => {
               setFeedItems(prev => prev.map(p => p.id === convoyId ? { ...p, ...updates } : p));
               // Notify going/maybe RSVPs
               const convoy = feedItems.find(p => p.id === convoyId);
@@ -12497,7 +12626,7 @@ export default function Trailhead() {
             {screen === "feed" && <FeedScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} pendingPostNav={pendingPostNav} onConsumePendingPostNav={() => setPendingPostNav(null)} onSharedPostMissing={() => { setSharedLinkToast("That post couldn't be loaded. It may have been removed or require sign-in."); setTimeout(() => setSharedLinkToast(""), 4500); }} onViewUser={openUserProfile} onOpenMap={openMap} onOpenThread={(threadId, catName, subName) => openForumThread(threadId, catName, subName)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onViewBuild={handleViewBuild} feedItems={feedItems} onUpdateFeed={requireAuth((items) => setFeedItems(items))} onAddNotification={requireAuth(addNotification)} forumUserReplies={forumUserReplies} forumViewCounts={forumViewCounts} savedRoutes={savedRoutes} onSaveRoute={requireAuth((route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev]))} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} onStartNav={(route) => setActiveNavRoute(route)} onAwardPoints={awardPoints} />}
             {screen === "forum" && <ForumScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} pendingThread={pendingThread} onPendingHandled={() => setPendingThread(null)} onAddNotification={requireAuth(addNotification)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onAddFeedPost={requireAuth((post) => setFeedItems(prev => [post, ...prev]))} userThreads={forumUserThreads} setUserThreads={requireAuth(setForumUserThreads)} userReplies={forumUserReplies} setUserReplies={requireAuth(setForumUserReplies)} likedForumItems={forumLikedItems} setLikedForumItems={requireAuth(setForumLikedItems)} forumLikeCounts={forumLikeCounts} setForumLikeCounts={requireAuth(setForumLikeCounts)} forumViewCounts={forumViewCounts} setForumViewCounts={setForumViewCounts} onAwardPoints={awardPoints} />}
             {screen === "routes" && <RoutesScreen userBuilds={myBuildsForLink} onRecordRoute={requireAuth(() => setShowRecorder(true))} onManualEntry={requireAuth(() => setShowManualRoute(true))} userRoutes={userRoutes} onUpdateRoute={requireAuth((routeId, updates) => setUserRoutes(prev => prev.map(r => r.id === routeId ? { ...r, ...updates } : r)))} savedRoutes={savedRoutes} onSaveRoute={requireAuth((route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev]))} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} onOpenDM={(user, msg, sharedPost) => openDM(user, msg, sharedPost)} onAddFeedPost={requireAuth((post) => setFeedItems(prev => [post, ...prev]))} onStartNav={(route) => setActiveNavRoute(route)} />}
-            {screen === "builds" && <BuildsScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onViewUser={openUserProfile} userBuilds={userBuilds} pendingBuildNav={pendingBuildNav} onConsumePendingBuildNav={() => setPendingBuildNav(null)} onAddBuild={requireAuth((data) => { const id = "build_" + Date.now(); const bd = { id, name: data.buildName || `${data.year} ${data.make} ${data.model}`, year: data.year, make: data.make, model: data.model, trim: data.trim, heroImg: data.mainPhotos && data.mainPhotos.length > 0 ? data.mainPhotos[0].url : null, buildData: data, tags: [], createdAt: Date.now() }; setUserBuilds(prev => [...prev, bd]); if (data.shareToFeed) { setFeedItems(prev => [{ id, type: "BUILDS", user: "KyleLPO", initial: "K", time: Date.now(), title: (data.buildName || `${data.year} ${data.make} ${data.model}`).toUpperCase(), body: `${data.year} ${data.make} ${data.model}${data.trim ? " " + data.trim : ""}`, vehicle: `${data.year} ${data.make} ${data.model}${data.trim ? " " + data.trim : ""}`, photoUrls: data.mainPhotos && data.mainPhotos.length > 0 ? [data.mainPhotos[0].url] : undefined, image: data.mainPhotos && data.mainPhotos.length > 0 ? data.mainPhotos[0].url : null, likes: 0, comments: 0, buildData: data, buildRawId: id }, ...prev]); } awardPoints(POINTS.feedPost, "Build Added"); })} userRoutes={userRoutes} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onUpdateBuild={requireAuth(updateBuild)} onPostBuildToFeed={requireAuth((b) => { const bd = b.buildData; const heroImg = b.image || (bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url) || null; setFeedItems(prev => [{ id: "feedbuild_" + Date.now(), type: "BUILDS", user: "KyleLPO", initial: "K", time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, vehicle: `${b.year} ${b.make} ${b.model}`, photoUrls: heroImg ? [heroImg] : undefined, image: heroImg, likes: 0, comments: 0, buildData: bd, buildRawId: b.rawId != null ? b.rawId : null }, ...prev]); awardPoints(POINTS.feedPost, "Build Shared"); })} />}
+            {screen === "builds" && <BuildsScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onViewUser={openUserProfile} userBuilds={userBuilds} pendingBuildNav={pendingBuildNav} onConsumePendingBuildNav={() => setPendingBuildNav(null)} onAddBuild={requireAuth(addBuild)} userRoutes={userRoutes} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onUpdateBuild={requireAuth(updateBuild)} onPostBuildToFeed={requireAuth((b) => { const bd = b.buildData; const heroImg = b.image || (bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url) || null; setFeedItems(prev => [{ id: "feedbuild_" + Date.now(), type: "BUILDS", user: "KyleLPO", initial: "K", time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, vehicle: `${b.year} ${b.make} ${b.model}`, photoUrls: heroImg ? [heroImg] : undefined, image: heroImg, likes: 0, comments: 0, buildData: bd, buildRawId: b.rawId != null ? b.rawId : null }, ...prev]); awardPoints(POINTS.feedPost, "Build Shared"); })} />}
             {screen === "ranks" && (isGuest
               ? <GuestGateScreen title="RANKS REQUIRE AN ACCOUNT" subtitle="Sign in to see the leaderboard and start earning points from your posts, routes and builds." onSignIn={goToLoginFromGuest} />
               : <RanksScreen myPoints={myTotalPoints} pointsBreakdown={pointsBreakdown} />
