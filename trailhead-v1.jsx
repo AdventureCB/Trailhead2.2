@@ -12192,7 +12192,10 @@ async function compressImage(file, { maxDim = 512, maxBytes = 900 * 1024, mimeTy
     r.readAsDataURL(file);
   });
   const img = await new Promise((resolve, reject) => {
-    const i = new Image();
+    // NOTE: can't use `new Image()` — the Trailhead module imports an `Image`
+    // icon from lucide-react which shadows the global constructor. Use the
+    // DOM API instead.
+    const i = document.createElement("img");
     i.onload = () => resolve(i);
     i.onerror = reject;
     i.src = dataUrl;
