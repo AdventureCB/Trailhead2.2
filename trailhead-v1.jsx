@@ -8796,7 +8796,7 @@ function AddBuildForm({ onClose, onSave, initialData }) {
 }
 
 /* ─── PROFILE SCREEN (Own Profile) ─── */
-function ProfileScreen({ onViewUser, onLogout, userBuilds, onAddBuild, onUpdateBuild, onDeleteBuild, profilePic, onSetProfilePic, notifPrefs, onSetNotifPrefs, feedItems, onDeletePost, onEditPost, onUpdateConvoy, onGoToPost, myPoints: myPointsProp, onEnterGuestPreview }) {
+function ProfileScreen({ initialUserName, initialUserHandle, onViewUser, onLogout, userBuilds, onAddBuild, onUpdateBuild, onDeleteBuild, profilePic, onSetProfilePic, notifPrefs, onSetNotifPrefs, feedItems, onDeletePost, onEditPost, onUpdateConvoy, onGoToPost, myPoints: myPointsProp, onEnterGuestPreview }) {
   const [isPublic, setIsPublic] = useState(true);
   const [activeTab, setActiveTab] = useState("builds");
   const [activeBuild, setActiveBuild] = useState(0);
@@ -8808,8 +8808,8 @@ function ProfileScreen({ onViewUser, onLogout, userBuilds, onAddBuild, onUpdateB
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
   const [showNotifSettings, setShowNotifSettings] = useState(false);
-  const [userName, setUserName] = useState("Kyle Morrison");
-  const [userHandle, setUserHandle] = useState("@KyleLPO");
+  const [userName, setUserName] = useState(initialUserName || "Kyle Morrison");
+  const [userHandle, setUserHandle] = useState(initialUserHandle ? "@" + initialUserHandle.replace(/^@/, "") : "@KyleLPO");
   const [userBio, setUserBio] = useState("");
   const profilePicRef = useRef(null);
   const settingsPicRef = useRef(null);
@@ -10342,13 +10342,19 @@ function SignupScreen({ onSignup, onGoToLogin, onSetProfilePic }) {
 // they came in through Google OAuth (or some other flow that bypassed
 // SignupScreen). Collects the same profile data SignupScreen step 2 does,
 // plus a handle field at top, and writes everything to user_metadata.
-function OnboardingScreen({ session, onComplete, onSetProfilePic }) {
+function OnboardingScreen({ session, onComplete, onSetProfilePic, onAddBuild }) {
   const prefillName =
     (session && session.user && session.user.user_metadata && (session.user.user_metadata.full_name || session.user.user_metadata.name)) || "";
   const prefillAvatar =
     (session && session.user && session.user.user_metadata && session.user.user_metadata.avatar_url) || null;
   const [handle, setHandle] = useState("");
-  const [rig, setRig] = useState({ year: "", make: "", model: "", buildName: "" });
+  const [buildName, setBuildName] = useState("");
+  const [year, setYear] = useState("");
+  const [yearMode, setYearMode] = useState("select");
+  const [make, setMake] = useState("");
+  const [makeMode, setMakeMode] = useState("select");
+  const [model, setModel] = useState("");
+  const [modelMode, setModelMode] = useState("select");
   const [signupPic, setSignupPic] = useState(prefillAvatar);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -10366,31 +10372,69 @@ function OnboardingScreen({ session, onComplete, onSetProfilePic }) {
     e.target.value = "";
   };
 
-  const setR = (key, val) => setRig({ ...rig, [key]: val });
-
   const inputStyle = {
     width: "100%", boxSizing: "border-box", padding: "14px 16px", borderRadius: 8,
     background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white,
     fontFamily: serif, fontSize: 14, outline: "none", transition: "border 0.2s",
   };
+  const selectStyle = {
+    ...inputStyle,
+    appearance: "none",
+    backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238B7D6B' stroke-width='2'%3e%3cpolyline points='6 9 12 15 18 9'/%3e%3c/svg%3e")`,
+    backgroundRepeat: "no-repeat",
+    backgroundPosition: "right 14px center",
+    paddingRight: 36,
+  };
   const labelStyle = { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 600, display: "block", marginBottom: 6 };
+
+  const modelOptions = make ? (VEHICLE_MODELS[make] || []) : [];
 
   const handleFinish = async () => {
     if (!handle.trim()) { setError("Choose a username to continue."); return; }
     setError("");
     setLoading(true);
+    const cleanHandle = handle.trim().replace(/^@/, "");
     try {
       await supabase.auth.updateUser({
         data: {
-          handle: handle.trim().replace(/^@/, ""),
+          handle: cleanHandle,
           // Preserve whatever name we already have from the OAuth provider
           ...(prefillName ? { full_name: prefillName } : {}),
-          first_build: rig.buildName || rig.model ? {
-            name: rig.buildName, year: rig.year, make: rig.make, model: rig.model,
-          } : null,
+          first_build: buildName || model ? { name: buildName, year, make, model } : null,
         },
       });
     } catch (e) { /* best-effort — handle is the only blocker */ }
+    // Persist the build to local state so it shows up on the Profile screen.
+    // onAddBuild expects the full AddBuildForm shape; stub out the mod fields
+    // with empty objects so the shape matches.
+    if (onAddBuild && (buildName || (year && make && model))) {
+      const emptyMod = () => ({ value: "", photo: [], link: "" });
+      try {
+        onAddBuild({
+          buildName,
+          year,
+          make,
+          model,
+          trim: "",
+          mainPhotos: [],
+          suspension: emptyMod(),
+          tires: emptyMod(),
+          wheels: emptyMod(),
+          bumpers: emptyMod(),
+          armor: emptyMod(),
+          lighting: emptyMod(),
+          rack: emptyMod(),
+          winch: emptyMod(),
+          otherMods: emptyMod(),
+          hasCamper: false,
+          camperMake: "",
+          camperModel: "",
+          camperPhoto: [],
+          camperLink: "",
+          shareToFeed: false,
+        });
+      } catch (e) { /* best-effort */ }
+    }
     setLoading(false);
     onComplete();
   };
@@ -10457,23 +10501,85 @@ function OnboardingScreen({ session, onComplete, onSetProfilePic }) {
                 <span style={{ fontFamily: serif, fontSize: 11, color: T.tertiary }}>Optional — you can add more vehicles later</span>
               </div>
             </div>
+
             <div style={{ marginBottom: 14 }}>
               <label style={labelStyle}>BUILD NAME</label>
-              <input value={rig.buildName} onChange={(e) => setR("buildName", e.target.value)} placeholder='e.g. "The Highlander"' style={inputStyle} onFocus={(e) => e.target.style.borderColor = T.copper} onBlur={(e) => e.target.style.borderColor = T.charcoal} />
+              <input value={buildName} onChange={(e) => setBuildName(e.target.value)} placeholder='e.g. "The Highlander"' style={inputStyle} onFocus={(e) => e.target.style.borderColor = T.copper} onBlur={(e) => e.target.style.borderColor = T.charcoal} />
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10, marginBottom: 14 }}>
-              <div>
-                <label style={labelStyle}>YEAR</label>
-                <input value={rig.year} onChange={(e) => setR("year", e.target.value)} placeholder="2022" style={inputStyle} onFocus={(e) => e.target.style.borderColor = T.copper} onBlur={(e) => e.target.style.borderColor = T.charcoal} />
-              </div>
-              <div>
-                <label style={labelStyle}>MAKE</label>
-                <input value={rig.make} onChange={(e) => setR("make", e.target.value)} placeholder="Toyota" style={inputStyle} onFocus={(e) => e.target.style.borderColor = T.copper} onBlur={(e) => e.target.style.borderColor = T.charcoal} />
-              </div>
+
+            {/* YEAR */}
+            <div style={{ marginBottom: 14 }}>
+              <label style={labelStyle}>YEAR</label>
+              {yearMode === "select" ? (
+                <select
+                  value={year}
+                  onChange={(e) => {
+                    if (e.target.value === "__other__") { setYearMode("other"); setYear(""); }
+                    else setYear(e.target.value);
+                  }}
+                  style={selectStyle}
+                >
+                  <option value="" disabled>Select year</option>
+                  {VEHICLE_YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+                  <option value="__other__">Other / Older</option>
+                </select>
+              ) : (
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input value={year} onChange={(e) => setYear(e.target.value)} placeholder="Enter year" style={{ ...inputStyle, flex: 1 }} />
+                  <button onClick={() => { setYearMode("select"); setYear(""); }} style={{ padding: "0 14px", borderRadius: 8, background: "transparent", border: `1px solid ${T.charcoal}`, color: T.tertiary, fontFamily: sans, fontSize: 10, letterSpacing: 1, cursor: "pointer" }}>BACK</button>
+                </div>
+              )}
             </div>
+
+            {/* MAKE */}
+            <div style={{ marginBottom: 14 }}>
+              <label style={labelStyle}>MAKE</label>
+              {makeMode === "select" ? (
+                <select
+                  value={make}
+                  onChange={(e) => {
+                    if (e.target.value === "__other__") { setMakeMode("other"); setMake(""); setModel(""); }
+                    else { setMake(e.target.value); setModel(""); setModelMode("select"); }
+                  }}
+                  style={selectStyle}
+                >
+                  <option value="" disabled>Select make</option>
+                  {VEHICLE_MAKES.map(m => <option key={m} value={m}>{m}</option>)}
+                  <option value="__other__">Other</option>
+                </select>
+              ) : (
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input value={make} onChange={(e) => setMake(e.target.value)} placeholder="Enter make" style={{ ...inputStyle, flex: 1 }} />
+                  <button onClick={() => { setMakeMode("select"); setMake(""); setModel(""); }} style={{ padding: "0 14px", borderRadius: 8, background: "transparent", border: `1px solid ${T.charcoal}`, color: T.tertiary, fontFamily: sans, fontSize: 10, letterSpacing: 1, cursor: "pointer" }}>BACK</button>
+                </div>
+              )}
+            </div>
+
+            {/* MODEL */}
             <div>
               <label style={labelStyle}>MODEL</label>
-              <input value={rig.model} onChange={(e) => setR("model", e.target.value)} placeholder="Tundra TRD Pro" style={inputStyle} onFocus={(e) => e.target.style.borderColor = T.copper} onBlur={(e) => e.target.style.borderColor = T.charcoal} />
+              {modelMode === "select" && modelOptions.length > 0 ? (
+                <select
+                  value={model}
+                  onChange={(e) => {
+                    if (e.target.value === "__other__") { setModelMode("other"); setModel(""); }
+                    else setModel(e.target.value);
+                  }}
+                  style={selectStyle}
+                  disabled={!make}
+                >
+                  <option value="" disabled>{make ? "Select model" : "Pick a make first"}</option>
+                  {modelOptions.map(m => <option key={m} value={m}>{m}</option>)}
+                  <option value="__other__">Other</option>
+                </select>
+              ) : (
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input value={model} onChange={(e) => setModel(e.target.value)} placeholder="Enter model" style={{ ...inputStyle, flex: 1 }} />
+                  {modelOptions.length > 0 && (
+                    <button onClick={() => { setModelMode("select"); setModel(""); }} style={{ padding: "0 14px", borderRadius: 8, background: "transparent", border: `1px solid ${T.charcoal}`, color: T.tertiary, fontFamily: sans, fontSize: 10, letterSpacing: 1, cursor: "pointer" }}>BACK</button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -11964,6 +12070,12 @@ export default function Trailhead() {
       if (event === "SIGNED_OUT") {
         setAuthState("login");
       }
+      // USER_UPDATED fires after supabase.auth.updateUser() — session object
+      // now carries the latest user_metadata. setSupabaseSession above already
+      // handled it, but we also sync session hydration flag for consistency.
+      if (event === "USER_UPDATED") {
+        setSessionHydrated(true);
+      }
     });
     return () => { cancelled = true; sub && sub.subscription && sub.subscription.unsubscribe && sub.subscription.unsubscribe(); };
   }, []);
@@ -12212,6 +12324,7 @@ export default function Trailhead() {
     return <OnboardingScreen
       session={supabaseSession}
       onSetProfilePic={setProfilePic}
+      onAddBuild={addBuild}
       onComplete={() => setAuthState("app")}
     />;
   }
@@ -12246,7 +12359,7 @@ export default function Trailhead() {
           isOtherProfile ? (
             <OtherProfileScreen userId={profileStack[1]} onBack={goBack} onMessage={(user) => openDM(user)} />
           ) : (
-            <ProfileScreen onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={(id) => { setUserBuilds(prev => prev.filter(b => b.id !== id)); setFeedItems(prev => prev.filter(p => p.buildId !== id && p.id !== id)); }} profilePic={profilePic} onSetProfilePic={setProfilePic} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => setFeedItems(prev => prev.filter(p => p.id !== id))} onEditPost={(id, newText) => setFeedItems(prev => prev.map(p => p.id === id ? { ...p, title: newText } : p))} onUpdateConvoy={(convoyId, updates) => {
+            <ProfileScreen initialUserName={(supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name) || null} initialUserHandle={(supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle) || null} onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={(id) => { setUserBuilds(prev => prev.filter(b => b.id !== id)); setFeedItems(prev => prev.filter(p => p.buildId !== id && p.id !== id)); }} profilePic={profilePic} onSetProfilePic={setProfilePic} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => setFeedItems(prev => prev.filter(p => p.id !== id))} onEditPost={(id, newText) => setFeedItems(prev => prev.map(p => p.id === id ? { ...p, title: newText } : p))} onUpdateConvoy={(convoyId, updates) => {
               setFeedItems(prev => prev.map(p => p.id === convoyId ? { ...p, ...updates } : p));
               // Notify going/maybe RSVPs
               const convoy = feedItems.find(p => p.id === convoyId);
