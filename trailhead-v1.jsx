@@ -268,15 +268,6 @@ function MapOverlay({ coords, location, title, onClose, recoveryCtx, onRecoveryS
         mapTypeControl: true,
         streetViewControl: false,
         fullscreenControl: false,
-        styles: [
-          { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
-          { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
-          { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
-          { featureType: "water", elementType: "geometry", stylers: [{ color: "#17263c" }] },
-          { featureType: "road", elementType: "geometry", stylers: [{ color: "#38414e" }] },
-          { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#212a37" }] },
-          { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#263c3f" }] },
-        ],
       });
 
       mapInstance.current = map;
@@ -4215,15 +4206,6 @@ function RouteRecorder({ onClose, onSave, skipDetailsForm, userBuilds }) {
         mapTypeId: "terrain",
         disableDefaultUI: true,
         zoomControl: true,
-        styles: [
-          { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
-          { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
-          { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
-          { featureType: "water", elementType: "geometry", stylers: [{ color: "#17263c" }] },
-          { featureType: "road", elementType: "geometry", stylers: [{ color: "#38414e" }] },
-          { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#212a37" }] },
-          { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#263c3f" }] },
-        ],
       });
       mapInst.current = map;
       polyRef.current = new window.google.maps.Polyline({
@@ -4642,14 +4624,6 @@ function RouteMapPreview({ pins, points, photos, highlightedPinIdx, onPhotoSelec
         mapTypeControl: false,
         streetViewControl: false,
         fullscreenControl: false,
-        styles: [
-          { elementType: "geometry", stylers: [{ color: "#1a1a1a" }] },
-          { elementType: "labels.text.fill", stylers: [{ color: "#8b7d6b" }] },
-          { elementType: "labels.text.stroke", stylers: [{ color: "#111111" }] },
-          { featureType: "road", elementType: "geometry", stylers: [{ color: "#2a2a28" }] },
-          { featureType: "water", elementType: "geometry", stylers: [{ color: "#0e1626" }] },
-          { featureType: "poi", stylers: [{ visibility: "off" }] },
-        ],
       });
       map.fitBounds(bounds, 30);
       mapInst.current = map;
@@ -4858,14 +4832,6 @@ function RouteNavigation({ route, onClose }) {
         disableDefaultUI: true,
         zoomControl: true,
         mapTypeId: "terrain",
-        styles: [
-          { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
-          { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
-          { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
-          { featureType: "water", elementType: "geometry", stylers: [{ color: "#17263c" }] },
-          { featureType: "road", elementType: "geometry", stylers: [{ color: "#38414e" }] },
-          { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#263c3f" }] },
-        ],
       });
       mapInst.current = map;
 
@@ -5064,14 +5030,6 @@ function RoutePinMap({ pins, setPins, linkingPhotoIdx, onLinkPin, onRoutePoints,
         mapTypeId: "terrain",
         disableDefaultUI: true,
         zoomControl: true,
-        styles: [
-          { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
-          { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
-          { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
-          { featureType: "water", elementType: "geometry", stylers: [{ color: "#17263c" }] },
-          { featureType: "road", elementType: "geometry", stylers: [{ color: "#38414e" }] },
-          { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#263c3f" }] },
-        ],
       });
       mapInst.current = map;
       polyRef.current = new window.google.maps.Polyline({ map, path: [], strokeColor: T.red, strokeWeight: 3, strokeOpacity: 0.8 });
@@ -10341,14 +10299,6 @@ function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotificatio
         disableDefaultUI: true,
         zoomControl: true,
         gestureHandling: "greedy",
-        styles: [
-          { elementType: "geometry", stylers: [{ color: "#1d1d1d" }] },
-          { elementType: "labels.text.fill", stylers: [{ color: "#999" }] },
-          { elementType: "labels.text.stroke", stylers: [{ color: "#1d1d1d" }] },
-          { featureType: "road", elementType: "geometry", stylers: [{ color: "#333" }] },
-          { featureType: "water", elementType: "geometry", stylers: [{ color: "#0e1626" }] },
-          { featureType: "poi", stylers: [{ visibility: "off" }] },
-        ],
       });
       convoyPinMapInst.current = map;
       if (convoyPin) {
