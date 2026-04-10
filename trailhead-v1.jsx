@@ -3982,7 +3982,7 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
 
 /* ─── ROUTES SCREEN ─── */
 /* ─── Route Recorder Overlay ─── */
-function RouteRecorder({ onClose, onSave, skipDetailsForm }) {
+function RouteRecorder({ onClose, onSave, skipDetailsForm, userBuilds }) {
   const mapRef = useRef(null);
   const mapInst = useRef(null);
   const polyRef = useRef(null);
@@ -4370,6 +4370,7 @@ function RouteRecorder({ onClose, onSave, skipDetailsForm }) {
         onPublish={handlePublish}
         initialPhotos={routePhotos}
         initialWaypoints={routeWaypoints}
+        userBuilds={userBuilds}
       />
     );
   }
@@ -5129,7 +5130,7 @@ function RoutePinMap({ pins, setPins, linkingPhotoIdx, onLinkPin, onRoutePoints 
   );
 }
 
-function RouteDetailsForm({ autoStats, onBack, onPublish, isManual, initialPhotos, isEdit, initialData, initialPins, initialWaypoints }) {
+function RouteDetailsForm({ autoStats, onBack, onPublish, isManual, initialPhotos, isEdit, initialData, initialPins, initialWaypoints, userBuilds }) {
   const d = initialData || {};
   const [name, setName] = useState(d.name || "");
   const [desc, setDesc] = useState(d.desc || "");
@@ -5138,6 +5139,7 @@ function RouteDetailsForm({ autoStats, onBack, onPublish, isManual, initialPhoto
   const [terrains, setTerrains] = useState(d.terrains || []); // multi-select
   const [tags, setTags] = useState(d.tags ? d.tags.join(", ") : "");
   const [shareToFeed, setShareToFeed] = useState(isEdit ? false : true);
+  const [buildId, setBuildId] = useState(d.buildId || ((userBuilds && userBuilds.length > 0) ? userBuilds[0].id : ""));
   const [pins, setPins] = useState(initialPins || []);
   const [routePhotos, setRoutePhotos] = useState(initialPhotos || []); // [{ url, name, lat?, lng? }]
   const routePhotoRef = useRef(null);
@@ -5277,7 +5279,7 @@ function RouteDetailsForm({ autoStats, onBack, onPublish, isManual, initialPhoto
     }));
     const allPins = [...pins, ...waypointPins];
     onPublish({
-      name, desc, difficulty, region, terrains, tags: tags.split(",").map(t => t.trim()).filter(Boolean), shareToFeed, pins: allPins, photos: routePhotos, waypoints,
+      name, desc, difficulty, region, terrains, tags: tags.split(",").map(t => t.trim()).filter(Boolean), shareToFeed, pins: allPins, photos: routePhotos, waypoints, buildId,
       ...(roadPoints.length > 0 ? { points: roadPoints } : {}),
       ...(isManual ? { distance: manualDistance, time: manualTime, elevGain: manualElevGain, maxElev: manualMaxElev, location: manualLocation } : {}),
     });
@@ -5373,6 +5375,24 @@ function RouteDetailsForm({ autoStats, onBack, onPublish, isManual, initialPhoto
             })}
           </div>
         </div>
+
+        {/* Link to Build */}
+        {userBuilds && userBuilds.length > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <span style={rdLabel}>LINK TO BUILD</span>
+            <select
+              value={buildId}
+              onChange={e => setBuildId(e.target.value)}
+              style={{ ...rdInput, appearance: "none", backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238B7D6B' stroke-width='2'%3e%3cpolyline points='6 9 12 15 18 9'/%3e%3c/svg%3e")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 12px center", paddingRight: 32 }}
+            >
+              <option value="">— No build —</option>
+              {userBuilds.map(b => (
+                <option key={b.id} value={b.id}>{b.name || `${b.year} ${b.make} ${b.model}`}</option>
+              ))}
+            </select>
+            <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, display: "block", marginTop: 4 }}>Miles, elevation, and route count will roll up to this build</span>
+          </div>
+        )}
 
         {/* Manual-only: distance, time, elevation */}
         {isManual && (
@@ -6036,12 +6056,14 @@ function RoutesScreen({ onRecordRoute, onManualEntry, userRoutes, onUpdateRoute,
 }
 
 /* ─── BUILDS / PROFILE SCREEN ─── */
-function BuildsScreen({ onViewUser, userBuilds, onAddBuild, onUpdateBuild, onPostBuildToFeed }) {
+function BuildsScreen({ onViewUser, userBuilds, onAddBuild, onUpdateBuild, onPostBuildToFeed, onOpenDM, userRoutes }) {
   const [filter, setFilter] = useState("all"); // "all" | "mine" | "following"
   const [search, setSearch] = useState("");
   const [detailBuildId, setDetailBuildId] = useState(null);
   const [editingBuild, setEditingBuild] = useState(null);
   const [expandedModKey, setExpandedModKey] = useState(null);
+  const [shareMenuOpen, setShareMenuOpen] = useState(false);
+  const [shareToast, setShareToast] = useState("");
   const [carouselImages, setCarouselImages] = useState(null);
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [likedBuilds, setLikedBuilds] = useState({});
@@ -6090,7 +6112,14 @@ function BuildsScreen({ onViewUser, userBuilds, onAddBuild, onUpdateBuild, onPos
     { id: 8, name: "BLACK MAMBA", owner: "Peak Finder", handle: "@Peak_Finder", initial: "P", year: 2023, make: "Ram", model: "2500 Power Wagon", tags: ["HEAVY DUTY", "WINCH READY"], suspension: "Carli Backcountry 2.0, 3\" lift", tires: "Toyo Open Country R/T 37\"", bumpers: "Expedition One front & rear", miles: "2,870", elevation: "94K ft", routes: 41, hasCamper: true, camperMake: "Bundutop", camperModel: "Explorer", isMine: false, isFollowing: false, likes: 512 },
   ];
 
-  const mappedUserBuilds = (userBuilds || []).map((b, i) => ({
+  const mappedUserBuilds = (userBuilds || []).map((b, i) => {
+    // Aggregate stats from linked routes
+    const linked = (userRoutes || []).filter(r => r.buildId === b.id);
+    const totalMi = linked.reduce((acc, r) => acc + (Number(r.distanceMi) || 0), 0);
+    const totalElev = linked.reduce((acc, r) => acc + (Number(r.elevGainFt) || 0), 0);
+    const fmtMi = totalMi >= 1000 ? (totalMi / 1000).toFixed(1) + "K" : Math.round(totalMi).toLocaleString();
+    const fmtElev = totalElev >= 1000 ? (totalElev / 1000).toFixed(0) + "K ft" : totalElev.toLocaleString() + " ft";
+    return {
     id: 100 + i,
     rawId: b.id,
     name: b.name || "UNNAMED BUILD",
@@ -6104,9 +6133,9 @@ function BuildsScreen({ onViewUser, userBuilds, onAddBuild, onUpdateBuild, onPos
     suspension: (b.buildData && b.buildData.suspension && b.buildData.suspension.value) || "",
     tires: (b.buildData && b.buildData.tires && b.buildData.tires.value) || "",
     bumpers: (b.buildData && b.buildData.bumpers && b.buildData.bumpers.value) || "",
-    miles: "0",
-    elevation: "0 ft",
-    routes: 0,
+    miles: linked.length > 0 ? fmtMi : "0",
+    elevation: linked.length > 0 ? fmtElev : "0 ft",
+    routes: linked.length,
     hasCamper: !!(b.camperMake || b.camperModel),
     camperMake: b.camperMake || "",
     camperModel: b.camperModel || "",
@@ -6115,7 +6144,8 @@ function BuildsScreen({ onViewUser, userBuilds, onAddBuild, onUpdateBuild, onPos
     likes: 0,
     image: b.heroImg || null,
     buildData: b.buildData || null,
-  }));
+    };
+  });
 
   const allBuilds = [...defaultBuilds, ...mappedUserBuilds];
 
@@ -6221,7 +6251,7 @@ function BuildsScreen({ onViewUser, userBuilds, onAddBuild, onUpdateBuild, onPos
           <button onClick={() => setDetailBuildId(null)} style={{ position: "absolute", top: 14, left: 14, width: 36, height: 36, borderRadius: 10, background: `${T.darkBg}CC`, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)" }}>
             <ChevronLeft size={20} color={T.white} />
           </button>
-          {/* Like + Edit */}
+          {/* Edit + Like counter */}
           <div style={{ position: "absolute", top: 14, right: 14, display: "flex", gap: 8 }}>
             {detailBuild.isMine && detailBuild.rawId && (
               <button onClick={() => {
@@ -6231,10 +6261,10 @@ function BuildsScreen({ onViewUser, userBuilds, onAddBuild, onUpdateBuild, onPos
                 <Edit3 size={15} color={T.white} />
               </button>
             )}
-            <button onClick={() => toggleLikeBuild(detailBuild.id)} style={{ height: 36, padding: "0 12px", borderRadius: 10, background: liked ? `${T.red}50` : `${T.darkBg}CC`, border: liked ? `1px solid ${T.red}` : "none", display: "flex", alignItems: "center", gap: 5, cursor: "pointer", backdropFilter: "blur(6px)" }}>
+            <div style={{ height: 36, padding: "0 12px", borderRadius: 10, background: `${T.darkBg}CC`, display: "flex", alignItems: "center", gap: 5, backdropFilter: "blur(6px)" }}>
               <Heart size={14} color={T.red} fill={liked ? T.red : "none"} />
               <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>{getBuildLikes(detailBuild)}</span>
-            </button>
+            </div>
           </div>
           {/* Tags + Title */}
           <div style={{ position: "absolute", left: 16, right: 16, bottom: 16 }}>
@@ -6256,15 +6286,60 @@ function BuildsScreen({ onViewUser, userBuilds, onAddBuild, onUpdateBuild, onPos
           </div>
         </div>
 
-        {/* Post to Feed button */}
-        <div style={{ padding: "14px 16px 0" }}>
-          <button
-            onClick={() => onPostBuildToFeed && onPostBuildToFeed(detailBuild)}
-            style={{ width: "100%", padding: "14px", borderRadius: 10, background: T.red, border: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, cursor: "pointer" }}
-          >
-            <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 1.5 }}>POST TO FEED</span>
-            <Camera size={16} color={T.white} />
-          </button>
+        {/* Like + Share actions */}
+        <div style={{ padding: "14px 16px 0", position: "relative" }}>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button
+              onClick={() => toggleLikeBuild(detailBuild.id)}
+              style={{ flex: 1, padding: "14px", borderRadius: 10, background: liked ? `${T.red}30` : T.red, border: liked ? `1px solid ${T.red}` : "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, cursor: "pointer" }}
+            >
+              <Heart size={16} color={T.white} fill={liked ? T.white : "none"} />
+              <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 1.5 }}>{liked ? "LIKED" : "LIKE BUILD"}</span>
+            </button>
+            <button
+              onClick={() => setShareMenuOpen(v => !v)}
+              style={{ flex: 1, padding: "14px", borderRadius: 10, background: T.charcoal, border: `1px solid ${T.tertiary}40`, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, cursor: "pointer" }}
+            >
+              <Share2 size={16} color={T.white} />
+              <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 1.5 }}>SHARE</span>
+            </button>
+          </div>
+          {shareMenuOpen && (
+            <>
+              <div onClick={() => setShareMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 80 }} />
+              <div style={{ position: "absolute", top: 68, right: 16, width: 220, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10, padding: 6, zIndex: 90, boxShadow: "0 10px 30px rgba(0,0,0,0.5)" }}>
+                <button onClick={() => { onPostBuildToFeed && onPostBuildToFeed(detailBuild); setShareMenuOpen(false); setShareToast("Shared to feed"); setTimeout(() => setShareToast(""), 2000); }} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "none", border: "none", cursor: "pointer", borderRadius: 6 }}>
+                  <Share2 size={14} color={T.copper} />
+                  <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>Share to Feed</span>
+                </button>
+                <button onClick={() => {
+                  const link = `https://trailhead.lpo/builds/${detailBuild.rawId || detailBuild.id}`;
+                  if (navigator.clipboard) navigator.clipboard.writeText(link).catch(() => {});
+                  setShareMenuOpen(false);
+                  setShareToast("Link copied");
+                  setTimeout(() => setShareToast(""), 2000);
+                }} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "none", border: "none", cursor: "pointer", borderRadius: 6 }}>
+                  <ExternalLink size={14} color={T.copper} />
+                  <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>Copy Link</span>
+                </button>
+                <button onClick={() => {
+                  const bd2 = detailBuild.buildData;
+                  const heroImg = detailBuild.image || (bd2 && bd2.mainPhotos && bd2.mainPhotos[0] && bd2.mainPhotos[0].url) || null;
+                  const sharedPost = { id: "build_" + detailBuild.id, type: "BUILDS", user: detailBuild.handle.replace("@", ""), initial: detailBuild.initial, title: detailBuild.name, body: `${detailBuild.year} ${detailBuild.make} ${detailBuild.model}`, image: heroImg, buildData: bd2 };
+                  onOpenDM && onOpenDM(null, `Check out this build: ${detailBuild.name}`, sharedPost);
+                  setShareMenuOpen(false);
+                }} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "none", border: "none", cursor: "pointer", borderRadius: 6 }}>
+                  <Send size={14} color={T.copper} />
+                  <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>Send via DM</span>
+                </button>
+              </div>
+            </>
+          )}
+          {shareToast && (
+            <div style={{ position: "fixed", bottom: 90, left: "50%", transform: "translateX(-50%)", background: T.charcoal, border: `1px solid ${T.copper}`, borderRadius: 8, padding: "10px 16px", zIndex: 100, boxShadow: "0 4px 20px rgba(0,0,0,0.5)" }}>
+              <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>{shareToast}</span>
+            </div>
+          )}
         </div>
 
         {/* Technical Specifications */}
@@ -8061,6 +8136,8 @@ function AddBuildForm({ onClose, onSave, initialData }) {
   const [hasCamper, setHasCamper] = useState(d.hasCamper || false);
   const [camperMake, setCamperMake] = useState(d.camperMake || "");
   const [camperModel, setCamperModel] = useState(d.camperModel || "");
+  const [camperMakeTouched, setCamperMakeTouched] = useState(!!d.camperMake);
+  const [camperModelTouched, setCamperModelTouched] = useState(!!d.camperModel);
   const [camperPhoto, setCamperPhoto] = useState(d.camperPhoto || []);
   const [camperLink, setCamperLink] = useState(d.camperLink || "");
 
@@ -8264,11 +8341,32 @@ function AddBuildForm({ onClose, onSave, initialData }) {
         </div>
       </div>
 
-      {hasCamper && (
+      {hasCamper && (() => {
+        const suggestedMake = "Lone Peak Overland";
+        const suggestedModel = "V2";
+        const showMakeSuggest = !camperMakeTouched && !camperMake;
+        const showModelSuggest = !camperModelTouched && !camperModel;
+        return (
         <div style={{ background: `${T.copper}08`, borderRadius: 10, padding: "4px 0 0", marginBottom: 14 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            {(() => { const f = fieldGroup("CAMPER MAKE", camperMake, setCamperMake, "e.g. Four Wheel Campers"); return f; })()}
-            {(() => { const f = fieldGroup("CAMPER MODEL", camperModel, setCamperModel, "e.g. Fleet Flatbed"); return f; })()}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 4 }}>
+            <div style={{ marginBottom: 14 }}>
+              <label style={labelStyle}>CAMPER MAKE</label>
+              <input value={camperMake} onChange={e => { setCamperMake(e.target.value); setCamperMakeTouched(true); }} onFocus={() => setCamperMakeTouched(true)} placeholder={suggestedMake} style={inputStyle} />
+              {showMakeSuggest && (
+                <button type="button" onClick={() => { setCamperMake(suggestedMake); setCamperMakeTouched(true); }} style={{ marginTop: 6, padding: "5px 10px", borderRadius: 6, background: `${T.copper}20`, border: `1px solid ${T.copper}50`, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5, fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600, letterSpacing: 0.5 }}>
+                  <Plus size={10} /> USE "{suggestedMake.toUpperCase()}"
+                </button>
+              )}
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <label style={labelStyle}>CAMPER MODEL</label>
+              <input value={camperModel} onChange={e => { setCamperModel(e.target.value); setCamperModelTouched(true); }} onFocus={() => setCamperModelTouched(true)} placeholder={suggestedModel} style={inputStyle} />
+              {showModelSuggest && (
+                <button type="button" onClick={() => { setCamperModel(suggestedModel); setCamperModelTouched(true); }} style={{ marginTop: 6, padding: "5px 10px", borderRadius: 6, background: `${T.copper}20`, border: `1px solid ${T.copper}50`, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5, fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600, letterSpacing: 0.5 }}>
+                  <Plus size={10} /> USE "{suggestedModel}"
+                </button>
+              )}
+            </div>
           </div>
           {/* Product link */}
           <div style={{ marginBottom: 12 }}>
@@ -8294,7 +8392,8 @@ function AddBuildForm({ onClose, onSave, initialData }) {
             )}
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Preview Button */}
       <button
@@ -11478,7 +11577,7 @@ export default function Trailhead() {
             {screen === "feed" && <FeedScreen onViewUser={openUserProfile} onOpenMap={openMap} onOpenThread={(threadId, catName, subName) => openForumThread(threadId, catName, subName)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} feedItems={feedItems} onUpdateFeed={(items) => setFeedItems(items)} onAddNotification={addNotification} forumUserReplies={forumUserReplies} forumViewCounts={forumViewCounts} savedRoutes={savedRoutes} onSaveRoute={(route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev])} onUnsaveRoute={(routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId))} onStartNav={(route) => setActiveNavRoute(route)} onAwardPoints={awardPoints} />}
             {screen === "forum" && <ForumScreen pendingThread={pendingThread} onPendingHandled={() => setPendingThread(null)} onAddNotification={addNotification} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onAddFeedPost={(post) => setFeedItems(prev => [post, ...prev])} userThreads={forumUserThreads} setUserThreads={setForumUserThreads} userReplies={forumUserReplies} setUserReplies={setForumUserReplies} likedForumItems={forumLikedItems} setLikedForumItems={setForumLikedItems} forumLikeCounts={forumLikeCounts} setForumLikeCounts={setForumLikeCounts} forumViewCounts={forumViewCounts} setForumViewCounts={setForumViewCounts} onAwardPoints={awardPoints} />}
             {screen === "routes" && <RoutesScreen onRecordRoute={() => setShowRecorder(true)} onManualEntry={() => setShowManualRoute(true)} userRoutes={userRoutes} onUpdateRoute={(routeId, updates) => setUserRoutes(prev => prev.map(r => r.id === routeId ? { ...r, ...updates } : r))} savedRoutes={savedRoutes} onSaveRoute={(route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev])} onUnsaveRoute={(routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId))} onOpenDM={(user, msg, sharedPost) => openDM(user, msg, sharedPost)} onAddFeedPost={(post) => setFeedItems(prev => [post, ...prev])} onStartNav={(route) => setActiveNavRoute(route)} />}
-            {screen === "builds" && <BuildsScreen onViewUser={openUserProfile} userBuilds={userBuilds} onAddBuild={(data) => { const id = "build_" + Date.now(); const bd = { id, name: data.buildName || `${data.year} ${data.make} ${data.model}`, year: data.year, make: data.make, model: data.model, trim: data.trim, heroImg: data.mainPhotos && data.mainPhotos.length > 0 ? data.mainPhotos[0].url : null, buildData: data, tags: [], createdAt: Date.now() }; setUserBuilds(prev => [...prev, bd]); if (data.shareToFeed) { setFeedItems(prev => [{ id, type: "BUILDS", user: "KyleLPO", initial: "K", time: Date.now(), title: data.buildName || `${data.year} ${data.make} ${data.model}`, body: `${data.year} ${data.make} ${data.model}${data.trim ? " " + data.trim : ""}`, image: data.mainPhotos && data.mainPhotos.length > 0 ? data.mainPhotos[0].url : null, likes: 0, comments: 0, buildData: data }, ...prev]); } awardPoints(POINTS.feedPost, "Build Added"); }} onUpdateBuild={updateBuild} onPostBuildToFeed={(b) => { const bd = b.buildData; const heroImg = b.image || (bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url) || null; setFeedItems(prev => [{ id: "feedbuild_" + Date.now(), type: "BUILDS", user: "KyleLPO", initial: "K", time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, image: heroImg, likes: 0, comments: 0, buildData: bd }, ...prev]); awardPoints(POINTS.feedPost, "Build Shared"); }} />}
+            {screen === "builds" && <BuildsScreen onViewUser={openUserProfile} userBuilds={userBuilds} onAddBuild={(data) => { const id = "build_" + Date.now(); const bd = { id, name: data.buildName || `${data.year} ${data.make} ${data.model}`, year: data.year, make: data.make, model: data.model, trim: data.trim, heroImg: data.mainPhotos && data.mainPhotos.length > 0 ? data.mainPhotos[0].url : null, buildData: data, tags: [], createdAt: Date.now() }; setUserBuilds(prev => [...prev, bd]); if (data.shareToFeed) { setFeedItems(prev => [{ id, type: "BUILDS", user: "KyleLPO", initial: "K", time: Date.now(), title: data.buildName || `${data.year} ${data.make} ${data.model}`, body: `${data.year} ${data.make} ${data.model}${data.trim ? " " + data.trim : ""}`, image: data.mainPhotos && data.mainPhotos.length > 0 ? data.mainPhotos[0].url : null, likes: 0, comments: 0, buildData: data }, ...prev]); } awardPoints(POINTS.feedPost, "Build Added"); }} userRoutes={userRoutes} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onUpdateBuild={updateBuild} onPostBuildToFeed={(b) => { const bd = b.buildData; const heroImg = b.image || (bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url) || null; setFeedItems(prev => [{ id: "feedbuild_" + Date.now(), type: "BUILDS", user: "KyleLPO", initial: "K", time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, image: heroImg, likes: 0, comments: 0, buildData: bd }, ...prev]); awardPoints(POINTS.feedPost, "Build Shared"); }} />}
             {screen === "ranks" && <RanksScreen myPoints={myTotalPoints} pointsBreakdown={pointsBreakdown} />}
           </>
         )}
@@ -11534,6 +11633,7 @@ export default function Trailhead() {
       )}
       {showRecorder && (
         <RouteRecorder
+          userBuilds={userBuilds}
           onClose={() => setShowRecorder(false)}
           onSave={(routeData) => {
             const id = "rec_route_" + Date.now();
@@ -11562,14 +11662,17 @@ export default function Trailhead() {
               desc: routeData.desc || "",
               difficulty: routeData.difficulty || "Moderate",
               distance: distMi + " MI",
+              distanceMi: typeof routeData.distance === "number" ? routeData.distance / 1609.34 : (parseFloat(distMi) || 0),
               time: durStr,
               elevation: routeData.elevGain ? "+" + Number(routeData.elevGain).toLocaleString() + " FT" : "—",
+              elevGainFt: Number(routeData.elevGain) || 0,
               location: routeData.location || routeData.region || "",
               terrains: routeData.terrains || [],
               tags: routeData.tags || [],
               pins: allPins,
               photos: routeData.photos || [],
               points: routeData.points || [],
+              buildId: routeData.buildId || null,
               rating: null,
               reviews: 0,
               author: "KyleLPO",
@@ -11600,6 +11703,7 @@ export default function Trailhead() {
       {showManualRoute && (
         <RouteDetailsForm
           isManual
+          userBuilds={userBuilds}
           onBack={() => setShowManualRoute(false)}
           onPublish={(routeData) => {
             const id = "user_route_" + Date.now();
@@ -11609,14 +11713,17 @@ export default function Trailhead() {
               desc: routeData.desc || "",
               difficulty: routeData.difficulty || "Moderate",
               distance: routeData.distance ? routeData.distance + " MI" : "—",
+              distanceMi: parseFloat(routeData.distance) || 0,
               time: routeData.time || "—",
               elevation: routeData.elevGain ? "+" + Number(routeData.elevGain).toLocaleString() + " FT" : "—",
+              elevGainFt: Number(routeData.elevGain) || 0,
               location: routeData.location || "",
               terrains: routeData.terrains || [],
               tags: routeData.tags || [],
               pins: routeData.pins || [],
               photos: routeData.photos || [],
               points: routeData.points || [],
+              buildId: routeData.buildId || null,
               rating: null,
               reviews: 0,
               author: "KyleLPO",
