@@ -11693,20 +11693,29 @@ export default function Trailhead() {
     setPointsToasts(prev => [...prev, { id: toastId, amount, reason }]);
     setTimeout(() => setPointsToasts(prev => prev.filter(t => t.id !== toastId)), 2500);
   };
-  // Parse shared-link URL path once the user reaches the app surface.
-  // Supported shapes: /post/:id
+  // Parse shared-link URL path. Shared links should be publicly viewable,
+  // so if the user hits one while unauthenticated we auto-drop them into
+  // guest mode and land directly on the post instead of bouncing them to
+  // the login screen. Once a real backend is wired up, the guest-by-default
+  // behavior will still be correct: guests can view posts, and they can
+  // choose to sign in from the guest banner if they want to interact.
   const sharedLinkParsed = useRef(false);
   useEffect(() => {
-    if (authState !== "app" || sharedLinkParsed.current) return;
-    sharedLinkParsed.current = true;
+    if (sharedLinkParsed.current) return;
     try {
       const path = window.location.pathname || "";
       const postMatch = path.match(/^\/post\/(.+?)\/?$/);
-      if (postMatch) {
-        setPendingPostNav(decodeURIComponent(postMatch[1]));
-        setScreen("feed");
-        window.history.replaceState(null, "", "/");
+      if (!postMatch) return;
+      sharedLinkParsed.current = true;
+      // If we're sitting on login/signup, auto-enter as guest so the post
+      // is viewable without forcing sign-in.
+      if (authState !== "app") {
+        setIsGuest(true);
+        setAuthState("app");
       }
+      setPendingPostNav(decodeURIComponent(postMatch[1]));
+      setScreen("feed");
+      window.history.replaceState(null, "", "/");
     } catch (e) { /* ignore */ }
   }, [authState]);
 
