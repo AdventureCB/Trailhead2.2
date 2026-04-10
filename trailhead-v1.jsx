@@ -1477,7 +1477,7 @@ const defaultFeedItems = [
     },
   ];
 
-function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onViewBuild, feedItems, onUpdateFeed, onAddNotification, forumUserReplies, forumViewCounts, savedRoutes, onSaveRoute, onUnsaveRoute, onStartNav, onAwardPoints }) {
+function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onViewBuild, feedItems, onUpdateFeed, onAddNotification, forumUserReplies, forumViewCounts, savedRoutes, onSaveRoute, onUnsaveRoute, onStartNav, onAwardPoints, isGuest, onGuestTap }) {
   const [activeFilter, setActiveFilter] = useState("ALL");
   const filters = ["ALL", "BUILDS", "CONVOYS", "ROUTES", "PHOTOS", "FORUM"];
   const [likedPosts, setLikedPosts] = useState({});
@@ -1519,6 +1519,7 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onViewBuild
   const shareSearchRef = useRef(null);
 
   const toggleLike = (id) => {
+    if (isGuest) { onGuestTap && onGuestTap(); return; }
     const wasLiked = likedPosts[id];
     setLikedPosts(prev => ({ ...prev, [id]: !prev[id] }));
     onUpdateFeed && onUpdateFeed(feedItems.map(item =>
@@ -1542,6 +1543,7 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onViewBuild
   };
 
   const addComment = (id) => {
+    if (isGuest) { onGuestTap && onGuestTap(); return; }
     if (!commentText.trim()) return;
     const newComment = { user: "KyleLPO", initial: "K", text: commentText.trim(), time: Date.now(), likes: 0 };
     setPostComments(prev => ({ ...prev, [id]: [...(prev[id] || []), newComment] }));
@@ -1705,7 +1707,7 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onViewBuild
                 <span style={{ fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.white }}>K</span>
               </div>
               <div style={{ flex: 1, display: "flex", alignItems: "center", background: T.darkCard, borderRadius: 20, padding: "8px 12px", border: `1px solid ${T.charcoal}` }}>
-                <MentionInput inputRef={openComments === item.id ? commentInputRef : null} value={commentText} onChange={setCommentText} onKeyDown={e => { if (e.key === "Enter") addComment(item.id); }} placeholder="Add a comment..." style={{ flex: 1, background: "none", border: "none", outline: "none", color: T.white, fontFamily: serif, fontSize: 12, padding: 0, width: "100%" }} />
+                <MentionInput inputRef={openComments === item.id ? commentInputRef : null} value={commentText} onChange={setCommentText} onKeyDown={e => { if (e.key === "Enter") addComment(item.id); }} onFocus={isGuest ? (e) => { e.target && e.target.blur && e.target.blur(); onGuestTap && onGuestTap(); } : undefined} placeholder={isGuest ? "Sign in to comment..." : "Add a comment..."} style={{ flex: 1, background: "none", border: "none", outline: "none", color: T.white, fontFamily: serif, fontSize: 12, padding: 0, width: "100%" }} />
               </div>
               <button onClick={() => addComment(item.id)} disabled={!commentText.trim()} style={{ background: commentText.trim() ? T.red : T.charcoal, border: "none", cursor: commentText.trim() ? "pointer" : "default", width: 30, height: 30, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", opacity: commentText.trim() ? 1 : 0.4, padding: 0, flexShrink: 0 }}>
                 <ArrowUp size={14} color={T.white} />
@@ -2654,7 +2656,7 @@ forumData.categories.forEach(cat => {
   });
 });
 
-function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpenDM, onAddFeedPost, userThreads, setUserThreads, userReplies, setUserReplies, likedForumItems, setLikedForumItems, forumLikeCounts, setForumLikeCounts, forumViewCounts, setForumViewCounts, onAwardPoints }) {
+function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpenDM, onAddFeedPost, userThreads, setUserThreads, userReplies, setUserReplies, likedForumItems, setLikedForumItems, forumLikeCounts, setForumLikeCounts, forumViewCounts, setForumViewCounts, onAwardPoints, isGuest, onGuestTap }) {
   // Normalize any time value (number timestamp OR "Xh ago" style string) into
   // an "age in minutes" sort key. Lower = more recent.
   const threadAgeMin = (time) => {
@@ -2829,6 +2831,7 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
   const openThread = (thread) => { setSelectedThread(thread); setView("thread"); trackView(thread.id); };
 
   const openNewThreadFromHome = () => {
+    if (isGuest) { onGuestTap && onGuestTap(); return; }
     setNtFromHome(true);
     setNtPickCat(null);
     setNtPickSub(null);
@@ -2840,6 +2843,7 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
   };
 
   const openNewThreadFromSub = () => {
+    if (isGuest) { onGuestTap && onGuestTap(); return; }
     setNtFromHome(false);
     setNtPickCat(selectedCat);
     setNtPickSub(selectedSub);
@@ -3238,6 +3242,7 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
     };
 
     const submitReply = () => {
+      if (isGuest) { onGuestTap && onGuestTap(); return; }
       if (!forumReplyText.trim() && replyPhotos.length === 0) return;
       const newReply = {
         author: "KyleLPO",
@@ -3513,7 +3518,7 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <div style={{ flex: 1, position: "relative", display: "flex", alignItems: "center" }}>
-                  <MentionInput value={forumReplyText} onChange={setForumReplyText} onKeyDown={e => { if (e.key === "Enter" && (forumReplyText.trim() || replyPhotos.length > 0)) { submitReply(); } }} placeholder={`Reply to @${replyToReply.author}...`} style={{ flex: 1, padding: "10px 38px 10px 12px", borderRadius: 8, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", width: "100%" }} />
+                  <MentionInput value={forumReplyText} onChange={setForumReplyText} onKeyDown={e => { if (e.key === "Enter" && (forumReplyText.trim() || replyPhotos.length > 0)) { submitReply(); } }} onFocus={isGuest ? (e) => { e.target && e.target.blur && e.target.blur(); onGuestTap && onGuestTap(); } : undefined} placeholder={`Reply to @${replyToReply.author}...`} style={{ flex: 1, padding: "10px 38px 10px 12px", borderRadius: 8, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", width: "100%" }} />
                   <button onClick={() => replyFileRef.current && replyFileRef.current.click()} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", padding: 2, display: "flex", alignItems: "center" }}>
                     <Camera size={16} color={T.tertiary} />
                   </button>
@@ -3556,7 +3561,7 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
             <div style={{ flex: 1, position: "relative", display: "flex", alignItems: "center" }}>
               <MentionInput value={forumReplyText} onChange={setForumReplyText} onKeyDown={e => {
                 if (e.key === "Enter" && (forumReplyText.trim() || replyPhotos.length > 0)) { submitReply(); }
-              }} placeholder="Write a reply..." style={{ flex: 1, padding: "12px 38px 12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", width: "100%" }} />
+              }} onFocus={isGuest ? (e) => { e.target && e.target.blur && e.target.blur(); onGuestTap && onGuestTap(); } : undefined} placeholder={isGuest ? "Sign in to reply..." : "Write a reply..."} style={{ flex: 1, padding: "12px 38px 12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", width: "100%" }} />
               <button onClick={() => replyFileRef.current && replyFileRef.current.click()} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", padding: 2, display: "flex", alignItems: "center" }}>
                 <Camera size={16} color={T.tertiary} />
               </button>
@@ -6171,7 +6176,7 @@ function RoutesScreen({ onRecordRoute, onManualEntry, userRoutes, onUpdateRoute,
 }
 
 /* ─── BUILDS / PROFILE SCREEN ─── */
-function BuildsScreen({ onViewUser, userBuilds, onAddBuild, onUpdateBuild, onPostBuildToFeed, onOpenDM, userRoutes, pendingBuildNav, onConsumePendingBuildNav }) {
+function BuildsScreen({ onViewUser, userBuilds, onAddBuild, onUpdateBuild, onPostBuildToFeed, onOpenDM, userRoutes, pendingBuildNav, onConsumePendingBuildNav, isGuest, onGuestTap }) {
   const [filter, setFilter] = useState("all"); // "all" | "mine" | "following"
   const [search, setSearch] = useState("");
   const [detailBuildId, setDetailBuildId] = useState(null);
@@ -6186,6 +6191,7 @@ function BuildsScreen({ onViewUser, userBuilds, onAddBuild, onUpdateBuild, onPos
   const [showAddBuildForm, setShowAddBuildForm] = useState(false);
 
   const toggleLikeBuild = (id) => {
+    if (isGuest) { onGuestTap && onGuestTap(); return; }
     const wasLiked = !!likedBuilds[id];
     setLikedBuilds(prev => ({ ...prev, [id]: !wasLiked }));
     setLikeBonuses(prev => ({ ...prev, [id]: wasLiked ? (prev[id] || 0) - 1 : (prev[id] || 0) + 1 }));
@@ -6615,7 +6621,7 @@ function BuildsScreen({ onViewUser, userBuilds, onAddBuild, onUpdateBuild, onPos
             <h2 style={{ fontFamily: sans, fontSize: 22, color: T.white, margin: "0 0 4px", fontWeight: 700 }}>Build Gallery</h2>
             <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "0 0 16px" }}>Explore rigs from the Trailhead community</p>
           </div>
-          <button onClick={() => setShowAddBuildForm(true)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 14px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer", flexShrink: 0 }}>
+          <button onClick={() => { if (isGuest) { onGuestTap && onGuestTap(); return; } setShowAddBuildForm(true); }} style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 14px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer", flexShrink: 0 }}>
             <Plus size={14} color={T.white} />
             <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>ADD BUILD</span>
           </button>
@@ -11829,10 +11835,10 @@ export default function Trailhead() {
         ) : (
           <>
             {isGuest && <GuestBanner onSignIn={() => setShowGuestPrompt(true)} />}
-            {screen === "feed" && <FeedScreen onViewUser={openUserProfile} onOpenMap={openMap} onOpenThread={(threadId, catName, subName) => openForumThread(threadId, catName, subName)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onViewBuild={handleViewBuild} feedItems={feedItems} onUpdateFeed={requireAuth((items) => setFeedItems(items))} onAddNotification={requireAuth(addNotification)} forumUserReplies={forumUserReplies} forumViewCounts={forumViewCounts} savedRoutes={savedRoutes} onSaveRoute={requireAuth((route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev]))} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} onStartNav={(route) => setActiveNavRoute(route)} onAwardPoints={awardPoints} />}
-            {screen === "forum" && <ForumScreen pendingThread={pendingThread} onPendingHandled={() => setPendingThread(null)} onAddNotification={requireAuth(addNotification)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onAddFeedPost={requireAuth((post) => setFeedItems(prev => [post, ...prev]))} userThreads={forumUserThreads} setUserThreads={requireAuth(setForumUserThreads)} userReplies={forumUserReplies} setUserReplies={requireAuth(setForumUserReplies)} likedForumItems={forumLikedItems} setLikedForumItems={requireAuth(setForumLikedItems)} forumLikeCounts={forumLikeCounts} setForumLikeCounts={requireAuth(setForumLikeCounts)} forumViewCounts={forumViewCounts} setForumViewCounts={setForumViewCounts} onAwardPoints={awardPoints} />}
+            {screen === "feed" && <FeedScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onViewUser={openUserProfile} onOpenMap={openMap} onOpenThread={(threadId, catName, subName) => openForumThread(threadId, catName, subName)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onViewBuild={handleViewBuild} feedItems={feedItems} onUpdateFeed={requireAuth((items) => setFeedItems(items))} onAddNotification={requireAuth(addNotification)} forumUserReplies={forumUserReplies} forumViewCounts={forumViewCounts} savedRoutes={savedRoutes} onSaveRoute={requireAuth((route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev]))} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} onStartNav={(route) => setActiveNavRoute(route)} onAwardPoints={awardPoints} />}
+            {screen === "forum" && <ForumScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} pendingThread={pendingThread} onPendingHandled={() => setPendingThread(null)} onAddNotification={requireAuth(addNotification)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onAddFeedPost={requireAuth((post) => setFeedItems(prev => [post, ...prev]))} userThreads={forumUserThreads} setUserThreads={requireAuth(setForumUserThreads)} userReplies={forumUserReplies} setUserReplies={requireAuth(setForumUserReplies)} likedForumItems={forumLikedItems} setLikedForumItems={requireAuth(setForumLikedItems)} forumLikeCounts={forumLikeCounts} setForumLikeCounts={requireAuth(setForumLikeCounts)} forumViewCounts={forumViewCounts} setForumViewCounts={setForumViewCounts} onAwardPoints={awardPoints} />}
             {screen === "routes" && <RoutesScreen userBuilds={myBuildsForLink} onRecordRoute={requireAuth(() => setShowRecorder(true))} onManualEntry={requireAuth(() => setShowManualRoute(true))} userRoutes={userRoutes} onUpdateRoute={requireAuth((routeId, updates) => setUserRoutes(prev => prev.map(r => r.id === routeId ? { ...r, ...updates } : r)))} savedRoutes={savedRoutes} onSaveRoute={requireAuth((route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev]))} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} onOpenDM={(user, msg, sharedPost) => openDM(user, msg, sharedPost)} onAddFeedPost={requireAuth((post) => setFeedItems(prev => [post, ...prev]))} onStartNav={(route) => setActiveNavRoute(route)} />}
-            {screen === "builds" && <BuildsScreen onViewUser={openUserProfile} userBuilds={userBuilds} pendingBuildNav={pendingBuildNav} onConsumePendingBuildNav={() => setPendingBuildNav(null)} onAddBuild={requireAuth((data) => { const id = "build_" + Date.now(); const bd = { id, name: data.buildName || `${data.year} ${data.make} ${data.model}`, year: data.year, make: data.make, model: data.model, trim: data.trim, heroImg: data.mainPhotos && data.mainPhotos.length > 0 ? data.mainPhotos[0].url : null, buildData: data, tags: [], createdAt: Date.now() }; setUserBuilds(prev => [...prev, bd]); if (data.shareToFeed) { setFeedItems(prev => [{ id, type: "BUILDS", user: "KyleLPO", initial: "K", time: Date.now(), title: (data.buildName || `${data.year} ${data.make} ${data.model}`).toUpperCase(), body: `${data.year} ${data.make} ${data.model}${data.trim ? " " + data.trim : ""}`, vehicle: `${data.year} ${data.make} ${data.model}${data.trim ? " " + data.trim : ""}`, photoUrls: data.mainPhotos && data.mainPhotos.length > 0 ? [data.mainPhotos[0].url] : undefined, image: data.mainPhotos && data.mainPhotos.length > 0 ? data.mainPhotos[0].url : null, likes: 0, comments: 0, buildData: data, buildRawId: id }, ...prev]); } awardPoints(POINTS.feedPost, "Build Added"); })} userRoutes={userRoutes} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onUpdateBuild={requireAuth(updateBuild)} onPostBuildToFeed={requireAuth((b) => { const bd = b.buildData; const heroImg = b.image || (bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url) || null; setFeedItems(prev => [{ id: "feedbuild_" + Date.now(), type: "BUILDS", user: "KyleLPO", initial: "K", time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, vehicle: `${b.year} ${b.make} ${b.model}`, photoUrls: heroImg ? [heroImg] : undefined, image: heroImg, likes: 0, comments: 0, buildData: bd, buildRawId: b.rawId != null ? b.rawId : null }, ...prev]); awardPoints(POINTS.feedPost, "Build Shared"); })} />}
+            {screen === "builds" && <BuildsScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onViewUser={openUserProfile} userBuilds={userBuilds} pendingBuildNav={pendingBuildNav} onConsumePendingBuildNav={() => setPendingBuildNav(null)} onAddBuild={requireAuth((data) => { const id = "build_" + Date.now(); const bd = { id, name: data.buildName || `${data.year} ${data.make} ${data.model}`, year: data.year, make: data.make, model: data.model, trim: data.trim, heroImg: data.mainPhotos && data.mainPhotos.length > 0 ? data.mainPhotos[0].url : null, buildData: data, tags: [], createdAt: Date.now() }; setUserBuilds(prev => [...prev, bd]); if (data.shareToFeed) { setFeedItems(prev => [{ id, type: "BUILDS", user: "KyleLPO", initial: "K", time: Date.now(), title: (data.buildName || `${data.year} ${data.make} ${data.model}`).toUpperCase(), body: `${data.year} ${data.make} ${data.model}${data.trim ? " " + data.trim : ""}`, vehicle: `${data.year} ${data.make} ${data.model}${data.trim ? " " + data.trim : ""}`, photoUrls: data.mainPhotos && data.mainPhotos.length > 0 ? [data.mainPhotos[0].url] : undefined, image: data.mainPhotos && data.mainPhotos.length > 0 ? data.mainPhotos[0].url : null, likes: 0, comments: 0, buildData: data, buildRawId: id }, ...prev]); } awardPoints(POINTS.feedPost, "Build Added"); })} userRoutes={userRoutes} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onUpdateBuild={requireAuth(updateBuild)} onPostBuildToFeed={requireAuth((b) => { const bd = b.buildData; const heroImg = b.image || (bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url) || null; setFeedItems(prev => [{ id: "feedbuild_" + Date.now(), type: "BUILDS", user: "KyleLPO", initial: "K", time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, vehicle: `${b.year} ${b.make} ${b.model}`, photoUrls: heroImg ? [heroImg] : undefined, image: heroImg, likes: 0, comments: 0, buildData: bd, buildRawId: b.rawId != null ? b.rawId : null }, ...prev]); awardPoints(POINTS.feedPost, "Build Shared"); })} />}
             {screen === "ranks" && (isGuest
               ? <GuestGateScreen title="RANKS REQUIRE AN ACCOUNT" subtitle="Sign in to see the leaderboard and start earning points from your posts, routes and builds." onSignIn={goToLoginFromGuest} />
               : <RanksScreen myPoints={myTotalPoints} pointsBreakdown={pointsBreakdown} />
