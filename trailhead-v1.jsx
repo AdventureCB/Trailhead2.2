@@ -1471,7 +1471,7 @@ const defaultFeedItems = [
     },
   ];
 
-function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, onUpdateFeed, onAddNotification, forumUserReplies, forumViewCounts, savedRoutes, onSaveRoute, onUnsaveRoute, onStartNav, onAwardPoints }) {
+function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onViewBuild, feedItems, onUpdateFeed, onAddNotification, forumUserReplies, forumViewCounts, savedRoutes, onSaveRoute, onUnsaveRoute, onStartNav, onAwardPoints }) {
   const [activeFilter, setActiveFilter] = useState("ALL");
   const filters = ["ALL", "BUILDS", "CONVOYS", "ROUTES", "PHOTOS", "FORUM"];
   const [likedPosts, setLikedPosts] = useState({});
@@ -2188,6 +2188,17 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, feedItems, 
               </div>
             </div>
           )}
+          {/* View Full Build CTA */}
+          <div style={{ padding: "10px 16px 4px" }}>
+            <button
+              onClick={() => onViewBuild && onViewBuild({ rawId: item.buildRawId != null ? item.buildRawId : null, name: item.title })}
+              style={{ width: "100%", padding: "11px 14px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+            >
+              <Wrench size={13} color={T.white} />
+              <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 1 }}>VIEW FULL BUILD</span>
+              <ChevronRight size={14} color={T.white} />
+            </button>
+          </div>
           {actionBar(item)}
         </div>
       );
@@ -6056,7 +6067,7 @@ function RoutesScreen({ onRecordRoute, onManualEntry, userRoutes, onUpdateRoute,
 }
 
 /* ─── BUILDS / PROFILE SCREEN ─── */
-function BuildsScreen({ onViewUser, userBuilds, onAddBuild, onUpdateBuild, onPostBuildToFeed, onOpenDM, userRoutes }) {
+function BuildsScreen({ onViewUser, userBuilds, onAddBuild, onUpdateBuild, onPostBuildToFeed, onOpenDM, userRoutes, pendingBuildNav, onConsumePendingBuildNav }) {
   const [filter, setFilter] = useState("all"); // "all" | "mine" | "following"
   const [search, setSearch] = useState("");
   const [detailBuildId, setDetailBuildId] = useState(null);
@@ -6148,6 +6159,21 @@ function BuildsScreen({ onViewUser, userBuilds, onAddBuild, onUpdateBuild, onPos
   });
 
   const allBuilds = [...defaultBuilds, ...mappedUserBuilds];
+
+  // Resolve pending build navigation from feed
+  useEffect(() => {
+    if (pendingBuildNav) {
+      const { rawId, name } = pendingBuildNav;
+      let match = null;
+      if (rawId != null) match = allBuilds.find(b => b.rawId === rawId);
+      if (!match && name) {
+        const lc = String(name).toLowerCase();
+        match = allBuilds.find(b => (b.name || "").toLowerCase() === lc);
+      }
+      if (match) setDetailBuildId(match.id);
+      onConsumePendingBuildNav && onConsumePendingBuildNav();
+    }
+  }, [pendingBuildNav]);
 
   const filters = [
     { key: "all", label: "ALL BUILDS", icon: Globe },
@@ -6325,7 +6351,7 @@ function BuildsScreen({ onViewUser, userBuilds, onAddBuild, onUpdateBuild, onPos
                 <button onClick={() => {
                   const bd2 = detailBuild.buildData;
                   const heroImg = detailBuild.image || (bd2 && bd2.mainPhotos && bd2.mainPhotos[0] && bd2.mainPhotos[0].url) || null;
-                  const sharedPost = { id: "build_" + detailBuild.id, type: "BUILDS", user: detailBuild.handle.replace("@", ""), initial: detailBuild.initial, title: detailBuild.name, body: `${detailBuild.year} ${detailBuild.make} ${detailBuild.model}`, image: heroImg, buildData: bd2 };
+                  const sharedPost = { id: "build_" + detailBuild.id, type: "BUILDS", user: detailBuild.handle.replace("@", ""), initial: detailBuild.initial, title: detailBuild.name, body: `${detailBuild.year} ${detailBuild.make} ${detailBuild.model}`, image: heroImg, buildData: bd2, buildRawId: detailBuild.rawId != null ? detailBuild.rawId : null };
                   onOpenDM && onOpenDM(null, `Check out this build: ${detailBuild.name}`, sharedPost);
                   setShareMenuOpen(false);
                 }} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "none", border: "none", cursor: "pointer", borderRadius: 6 }}>
@@ -11352,6 +11378,7 @@ export default function Trailhead() {
   const [showRecorder, setShowRecorder] = useState(false);
   const [showManualRoute, setShowManualRoute] = useState(false);
   const [pendingThread, setPendingThread] = useState(null); // { threadId, catName, subName }
+  const [pendingBuildNav, setPendingBuildNav] = useState(null); // { rawId, name }
   const [feedItems, setFeedItems] = useState(defaultFeedItems);
   const [forumUserThreads, setForumUserThreads] = useState({}); // { subName: [thread, ...] }
   const [forumUserReplies, setForumUserReplies] = useState({}); // { threadId: [reply, ...] }
@@ -11476,6 +11503,7 @@ export default function Trailhead() {
         photoUrls: heroImg ? [heroImg] : undefined,
         buildData: data,
         vehicle: `${data.year} ${data.make} ${data.model}${data.trim ? " " + data.trim : ""}`,
+        buildRawId: newBuild.id,
       };
       setFeedItems(prev => [feedPost, ...prev]);
     }
@@ -11503,6 +11531,14 @@ export default function Trailhead() {
   const openForumThread = (threadId, catName, subName) => {
     setPendingThread({ threadId, catName, subName });
     setScreen("forum");
+  };
+
+  const handleViewBuild = (nav) => {
+    setPendingBuildNav(nav || null);
+    setProfileStack([]);
+    setShowRecovery(false);
+    setShowCompose(false);
+    setScreen("builds");
   };
 
   const openProfile = () => setProfileStack(["self"]);
@@ -11574,10 +11610,10 @@ export default function Trailhead() {
           )
         ) : (
           <>
-            {screen === "feed" && <FeedScreen onViewUser={openUserProfile} onOpenMap={openMap} onOpenThread={(threadId, catName, subName) => openForumThread(threadId, catName, subName)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} feedItems={feedItems} onUpdateFeed={(items) => setFeedItems(items)} onAddNotification={addNotification} forumUserReplies={forumUserReplies} forumViewCounts={forumViewCounts} savedRoutes={savedRoutes} onSaveRoute={(route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev])} onUnsaveRoute={(routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId))} onStartNav={(route) => setActiveNavRoute(route)} onAwardPoints={awardPoints} />}
+            {screen === "feed" && <FeedScreen onViewUser={openUserProfile} onOpenMap={openMap} onOpenThread={(threadId, catName, subName) => openForumThread(threadId, catName, subName)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onViewBuild={handleViewBuild} feedItems={feedItems} onUpdateFeed={(items) => setFeedItems(items)} onAddNotification={addNotification} forumUserReplies={forumUserReplies} forumViewCounts={forumViewCounts} savedRoutes={savedRoutes} onSaveRoute={(route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev])} onUnsaveRoute={(routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId))} onStartNav={(route) => setActiveNavRoute(route)} onAwardPoints={awardPoints} />}
             {screen === "forum" && <ForumScreen pendingThread={pendingThread} onPendingHandled={() => setPendingThread(null)} onAddNotification={addNotification} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onAddFeedPost={(post) => setFeedItems(prev => [post, ...prev])} userThreads={forumUserThreads} setUserThreads={setForumUserThreads} userReplies={forumUserReplies} setUserReplies={setForumUserReplies} likedForumItems={forumLikedItems} setLikedForumItems={setForumLikedItems} forumLikeCounts={forumLikeCounts} setForumLikeCounts={setForumLikeCounts} forumViewCounts={forumViewCounts} setForumViewCounts={setForumViewCounts} onAwardPoints={awardPoints} />}
             {screen === "routes" && <RoutesScreen onRecordRoute={() => setShowRecorder(true)} onManualEntry={() => setShowManualRoute(true)} userRoutes={userRoutes} onUpdateRoute={(routeId, updates) => setUserRoutes(prev => prev.map(r => r.id === routeId ? { ...r, ...updates } : r))} savedRoutes={savedRoutes} onSaveRoute={(route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev])} onUnsaveRoute={(routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId))} onOpenDM={(user, msg, sharedPost) => openDM(user, msg, sharedPost)} onAddFeedPost={(post) => setFeedItems(prev => [post, ...prev])} onStartNav={(route) => setActiveNavRoute(route)} />}
-            {screen === "builds" && <BuildsScreen onViewUser={openUserProfile} userBuilds={userBuilds} onAddBuild={(data) => { const id = "build_" + Date.now(); const bd = { id, name: data.buildName || `${data.year} ${data.make} ${data.model}`, year: data.year, make: data.make, model: data.model, trim: data.trim, heroImg: data.mainPhotos && data.mainPhotos.length > 0 ? data.mainPhotos[0].url : null, buildData: data, tags: [], createdAt: Date.now() }; setUserBuilds(prev => [...prev, bd]); if (data.shareToFeed) { setFeedItems(prev => [{ id, type: "BUILDS", user: "KyleLPO", initial: "K", time: Date.now(), title: data.buildName || `${data.year} ${data.make} ${data.model}`, body: `${data.year} ${data.make} ${data.model}${data.trim ? " " + data.trim : ""}`, image: data.mainPhotos && data.mainPhotos.length > 0 ? data.mainPhotos[0].url : null, likes: 0, comments: 0, buildData: data }, ...prev]); } awardPoints(POINTS.feedPost, "Build Added"); }} userRoutes={userRoutes} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onUpdateBuild={updateBuild} onPostBuildToFeed={(b) => { const bd = b.buildData; const heroImg = b.image || (bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url) || null; setFeedItems(prev => [{ id: "feedbuild_" + Date.now(), type: "BUILDS", user: "KyleLPO", initial: "K", time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, image: heroImg, likes: 0, comments: 0, buildData: bd }, ...prev]); awardPoints(POINTS.feedPost, "Build Shared"); }} />}
+            {screen === "builds" && <BuildsScreen onViewUser={openUserProfile} userBuilds={userBuilds} pendingBuildNav={pendingBuildNav} onConsumePendingBuildNav={() => setPendingBuildNav(null)} onAddBuild={(data) => { const id = "build_" + Date.now(); const bd = { id, name: data.buildName || `${data.year} ${data.make} ${data.model}`, year: data.year, make: data.make, model: data.model, trim: data.trim, heroImg: data.mainPhotos && data.mainPhotos.length > 0 ? data.mainPhotos[0].url : null, buildData: data, tags: [], createdAt: Date.now() }; setUserBuilds(prev => [...prev, bd]); if (data.shareToFeed) { setFeedItems(prev => [{ id, type: "BUILDS", user: "KyleLPO", initial: "K", time: Date.now(), title: (data.buildName || `${data.year} ${data.make} ${data.model}`).toUpperCase(), body: `${data.year} ${data.make} ${data.model}${data.trim ? " " + data.trim : ""}`, vehicle: `${data.year} ${data.make} ${data.model}${data.trim ? " " + data.trim : ""}`, photoUrls: data.mainPhotos && data.mainPhotos.length > 0 ? [data.mainPhotos[0].url] : undefined, image: data.mainPhotos && data.mainPhotos.length > 0 ? data.mainPhotos[0].url : null, likes: 0, comments: 0, buildData: data, buildRawId: id }, ...prev]); } awardPoints(POINTS.feedPost, "Build Added"); }} userRoutes={userRoutes} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onUpdateBuild={updateBuild} onPostBuildToFeed={(b) => { const bd = b.buildData; const heroImg = b.image || (bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url) || null; setFeedItems(prev => [{ id: "feedbuild_" + Date.now(), type: "BUILDS", user: "KyleLPO", initial: "K", time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, vehicle: `${b.year} ${b.make} ${b.model}`, photoUrls: heroImg ? [heroImg] : undefined, image: heroImg, likes: 0, comments: 0, buildData: bd, buildRawId: b.rawId != null ? b.rawId : null }, ...prev]); awardPoints(POINTS.feedPost, "Build Shared"); }} />}
             {screen === "ranks" && <RanksScreen myPoints={myTotalPoints} pointsBreakdown={pointsBreakdown} />}
           </>
         )}
