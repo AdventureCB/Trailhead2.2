@@ -4607,6 +4607,7 @@ function RouteMapPreview({ pins, points, photos, highlightedPinIdx, onPhotoSelec
       const map = new window.google.maps.Map(mapRef.current, {
         center: bounds.getCenter(),
         zoom: 12,
+        mapTypeId: "terrain",
         disableDefaultUI: true,
         zoomControl: true,
         gestureHandling: "greedy",
@@ -10308,6 +10309,7 @@ function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotificatio
       const zoom = convoyPin ? 14 : 5;
       const map = new window.google.maps.Map(convoyPinMapRef.current, {
         center, zoom,
+        mapTypeId: "terrain",
         disableDefaultUI: true,
         zoomControl: true,
         gestureHandling: "greedy",
