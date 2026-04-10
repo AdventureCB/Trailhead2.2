@@ -3982,7 +3982,7 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
 
 /* ─── ROUTES SCREEN ─── */
 /* ─── Route Recorder Overlay ─── */
-function RouteRecorder({ onClose, onSave }) {
+function RouteRecorder({ onClose, onSave, skipDetailsForm }) {
   const mapRef = useRef(null);
   const mapInst = useRef(null);
   const polyRef = useRef(null);
@@ -4325,6 +4325,24 @@ function RouteRecorder({ onClose, onSave }) {
       const bounds = new window.google.maps.LatLngBounds();
       trackPoints.forEach(p => bounds.extend({ lat: p.lat, lng: p.lng }));
       mapInst.current.fitBounds(bounds, 40);
+    }
+    // If caller doesn't want the details form, save directly with just the recorded data
+    if (skipDetailsForm) {
+      // Build pins from waypoints so the map preview renders them
+      const waypointPins = (routeWaypoints || []).map(w => ({
+        lat: w.lat, lng: w.lng, isWaypoint: true, desc: w.desc || "", ...(w.photo ? { photo: w.photo } : {}),
+      }));
+      onSave && onSave({
+        points: trackPoints,
+        pins: waypointPins,
+        photos: [],
+        waypoints: routeWaypoints || [],
+        distance: stats.distance,
+        elevGain: stats.elevGain,
+        maxSpeed: stats.maxSpeed,
+        duration: elapsed,
+      });
+      return;
     }
     // Open details form after stopping
     setShowDetails(true);
@@ -5498,6 +5516,191 @@ function RouteDetailsForm({ autoStats, onBack, onPublish, isManual, initialPhoto
   );
 }
 
+/* ─── Lightweight route map editor for bounty trail reports ───
+   Slim version of RouteDetailsForm: just the tap-to-pin map, photo upload,
+   and photo-to-pin linking. No name/desc/difficulty/terrain/tags fields —
+   those all live in the parent trail report form. */
+function BountyRouteMapEditor({ initialPins, initialPhotos, onBack, onSave }) {
+  const [pins, setPins] = useState(initialPins || []);
+  const [routePhotos, setRoutePhotos] = useState(initialPhotos || []);
+  const [roadPoints, setRoadPoints] = useState([]);
+  const [linkingPhotoIdx, setLinkingPhotoIdx] = useState(null);
+  const photoRef = useRef(null);
+
+  // GPS EXIF extract (same logic as RouteDetailsForm)
+  const extractGPS = (file) => new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const view = new DataView(e.target.result);
+        if (view.getUint16(0) !== 0xFFD8) { resolve(null); return; }
+        let offset = 2;
+        while (offset < view.byteLength) {
+          const marker = view.getUint16(offset);
+          if (marker === 0xFFE1) {
+            const exifData = view.buffer.slice(offset + 10);
+            const dv = new DataView(exifData);
+            const le = dv.getUint16(0) === 0x4949;
+            const ifdOffset = dv.getUint32(4, le);
+            const entries = dv.getUint16(ifdOffset, le);
+            let gpsOffset = null;
+            for (let i = 0; i < entries; i++) {
+              const tag = dv.getUint16(ifdOffset + 2 + i * 12, le);
+              if (tag === 0x8825) { gpsOffset = dv.getUint32(ifdOffset + 2 + i * 12 + 8, le); break; }
+            }
+            if (!gpsOffset) { resolve(null); return; }
+            const gpsEntries = dv.getUint16(gpsOffset, le);
+            let latRef = "N", lngRef = "E", latVals = null, lngVals = null;
+            const readRational = (off) => dv.getUint32(off, le) / dv.getUint32(off + 4, le);
+            const readDMS = (valOff) => {
+              const d = readRational(valOff);
+              const m = readRational(valOff + 8);
+              const s = readRational(valOff + 16);
+              return d + m / 60 + s / 3600;
+            };
+            for (let i = 0; i < gpsEntries; i++) {
+              const gTag = dv.getUint16(gpsOffset + 2 + i * 12, le);
+              const gValOff = dv.getUint32(gpsOffset + 2 + i * 12 + 8, le);
+              if (gTag === 1) latRef = String.fromCharCode(dv.getUint8(gpsOffset + 2 + i * 12 + 8));
+              if (gTag === 2) latVals = gValOff;
+              if (gTag === 3) lngRef = String.fromCharCode(dv.getUint8(gpsOffset + 2 + i * 12 + 8));
+              if (gTag === 4) lngVals = gValOff;
+            }
+            if (latVals && lngVals) {
+              let lat = readDMS(latVals);
+              let lng = readDMS(lngVals);
+              if (latRef === "S") lat = -lat;
+              if (lngRef === "W") lng = -lng;
+              resolve({ lat, lng });
+              return;
+            }
+          }
+          offset += 2 + view.getUint16(offset + 2);
+        }
+      } catch (e) { /* EXIF parse error */ }
+      resolve(null);
+    };
+    reader.readAsArrayBuffer(file.slice(0, 128 * 1024));
+  });
+
+  const handlePhotoUpload = async (e) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    for (const file of Array.from(files)) {
+      const isVideo = file.type.startsWith("video/");
+      if (isVideo) {
+        const blobUrl = URL.createObjectURL(file);
+        setRoutePhotos(prev => [...prev, { url: blobUrl, name: file.name, type: "video" }]);
+      } else {
+        const gps = await extractGPS(file);
+        const photoReader = new FileReader();
+        photoReader.onload = (ev) => {
+          const photo = { url: ev.target.result, name: file.name, type: "image", ...(gps || {}) };
+          setRoutePhotos(prev => [...prev, photo]);
+          if (gps) {
+            setPins(prev => [...prev, { lat: gps.lat, lng: gps.lng, photo: ev.target.result, label: file.name, isPhotoOnly: true }]);
+          }
+        };
+        photoReader.readAsDataURL(file);
+      }
+    }
+    e.target.value = "";
+  };
+
+  const linkPhotoToPin = (pinIdx) => {
+    if (linkingPhotoIdx === null) return;
+    const photo = routePhotos[linkingPhotoIdx];
+    if (!photo) return;
+    setPins(prev => prev.map((p, i) => i === pinIdx ? { ...p, photo: photo.url, label: photo.name } : p));
+    const pin = pins[pinIdx];
+    if (pin) {
+      setRoutePhotos(prev => prev.map((p, i) => i === linkingPhotoIdx ? { ...p, lat: pin.lat, lng: pin.lng, pinIdx } : p));
+    }
+    setLinkingPhotoIdx(null);
+  };
+
+  const handleSave = () => {
+    onSave({
+      pins,
+      photos: routePhotos,
+      ...(roadPoints.length > 0 ? { points: roadPoints } : {}),
+    });
+  };
+
+  const canSave = pins.length > 0;
+
+  return (
+    <div style={{ position: "absolute", inset: 0, zIndex: 300, background: T.darkBg, display: "flex", flexDirection: "column" }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", background: T.charcoal, borderBottom: `1px solid ${T.darkCard}`, flexShrink: 0 }}>
+        <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" }}>
+          <ChevronLeft size={22} color={T.white} strokeWidth={1.5} />
+        </button>
+        <span style={{ fontFamily: sans, fontSize: 14, fontWeight: 700, color: T.white }}>Add Route</span>
+      </div>
+
+      {/* Scroll body */}
+      <div className="th-scroll" style={{ flex: 1, overflowY: "auto", padding: "16px" }}>
+        <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 12px", lineHeight: 1.4 }}>Search for a location or tap the map to drop pins. Add photos below and tap "Link Pin" to attach them to a spot on the trail.</p>
+
+        {/* Interactive map for pin placement */}
+        <RoutePinMap pins={pins} setPins={setPins} linkingPhotoIdx={linkingPhotoIdx} onLinkPin={linkPhotoToPin} onRoutePoints={setRoadPoints} />
+
+        {/* Photos */}
+        <div style={{ marginTop: 16 }}>
+          <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.5, fontWeight: 600, display: "block", marginBottom: 8 }}>PHOTOS</span>
+          <input ref={photoRef} type="file" accept="image/*,video/*" multiple onChange={handlePhotoUpload} style={{ display: "none" }} />
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+            {routePhotos.map((p, i) => (
+              <div key={i} style={{ position: "relative", width: 72, height: 72, borderRadius: 8, overflow: "hidden", outline: linkingPhotoIdx === i ? `2px solid ${T.copper}` : "none", outlineOffset: 2 }}>
+                <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                {p.lat ? (
+                  <div style={{ position: "absolute", bottom: 2, left: 2, background: `${T.darkBg}CC`, borderRadius: 4, padding: "1px 4px", display: "flex", alignItems: "center", gap: 2 }}>
+                    <MapPin size={8} color={T.green} />
+                    <span style={{ fontFamily: sans, fontSize: 7, color: T.green }}>PINNED</span>
+                  </div>
+                ) : pins.length > 0 ? (
+                  <button onClick={() => setLinkingPhotoIdx(linkingPhotoIdx === i ? null : i)} style={{ position: "absolute", bottom: 2, left: 2, background: linkingPhotoIdx === i ? T.copper : `${T.copper}DD`, borderRadius: 4, padding: "2px 5px", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 2 }}>
+                    <MapPin size={8} color={T.white} />
+                    <span style={{ fontFamily: sans, fontSize: 7, color: T.white }}>{linkingPhotoIdx === i ? "TAP PIN" : "LINK PIN"}</span>
+                  </button>
+                ) : null}
+                <button onClick={() => setRoutePhotos(prev => prev.filter((_, idx) => idx !== i))} style={{ position: "absolute", top: 2, right: 2, width: 18, height: 18, borderRadius: "50%", background: `${T.darkBg}CC`, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+                  <X size={10} color={T.white} />
+                </button>
+              </div>
+            ))}
+            <button onClick={() => photoRef.current && photoRef.current.click()} style={{ width: 72, height: 72, borderRadius: 8, background: T.darkCard, border: `1px dashed ${T.charcoal}`, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4 }}>
+              <Camera size={18} color={T.tertiary} />
+              <span style={{ fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 0.5 }}>ADD</span>
+            </button>
+          </div>
+          {linkingPhotoIdx !== null && (
+            <div style={{ background: `${T.copper}15`, border: `1px solid ${T.copper}30`, borderRadius: 8, padding: "8px 12px", display: "flex", alignItems: "center", gap: 8 }}>
+              <MapPin size={14} color={T.copper} />
+              <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, flex: 1 }}>Tap a pin on the map to link this photo</span>
+              <button onClick={() => setLinkingPhotoIdx(null)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                <X size={14} color={T.tertiary} />
+              </button>
+            </div>
+          )}
+          {routePhotos.length > 0 && pins.length > 0 && linkingPhotoIdx === null && routePhotos.some(p => !p.lat) && (
+            <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, display: "block" }}>Tap "Link Pin" on a photo, then tap a map pin to associate them</span>
+          )}
+        </div>
+      </div>
+
+      {/* Save */}
+      <div style={{ padding: "12px 16px", background: T.charcoal, borderTop: `1px solid ${T.darkCard}`, flexShrink: 0 }}>
+        <button onClick={handleSave} disabled={!canSave} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "14px", borderRadius: 8, background: canSave ? T.green : T.charcoal, border: "none", cursor: canSave ? "pointer" : "default", opacity: canSave ? 1 : 0.5 }}>
+          <CheckCircle size={16} color={T.white} />
+          <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>SAVE ROUTE</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function RoutesScreen({ onRecordRoute, onManualEntry, userRoutes, onUpdateRoute, savedRoutes, onSaveRoute, onUnsaveRoute, onOpenDM, onAddFeedPost, onStartNav }) {
   const seedRoutes = [
     { name: "The Timberline Traverse", difficulty: "Hard", distance: "64.2 MI", time: "5H 30M", elevation: "+4,200 FT", rating: 4.8, reviews: 142, desc: "Scenic high-altitude crawl across the eastern slopes of Mt. Hood.", location: "Mt. Hood, OR", terrains: ["Dirt/Gravel", "Rock/Slickrock"], tags: ["scenic", "challenging"] },
@@ -6224,8 +6427,8 @@ const BOUNTY_FORM_TEMPLATES = {
       { id: "details_header", label: "Route Details", type: "h2", fixed: true, value: "Route Details" },
       { id: "location", label: "Location / Region", type: "short", placeholder: "e.g. San Juan Mountains, CO", required: true },
       { id: "map_field", label: "Route Map", type: "route_builder", description: "Live track or manually add the route — distance, elevation, and waypoints capture automatically", required: true },
-      { id: "difficulty", label: "Difficulty Rating", type: "select", options: ["Easy — Stock friendly", "Moderate — High clearance recommended", "Hard — 4WD required, some armor", "Expert — Lockers, armor, experience required"] },
-      { id: "terrains", label: "Terrain Types", type: "tag_select", options: ["Rock", "Mud", "Sand", "Gravel", "Snow/Ice", "Water Crossing", "Shelf Road", "Forest", "Desert", "Alpine"] },
+      { id: "difficulty", label: "Difficulty Rating", type: "select", options: ["Easy", "Moderate", "Hard", "Expert"] },
+      { id: "terrains", label: "Terrain Types", type: "tag_select", options: ["Dirt/Gravel", "Rock/Slickrock", "Sand", "Mud", "Snow/Ice", "Mixed", "Paved"] },
       { id: "conditions_header", label: "Current Conditions", type: "h2", fixed: true, value: "Current Trail Conditions" },
       { id: "conditions_body", label: "Conditions Detail", type: "p", placeholder: "Date of last run, surface conditions, water crossings, obstacles, closures, snow/ice. Be specific — other overlanders depend on this." },
       { id: "photos_field", label: "Trail Photos", type: "photos", placeholder: "Upload 10+ photos showing key obstacles, scenery, and trail conditions", required: true, min: 10 },
@@ -6402,6 +6605,7 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose }) {
       return (
         <div style={{ position: "absolute", inset: 0, background: T.darkBg, zIndex: 700 }}>
           <RouteRecorder
+            skipDetailsForm={true}
             onClose={() => setRouteBuilderOverlay(null)}
             onSave={(routeData) => saveRouteToField(fieldId, routeData)}
           />
@@ -6411,14 +6615,11 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose }) {
     if (mode === "manual") {
       return (
         <div style={{ position: "absolute", inset: 0, background: T.darkBg, zIndex: 700 }}>
-          <RouteDetailsForm
-            isManual={true}
-            isEdit={!!editData}
-            initialData={editData || undefined}
+          <BountyRouteMapEditor
             initialPins={editData ? editData.pins : undefined}
             initialPhotos={editData ? editData.photos : undefined}
             onBack={() => setRouteBuilderOverlay(null)}
-            onPublish={(routeData) => saveRouteToField(fieldId, routeData)}
+            onSave={(routeData) => saveRouteToField(fieldId, routeData)}
           />
         </div>
       );
