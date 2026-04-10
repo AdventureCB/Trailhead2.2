@@ -7689,8 +7689,6 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp })
   const leaderboardData = lbAll.map((u, i) => ({ ...u, rank: i + 1, badge: (rankTiers.find(r => u.points >= r.min && u.points <= r.max) || rankTiers[0]).name }));
   const myLeaderboardRank = leaderboardData.find(u => u.isYou)?.rank || "—";
 
-  const [lbFilter, setLbFilter] = useState("ALL TIME");
-  const lbFilters = ["ALL TIME", "THIS MONTH", "THIS WEEK"];
 
   // ── Bounty Board (admin-set, monetary value) ──
   const [bounties, setBounties] = useState([
@@ -7889,11 +7887,13 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp })
       {/* ═══════════ LEADERBOARD TAB ═══════════ */}
       {tab === "leaderboard" && (
         <div>
-          {/* Filter */}
-          <div style={{ display: "flex", gap: 6, padding: "14px 16px 10px" }}>
-            {lbFilters.map(f => (
-              <button key={f} onClick={() => setLbFilter(f)} style={{ padding: "6px 12px", borderRadius: 14, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 10, fontWeight: 600, letterSpacing: 0.5, background: lbFilter === f ? T.red : T.darkCard, color: lbFilter === f ? T.white : T.tertiary, transition: "all 0.15s" }}>{f}</button>
-            ))}
+          {/* Header: All Time + live indicator */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px 10px" }}>
+            <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 1 }}>ALL TIME</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: T.green, display: "inline-block", boxShadow: `0 0 6px ${T.green}` }} />
+              <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.5 }}>LIVE · UPDATES HOURLY</span>
+            </div>
           </div>
 
           {/* Top 3 Podium */}
