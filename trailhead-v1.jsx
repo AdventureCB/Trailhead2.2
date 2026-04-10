@@ -8817,8 +8817,8 @@ function AddBuildForm({ onClose, onSave, initialData }) {
 }
 
 /* ─── PROFILE SCREEN (Own Profile) ─── */
-function ProfileScreen({ initialUserName, initialUserHandle, onViewUser, onLogout, userBuilds, onAddBuild, onUpdateBuild, onDeleteBuild, profilePic, onSetProfilePic, notifPrefs, onSetNotifPrefs, feedItems, onDeletePost, onEditPost, onUpdateConvoy, onGoToPost, myPoints: myPointsProp, onEnterGuestPreview }) {
-  const [isPublic, setIsPublic] = useState(true);
+function ProfileScreen({ initialUserName, initialUserHandle, initialUserBio, initialIsPublic, onViewUser, onLogout, userBuilds, onAddBuild, onUpdateBuild, onDeleteBuild, profilePic, onSetProfilePic, notifPrefs, onSetNotifPrefs, feedItems, onDeletePost, onEditPost, onUpdateConvoy, onGoToPost, myPoints: myPointsProp, onSaveProfile }) {
+  const [isPublic, setIsPublic] = useState(initialIsPublic == null ? true : !!initialIsPublic);
   const [activeTab, setActiveTab] = useState("builds");
   const [activeBuild, setActiveBuild] = useState(0);
   const [showAddBuild, setShowAddBuild] = useState(false);
@@ -8829,9 +8829,45 @@ function ProfileScreen({ initialUserName, initialUserHandle, onViewUser, onLogou
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
   const [showNotifSettings, setShowNotifSettings] = useState(false);
-  const [userName, setUserName] = useState(initialUserName || "Kyle Morrison");
-  const [userHandle, setUserHandle] = useState(initialUserHandle ? "@" + initialUserHandle.replace(/^@/, "") : "@KyleLPO");
-  const [userBio, setUserBio] = useState("");
+  const [userName, setUserName] = useState(initialUserName || "");
+  const [userHandle, setUserHandle] = useState(initialUserHandle ? "@" + initialUserHandle.replace(/^@/, "") : "");
+  const [userBio, setUserBio] = useState(initialUserBio || "");
+  const [profileSaveState, setProfileSaveState] = useState({ status: "idle", error: "" }); // "idle" | "saving" | "saved" | "error"
+  // Keep local edit state in sync with the hydrated profile row from the
+  // parent. This fires after hydrateUserData lands and whenever the parent
+  // updates currentProfile (e.g. after a successful save).
+  useEffect(() => {
+    if (initialUserName != null) setUserName(initialUserName);
+  }, [initialUserName]);
+  useEffect(() => {
+    if (initialUserHandle != null) setUserHandle("@" + initialUserHandle.replace(/^@/, ""));
+  }, [initialUserHandle]);
+  useEffect(() => {
+    if (initialUserBio != null) setUserBio(initialUserBio);
+  }, [initialUserBio]);
+  useEffect(() => {
+    if (initialIsPublic != null) setIsPublic(!!initialIsPublic);
+  }, [initialIsPublic]);
+  const handleSaveProfile = async () => {
+    if (!onSaveProfile) return;
+    const cleanHandle = userHandle.trim().replace(/^@/, "");
+    if (!userName.trim()) { setProfileSaveState({ status: "error", error: "Display name is required." }); return; }
+    if (!cleanHandle) { setProfileSaveState({ status: "error", error: "Username is required." }); return; }
+    if (!/^[A-Za-z0-9_]{3,30}$/.test(cleanHandle)) { setProfileSaveState({ status: "error", error: "Username: 3-30 letters, numbers, or underscores." }); return; }
+    setProfileSaveState({ status: "saving", error: "" });
+    const result = await onSaveProfile({
+      full_name: userName.trim(),
+      handle: cleanHandle,
+      bio: userBio.trim() || null,
+      is_public: isPublic,
+    });
+    if (result && result.error) {
+      setProfileSaveState({ status: "error", error: result.error });
+    } else {
+      setProfileSaveState({ status: "saved", error: "" });
+      setTimeout(() => setProfileSaveState(s => s.status === "saved" ? { status: "idle", error: "" } : s), 2000);
+    }
+  };
   const profilePicRef = useRef(null);
   const settingsPicRef = useRef(null);
 
@@ -9113,10 +9149,38 @@ function ProfileScreen({ initialUserName, initialUserHandle, onViewUser, onLogou
             </div>
 
             {/* Bio */}
-            <div>
+            <div style={{ marginBottom: 14 }}>
               <label style={labelStyle}>BIO</label>
               <textarea value={userBio} onChange={e => setUserBio(e.target.value)} placeholder="Tell the community about yourself..." rows={3} style={{ ...inputStyle, resize: "vertical", fontFamily: serif, lineHeight: 1.5 }} />
             </div>
+
+            {/* Save button + status */}
+            {profileSaveState.status === "error" && profileSaveState.error && (
+              <div style={{ background: `${T.red}15`, border: `1px solid ${T.red}40`, borderRadius: 8, padding: "10px 12px", marginBottom: 10 }}>
+                <span style={{ fontFamily: serif, fontSize: 12, color: T.red }}>{profileSaveState.error}</span>
+              </div>
+            )}
+            {profileSaveState.status === "saved" && (
+              <div style={{ background: `${T.green}15`, border: `1px solid ${T.green}40`, borderRadius: 8, padding: "10px 12px", marginBottom: 10 }}>
+                <span style={{ fontFamily: serif, fontSize: 12, color: T.green }}>Profile saved.</span>
+              </div>
+            )}
+            <button
+              onClick={handleSaveProfile}
+              disabled={profileSaveState.status === "saving"}
+              style={{
+                width: "100%",
+                padding: "12px",
+                borderRadius: 8,
+                background: profileSaveState.status === "saving" ? T.charcoal : T.copper,
+                border: "none",
+                cursor: profileSaveState.status === "saving" ? "default" : "pointer",
+              }}
+            >
+              <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 1 }}>
+                {profileSaveState.status === "saving" ? "SAVING…" : "SAVE CHANGES"}
+              </span>
+            </button>
           </div>
 
           {/* Privacy Section */}
@@ -9162,24 +9226,6 @@ function ProfileScreen({ initialUserName, initialUserHandle, onViewUser, onLogou
               <ChevronRight size={16} color={T.tertiary} />
             </button>
           </div>
-
-          {/* GUEST_DEV_TOGGLE — REMOVE BEFORE BACKEND INTEGRATION.
-              This entire block lets the logged-in user jump into the guest
-              experience to verify read-only gating. Real guest state will
-              come from the backend session; this button must be deleted
-              before shipping. Search for GUEST_DEV_TOGGLE to find it. */}
-          {onEnterGuestPreview && (
-            <div style={{ background: `${T.copper}10`, border: `1px dashed ${T.copper}50`, borderRadius: 12, padding: 14, marginBottom: 16 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                <AlertTriangle size={13} color={T.copper} />
-                <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.5, fontWeight: 700 }}>DEV ONLY · REMOVE BEFORE BACKEND</span>
-              </div>
-              <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 10px", lineHeight: 1.5 }}>Preview what an unauthenticated visitor sees. Read-only across feed, forum, routes and builds. Ranks and interactions are locked behind sign-in.</p>
-              <button onClick={onEnterGuestPreview} style={{ width: "100%", padding: "10px", borderRadius: 8, background: T.copper, border: "none", cursor: "pointer" }}>
-                <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 1 }}>PREVIEW GUEST MODE</span>
-              </button>
-            </div>
-          )}
 
           {/* Sign Out */}
           <button onClick={onLogout} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "14px", borderRadius: 10, background: `${T.red}12`, border: `1px solid ${T.red}25`, cursor: "pointer" }}>
@@ -12352,11 +12398,8 @@ export default function Trailhead() {
     return () => { cancelled = true; sub && sub.subscription && sub.subscription.unsubscribe && sub.subscription.unsubscribe(); };
   }, []);
   // ─── GUEST MODE ───────────────────────────────────────────────────────────
-  // NOTE FOR BACKEND INTEGRATION: when wiring this prototype to a real backend,
-  // `isGuest` should be derived from auth/session state (i.e. currentUser == null),
-  // NOT from local toggling. The dev-only toggle in Profile > Settings is intended
-  // purely for previewing the guest experience inside this prototype and MUST be
-  // removed before shipping (search for GUEST_DEV_TOGGLE to find/delete it).
+  // Guests are only created by following a shared link without an active
+  // session. Normal app use requires sign-in.
   const [isGuest, setIsGuest] = useState(!!initialSharedLink);
   const [showGuestPrompt, setShowGuestPrompt] = useState(false);
   // Wraps any mutating callback so that when a guest calls it, we intercept and
@@ -12458,6 +12501,37 @@ export default function Trailhead() {
       setProfilePic(publicUrl);
       setCurrentProfile(prev => prev ? { ...prev, avatar_url: publicUrl } : prev);
     } catch (e) { console.error("[avatar] handleSetProfilePic failed", e); }
+  };
+  // Persist profile edits to public.profiles. Returns { ok } or { error }.
+  // The unique index on handle turns dupes into Postgres code 23505 which
+  // we translate into a friendly message.
+  const saveProfile = async ({ full_name, handle, bio, is_public }) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) return { error: "You're not signed in." };
+    try {
+      const { data, error } = await supabase.from("profiles").update({
+        full_name,
+        handle,
+        bio,
+        is_public,
+        updated_at: new Date().toISOString(),
+      }).eq("id", uid).select().single();
+      if (error) {
+        if (error.code === "23505") return { error: "That username is taken. Try another." };
+        console.error("[saveProfile] update error", error);
+        return { error: error.message || "Could not save profile." };
+      }
+      // Also mirror full_name + handle onto auth.users.user_metadata so the
+      // Google/Supabase-auth side stays in sync (non-blocking).
+      try {
+        await supabase.auth.updateUser({ data: { full_name, handle } });
+      } catch (e) { /* best-effort */ }
+      setCurrentProfile(data);
+      return { ok: true };
+    } catch (e) {
+      console.error("[saveProfile] failed", e);
+      return { error: "Network error. Try again." };
+    }
   };
   const [notifPrefs, setNotifPrefs] = useState({ likes: true, comments: true, replies: true, follows: true, mentions: true, push: false });
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
@@ -12724,7 +12798,7 @@ export default function Trailhead() {
           isOtherProfile ? (
             <OtherProfileScreen userId={profileStack[1]} onBack={goBack} onMessage={(user) => openDM(user)} />
           ) : (
-            <ProfileScreen initialUserName={(currentProfile && currentProfile.full_name) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name) || null} initialUserHandle={(currentProfile && currentProfile.handle) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle) || null} onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={deleteBuild} profilePic={profilePic} onSetProfilePic={handleSetProfilePic} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => setFeedItems(prev => prev.filter(p => p.id !== id))} onEditPost={(id, newText) => setFeedItems(prev => prev.map(p => p.id === id ? { ...p, title: newText } : p))} onUpdateConvoy={(convoyId, updates) => {
+            <ProfileScreen initialUserName={(currentProfile && currentProfile.full_name) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name) || null} initialUserHandle={(currentProfile && currentProfile.handle) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle) || null} initialUserBio={currentProfile ? currentProfile.bio : null} initialIsPublic={currentProfile ? currentProfile.is_public : null} onSaveProfile={saveProfile} onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={deleteBuild} profilePic={profilePic} onSetProfilePic={handleSetProfilePic} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => setFeedItems(prev => prev.filter(p => p.id !== id))} onEditPost={(id, newText) => setFeedItems(prev => prev.map(p => p.id === id ? { ...p, title: newText } : p))} onUpdateConvoy={(convoyId, updates) => {
               setFeedItems(prev => prev.map(p => p.id === convoyId ? { ...p, ...updates } : p));
               // Notify going/maybe RSVPs
               const convoy = feedItems.find(p => p.id === convoyId);
@@ -12735,7 +12809,7 @@ export default function Trailhead() {
                 });
                 addNotification({ type: "convoy", user: "KyleLPO", text: `updated convoy`, title: updates.title || convoy.title, time: Date.now() });
               }
-            }} onGoToPost={(id) => { setProfileStack([]); setScreen("feed"); }} myPoints={myTotalPoints} onEnterGuestPreview={() => { setIsGuest(true); setProfileStack([]); setScreen("feed"); }} />
+            }} onGoToPost={(id) => { setProfileStack([]); setScreen("feed"); }} myPoints={myTotalPoints} />
           )
         ) : (
           <>
