@@ -8838,11 +8838,8 @@ function ProfileScreen({ initialUserName, initialUserHandle, onViewUser, onLogou
   const handleProfilePicUpload = (e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      onSetProfilePic && onSetProfilePic(ev.target.result);
-    };
-    reader.readAsDataURL(file);
+    // Pass the File directly — parent handler compresses + uploads to storage.
+    onSetProfilePic && onSetProfilePic(file);
     e.target.value = "";
   };
 
@@ -8975,9 +8972,7 @@ function ProfileScreen({ initialUserName, initialUserHandle, onViewUser, onLogou
     const handleSettingsPic = (e) => {
       const file = e.target.files && e.target.files[0];
       if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (ev) => { onSetProfilePic && onSetProfilePic(ev.target.result); };
-      reader.readAsDataURL(file);
+      onSetProfilePic && onSetProfilePic(file);
       e.target.value = "";
     };
 
@@ -10083,15 +10078,17 @@ function SignupScreen({ onSignup, onGoToLogin, onSetProfilePic, onAddBuild }) {
   const [signupPic, setSignupPic] = useState(null);
   const [loading, setLoading] = useState(false);
   const signupPicRef = useRef(null);
+  // Pending pic File chosen in step 1 — deferred because the user isn't
+  // signed in yet. Uploaded via onSetProfilePic after signUp succeeds.
+  const pendingPicFileRef = useRef(null);
 
   const handlePicUpload = (e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
+    pendingPicFileRef.current = file;
+    // Local preview for this screen's UI
     const reader = new FileReader();
-    reader.onload = (ev) => {
-      setSignupPic(ev.target.result);
-      onSetProfilePic && onSetProfilePic(ev.target.result);
-    };
+    reader.onload = (ev) => setSignupPic(ev.target.result);
     reader.readAsDataURL(file);
     e.target.value = "";
   };
@@ -10143,6 +10140,11 @@ function SignupScreen({ onSignup, onGoToLogin, onSetProfilePic, onAddBuild }) {
         setError("Check your email to confirm your account, then sign in.");
         setLoading(false);
         return;
+      }
+      // Now that we have an authed session, hand the pending profile pic
+      // File off to the parent so it can compress + upload to storage.
+      if (pendingPicFileRef.current && onSetProfilePic) {
+        try { onSetProfilePic(pendingPicFileRef.current); } catch (e) {}
       }
       setLoading(false);
       setStep(2);
@@ -10482,12 +10484,12 @@ function OnboardingScreen({ session, onComplete, onSetProfilePic, onAddBuild }) 
   const handlePicUpload = (e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
+    // Local preview for this screen's UI
     const reader = new FileReader();
-    reader.onload = (ev) => {
-      setSignupPic(ev.target.result);
-      onSetProfilePic && onSetProfilePic(ev.target.result);
-    };
+    reader.onload = (ev) => setSignupPic(ev.target.result);
     reader.readAsDataURL(file);
+    // Pass File to parent (compresses + uploads once user is authed)
+    onSetProfilePic && onSetProfilePic(file);
     e.target.value = "";
   };
 
@@ -12165,6 +12167,46 @@ const __INITIAL_SHARED_LINK = (function() {
 // a specific "local" build shape with fields like owner/handle/initial/tags.
 // These helpers let us keep that shape intact while the source of truth moves
 // to the `public.builds` table — we just translate at the edge.
+// Client-side image compression. Downscales to maxDim and re-encodes as JPEG,
+// stepping quality down until the blob fits under maxBytes. Returns a Blob
+// (or the original File if it already fits and we hit a decode error).
+async function compressImage(file, { maxDim = 512, maxBytes = 900 * 1024, mimeType = "image/jpeg" } = {}) {
+  if (!file) return null;
+  // Skip work if already small enough and not huge dimension — we still
+  // re-encode to strip EXIF and normalize format.
+  const dataUrl = await new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+  const img = await new Promise((resolve, reject) => {
+    const i = new Image();
+    i.onload = () => resolve(i);
+    i.onerror = reject;
+    i.src = dataUrl;
+  });
+  let { width, height } = img;
+  if (width > maxDim || height > maxDim) {
+    const scale = Math.min(maxDim / width, maxDim / height);
+    width = Math.round(width * scale);
+    height = Math.round(height * scale);
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(img, 0, 0, width, height);
+  // Step quality down until under maxBytes (or floor at 0.5).
+  let quality = 0.85;
+  let blob = await new Promise(res => canvas.toBlob(res, mimeType, quality));
+  while (blob && blob.size > maxBytes && quality > 0.5) {
+    quality -= 0.1;
+    blob = await new Promise(res => canvas.toBlob(res, mimeType, quality));
+  }
+  return blob || file;
+}
+
 function dbRowToLocalBuild(row, profile) {
   if (!row) return null;
   const bd = row.build_data || {};
@@ -12342,6 +12384,56 @@ export default function Trailhead() {
     ...(userBuilds || []).map(b => ({ id: b.id, name: b.name || `${b.year} ${b.make} ${b.model}`, year: b.year, make: b.make, model: b.model })),
   ];
   const [profilePic, setProfilePic] = useState(null);
+  // Accepts either a raw data URL string (legacy callers / guest mode) or a
+  // File/Blob. When passed a File and the user is signed in, compresses the
+  // image, uploads to the `avatars` Supabase Storage bucket, writes the
+  // public URL to public.profiles.avatar_url, and updates local state.
+  // For optimistic UI we setProfilePic to a data URL immediately, then
+  // replace with the public URL once the upload lands.
+  const handleSetProfilePic = async (input) => {
+    if (!input) { setProfilePic(null); return; }
+    // Legacy: someone passed a string (data URL or regular URL). Just set it.
+    if (typeof input === "string") { setProfilePic(input); return; }
+    // File/Blob path
+    const file = input;
+    // Optimistic preview
+    try {
+      const previewUrl = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = reject;
+        r.readAsDataURL(file);
+      });
+      setProfilePic(previewUrl);
+    } catch (e) { /* ignore preview failure */ }
+    // Read the session directly (don't rely on React state) — handles the
+    // race right after signUp when Trailhead hasn't re-rendered yet.
+    let uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) {
+      try {
+        const { data: sess } = await supabase.auth.getSession();
+        uid = sess && sess.session && sess.session.user && sess.session.user.id;
+      } catch (e) {}
+    }
+    if (!uid) return; // guest/unsigned — local preview only
+    try {
+      const compressed = await compressImage(file, { maxDim: 512, maxBytes: 900 * 1024 });
+      const path = `${uid}/${Date.now()}.jpg`;
+      const { error: upErr } = await supabase.storage
+        .from("avatars")
+        .upload(path, compressed, { contentType: "image/jpeg", upsert: true });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from("avatars").getPublicUrl(path);
+      const publicUrl = pub && pub.publicUrl;
+      if (!publicUrl) return;
+      await supabase.from("profiles").update({
+        avatar_url: publicUrl,
+        updated_at: new Date().toISOString(),
+      }).eq("id", uid);
+      setProfilePic(publicUrl);
+      setCurrentProfile(prev => prev ? { ...prev, avatar_url: publicUrl } : prev);
+    } catch (e) { /* best-effort — local preview stays */ }
+  };
   const [notifPrefs, setNotifPrefs] = useState({ likes: true, comments: true, replies: true, follows: true, mentions: true, push: false });
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [showDM, setShowDM] = useState(false);
@@ -12566,12 +12658,12 @@ export default function Trailhead() {
     />;
   }
   if (authState === "signup") {
-    return <SignupScreen onSignup={() => setAuthState("app")} onGoToLogin={() => setAuthState("login")} onSetProfilePic={setProfilePic} onAddBuild={addBuild} />;
+    return <SignupScreen onSignup={() => setAuthState("app")} onGoToLogin={() => setAuthState("login")} onSetProfilePic={handleSetProfilePic} onAddBuild={addBuild} />;
   }
   if (authState === "onboarding") {
     return <OnboardingScreen
       session={supabaseSession}
-      onSetProfilePic={setProfilePic}
+      onSetProfilePic={handleSetProfilePic}
       onAddBuild={addBuild}
       onComplete={() => setAuthState("app")}
     />;
@@ -12607,7 +12699,7 @@ export default function Trailhead() {
           isOtherProfile ? (
             <OtherProfileScreen userId={profileStack[1]} onBack={goBack} onMessage={(user) => openDM(user)} />
           ) : (
-            <ProfileScreen initialUserName={(currentProfile && currentProfile.full_name) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name) || null} initialUserHandle={(currentProfile && currentProfile.handle) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle) || null} onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={deleteBuild} profilePic={profilePic} onSetProfilePic={setProfilePic} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => setFeedItems(prev => prev.filter(p => p.id !== id))} onEditPost={(id, newText) => setFeedItems(prev => prev.map(p => p.id === id ? { ...p, title: newText } : p))} onUpdateConvoy={(convoyId, updates) => {
+            <ProfileScreen initialUserName={(currentProfile && currentProfile.full_name) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name) || null} initialUserHandle={(currentProfile && currentProfile.handle) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle) || null} onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={deleteBuild} profilePic={profilePic} onSetProfilePic={handleSetProfilePic} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => setFeedItems(prev => prev.filter(p => p.id !== id))} onEditPost={(id, newText) => setFeedItems(prev => prev.map(p => p.id === id ? { ...p, title: newText } : p))} onUpdateConvoy={(convoyId, updates) => {
               setFeedItems(prev => prev.map(p => p.id === convoyId ? { ...p, ...updates } : p));
               // Notify going/maybe RSVPs
               const convoy = feedItems.find(p => p.id === convoyId);
