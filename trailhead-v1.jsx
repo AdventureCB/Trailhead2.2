@@ -2655,6 +2655,24 @@ forumData.categories.forEach(cat => {
 });
 
 function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpenDM, onAddFeedPost, userThreads, setUserThreads, userReplies, setUserReplies, likedForumItems, setLikedForumItems, forumLikeCounts, setForumLikeCounts, forumViewCounts, setForumViewCounts, onAwardPoints }) {
+  // Normalize any time value (number timestamp OR "Xh ago" style string) into
+  // an "age in minutes" sort key. Lower = more recent.
+  const threadAgeMin = (time) => {
+    if (time == null) return Number.MAX_SAFE_INTEGER;
+    if (typeof time === "number") return Math.max(0, (Date.now() - time) / 60000);
+    const s = String(time);
+    const m = s.match(/(\d+)\s*(mo|m|h|d|w|y)/i);
+    if (!m) return 99999;
+    const n = parseInt(m[1], 10);
+    const unit = m[2].toLowerCase();
+    if (unit === "m") return n;
+    if (unit === "h") return n * 60;
+    if (unit === "d") return n * 1440;
+    if (unit === "w") return n * 10080;
+    if (unit === "mo") return n * 43200;
+    if (unit === "y") return n * 525600;
+    return 99999;
+  };
   const [view, setView] = useState("categories"); // "categories" | "subcategories" | "threads" | "thread" | "newThread"
   const [selectedCat, setSelectedCat] = useState(null);
   const [selectedSub, setSelectedSub] = useState(null);
@@ -3761,7 +3779,19 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
 
   // ─── Thread List View ───
   if (view === "threads" && selectedSub && selectedCat) {
-    const threads = [...(userThreads[selectedSub.name] || []), ...(forumData.threads[selectedSub.name] || [])];
+    // Pinned threads are sticky at the top of the list; within pinned and
+    // unpinned groups, sort by most recent first. NOTE: ability to pin/unpin
+    // a thread will be gated by user role once privileges ship — the pin flag
+    // lives on the thread object so enforcement can happen in the mutation
+    // handler without any UI re-plumbing.
+    const threads = [...(userThreads[selectedSub.name] || []), ...(forumData.threads[selectedSub.name] || [])]
+      .slice()
+      .sort((a, b) => {
+        const pa = a.pinned ? 0 : 1;
+        const pb = b.pinned ? 0 : 1;
+        if (pa !== pb) return pa - pb;
+        return threadAgeMin(a.time) - threadAgeMin(b.time);
+      });
     return (
       <div style={{ padding: "0 0 16px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px" }}>
@@ -3847,11 +3877,16 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
   // ─── Categories View (default) ───
   const totalThreads = (cat) => cat.subs.reduce((sum, s) => sum + s.threads, 0);
 
-  // Collect recent threads across all subcategories for the home view
-  const recentThreads = Object.values(forumData.threads).flat().sort((a, b) => {
-    const timeVal = (t) => t.includes("m ago") ? 1 : t.includes("h ago") ? parseInt(t) : t.includes("d ago") ? parseInt(t) * 24 : 999;
-    return timeVal(a.time) - timeVal(b.time);
-  }).slice(0, 5);
+  // Collect the 5 most recent threads across every subcategory for the home
+  // view — includes user-created threads and sorts by real timestamp.
+  const recentThreadsPool = [
+    ...Object.values(forumData.threads).flat(),
+    ...Object.values(userThreads || {}).flat(),
+  ];
+  const recentThreads = recentThreadsPool
+    .slice()
+    .sort((a, b) => threadAgeMin(a.time) - threadAgeMin(b.time))
+    .slice(0, 5);
 
   return (
     <div style={{ padding: "0 0 16px" }}>
@@ -3956,10 +3991,12 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           {recentThreads.map((t, i) => (
             <div key={t.id} onClick={() => {
-              // Find the category and sub for this thread
+              // Find the category and sub for this thread (search both seed + user threads)
               for (const cat of forumData.categories) {
                 for (const sub of cat.subs) {
-                  if ((forumData.threads[sub.name] || []).find(th => th.id === t.id)) {
+                  const seedHit = (forumData.threads[sub.name] || []).find(th => th.id === t.id);
+                  const userHit = (userThreads[sub.name] || []).find(th => th.id === t.id);
+                  if (seedHit || userHit) {
                     setSelectedCat(cat);
                     setSelectedSub(sub);
                     setSelectedThread(t);
