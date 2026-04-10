@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
-import { Heart, MessageCircle, MapPin, Clock, Mountain, ChevronRight, ChevronLeft, ChevronDown, Search, Plus, Home, Compass, Map, Wrench, Trophy, AlertTriangle, Navigation, Star, Share2, Bookmark, MoreHorizontal, ArrowUp, Users, Radio, CloudSun, CheckCircle, Target, Gift, ChevronUp, ExternalLink, Lock, Globe, Shield, UserPlus, UserCheck, Settings, Camera, Eye, EyeOff, X, Bell, ThumbsUp, UserPlus as UserPlusIcon, AtSign, Mail, Send, Image, Smartphone, Trash2, Edit3, Award, Zap, TrendingUp, Flame, DollarSign, Route, Video, Play, Maximize2, Minimize2 } from "lucide-react";
+import { Heart, MessageCircle, MapPin, Clock, Mountain, ChevronRight, ChevronLeft, ChevronDown, Search, Plus, Home, Compass, Map, Wrench, Trophy, AlertTriangle, Navigation, Star, Share2, Bookmark, MoreHorizontal, ArrowUp, Users, Radio, CloudSun, CheckCircle, Target, Gift, ChevronUp, ExternalLink, Lock, Globe, Shield, UserPlus, UserCheck, Settings, Camera, Eye, EyeOff, X, Bell, ThumbsUp, UserPlus as UserPlusIcon, AtSign, Mail, Send, Image, Smartphone, Trash2, Edit3, Award, Zap, TrendingUp, Flame, DollarSign, Route, Video, Play, Maximize2, Minimize2, LogOut } from "lucide-react";
+import { supabase } from "./supabase-client.js";
 
 /* ─── Design Tokens from Lone Peak Concept ─── */
 const T = {
@@ -9932,12 +9933,37 @@ function LoginScreen({ onLogin, onGoToSignup, onGuestEnter }) {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!email.trim()) return setError("Enter your email to continue.");
     if (!password) return setError("Enter your password.");
     setError("");
-    onLogin();
+    setLoading(true);
+    try {
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+      if (authError) { setError(authError.message || "Sign in failed."); setLoading(false); return; }
+      if (data && data.session) { onLogin(); }
+    } catch (e) {
+      setError("Could not reach server. Check your connection.");
+    }
+    setLoading(false);
+  };
+
+  const handleGoogleSignIn = async () => {
+    setError("");
+    try {
+      const { error: authError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: window.location.origin + "/" },
+      });
+      if (authError) setError(authError.message || "Google sign-in failed.");
+    } catch (e) {
+      setError("Could not start Google sign-in.");
+    }
   };
 
   const inputStyle = {
@@ -9989,8 +10015,8 @@ function LoginScreen({ onLogin, onGoToSignup, onGuestEnter }) {
             <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, cursor: "pointer" }}>Forgot password?</span>
           </div>
 
-          <button onClick={handleSubmit} style={{ width: "100%", padding: "14px 0", borderRadius: 8, background: T.red, border: "none", cursor: "pointer", marginBottom: 16 }}>
-            <span style={{ fontFamily: sans, fontSize: 13, fontWeight: 600, color: T.white, letterSpacing: 1.5 }}>SIGN IN</span>
+          <button onClick={handleSubmit} disabled={loading} style={{ width: "100%", padding: "14px 0", borderRadius: 8, background: T.red, border: "none", cursor: loading ? "wait" : "pointer", marginBottom: 16, opacity: loading ? 0.7 : 1 }}>
+            <span style={{ fontFamily: sans, fontSize: 13, fontWeight: 600, color: T.white, letterSpacing: 1.5 }}>{loading ? "SIGNING IN..." : "SIGN IN"}</span>
           </button>
 
           {/* Divider */}
@@ -10000,15 +10026,11 @@ function LoginScreen({ onLogin, onGoToSignup, onGuestEnter }) {
             <div style={{ flex: 1, height: 1, background: T.charcoal }} />
           </div>
 
-          {/* Social Login */}
+          {/* Social Login — Apple deferred until Apple Developer account is set up */}
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
-            <button style={{ width: "100%", padding: "12px 0", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+            <button onClick={handleGoogleSignIn} style={{ width: "100%", padding: "12px 0", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18A10.96 10.96 0 0 0 1 12c0 1.77.42 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
               <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, letterSpacing: 0.5 }}>Continue with Google</span>
-            </button>
-            <button style={{ width: "100%", padding: "12px 0", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="#FFFFFF"><path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/></svg>
-              <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, letterSpacing: 0.5 }}>Continue with Apple</span>
             </button>
           </div>
 
@@ -10039,6 +10061,7 @@ function SignupScreen({ onSignup, onGoToLogin, onSetProfilePic }) {
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [signupPic, setSignupPic] = useState(null);
+  const [loading, setLoading] = useState(false);
   const signupPicRef = useRef(null);
 
   const handlePicUpload = (e) => {
@@ -10063,17 +10086,72 @@ function SignupScreen({ onSignup, onGoToLogin, onSetProfilePic }) {
   };
   const labelStyle = { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 600, display: "block", marginBottom: 6 };
 
-  const handleStep1 = () => {
+  const handleStep1 = async () => {
     if (!form.name.trim()) return setError("Enter your name.");
     if (!form.email.trim()) return setError("Enter your email.");
     if (!form.handle.trim()) return setError("Choose a username.");
     if (form.password.length < 6) return setError("Password must be at least 6 characters.");
     if (form.password !== form.confirmPassword) return setError("Passwords don't match.");
     setError("");
-    setStep(2);
+    setLoading(true);
+    try {
+      const { data, error: authError } = await supabase.auth.signUp({
+        email: form.email.trim(),
+        password: form.password,
+        options: {
+          // Stored on auth.users.raw_user_meta_data — available on session.user.user_metadata.
+          // When we create a public.profiles table later, a DB trigger will copy these into it.
+          data: {
+            full_name: form.name.trim(),
+            handle: form.handle.trim().replace(/^@/, ""),
+          },
+        },
+      });
+      if (authError) { setError(authError.message || "Sign up failed."); setLoading(false); return; }
+      // If email confirmation is ON in Supabase, data.session will be null and the user
+      // must click a link in their email. If OFF, they're signed in immediately.
+      if (data && data.user && !data.session) {
+        setError("Check your email to confirm your account, then sign in.");
+        setLoading(false);
+        return;
+      }
+      setLoading(false);
+      setStep(2);
+    } catch (e) {
+      setError("Could not reach server. Check your connection.");
+      setLoading(false);
+    }
   };
 
-  const handleFinish = () => {
+  const handleGoogleSignUp = async () => {
+    setError("");
+    try {
+      const { error: authError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: window.location.origin + "/" },
+      });
+      if (authError) setError(authError.message || "Google sign-up failed.");
+    } catch (e) {
+      setError("Could not start Google sign-up.");
+    }
+  };
+
+  const handleFinish = async () => {
+    // Persist the rig/build survey into user_metadata so it's available later
+    // when we create the profiles/builds tables. Non-blocking — if it fails
+    // the user can still complete onboarding and we'll sync on next save.
+    try {
+      await supabase.auth.updateUser({
+        data: {
+          first_build: rig.buildName || rig.model ? {
+            name: rig.buildName,
+            year: rig.year,
+            make: rig.make,
+            model: rig.model,
+          } : null,
+        },
+      });
+    } catch (e) { /* ignore — onboarding survey is best-effort */ }
     onSignup();
   };
 
@@ -10139,8 +10217,8 @@ function SignupScreen({ onSignup, onGoToLogin, onSetProfilePic }) {
               <input type="password" value={form.confirmPassword} onChange={(e) => set("confirmPassword", e.target.value)} placeholder="Re-enter your password" style={inputStyle} onFocus={(e) => e.target.style.borderColor = T.copper} onBlur={(e) => e.target.style.borderColor = T.charcoal} />
             </div>
 
-            <button onClick={handleStep1} style={{ width: "100%", padding: "14px 0", borderRadius: 8, background: T.red, border: "none", cursor: "pointer", marginBottom: 16 }}>
-              <span style={{ fontFamily: sans, fontSize: 13, fontWeight: 600, color: T.white, letterSpacing: 1.5 }}>CONTINUE</span>
+            <button onClick={handleStep1} disabled={loading} style={{ width: "100%", padding: "14px 0", borderRadius: 8, background: T.red, border: "none", cursor: loading ? "wait" : "pointer", marginBottom: 16, opacity: loading ? 0.7 : 1 }}>
+              <span style={{ fontFamily: sans, fontSize: 13, fontWeight: 600, color: T.white, letterSpacing: 1.5 }}>{loading ? "CREATING ACCOUNT..." : "CONTINUE"}</span>
             </button>
 
             {/* Divider */}
@@ -10151,13 +10229,9 @@ function SignupScreen({ onSignup, onGoToLogin, onSetProfilePic }) {
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
-              <button style={{ width: "100%", padding: "12px 0", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+              <button onClick={handleGoogleSignUp} style={{ width: "100%", padding: "12px 0", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18A10.96 10.96 0 0 0 1 12c0 1.77.42 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
                 <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, letterSpacing: 0.5 }}>Sign up with Google</span>
-              </button>
-              <button style={{ width: "100%", padding: "12px 0", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="#FFFFFF"><path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/></svg>
-                <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, letterSpacing: 0.5 }}>Sign up with Apple</span>
               </button>
             </div>
 
@@ -11702,6 +11776,37 @@ export default function Trailhead() {
   // Seed from cached module-scope URL parse so LoginScreen never mounts for shared links.
   const initialSharedLink = __INITIAL_SHARED_LINK;
   const [authState, setAuthState] = useState(initialSharedLink ? "app" : "login"); // "login" | "signup" | "app"
+  // Supabase session — hydrated on boot from localStorage. While null, we
+  // show the login screen (unless we're in guest/shared-link mode).
+  const [supabaseSession, setSupabaseSession] = useState(null);
+  const [sessionHydrated, setSessionHydrated] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    // 1) Hydrate any existing session on first mount.
+    supabase.auth.getSession().then(({ data }) => {
+      if (cancelled) return;
+      const session = data && data.session;
+      setSupabaseSession(session || null);
+      setSessionHydrated(true);
+      if (session && !initialSharedLink) {
+        // Skip login screen if already signed in.
+        setAuthState("app");
+      }
+    });
+    // 2) Subscribe to auth state changes (sign-in, sign-out, token refresh, OAuth callback).
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (cancelled) return;
+      setSupabaseSession(session || null);
+      if (event === "SIGNED_IN" && session) {
+        setAuthState("app");
+        setIsGuest(false);
+      }
+      if (event === "SIGNED_OUT") {
+        setAuthState("login");
+      }
+    });
+    return () => { cancelled = true; sub && sub.subscription && sub.subscription.unsubscribe && sub.subscription.unsubscribe(); };
+  }, []);
   // ─── GUEST MODE ───────────────────────────────────────────────────────────
   // NOTE FOR BACKEND INTEGRATION: when wiring this prototype to a real backend,
   // `isGuest` should be derived from auth/session state (i.e. currentUser == null),
@@ -11974,7 +12079,7 @@ export default function Trailhead() {
           isOtherProfile ? (
             <OtherProfileScreen userId={profileStack[1]} onBack={goBack} onMessage={(user) => openDM(user)} />
           ) : (
-            <ProfileScreen onViewUser={openUserProfile} onLogout={() => { setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={(id) => { setUserBuilds(prev => prev.filter(b => b.id !== id)); setFeedItems(prev => prev.filter(p => p.buildId !== id && p.id !== id)); }} profilePic={profilePic} onSetProfilePic={setProfilePic} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => setFeedItems(prev => prev.filter(p => p.id !== id))} onEditPost={(id, newText) => setFeedItems(prev => prev.map(p => p.id === id ? { ...p, title: newText } : p))} onUpdateConvoy={(convoyId, updates) => {
+            <ProfileScreen onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={(id) => { setUserBuilds(prev => prev.filter(b => b.id !== id)); setFeedItems(prev => prev.filter(p => p.buildId !== id && p.id !== id)); }} profilePic={profilePic} onSetProfilePic={setProfilePic} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => setFeedItems(prev => prev.filter(p => p.id !== id))} onEditPost={(id, newText) => setFeedItems(prev => prev.map(p => p.id === id ? { ...p, title: newText } : p))} onUpdateConvoy={(convoyId, updates) => {
               setFeedItems(prev => prev.map(p => p.id === convoyId ? { ...p, ...updates } : p));
               // Notify going/maybe RSVPs
               const convoy = feedItems.find(p => p.id === convoyId);
