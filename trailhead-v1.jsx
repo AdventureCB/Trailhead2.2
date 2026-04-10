@@ -4966,13 +4966,14 @@ function RouteNavigation({ route, onClose }) {
 }
 
 /* ─── Route Pin Map (for manual route entry) ─── */
-function RoutePinMap({ pins, setPins, linkingPhotoIdx, onLinkPin, onRoutePoints }) {
+function RoutePinMap({ pins, setPins, linkingPhotoIdx, onLinkPin, onRoutePoints, onRouteStats }) {
   const mapRef = useRef(null);
   const mapInst = useRef(null);
   const markersRef = useRef([]);
   const polyRef = useRef(null);
   const dirRendererRef = useRef(null);
   const dirServiceRef = useRef(null);
+  const elevServiceRef = useRef(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -4998,6 +4999,7 @@ function RoutePinMap({ pins, setPins, linkingPhotoIdx, onLinkPin, onRoutePoints 
       mapInst.current = map;
       polyRef.current = new window.google.maps.Polyline({ map, path: [], strokeColor: T.red, strokeWeight: 3, strokeOpacity: 0.8 });
       dirServiceRef.current = new window.google.maps.DirectionsService();
+      try { elevServiceRef.current = new window.google.maps.ElevationService(); } catch (e) { elevServiceRef.current = null; }
       dirRendererRef.current = new window.google.maps.DirectionsRenderer({
         map,
         suppressMarkers: true,
@@ -5077,16 +5079,50 @@ function RoutePinMap({ pins, setPins, linkingPhotoIdx, onLinkPin, onRoutePoints 
         if (status === "OK") {
           dirRendererRef.current.setDirections(result);
           // Extract road-snapped polyline points and pass up
-          if (onRoutePoints && result.routes && result.routes[0]) {
-            const routePoints = [];
+          const routePoints = [];
+          let totalMeters = 0;
+          let totalSeconds = 0;
+          if (result.routes && result.routes[0]) {
             result.routes[0].legs.forEach(leg => {
+              if (leg.distance && leg.distance.value) totalMeters += leg.distance.value;
+              if (leg.duration && leg.duration.value) totalSeconds += leg.duration.value;
               leg.steps.forEach(step => {
                 step.path.forEach(pt => {
                   routePoints.push({ lat: pt.lat(), lng: pt.lng() });
                 });
               });
             });
-            onRoutePoints(routePoints);
+          }
+          if (onRoutePoints) onRoutePoints(routePoints);
+          // Compute distance in miles and a formatted time string
+          const miles = totalMeters / 1609.34;
+          const h = Math.floor(totalSeconds / 3600);
+          const m = Math.round((totalSeconds % 3600) / 60);
+          const timeStr = totalSeconds > 0 ? (h > 0 ? `${h}H ${m}M` : `${m}M`) : "";
+          // Sample elevation along path to compute gain + max
+          if (onRouteStats) {
+            const pathForElev = routePoints.length > 0 ? routePoints.map(p => new window.google.maps.LatLng(p.lat, p.lng)) : routePins.map(p => new window.google.maps.LatLng(p.lat, p.lng));
+            const samples = Math.min(256, Math.max(8, pathForElev.length));
+            if (elevServiceRef.current && pathForElev.length >= 2) {
+              elevServiceRef.current.getElevationAlongPath({ path: pathForElev, samples }, (elevs, estatus) => {
+                let gainFt = 0;
+                let maxFt = 0;
+                if (estatus === "OK" && Array.isArray(elevs) && elevs.length > 1) {
+                  const toFt = (m) => m * 3.28084;
+                  let prev = elevs[0].elevation;
+                  maxFt = toFt(prev);
+                  for (let i = 1; i < elevs.length; i++) {
+                    const cur = elevs[i].elevation;
+                    if (cur > prev) gainFt += toFt(cur - prev);
+                    if (toFt(cur) > maxFt) maxFt = toFt(cur);
+                    prev = cur;
+                  }
+                }
+                onRouteStats({ distanceMi: miles, timeStr, elevGainFt: Math.round(gainFt), maxElevFt: Math.round(maxFt) });
+              });
+            } else {
+              onRouteStats({ distanceMi: miles, timeStr, elevGainFt: 0, maxElevFt: 0 });
+            }
           }
         } else {
           // Fallback to straight polyline if directions fail
@@ -5095,6 +5131,7 @@ function RoutePinMap({ pins, setPins, linkingPhotoIdx, onLinkPin, onRoutePoints 
             polyRef.current.setPath(routePins.map(p => ({ lat: p.lat, lng: p.lng })));
           }
           onRoutePoints && onRoutePoints([]);
+          onRouteStats && onRouteStats(null);
         }
       });
     } else {
@@ -5104,6 +5141,8 @@ function RoutePinMap({ pins, setPins, linkingPhotoIdx, onLinkPin, onRoutePoints 
         const linePins = pins.filter(p => !p.isPhotoOnly);
         polyRef.current.setPath(linePins.map(p => ({ lat: p.lat, lng: p.lng })));
       }
+      onRoutePoints && onRoutePoints([]);
+      onRouteStats && onRouteStats(null);
     }
   }, [pins, ready, linkingPhotoIdx]);
 
@@ -5158,11 +5197,26 @@ function RouteDetailsForm({ autoStats, onBack, onPublish, isManual, initialPhoto
   const [waypoints, setWaypoints] = useState(initialWaypoints || []);
   const wpPhotoRefs = useRef({});
   // Manual-only fields
-  const [manualDistance, setManualDistance] = useState(d.distance ? d.distance.replace(/[^0-9.]/g, "") : "");
+  const [manualDistance, setManualDistance] = useState(d.distance ? String(d.distance).replace(/[^0-9.]/g, "") : "");
   const [manualTime, setManualTime] = useState(d.time || "");
-  const [manualElevGain, setManualElevGain] = useState(d.elevation ? d.elevation.replace(/[^0-9,]/g, "").replace(/,/g, "") : "");
+  const [manualElevGain, setManualElevGain] = useState(d.elevation ? String(d.elevation).replace(/[^0-9,]/g, "").replace(/,/g, "") : "");
   const [manualMaxElev, setManualMaxElev] = useState("");
   const [manualLocation, setManualLocation] = useState(d.location || "");
+  // Track whether user has manually edited stat fields so auto-fill from map doesn't overwrite
+  const [distTouched, setDistTouched] = useState(!!(d.distance));
+  const [timeTouched, setTimeTouched] = useState(!!(d.time));
+  const [elevTouched, setElevTouched] = useState(!!(d.elevation));
+  const [maxElevTouched, setMaxElevTouched] = useState(false);
+  const [mapStats, setMapStats] = useState(null); // { distanceMi, timeStr, elevGainFt, maxElevFt }
+
+  const handleRouteStats = (stats) => {
+    setMapStats(stats);
+    if (!stats) return;
+    if (!distTouched && stats.distanceMi != null) setManualDistance(stats.distanceMi.toFixed(1));
+    if (!timeTouched && stats.timeStr) setManualTime(stats.timeStr);
+    if (!elevTouched && stats.elevGainFt != null) setManualElevGain(String(stats.elevGainFt));
+    if (!maxElevTouched && stats.maxElevFt != null) setManualMaxElev(String(stats.maxElevFt));
+  };
 
   // Extract GPS EXIF from image
   const extractGPS = (file) => new Promise((resolve) => {
@@ -5358,7 +5412,7 @@ function RouteDetailsForm({ autoStats, onBack, onPublish, isManual, initialPhoto
         </div>
 
         {/* Interactive map for pin placement */}
-        {isManual && <RoutePinMap pins={pins} setPins={setPins} linkingPhotoIdx={linkingPhotoIdx} onLinkPin={linkPhotoToPin} onRoutePoints={setRoadPoints} />}
+        {isManual && <RoutePinMap pins={pins} setPins={setPins} linkingPhotoIdx={linkingPhotoIdx} onLinkPin={linkPhotoToPin} onRoutePoints={setRoadPoints} onRouteStats={handleRouteStats} />}
 
         {/* Difficulty */}
         <div style={{ marginBottom: 16 }}>
@@ -5410,24 +5464,29 @@ function RouteDetailsForm({ autoStats, onBack, onPublish, isManual, initialPhoto
           <>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
               <div>
-                <span style={rdLabel}>DISTANCE (MI)</span>
-                <input value={manualDistance} onChange={e => setManualDistance(e.target.value)} placeholder="0.0" type="number" style={rdInput} />
+                <span style={rdLabel}>DISTANCE (MI){mapStats && !distTouched && <span style={{ color: T.copper, fontSize: 8, marginLeft: 6 }}>AUTO</span>}</span>
+                <input value={manualDistance} onChange={e => { setManualDistance(e.target.value); setDistTouched(true); }} placeholder="0.0" type="number" style={rdInput} />
               </div>
               <div>
-                <span style={rdLabel}>EST. TIME</span>
-                <input value={manualTime} onChange={e => setManualTime(e.target.value)} placeholder="e.g. 3H 15M" style={rdInput} />
+                <span style={rdLabel}>EST. TIME{mapStats && !timeTouched && <span style={{ color: T.copper, fontSize: 8, marginLeft: 6 }}>AUTO</span>}</span>
+                <input value={manualTime} onChange={e => { setManualTime(e.target.value); setTimeTouched(true); }} placeholder="e.g. 3H 15M" style={rdInput} />
               </div>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
               <div>
-                <span style={rdLabel}>ELEVATION GAIN (FT)</span>
-                <input value={manualElevGain} onChange={e => setManualElevGain(e.target.value)} placeholder="0" type="number" style={rdInput} />
+                <span style={rdLabel}>ELEVATION GAIN (FT){mapStats && !elevTouched && <span style={{ color: T.copper, fontSize: 8, marginLeft: 6 }}>AUTO</span>}</span>
+                <input value={manualElevGain} onChange={e => { setManualElevGain(e.target.value); setElevTouched(true); }} placeholder="0" type="number" style={rdInput} />
               </div>
               <div>
-                <span style={rdLabel}>MAX ELEVATION (FT)</span>
-                <input value={manualMaxElev} onChange={e => setManualMaxElev(e.target.value)} placeholder="0" type="number" style={rdInput} />
+                <span style={rdLabel}>MAX ELEVATION (FT){mapStats && !maxElevTouched && <span style={{ color: T.copper, fontSize: 8, marginLeft: 6 }}>AUTO</span>}</span>
+                <input value={manualMaxElev} onChange={e => { setManualMaxElev(e.target.value); setMaxElevTouched(true); }} placeholder="0" type="number" style={rdInput} />
               </div>
             </div>
+            {mapStats && (
+              <div style={{ marginBottom: 16, padding: "8px 12px", background: `${T.copper}10`, border: `1px solid ${T.copper}30`, borderRadius: 6 }}>
+                <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 0.5 }}>Stats auto-filled from your mapped route. Edit any field to override.</span>
+              </div>
+            )}
           </>
         )}
 
@@ -5732,7 +5791,7 @@ function BountyRouteMapEditor({ initialPins, initialPhotos, onBack, onSave }) {
   );
 }
 
-function RoutesScreen({ onRecordRoute, onManualEntry, userRoutes, onUpdateRoute, savedRoutes, onSaveRoute, onUnsaveRoute, onOpenDM, onAddFeedPost, onStartNav }) {
+function RoutesScreen({ onRecordRoute, onManualEntry, userRoutes, onUpdateRoute, savedRoutes, onSaveRoute, onUnsaveRoute, onOpenDM, onAddFeedPost, onStartNav, userBuilds }) {
   const seedRoutes = [
     { name: "The Timberline Traverse", difficulty: "Hard", distance: "64.2 MI", time: "5H 30M", elevation: "+4,200 FT", rating: 4.8, reviews: 142, desc: "Scenic high-altitude crawl across the eastern slopes of Mt. Hood.", location: "Mt. Hood, OR", terrains: ["Dirt/Gravel", "Rock/Slickrock"], tags: ["scenic", "challenging"] },
     { name: "Hell's Revenge Loop", difficulty: "Expert", distance: "6.5 MI", time: "2H 45M", elevation: "+1,800 FT", rating: 4.9, reviews: 312, desc: "Iconic slickrock trail in Moab with steep climbs and ledges.", location: "Moab, UT", terrains: ["Rock/Slickrock"], tags: ["technical", "iconic"] },
@@ -6035,6 +6094,7 @@ function RoutesScreen({ onRecordRoute, onManualEntry, userRoutes, onUpdateRoute,
         <RouteDetailsForm
           isManual
           isEdit
+          userBuilds={userBuilds}
           initialData={editingRoute}
           initialPhotos={editingRoute.photos || []}
           initialPins={editingRoute.pins || []}
@@ -6050,11 +6110,12 @@ function RoutesScreen({ onRecordRoute, onManualEntry, userRoutes, onUpdateRoute,
                 tags: updatedData.tags,
                 pins: updatedData.pins,
                 photos: updatedData.photos,
+                buildId: updatedData.buildId || null,
                 // Preserve original GPS track if it exists (recorded routes), or use road-snapped points from edit
                 points: updatedData.points && updatedData.points.length > 0 ? updatedData.points : (editingRoute.points || []),
-                ...(updatedData.distance ? { distance: updatedData.distance + " MI" } : {}),
+                ...(updatedData.distance ? { distance: updatedData.distance + " MI", distanceMi: Number(updatedData.distance) || 0 } : {}),
                 ...(updatedData.time ? { time: updatedData.time } : {}),
-                ...(updatedData.elevGain ? { elevation: "+" + Number(updatedData.elevGain).toLocaleString() + " FT" } : {}),
+                ...(updatedData.elevGain ? { elevation: "+" + Number(updatedData.elevGain).toLocaleString() + " FT", elevGainFt: Number(updatedData.elevGain) || 0 } : {}),
                 editedAt: Date.now(),
               });
             }
@@ -11612,7 +11673,7 @@ export default function Trailhead() {
           <>
             {screen === "feed" && <FeedScreen onViewUser={openUserProfile} onOpenMap={openMap} onOpenThread={(threadId, catName, subName) => openForumThread(threadId, catName, subName)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onViewBuild={handleViewBuild} feedItems={feedItems} onUpdateFeed={(items) => setFeedItems(items)} onAddNotification={addNotification} forumUserReplies={forumUserReplies} forumViewCounts={forumViewCounts} savedRoutes={savedRoutes} onSaveRoute={(route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev])} onUnsaveRoute={(routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId))} onStartNav={(route) => setActiveNavRoute(route)} onAwardPoints={awardPoints} />}
             {screen === "forum" && <ForumScreen pendingThread={pendingThread} onPendingHandled={() => setPendingThread(null)} onAddNotification={addNotification} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onAddFeedPost={(post) => setFeedItems(prev => [post, ...prev])} userThreads={forumUserThreads} setUserThreads={setForumUserThreads} userReplies={forumUserReplies} setUserReplies={setForumUserReplies} likedForumItems={forumLikedItems} setLikedForumItems={setForumLikedItems} forumLikeCounts={forumLikeCounts} setForumLikeCounts={setForumLikeCounts} forumViewCounts={forumViewCounts} setForumViewCounts={setForumViewCounts} onAwardPoints={awardPoints} />}
-            {screen === "routes" && <RoutesScreen onRecordRoute={() => setShowRecorder(true)} onManualEntry={() => setShowManualRoute(true)} userRoutes={userRoutes} onUpdateRoute={(routeId, updates) => setUserRoutes(prev => prev.map(r => r.id === routeId ? { ...r, ...updates } : r))} savedRoutes={savedRoutes} onSaveRoute={(route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev])} onUnsaveRoute={(routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId))} onOpenDM={(user, msg, sharedPost) => openDM(user, msg, sharedPost)} onAddFeedPost={(post) => setFeedItems(prev => [post, ...prev])} onStartNav={(route) => setActiveNavRoute(route)} />}
+            {screen === "routes" && <RoutesScreen userBuilds={userBuilds} onRecordRoute={() => setShowRecorder(true)} onManualEntry={() => setShowManualRoute(true)} userRoutes={userRoutes} onUpdateRoute={(routeId, updates) => setUserRoutes(prev => prev.map(r => r.id === routeId ? { ...r, ...updates } : r))} savedRoutes={savedRoutes} onSaveRoute={(route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev])} onUnsaveRoute={(routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId))} onOpenDM={(user, msg, sharedPost) => openDM(user, msg, sharedPost)} onAddFeedPost={(post) => setFeedItems(prev => [post, ...prev])} onStartNav={(route) => setActiveNavRoute(route)} />}
             {screen === "builds" && <BuildsScreen onViewUser={openUserProfile} userBuilds={userBuilds} pendingBuildNav={pendingBuildNav} onConsumePendingBuildNav={() => setPendingBuildNav(null)} onAddBuild={(data) => { const id = "build_" + Date.now(); const bd = { id, name: data.buildName || `${data.year} ${data.make} ${data.model}`, year: data.year, make: data.make, model: data.model, trim: data.trim, heroImg: data.mainPhotos && data.mainPhotos.length > 0 ? data.mainPhotos[0].url : null, buildData: data, tags: [], createdAt: Date.now() }; setUserBuilds(prev => [...prev, bd]); if (data.shareToFeed) { setFeedItems(prev => [{ id, type: "BUILDS", user: "KyleLPO", initial: "K", time: Date.now(), title: (data.buildName || `${data.year} ${data.make} ${data.model}`).toUpperCase(), body: `${data.year} ${data.make} ${data.model}${data.trim ? " " + data.trim : ""}`, vehicle: `${data.year} ${data.make} ${data.model}${data.trim ? " " + data.trim : ""}`, photoUrls: data.mainPhotos && data.mainPhotos.length > 0 ? [data.mainPhotos[0].url] : undefined, image: data.mainPhotos && data.mainPhotos.length > 0 ? data.mainPhotos[0].url : null, likes: 0, comments: 0, buildData: data, buildRawId: id }, ...prev]); } awardPoints(POINTS.feedPost, "Build Added"); }} userRoutes={userRoutes} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onUpdateBuild={updateBuild} onPostBuildToFeed={(b) => { const bd = b.buildData; const heroImg = b.image || (bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url) || null; setFeedItems(prev => [{ id: "feedbuild_" + Date.now(), type: "BUILDS", user: "KyleLPO", initial: "K", time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, vehicle: `${b.year} ${b.make} ${b.model}`, photoUrls: heroImg ? [heroImg] : undefined, image: heroImg, likes: 0, comments: 0, buildData: bd, buildRawId: b.rawId != null ? b.rawId : null }, ...prev]); awardPoints(POINTS.feedPost, "Build Shared"); }} />}
             {screen === "ranks" && <RanksScreen myPoints={myTotalPoints} pointsBreakdown={pointsBreakdown} />}
           </>
