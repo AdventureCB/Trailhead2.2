@@ -11798,7 +11798,11 @@ export default function Trailhead() {
       if (cancelled) return;
       setSupabaseSession(session || null);
       if (event === "SIGNED_IN" && session) {
-        setAuthState("app");
+        // Use a functional update so we can read the CURRENT authState and
+        // skip auto-advancing into the app if the user is mid-signup (the
+        // SignupScreen owns its own flow and will advance to step 2 itself).
+        // Auto-advance is only for login screen and OAuth callback re-hydration.
+        setAuthState(prev => (prev === "signup" ? prev : "app"));
         setIsGuest(false);
       }
       if (event === "SIGNED_OUT") {
