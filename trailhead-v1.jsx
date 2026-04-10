@@ -11594,31 +11594,27 @@ function GuestPromptModal({ onClose, onSignIn }) {
 // when a shared link is opened, instead of mounting LoginScreen first and
 // then swapping it out inside a useEffect — which was causing React
 // reconciliation errors (removeChild NotFoundError) during the tree swap.
-// DEBUG: capture pathname at earliest possible moment so we can see
-// what the browser actually has when the bundle starts running.
-let __DEBUG_INITIAL_PATH = "";
-let __DEBUG_PARSE_RESULT = "not-run";
-try { __DEBUG_INITIAL_PATH = (typeof window !== "undefined" && window.location && window.location.pathname) || ""; } catch (e) {}
-
-function parseInitialSharedLink() {
+// Parse the initial URL ONCE at module load and cache the result. React in
+// dev mode (and concurrent mode) can invoke components twice, and we also
+// replaceState the URL to "/" as a side effect — so any parse logic that
+// runs inside the component body would see "/" on the second invocation
+// and return null, overwriting our seed. Caching at module scope makes
+// parsing idempotent regardless of how many times the component renders.
+const __INITIAL_SHARED_LINK = (function() {
   try {
     const path = (typeof window !== "undefined" && window.location && window.location.pathname) || "";
     const postMatch = path.match(/^\/post\/(.+?)\/?$/);
     if (postMatch) {
-      __DEBUG_PARSE_RESULT = "matched:" + postMatch[1];
-      // Clean the URL immediately so soft refreshes / tab switches don't
-      // re-trigger this flow.
       try { window.history.replaceState(null, "", "/"); } catch (e) {}
       return { kind: "post", id: decodeURIComponent(postMatch[1]) };
     }
-    __DEBUG_PARSE_RESULT = "no-match:" + path;
-  } catch (e) { __DEBUG_PARSE_RESULT = "error:" + (e && e.message); }
+  } catch (e) { /* ignore */ }
   return null;
-}
+})();
 
 export default function Trailhead() {
-  // Seed from URL synchronously so LoginScreen never mounts for shared links.
-  const initialSharedLink = (typeof window !== "undefined") ? parseInitialSharedLink() : null;
+  // Seed from cached module-scope URL parse so LoginScreen never mounts for shared links.
+  const initialSharedLink = __INITIAL_SHARED_LINK;
   const [authState, setAuthState] = useState(initialSharedLink ? "app" : "login"); // "login" | "signup" | "app"
   // ─── GUEST MODE ───────────────────────────────────────────────────────────
   // NOTE FOR BACKEND INTEGRATION: when wiring this prototype to a real backend,
@@ -11852,16 +11848,11 @@ export default function Trailhead() {
 
   // Auth screens
   if (authState === "login") {
-    return <>
-      <div style={{ position: "fixed", top: 0, left: 0, right: 0, background: "#ff0", color: "#000", fontFamily: "monospace", fontSize: 11, padding: 8, zIndex: 99999, wordBreak: "break-all" }}>
-        DEBUG path=[{__DEBUG_INITIAL_PATH}] parse=[{__DEBUG_PARSE_RESULT}] seed=[{initialSharedLink ? "YES" : "NO"}]
-      </div>
-      <LoginScreen
-        onLogin={() => { setIsGuest(false); setAuthState("app"); }}
-        onGoToSignup={() => setAuthState("signup")}
-        onGuestEnter={() => { setIsGuest(true); setScreen("feed"); setAuthState("app"); }}
-      />
-    </>;
+    return <LoginScreen
+      onLogin={() => { setIsGuest(false); setAuthState("app"); }}
+      onGoToSignup={() => setAuthState("signup")}
+      onGuestEnter={() => { setIsGuest(true); setScreen("feed"); setAuthState("app"); }}
+    />;
   }
   if (authState === "signup") {
     return <SignupScreen onSignup={() => setAuthState("app")} onGoToLogin={() => setAuthState("login")} onSetProfilePic={setProfilePic} />;
