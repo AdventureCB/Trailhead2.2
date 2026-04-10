@@ -10054,7 +10054,7 @@ function LoginScreen({ onLogin, onGoToSignup, onGuestEnter }) {
 }
 
 /* ─── CREATE ACCOUNT SCREEN ─── */
-function SignupScreen({ onSignup, onGoToLogin, onSetProfilePic }) {
+function SignupScreen({ onSignup, onGoToLogin, onSetProfilePic, onAddBuild }) {
   const [step, setStep] = useState(1); // 1 = account info, 2 = profile pic + rig survey
   const [form, setForm] = useState({ name: "", email: "", handle: "", password: "", confirmPassword: "" });
   const [rig, setRig] = useState({ year: "", make: "", model: "", buildName: "" });
@@ -10164,6 +10164,37 @@ function SignupScreen({ onSignup, onGoToLogin, onSetProfilePic }) {
         },
       });
     } catch (e) { /* ignore — onboarding survey is best-effort */ }
+    // Also persist the build into local state so it shows up on the Profile
+    // and Builds screens. onAddBuild expects the full AddBuildForm shape, so
+    // stub out the mod fields with empty objects.
+    if (onAddBuild && (rig.buildName || (rig.year && rig.make && rig.model))) {
+      const emptyMod = () => ({ value: "", photo: [], link: "" });
+      try {
+        onAddBuild({
+          buildName: rig.buildName,
+          year: rig.year,
+          make: rig.make,
+          model: rig.model,
+          trim: "",
+          mainPhotos: [],
+          suspension: emptyMod(),
+          tires: emptyMod(),
+          wheels: emptyMod(),
+          bumpers: emptyMod(),
+          armor: emptyMod(),
+          lighting: emptyMod(),
+          rack: emptyMod(),
+          winch: emptyMod(),
+          otherMods: emptyMod(),
+          hasCamper: false,
+          camperMake: "",
+          camperModel: "",
+          camperPhoto: [],
+          camperLink: "",
+          shareToFeed: false,
+        });
+      } catch (e) { /* best-effort */ }
+    }
     onSignup();
   };
 
@@ -12391,7 +12422,7 @@ export default function Trailhead() {
     />;
   }
   if (authState === "signup") {
-    return <SignupScreen onSignup={() => setAuthState("app")} onGoToLogin={() => setAuthState("login")} onSetProfilePic={setProfilePic} />;
+    return <SignupScreen onSignup={() => setAuthState("app")} onGoToLogin={() => setAuthState("login")} onSetProfilePic={setProfilePic} onAddBuild={addBuild} />;
   }
   if (authState === "onboarding") {
     return <OnboardingScreen
