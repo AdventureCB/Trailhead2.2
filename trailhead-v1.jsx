@@ -10058,6 +10058,9 @@ function SignupScreen({ onSignup, onGoToLogin, onSetProfilePic }) {
   const [step, setStep] = useState(1); // 1 = account info, 2 = profile pic + rig survey
   const [form, setForm] = useState({ name: "", email: "", handle: "", password: "", confirmPassword: "" });
   const [rig, setRig] = useState({ year: "", make: "", model: "", buildName: "" });
+  const [yearMode, setYearMode] = useState("select");
+  const [makeMode, setMakeMode] = useState("select");
+  const [modelMode, setModelMode] = useState("select");
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [signupPic, setSignupPic] = useState(null);
@@ -10084,7 +10087,16 @@ function SignupScreen({ onSignup, onGoToLogin, onSetProfilePic }) {
     background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white,
     fontFamily: serif, fontSize: 14, outline: "none", transition: "border 0.2s",
   };
+  const selectStyle = {
+    ...inputStyle,
+    appearance: "none",
+    backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238B7D6B' stroke-width='2'%3e%3cpolyline points='6 9 12 15 18 9'/%3e%3c/svg%3e")`,
+    backgroundRepeat: "no-repeat",
+    backgroundPosition: "right 14px center",
+    paddingRight: 36,
+  };
   const labelStyle = { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 600, display: "block", marginBottom: 6 };
+  const modelOptions = rig.make ? (VEHICLE_MODELS[rig.make] || []) : [];
 
   const handleStep1 = async () => {
     if (!form.name.trim()) return setError("Enter your name.");
@@ -10190,7 +10202,7 @@ function SignupScreen({ onSignup, onGoToLogin, onSetProfilePic }) {
 
             <div style={{ marginBottom: 14 }}>
               <label style={labelStyle}>FULL NAME</label>
-              <input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="Kyle Morrison" style={inputStyle} onFocus={(e) => e.target.style.borderColor = T.copper} onBlur={(e) => e.target.style.borderColor = T.charcoal} />
+              <input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="First Last" style={inputStyle} onFocus={(e) => e.target.style.borderColor = T.copper} onBlur={(e) => e.target.style.borderColor = T.charcoal} />
             </div>
             <div style={{ marginBottom: 14 }}>
               <label style={labelStyle}>EMAIL</label>
@@ -10289,19 +10301,80 @@ function SignupScreen({ onSignup, onGoToLogin, onSetProfilePic }) {
                 <label style={labelStyle}>BUILD NAME</label>
                 <input value={rig.buildName} onChange={(e) => setR("buildName", e.target.value)} placeholder='e.g. "The Highlander"' style={inputStyle} onFocus={(e) => e.target.style.borderColor = T.copper} onBlur={(e) => e.target.style.borderColor = T.charcoal} />
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10, marginBottom: 14 }}>
-                <div>
-                  <label style={labelStyle}>YEAR</label>
-                  <input value={rig.year} onChange={(e) => setR("year", e.target.value)} placeholder="2022" style={inputStyle} onFocus={(e) => e.target.style.borderColor = T.copper} onBlur={(e) => e.target.style.borderColor = T.charcoal} />
-                </div>
-                <div>
-                  <label style={labelStyle}>MAKE</label>
-                  <input value={rig.make} onChange={(e) => setR("make", e.target.value)} placeholder="Toyota" style={inputStyle} onFocus={(e) => e.target.style.borderColor = T.copper} onBlur={(e) => e.target.style.borderColor = T.charcoal} />
-                </div>
+
+              {/* YEAR */}
+              <div style={{ marginBottom: 14 }}>
+                <label style={labelStyle}>YEAR</label>
+                {yearMode === "select" ? (
+                  <select
+                    value={rig.year}
+                    onChange={(e) => {
+                      if (e.target.value === "__other__") { setYearMode("other"); setR("year", ""); }
+                      else setR("year", e.target.value);
+                    }}
+                    style={selectStyle}
+                  >
+                    <option value="" disabled>Select year</option>
+                    {VEHICLE_YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+                    <option value="__other__">Other / Older</option>
+                  </select>
+                ) : (
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input value={rig.year} onChange={(e) => setR("year", e.target.value)} placeholder="Enter year" style={{ ...inputStyle, flex: 1 }} />
+                    <button onClick={() => { setYearMode("select"); setR("year", ""); }} style={{ padding: "0 14px", borderRadius: 8, background: "transparent", border: `1px solid ${T.charcoal}`, color: T.tertiary, fontFamily: sans, fontSize: 10, letterSpacing: 1, cursor: "pointer" }}>BACK</button>
+                  </div>
+                )}
               </div>
+
+              {/* MAKE */}
+              <div style={{ marginBottom: 14 }}>
+                <label style={labelStyle}>MAKE</label>
+                {makeMode === "select" ? (
+                  <select
+                    value={rig.make}
+                    onChange={(e) => {
+                      if (e.target.value === "__other__") { setMakeMode("other"); setRig({ ...rig, make: "", model: "" }); }
+                      else { setRig({ ...rig, make: e.target.value, model: "" }); setModelMode("select"); }
+                    }}
+                    style={selectStyle}
+                  >
+                    <option value="" disabled>Select make</option>
+                    {VEHICLE_MAKES.map(m => <option key={m} value={m}>{m}</option>)}
+                    <option value="__other__">Other</option>
+                  </select>
+                ) : (
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input value={rig.make} onChange={(e) => setR("make", e.target.value)} placeholder="Enter make" style={{ ...inputStyle, flex: 1 }} />
+                    <button onClick={() => { setMakeMode("select"); setRig({ ...rig, make: "", model: "" }); }} style={{ padding: "0 14px", borderRadius: 8, background: "transparent", border: `1px solid ${T.charcoal}`, color: T.tertiary, fontFamily: sans, fontSize: 10, letterSpacing: 1, cursor: "pointer" }}>BACK</button>
+                  </div>
+                )}
+              </div>
+
+              {/* MODEL */}
               <div>
                 <label style={labelStyle}>MODEL</label>
-                <input value={rig.model} onChange={(e) => setR("model", e.target.value)} placeholder="Tundra TRD Pro" style={inputStyle} onFocus={(e) => e.target.style.borderColor = T.copper} onBlur={(e) => e.target.style.borderColor = T.charcoal} />
+                {modelMode === "select" && modelOptions.length > 0 ? (
+                  <select
+                    value={rig.model}
+                    onChange={(e) => {
+                      if (e.target.value === "__other__") { setModelMode("other"); setR("model", ""); }
+                      else setR("model", e.target.value);
+                    }}
+                    style={selectStyle}
+                    disabled={!rig.make}
+                  >
+                    <option value="" disabled>{rig.make ? "Select model" : "Pick a make first"}</option>
+                    {modelOptions.map(m => <option key={m} value={m}>{m}</option>)}
+                    <option value="__other__">Other</option>
+                  </select>
+                ) : (
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input value={rig.model} onChange={(e) => setR("model", e.target.value)} placeholder="Enter model" style={{ ...inputStyle, flex: 1 }} />
+                    {modelOptions.length > 0 && (
+                      <button onClick={() => { setModelMode("select"); setR("model", ""); }} style={{ padding: "0 14px", borderRadius: 8, background: "transparent", border: `1px solid ${T.charcoal}`, color: T.tertiary, fontFamily: sans, fontSize: 10, letterSpacing: 1, cursor: "pointer" }}>BACK</button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
