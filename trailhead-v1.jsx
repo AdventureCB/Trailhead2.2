@@ -6223,15 +6223,9 @@ const BOUNTY_FORM_TEMPLATES = {
       { id: "intro", label: "Trail Summary", type: "p", placeholder: "One-paragraph overview — where is it, how long, what makes it notable? When did you run it?", required: true },
       { id: "details_header", label: "Route Details", type: "h2", fixed: true, value: "Route Details" },
       { id: "location", label: "Location / Region", type: "short", placeholder: "e.g. San Juan Mountains, CO", required: true },
-      { id: "start_coords", label: "Trailhead Coordinates", type: "short", placeholder: "e.g. 37.9375° N, 107.8123° W" },
-      { id: "end_coords", label: "End Point Coordinates", type: "short", placeholder: "e.g. 37.8106° N, 107.6992° W" },
-      { id: "distance", label: "Distance (miles)", type: "short", placeholder: "e.g. 18.5" },
-      { id: "time", label: "Estimated Time", type: "short", placeholder: "e.g. 4–6 hours" },
-      { id: "elev_gain", label: "Elevation Gain (ft)", type: "short", placeholder: "e.g. 3200" },
-      { id: "max_elev", label: "Max Elevation (ft)", type: "short", placeholder: "e.g. 12,840" },
+      { id: "map_field", label: "Route Map", type: "route_builder", description: "Live track or manually add the route — distance, elevation, and waypoints capture automatically", required: true },
       { id: "difficulty", label: "Difficulty Rating", type: "select", options: ["Easy — Stock friendly", "Moderate — High clearance recommended", "Hard — 4WD required, some armor", "Expert — Lockers, armor, experience required"] },
       { id: "terrains", label: "Terrain Types", type: "tag_select", options: ["Rock", "Mud", "Sand", "Gravel", "Snow/Ice", "Water Crossing", "Shelf Road", "Forest", "Desert", "Alpine"] },
-      { id: "map_field", label: "Route Map", type: "map_embed", description: "Map will auto-populate from your coordinates above" },
       { id: "conditions_header", label: "Current Conditions", type: "h2", fixed: true, value: "Current Trail Conditions" },
       { id: "conditions_body", label: "Conditions Detail", type: "p", placeholder: "Date of last run, surface conditions, water crossings, obstacles, closures, snow/ice. Be specific — other overlanders depend on this." },
       { id: "photos_field", label: "Trail Photos", type: "photos", placeholder: "Upload 10+ photos showing key obstacles, scenery, and trail conditions", required: true, min: 10 },
@@ -6287,6 +6281,7 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose }) {
       else if (s.type === "bullet_list") { init[s.id] = [""]; }
       else if (s.type === "tag_select") { init[s.id] = []; }
       else if (s.type === "map_embed") { init[s.id] = ""; }
+      else if (s.type === "route_builder") { init[s.id] = null; }
       else if (s.type === "hero_image") { init[s.id] = null; }
       else if (s.type === "rating") { init[s.id] = 0; }
       else { init[s.id] = ""; }
@@ -6298,6 +6293,35 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose }) {
   const photoRef = useRef(null);
   const heroRef = useRef(null);
   const [activePhotoField, setActivePhotoField] = useState(null);
+  // Route builder overlay: { fieldId, mode: "record" | "manual", editData? }
+  const [routeBuilderOverlay, setRouteBuilderOverlay] = useState(null);
+
+  const saveRouteToField = (fieldId, routeData) => {
+    // Normalize route data from RouteRecorder/RouteDetailsForm into a route object for this field
+    const rd = {
+      name: routeData.name || "",
+      desc: routeData.desc || "",
+      difficulty: routeData.difficulty || "",
+      location: routeData.region || routeData.location || "",
+      terrains: routeData.terrains || [],
+      tags: routeData.tags || [],
+      pins: routeData.pins || [],
+      points: routeData.points || [],
+      photos: routeData.photos || [],
+      waypoints: routeData.waypoints || [],
+      distance: typeof routeData.distance === "number"
+        ? (routeData.distance / 1609.34).toFixed(1) + " MI"
+        : (routeData.distance ? (String(routeData.distance).match(/mi/i) ? routeData.distance : routeData.distance + " MI") : "—"),
+      duration: routeData.duration ? (typeof routeData.duration === "number" ? `${Math.floor(routeData.duration/3600)}H ${Math.floor((routeData.duration%3600)/60)}M` : routeData.duration) : (routeData.time || "—"),
+      elevGain: typeof routeData.elevGain === "number"
+        ? "+" + Number(routeData.elevGain).toLocaleString() + " FT"
+        : (routeData.elevGain ? "+" + routeData.elevGain + " FT" : "—"),
+      maxElev: routeData.maxElev ? routeData.maxElev + " FT" : "",
+      maxSpeed: routeData.maxSpeed || null,
+    };
+    setFields(prev => ({ ...prev, [fieldId]: rd }));
+    setRouteBuilderOverlay(null);
+  };
 
   const updateField = (id, val) => setFields(prev => ({ ...prev, [id]: val }));
 
@@ -6345,6 +6369,7 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose }) {
       const val = fields[s.id];
       if (s.type === "photos") return val && val.length >= (s.min || 1);
       if (s.type === "hero_image") return val && val.url;
+      if (s.type === "route_builder") return val && ((val.pins && val.pins.length > 0) || (val.points && val.points.length > 0));
       return val && String(val).trim().length > 0;
     });
   };
@@ -6369,6 +6394,36 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose }) {
     if (type === "h3") return "#C0A060";
     return T.tertiary;
   };
+
+  // ── Route Builder Overlay (live tracking or manual) ──
+  if (routeBuilderOverlay) {
+    const { fieldId, mode, editData } = routeBuilderOverlay;
+    if (mode === "record") {
+      return (
+        <div style={{ position: "absolute", inset: 0, background: T.darkBg, zIndex: 700 }}>
+          <RouteRecorder
+            onClose={() => setRouteBuilderOverlay(null)}
+            onSave={(routeData) => saveRouteToField(fieldId, routeData)}
+          />
+        </div>
+      );
+    }
+    if (mode === "manual") {
+      return (
+        <div style={{ position: "absolute", inset: 0, background: T.darkBg, zIndex: 700 }}>
+          <RouteDetailsForm
+            isManual={true}
+            isEdit={!!editData}
+            initialData={editData || undefined}
+            initialPins={editData ? editData.pins : undefined}
+            initialPhotos={editData ? editData.photos : undefined}
+            onBack={() => setRouteBuilderOverlay(null)}
+            onPublish={(routeData) => saveRouteToField(fieldId, routeData)}
+          />
+        </div>
+      );
+    }
+  }
 
   // ── Preview Mode ──
   if (showPreview) {
@@ -6443,6 +6498,41 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose }) {
               return (
                 <div key={s.id} style={{ display: "flex", flexWrap: "wrap", gap: 6, margin: "8px 0 12px" }}>
                   {tags.map(t => <span key={t} style={{ fontFamily: sans, fontSize: 11, color: T.copper, background: `${T.copper}18`, padding: "4px 10px", borderRadius: 12, fontWeight: 600 }}>{t}</span>)}
+                </div>
+              );
+            }
+            if (s.type === "route_builder") {
+              const rd = val;
+              if (!rd || ((!rd.pins || rd.pins.length === 0) && (!rd.points || rd.points.length === 0))) return null;
+              return (
+                <div key={s.id} style={{ margin: "12px 0", borderRadius: 12, overflow: "hidden", border: `1px solid ${T.charcoal}` }}>
+                  <div style={{ width: "100%", height: 200, background: T.charcoal, position: "relative" }}>
+                    <RouteMapPreview pins={rd.pins} points={rd.points} photos={rd.photos} />
+                  </div>
+                  <div style={{ padding: "12px 14px", background: T.darkCard, display: "flex", gap: 16, flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", flexDirection: "column" }}>
+                      <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.5 }}>DISTANCE</span>
+                      <span style={{ fontFamily: sans, fontSize: 14, color: T.copper, fontWeight: 700 }}>{rd.distance}</span>
+                    </div>
+                    {rd.duration && rd.duration !== "—" && (
+                      <div style={{ display: "flex", flexDirection: "column" }}>
+                        <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.5 }}>TIME</span>
+                        <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700 }}>{rd.duration}</span>
+                      </div>
+                    )}
+                    {rd.elevGain && rd.elevGain !== "—" && (
+                      <div style={{ display: "flex", flexDirection: "column" }}>
+                        <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.5 }}>ELEV GAIN</span>
+                        <span style={{ fontFamily: sans, fontSize: 14, color: T.green, fontWeight: 700 }}>{rd.elevGain}</span>
+                      </div>
+                    )}
+                    {rd.waypoints && rd.waypoints.length > 0 && (
+                      <div style={{ display: "flex", flexDirection: "column" }}>
+                        <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.5 }}>WAYPOINTS</span>
+                        <span style={{ fontFamily: sans, fontSize: 14, color: T.copper, fontWeight: 700 }}>{rd.waypoints.length}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             }
@@ -6712,6 +6802,92 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose }) {
                     );
                   })}
                 </div>
+              </div>
+            );
+          }
+
+          if (section.type === "route_builder") {
+            const rd = fields[section.id];
+            const hasRoute = rd && ((rd.pins && rd.pins.length > 0) || (rd.points && rd.points.length > 0));
+            return (
+              <div key={section.id} style={{ margin: "16px 0" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <Map size={14} color={T.copper} />
+                  <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>{section.label}</span>
+                  {section.required && <span style={{ fontFamily: sans, fontSize: 9, color: T.red }}>REQUIRED</span>}
+                </div>
+                {section.description && !hasRoute && (
+                  <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: "0 0 10px", lineHeight: 1.4 }}>{section.description}</p>
+                )}
+                {!hasRoute ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    <button onClick={() => setRouteBuilderOverlay({ fieldId: section.id, mode: "record" })} style={{ width: "100%", padding: "16px", borderRadius: 12, background: `${T.red}18`, border: `1px solid ${T.red}40`, cursor: "pointer", display: "flex", alignItems: "center", gap: 12 }}>
+                      <div style={{ width: 40, height: 40, borderRadius: "50%", background: `${T.red}25`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <Radio size={18} color={T.red} />
+                      </div>
+                      <div style={{ textAlign: "left", flex: 1 }}>
+                        <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, display: "block" }}>Live Track Route</span>
+                        <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, display: "block", marginTop: 2 }}>Record GPS in real time with waypoints</span>
+                      </div>
+                      <ChevronRight size={16} color={T.tertiary} />
+                    </button>
+                    <button onClick={() => setRouteBuilderOverlay({ fieldId: section.id, mode: "manual" })} style={{ width: "100%", padding: "16px", borderRadius: 12, background: `${T.copper}18`, border: `1px solid ${T.copper}40`, cursor: "pointer", display: "flex", alignItems: "center", gap: 12 }}>
+                      <div style={{ width: 40, height: 40, borderRadius: "50%", background: `${T.copper}25`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <MapPin size={18} color={T.copper} />
+                      </div>
+                      <div style={{ textAlign: "left", flex: 1 }}>
+                        <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, display: "block" }}>Add Route Manually</span>
+                        <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, display: "block", marginTop: 2 }}>Drop pins on the map or search locations</span>
+                      </div>
+                      <ChevronRight size={16} color={T.tertiary} />
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ borderRadius: 12, overflow: "hidden", border: `1px solid ${T.copper}30`, background: T.darkCard }}>
+                    <div style={{ width: "100%", height: 200, background: T.charcoal, position: "relative" }}>
+                      <RouteMapPreview pins={rd.pins} points={rd.points} photos={rd.photos} />
+                    </div>
+                    <div style={{ padding: "12px 14px" }}>
+                      {rd.name && (
+                        <span style={{ fontFamily: serif, fontSize: 14, color: T.white, fontWeight: 600, display: "block", marginBottom: 6 }}>{rd.name}</span>
+                      )}
+                      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 10 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.5 }}>DIST</span>
+                          <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700 }}>{rd.distance}</span>
+                        </div>
+                        {rd.duration && rd.duration !== "—" && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                            <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.5 }}>TIME</span>
+                            <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700 }}>{rd.duration}</span>
+                          </div>
+                        )}
+                        {rd.elevGain && rd.elevGain !== "—" && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                            <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.5 }}>ELEV</span>
+                            <span style={{ fontFamily: sans, fontSize: 11, color: T.green, fontWeight: 700 }}>{rd.elevGain}</span>
+                          </div>
+                        )}
+                        {rd.waypoints && rd.waypoints.length > 0 && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                            <MapPin size={10} color={T.copper} />
+                            <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700 }}>{rd.waypoints.length} waypoints</span>
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button onClick={() => setRouteBuilderOverlay({ fieldId: section.id, mode: "manual", editData: rd })} style={{ flex: 1, padding: "9px", borderRadius: 8, background: T.charcoal, border: `1px solid ${T.copper}40`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
+                          <Edit3 size={12} color={T.copper} />
+                          <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600, letterSpacing: 0.5 }}>EDIT</span>
+                        </button>
+                        <button onClick={() => updateField(section.id, null)} style={{ flex: 1, padding: "9px", borderRadius: 8, background: T.charcoal, border: `1px solid ${T.red}40`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
+                          <X size={12} color={T.red} />
+                          <span style={{ fontFamily: sans, fontSize: 10, color: T.red, fontWeight: 600, letterSpacing: 0.5 }}>REMOVE</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           }
