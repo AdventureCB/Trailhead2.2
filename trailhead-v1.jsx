@@ -12344,4 +12344,7 @@ export default function Trailhead() {
 }
 
 /* ─── Mount ─── */
-createRoot(document.getElementById("root")).render(React.createElement(Trailhead));
+// NOTE: entry.jsx owns the createRoot/render call. This file must NOT mount
+// itself, otherwise the app gets mounted twice into the same DOM node and
+// two React roots race over it (manifests as intermittent removeChild errors
+// during state transitions like signup).
