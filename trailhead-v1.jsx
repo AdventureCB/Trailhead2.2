@@ -8666,7 +8666,7 @@ function AddBuildForm({ onClose, onSave, initialData }) {
 }
 
 /* ─── PROFILE SCREEN (Own Profile) ─── */
-function ProfileScreen({ onViewUser, onLogout, userBuilds, onAddBuild, onUpdateBuild, onDeleteBuild, profilePic, onSetProfilePic, notifPrefs, onSetNotifPrefs, feedItems, onDeletePost, onEditPost, onUpdateConvoy, onGoToPost, myPoints: myPointsProp }) {
+function ProfileScreen({ onViewUser, onLogout, userBuilds, onAddBuild, onUpdateBuild, onDeleteBuild, profilePic, onSetProfilePic, notifPrefs, onSetNotifPrefs, feedItems, onDeletePost, onEditPost, onUpdateConvoy, onGoToPost, myPoints: myPointsProp, onEnterGuestPreview }) {
   const [isPublic, setIsPublic] = useState(true);
   const [activeTab, setActiveTab] = useState("builds");
   const [activeBuild, setActiveBuild] = useState(0);
@@ -9018,6 +9018,24 @@ function ProfileScreen({ onViewUser, onLogout, userBuilds, onAddBuild, onUpdateB
               <ChevronRight size={16} color={T.tertiary} />
             </button>
           </div>
+
+          {/* GUEST_DEV_TOGGLE — REMOVE BEFORE BACKEND INTEGRATION.
+              This entire block lets the logged-in user jump into the guest
+              experience to verify read-only gating. Real guest state will
+              come from the backend session; this button must be deleted
+              before shipping. Search for GUEST_DEV_TOGGLE to find it. */}
+          {onEnterGuestPreview && (
+            <div style={{ background: `${T.copper}10`, border: `1px dashed ${T.copper}50`, borderRadius: 12, padding: 14, marginBottom: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <AlertTriangle size={13} color={T.copper} />
+                <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.5, fontWeight: 700 }}>DEV ONLY · REMOVE BEFORE BACKEND</span>
+              </div>
+              <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 10px", lineHeight: 1.5 }}>Preview what an unauthenticated visitor sees. Read-only across feed, forum, routes and builds. Ranks and interactions are locked behind sign-in.</p>
+              <button onClick={onEnterGuestPreview} style={{ width: "100%", padding: "10px", borderRadius: 8, background: T.copper, border: "none", cursor: "pointer" }}>
+                <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 1 }}>PREVIEW GUEST MODE</span>
+              </button>
+            </div>
+          )}
 
           {/* Sign Out */}
           <button onClick={onLogout} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "14px", borderRadius: 10, background: `${T.red}12`, border: `1px solid ${T.red}25`, cursor: "pointer" }}>
@@ -9780,7 +9798,7 @@ function OtherProfileScreen({ userId, onBack, onMessage }) {
 }
 
 /* ─── LOGIN SCREEN ─── */
-function LoginScreen({ onLogin, onGoToSignup }) {
+function LoginScreen({ onLogin, onGoToSignup, onGuestEnter }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -9870,6 +9888,14 @@ function LoginScreen({ onLogin, onGoToSignup }) {
             <span style={{ fontFamily: serif, fontSize: 13, color: T.tertiary }}>New to the trail? </span>
             <span onClick={onGoToSignup} style={{ fontFamily: sans, fontSize: 13, color: T.red, fontWeight: 600, cursor: "pointer" }}>Create an account</span>
           </div>
+
+          {/* Browse as guest */}
+          {onGuestEnter && (
+            <div style={{ textAlign: "center", marginTop: 20, paddingTop: 16, borderTop: `1px solid ${T.charcoal}` }}>
+              <span onClick={onGuestEnter} style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, letterSpacing: 1, cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 3 }}>BROWSE AS GUEST</span>
+              <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: "6px 0 0", opacity: 0.7 }}>Read-only. Sign in to post, like, comment, or view ranks.</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -11472,8 +11498,79 @@ function DMScreen({ onClose, onViewUser, initialUser, initialMessage, initialSha
 }
 
 /* ─── MAIN APP ─── */
+// ─── GUEST MODE ───
+// Small banner shown at the top of view-only screens while browsing as guest.
+// Tap → opens the sign-in prompt modal managed at root level.
+function GuestBanner({ onSignIn }) {
+  return (
+    <div onClick={onSignIn} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "10px 14px", margin: "10px 12px 0", background: `${T.copper}14`, border: `1px solid ${T.copper}30`, borderRadius: 10, cursor: "pointer" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <Eye size={14} color={T.copper} />
+        <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 0.5 }}>BROWSING AS GUEST</span>
+      </div>
+      <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1, fontWeight: 700 }}>SIGN IN →</span>
+    </div>
+  );
+}
+
+// Full-screen gate shown when a guest hits a logged-in-only surface (e.g. Ranks).
+function GuestGateScreen({ title, subtitle, onSignIn }) {
+  return (
+    <div style={{ padding: "48px 24px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", minHeight: "60vh", justifyContent: "center" }}>
+      <div style={{ width: 64, height: 64, borderRadius: "50%", background: `${T.red}15`, border: `2px solid ${T.red}50`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 18 }}>
+        <Lock size={26} color={T.red} strokeWidth={1.5} />
+      </div>
+      <h2 style={{ fontFamily: sans, fontSize: 20, color: T.white, margin: "0 0 8px", fontWeight: 700, letterSpacing: 1 }}>{title || "SIGN IN REQUIRED"}</h2>
+      <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "0 0 24px", maxWidth: 280, lineHeight: 1.6 }}>{subtitle || "Create an account or sign in to access this part of Trailhead."}</p>
+      <button onClick={onSignIn} style={{ padding: "12px 28px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer" }}>
+        <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 1.5 }}>SIGN IN TO TRAILHEAD</span>
+      </button>
+    </div>
+  );
+}
+
+// Modal prompt shown when a guest tries to perform a gated interaction
+// (like, comment, post, save, DM, etc.). Offers sign-in or dismiss.
+function GuestPromptModal({ onClose, onSignIn }) {
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 10000, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: T.darkCard, borderRadius: 16, padding: 24, maxWidth: 340, width: "100%", textAlign: "center", border: `1px solid ${T.charcoal}` }}>
+        <div style={{ width: 54, height: 54, borderRadius: "50%", background: `${T.copper}18`, border: `2px solid ${T.copper}`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
+          <Lock size={24} color={T.copper} />
+        </div>
+        <h3 style={{ fontFamily: sans, fontSize: 17, color: T.white, margin: "0 0 6px", fontWeight: 700 }}>Sign in to continue</h3>
+        <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "0 0 20px", lineHeight: 1.5 }}>Posting, liking, commenting, saving routes and viewing ranks require an account.</p>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={onSignIn} style={{ flex: 1, padding: "12px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer" }}>
+            <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 1 }}>SIGN IN</span>
+          </button>
+          <button onClick={onClose} style={{ padding: "12px 16px", borderRadius: 8, background: T.charcoal, border: "none", cursor: "pointer" }}>
+            <span style={{ fontFamily: sans, fontSize: 12, color: T.tertiary, fontWeight: 600, letterSpacing: 0.5 }}>NOT NOW</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Trailhead() {
   const [authState, setAuthState] = useState("login"); // "login" | "signup" | "app"
+  // ─── GUEST MODE ───────────────────────────────────────────────────────────
+  // NOTE FOR BACKEND INTEGRATION: when wiring this prototype to a real backend,
+  // `isGuest` should be derived from auth/session state (i.e. currentUser == null),
+  // NOT from local toggling. The dev-only toggle in Profile > Settings is intended
+  // purely for previewing the guest experience inside this prototype and MUST be
+  // removed before shipping (search for GUEST_DEV_TOGGLE to find/delete it).
+  const [isGuest, setIsGuest] = useState(false);
+  const [showGuestPrompt, setShowGuestPrompt] = useState(false);
+  // Wraps any mutating callback so that when a guest calls it, we intercept and
+  // show the sign-in prompt instead of mutating state. This keeps the read-only
+  // guarantee in one place and means screens don't need guest-aware code paths.
+  const requireAuth = (fn) => (...args) => {
+    if (isGuest) { setShowGuestPrompt(true); return; }
+    return fn && fn(...args);
+  };
+  const goToLoginFromGuest = () => { setShowGuestPrompt(false); setIsGuest(false); setAuthState("login"); };
   const [screen, setScreen] = useState("feed");
   const [profileStack, setProfileStack] = useState([]);
   const [showRecovery, setShowRecovery] = useState(false);
@@ -11540,6 +11637,7 @@ export default function Trailhead() {
   });
   const awardPoints = (amount, reason) => {
     if (!amount || !reason) return;
+    if (isGuest) return; // guests don't earn points
     setMyTotalPoints(prev => prev + amount);
     // Update global lookup so rank badges refresh
     USER_POINTS["KyleLPO"] = (USER_POINTS["KyleLPO"] || 12450) + amount;
@@ -11564,7 +11662,10 @@ export default function Trailhead() {
   };
 
   const [dmKey, setDmKey] = useState(0);
-  const openDM = (user, prefillMsg, sharedPost) => { setDmInitialUser(user || null); setDmInitialMessage(prefillMsg || ""); setDmSharedPost(sharedPost || null); setDmKey(k => k + 1); setShowDM(true); };
+  const openDM = (user, prefillMsg, sharedPost) => {
+    if (isGuest) { setShowGuestPrompt(true); return; }
+    setDmInitialUser(user || null); setDmInitialMessage(prefillMsg || ""); setDmSharedPost(sharedPost || null); setDmKey(k => k + 1); setShowDM(true);
+  };
 
   const addBuild = (data) => {
     const displayName = data.buildName || `${data.year} ${data.make} ${data.model}`;
@@ -11651,7 +11752,10 @@ export default function Trailhead() {
     setScreen("builds");
   };
 
-  const openProfile = () => setProfileStack(["self"]);
+  const openProfile = () => {
+    if (isGuest) { setShowGuestPrompt(true); return; }
+    setProfileStack(["self"]);
+  };
   const openUserProfile = (userId) => setProfileStack(["user", userId]);
   const openMap = (coords, location, title, recoveryCtx) => setMapData({ coords, location, title, recoveryCtx: recoveryCtx || null });
   const goBack = () => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); };
@@ -11669,7 +11773,11 @@ export default function Trailhead() {
 
   // Auth screens
   if (authState === "login") {
-    return <LoginScreen onLogin={() => setAuthState("app")} onGoToSignup={() => setAuthState("signup")} />;
+    return <LoginScreen
+      onLogin={() => { setIsGuest(false); setAuthState("app"); }}
+      onGoToSignup={() => setAuthState("signup")}
+      onGuestEnter={() => { setIsGuest(true); setScreen("feed"); setAuthState("app"); }}
+    />;
   }
   if (authState === "signup") {
     return <SignupScreen onSignup={() => setAuthState("app")} onGoToLogin={() => setAuthState("login")} onSetProfilePic={setProfilePic} />;
@@ -11716,21 +11824,25 @@ export default function Trailhead() {
                 });
                 addNotification({ type: "convoy", user: "KyleLPO", text: `updated convoy`, title: updates.title || convoy.title, time: Date.now() });
               }
-            }} onGoToPost={(id) => { setProfileStack([]); setScreen("feed"); }} myPoints={myTotalPoints} />
+            }} onGoToPost={(id) => { setProfileStack([]); setScreen("feed"); }} myPoints={myTotalPoints} onEnterGuestPreview={() => { setIsGuest(true); setProfileStack([]); setScreen("feed"); }} />
           )
         ) : (
           <>
-            {screen === "feed" && <FeedScreen onViewUser={openUserProfile} onOpenMap={openMap} onOpenThread={(threadId, catName, subName) => openForumThread(threadId, catName, subName)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onViewBuild={handleViewBuild} feedItems={feedItems} onUpdateFeed={(items) => setFeedItems(items)} onAddNotification={addNotification} forumUserReplies={forumUserReplies} forumViewCounts={forumViewCounts} savedRoutes={savedRoutes} onSaveRoute={(route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev])} onUnsaveRoute={(routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId))} onStartNav={(route) => setActiveNavRoute(route)} onAwardPoints={awardPoints} />}
-            {screen === "forum" && <ForumScreen pendingThread={pendingThread} onPendingHandled={() => setPendingThread(null)} onAddNotification={addNotification} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onAddFeedPost={(post) => setFeedItems(prev => [post, ...prev])} userThreads={forumUserThreads} setUserThreads={setForumUserThreads} userReplies={forumUserReplies} setUserReplies={setForumUserReplies} likedForumItems={forumLikedItems} setLikedForumItems={setForumLikedItems} forumLikeCounts={forumLikeCounts} setForumLikeCounts={setForumLikeCounts} forumViewCounts={forumViewCounts} setForumViewCounts={setForumViewCounts} onAwardPoints={awardPoints} />}
-            {screen === "routes" && <RoutesScreen userBuilds={myBuildsForLink} onRecordRoute={() => setShowRecorder(true)} onManualEntry={() => setShowManualRoute(true)} userRoutes={userRoutes} onUpdateRoute={(routeId, updates) => setUserRoutes(prev => prev.map(r => r.id === routeId ? { ...r, ...updates } : r))} savedRoutes={savedRoutes} onSaveRoute={(route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev])} onUnsaveRoute={(routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId))} onOpenDM={(user, msg, sharedPost) => openDM(user, msg, sharedPost)} onAddFeedPost={(post) => setFeedItems(prev => [post, ...prev])} onStartNav={(route) => setActiveNavRoute(route)} />}
-            {screen === "builds" && <BuildsScreen onViewUser={openUserProfile} userBuilds={userBuilds} pendingBuildNav={pendingBuildNav} onConsumePendingBuildNav={() => setPendingBuildNav(null)} onAddBuild={(data) => { const id = "build_" + Date.now(); const bd = { id, name: data.buildName || `${data.year} ${data.make} ${data.model}`, year: data.year, make: data.make, model: data.model, trim: data.trim, heroImg: data.mainPhotos && data.mainPhotos.length > 0 ? data.mainPhotos[0].url : null, buildData: data, tags: [], createdAt: Date.now() }; setUserBuilds(prev => [...prev, bd]); if (data.shareToFeed) { setFeedItems(prev => [{ id, type: "BUILDS", user: "KyleLPO", initial: "K", time: Date.now(), title: (data.buildName || `${data.year} ${data.make} ${data.model}`).toUpperCase(), body: `${data.year} ${data.make} ${data.model}${data.trim ? " " + data.trim : ""}`, vehicle: `${data.year} ${data.make} ${data.model}${data.trim ? " " + data.trim : ""}`, photoUrls: data.mainPhotos && data.mainPhotos.length > 0 ? [data.mainPhotos[0].url] : undefined, image: data.mainPhotos && data.mainPhotos.length > 0 ? data.mainPhotos[0].url : null, likes: 0, comments: 0, buildData: data, buildRawId: id }, ...prev]); } awardPoints(POINTS.feedPost, "Build Added"); }} userRoutes={userRoutes} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onUpdateBuild={updateBuild} onPostBuildToFeed={(b) => { const bd = b.buildData; const heroImg = b.image || (bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url) || null; setFeedItems(prev => [{ id: "feedbuild_" + Date.now(), type: "BUILDS", user: "KyleLPO", initial: "K", time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, vehicle: `${b.year} ${b.make} ${b.model}`, photoUrls: heroImg ? [heroImg] : undefined, image: heroImg, likes: 0, comments: 0, buildData: bd, buildRawId: b.rawId != null ? b.rawId : null }, ...prev]); awardPoints(POINTS.feedPost, "Build Shared"); }} />}
-            {screen === "ranks" && <RanksScreen myPoints={myTotalPoints} pointsBreakdown={pointsBreakdown} />}
+            {isGuest && <GuestBanner onSignIn={() => setShowGuestPrompt(true)} />}
+            {screen === "feed" && <FeedScreen onViewUser={openUserProfile} onOpenMap={openMap} onOpenThread={(threadId, catName, subName) => openForumThread(threadId, catName, subName)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onViewBuild={handleViewBuild} feedItems={feedItems} onUpdateFeed={requireAuth((items) => setFeedItems(items))} onAddNotification={requireAuth(addNotification)} forumUserReplies={forumUserReplies} forumViewCounts={forumViewCounts} savedRoutes={savedRoutes} onSaveRoute={requireAuth((route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev]))} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} onStartNav={(route) => setActiveNavRoute(route)} onAwardPoints={awardPoints} />}
+            {screen === "forum" && <ForumScreen pendingThread={pendingThread} onPendingHandled={() => setPendingThread(null)} onAddNotification={requireAuth(addNotification)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onAddFeedPost={requireAuth((post) => setFeedItems(prev => [post, ...prev]))} userThreads={forumUserThreads} setUserThreads={requireAuth(setForumUserThreads)} userReplies={forumUserReplies} setUserReplies={requireAuth(setForumUserReplies)} likedForumItems={forumLikedItems} setLikedForumItems={requireAuth(setForumLikedItems)} forumLikeCounts={forumLikeCounts} setForumLikeCounts={requireAuth(setForumLikeCounts)} forumViewCounts={forumViewCounts} setForumViewCounts={setForumViewCounts} onAwardPoints={awardPoints} />}
+            {screen === "routes" && <RoutesScreen userBuilds={myBuildsForLink} onRecordRoute={requireAuth(() => setShowRecorder(true))} onManualEntry={requireAuth(() => setShowManualRoute(true))} userRoutes={userRoutes} onUpdateRoute={requireAuth((routeId, updates) => setUserRoutes(prev => prev.map(r => r.id === routeId ? { ...r, ...updates } : r)))} savedRoutes={savedRoutes} onSaveRoute={requireAuth((route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev]))} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} onOpenDM={(user, msg, sharedPost) => openDM(user, msg, sharedPost)} onAddFeedPost={requireAuth((post) => setFeedItems(prev => [post, ...prev]))} onStartNav={(route) => setActiveNavRoute(route)} />}
+            {screen === "builds" && <BuildsScreen onViewUser={openUserProfile} userBuilds={userBuilds} pendingBuildNav={pendingBuildNav} onConsumePendingBuildNav={() => setPendingBuildNav(null)} onAddBuild={requireAuth((data) => { const id = "build_" + Date.now(); const bd = { id, name: data.buildName || `${data.year} ${data.make} ${data.model}`, year: data.year, make: data.make, model: data.model, trim: data.trim, heroImg: data.mainPhotos && data.mainPhotos.length > 0 ? data.mainPhotos[0].url : null, buildData: data, tags: [], createdAt: Date.now() }; setUserBuilds(prev => [...prev, bd]); if (data.shareToFeed) { setFeedItems(prev => [{ id, type: "BUILDS", user: "KyleLPO", initial: "K", time: Date.now(), title: (data.buildName || `${data.year} ${data.make} ${data.model}`).toUpperCase(), body: `${data.year} ${data.make} ${data.model}${data.trim ? " " + data.trim : ""}`, vehicle: `${data.year} ${data.make} ${data.model}${data.trim ? " " + data.trim : ""}`, photoUrls: data.mainPhotos && data.mainPhotos.length > 0 ? [data.mainPhotos[0].url] : undefined, image: data.mainPhotos && data.mainPhotos.length > 0 ? data.mainPhotos[0].url : null, likes: 0, comments: 0, buildData: data, buildRawId: id }, ...prev]); } awardPoints(POINTS.feedPost, "Build Added"); })} userRoutes={userRoutes} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onUpdateBuild={requireAuth(updateBuild)} onPostBuildToFeed={requireAuth((b) => { const bd = b.buildData; const heroImg = b.image || (bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url) || null; setFeedItems(prev => [{ id: "feedbuild_" + Date.now(), type: "BUILDS", user: "KyleLPO", initial: "K", time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, vehicle: `${b.year} ${b.make} ${b.model}`, photoUrls: heroImg ? [heroImg] : undefined, image: heroImg, likes: 0, comments: 0, buildData: bd, buildRawId: b.rawId != null ? b.rawId : null }, ...prev]); awardPoints(POINTS.feedPost, "Build Shared"); })} />}
+            {screen === "ranks" && (isGuest
+              ? <GuestGateScreen title="RANKS REQUIRE AN ACCOUNT" subtitle="Sign in to see the leaderboard and start earning points from your posts, routes and builds." onSignIn={goToLoginFromGuest} />
+              : <RanksScreen myPoints={myTotalPoints} pointsBreakdown={pointsBreakdown} />
+            )}
           </>
         )}
       </div>
 
       {/* FAB */}
-      {screen === "feed" && !isOverlay && (
+      {screen === "feed" && !isOverlay && !isGuest && (
         <button onClick={() => setShowCompose(true)} style={{ position: "absolute", bottom: 68, right: 16, width: 52, height: 52, borderRadius: "50%", background: T.red, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 4px 20px ${T.red}60`, zIndex: 90 }}>
           <Plus size={24} color={T.white} strokeWidth={2} />
         </button>
@@ -11930,6 +12042,11 @@ export default function Trailhead() {
             }
           }}
         />
+      )}
+
+      {/* Guest sign-in prompt */}
+      {showGuestPrompt && (
+        <GuestPromptModal onClose={() => setShowGuestPrompt(false)} onSignIn={goToLoginFromGuest} />
       )}
 
       {/* Points Toast Notifications */}
