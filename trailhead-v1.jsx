@@ -6041,6 +6041,7 @@ function BuildsScreen({ onViewUser, userBuilds, onAddBuild, onUpdateBuild, onPos
   const [search, setSearch] = useState("");
   const [detailBuildId, setDetailBuildId] = useState(null);
   const [editingBuild, setEditingBuild] = useState(null);
+  const [expandedModKey, setExpandedModKey] = useState(null);
   const [carouselImages, setCarouselImages] = useState(null);
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [likedBuilds, setLikedBuilds] = useState({});
@@ -6286,29 +6287,43 @@ function BuildsScreen({ onViewUser, userBuilds, onAddBuild, onUpdateBuild, onPos
                 const Icon = row.icon;
                 const m = row.mod;
                 const hasPhoto = m.photo && m.photo.length > 0;
+                const isOpen = expandedModKey === row.key;
+                // Short descriptor for collapsed state — first 3 words of value
+                const descriptor = (m.value || "").split(/[,/]/)[0].trim().split(" ").slice(0, 3).join(" ");
                 return (
-                  <div key={row.key} style={{ ...cardStyle, padding: 14, display: "flex", alignItems: "flex-start", gap: 12 }}>
-                    <div style={{ width: 38, height: 38, borderRadius: 8, background: `${T.red}20`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      <Icon size={17} color={T.red} />
+                  <div key={row.key} style={{ ...cardStyle, overflow: "hidden" }}>
+                    <div
+                      onClick={() => setExpandedModKey(isOpen ? null : row.key)}
+                      style={{ display: "flex", alignItems: "center", gap: 12, padding: 14, cursor: "pointer" }}
+                    >
+                      <div style={{ width: 42, height: 42, borderRadius: 8, background: T.charcoal, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <Icon size={18} color={T.red} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, fontWeight: 400, display: "block", marginBottom: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{descriptor || "Installed"}</span>
+                        <span style={{ fontFamily: sans, fontSize: 15, color: T.white, fontWeight: 700, letterSpacing: 1 }}>{row.label.toUpperCase()}</span>
+                      </div>
+                      {isOpen ? <ChevronDown size={18} color={T.tertiary} /> : <ChevronRight size={18} color={T.tertiary} />}
                     </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.2, display: "block", marginBottom: 2 }}>{row.label.toUpperCase()}</span>
-                      <div style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, letterSpacing: 0.3, marginBottom: hasPhoto || m.link ? 6 : 0, wordBreak: "break-word" }}>{m.value}</div>
-                      {hasPhoto && (
-                        <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-                          {m.photo.map((p, pi) => (
-                            <img key={pi} src={p.url} alt="" onClick={() => openGalleryCarousel(detailBuild, 0)} style={{ width: 60, height: 60, borderRadius: 6, objectFit: "cover", cursor: "pointer" }} />
-                          ))}
-                        </div>
-                      )}
-                      {m.link && (
-                        <div style={{ marginTop: 6 }}>
-                          <a href={ensureUrl(m.link)} target="_blank" rel="noopener noreferrer" style={{ fontFamily: sans, fontSize: 10, color: T.copper, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
-                            <ExternalLink size={10} /> View Product
-                          </a>
-                        </div>
-                      )}
-                    </div>
+                    {isOpen && (
+                      <div style={{ padding: "0 14px 14px", borderTop: `1px solid ${T.charcoal}` }}>
+                        <div style={{ fontFamily: serif, fontSize: 13, color: T.white, paddingTop: 12, lineHeight: 1.55, wordBreak: "break-word" }}>{m.value}</div>
+                        {hasPhoto && (
+                          <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+                            {m.photo.map((p, pi) => (
+                              <img key={pi} src={p.url} alt="" onClick={() => openGalleryCarousel(detailBuild, 0)} style={{ width: 72, height: 72, borderRadius: 6, objectFit: "cover", cursor: "pointer" }} />
+                            ))}
+                          </div>
+                        )}
+                        {m.link && (
+                          <div style={{ marginTop: 10 }}>
+                            <a href={ensureUrl(m.link)} target="_blank" rel="noopener noreferrer" style={{ fontFamily: sans, fontSize: 11, color: T.copper, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 5 }}>
+                              <ExternalLink size={11} /> View Product
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -7984,13 +7999,50 @@ function ModFieldPhoto({ mod, setMod }) {
 }
 
 /* ─── ADD BUILD FORM ─── */
+const VEHICLE_YEARS = (() => {
+  const now = new Date().getFullYear() + 1;
+  const years = [];
+  for (let y = now; y >= 1980; y--) years.push(String(y));
+  return years;
+})();
+
+const VEHICLE_MAKES = [
+  "Toyota", "Jeep", "Ford", "Chevrolet", "GMC", "Ram", "Lexus", "Land Rover",
+  "Nissan", "Subaru", "Mercedes-Benz", "Honda", "Hummer", "Isuzu", "Mitsubishi",
+];
+
+const VEHICLE_MODELS = {
+  "Toyota": ["Tacoma", "Tundra", "4Runner", "Land Cruiser", "Sequoia", "FJ Cruiser", "Hilux"],
+  "Jeep": ["Wrangler", "Gladiator", "Cherokee", "Grand Cherokee", "Wagoneer", "Grand Wagoneer", "Comanche"],
+  "Ford": ["F-150", "F-250", "F-350", "Bronco", "Bronco Sport", "Ranger", "Raptor", "Expedition"],
+  "Chevrolet": ["Silverado 1500", "Silverado 2500HD", "Colorado", "Tahoe", "Suburban", "K5 Blazer", "ZR2"],
+  "GMC": ["Sierra 1500", "Sierra 2500HD", "Canyon", "Yukon", "Yukon XL", "AT4"],
+  "Ram": ["1500", "2500", "3500", "Power Wagon", "TRX", "Rebel"],
+  "Lexus": ["GX 460", "GX 550", "LX 570", "LX 600"],
+  "Land Rover": ["Defender 90", "Defender 110", "Discovery", "Range Rover", "LR3", "LR4"],
+  "Nissan": ["Frontier", "Titan", "Xterra", "Patrol", "Pathfinder", "Armada"],
+  "Subaru": ["Outback", "Forester", "Crosstrek", "Ascent"],
+  "Mercedes-Benz": ["G-Class", "Sprinter", "Unimog", "GLS"],
+  "Honda": ["Ridgeline", "Passport", "Pilot"],
+  "Hummer": ["H1", "H2", "H3"],
+  "Isuzu": ["Trooper", "Rodeo", "VehiCROSS"],
+  "Mitsubishi": ["Montero", "Pajero", "Delica", "Triton"],
+};
+
 function AddBuildForm({ onClose, onSave, initialData }) {
   const d = initialData || {};
   const initMod = (m) => m && m.value != null ? { ...m } : { value: "", photo: [], link: "" };
   const [buildName, setBuildName] = useState(d.buildName || "");
   const [year, setYear] = useState(d.year || "");
+  const [yearMode, setYearMode] = useState(d.year && !VEHICLE_YEARS.includes(String(d.year)) ? "other" : "select");
   const [make, setMake] = useState(d.make || "");
+  const [makeMode, setMakeMode] = useState(d.make && !VEHICLE_MAKES.includes(d.make) ? "other" : "select");
   const [model, setModel] = useState(d.model || "");
+  const [modelMode, setModelMode] = useState(() => {
+    if (!d.model) return "select";
+    const list = VEHICLE_MODELS[d.make] || [];
+    return list.includes(d.model) ? "select" : "other";
+  });
   const [trim, setTrim] = useState(d.trim || "");
   const [showPreview, setShowPreview] = useState(false);
   const [shareToFeed, setShareToFeed] = useState(initialData ? false : true);
@@ -8064,36 +8116,116 @@ function AddBuildForm({ onClose, onSave, initialData }) {
       {/* Build Identity */}
       {sectionTitle("BUILD IDENTITY", <Wrench size={16} color={T.copper} />)}
       {fieldGroup("BUILD NAME", buildName, setBuildName, "e.g. THE HIGHLANDER")}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10, marginBottom: 14 }}>
-        <div>
-          <label style={labelStyle}>YEAR</label>
-          <input value={year} onChange={e => setYear(e.target.value)} placeholder="2024" style={inputStyle} />
-        </div>
-        <div>
-          <label style={labelStyle}>MAKE</label>
-          <input value={make} onChange={e => setMake(e.target.value)} placeholder="Toyota" style={inputStyle} />
-        </div>
+      {/* YEAR */}
+      <div style={{ marginBottom: 14 }}>
+        <label style={labelStyle}>YEAR</label>
+        {yearMode === "select" ? (
+          <select
+            value={year}
+            onChange={e => {
+              if (e.target.value === "__other__") { setYearMode("other"); setYear(""); }
+              else setYear(e.target.value);
+            }}
+            style={{ ...inputStyle, appearance: "none", backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238B7D6B' stroke-width='2'%3e%3cpolyline points='6 9 12 15 18 9'/%3e%3c/svg%3e")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 12px center", paddingRight: 32 }}
+          >
+            <option value="">Select year…</option>
+            {VEHICLE_YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+            <option value="__other__">Other (enter manually)</option>
+          </select>
+        ) : (
+          <div style={{ display: "flex", gap: 6 }}>
+            <input value={year} onChange={e => setYear(e.target.value)} placeholder="e.g. 1978" style={{ ...inputStyle, flex: 1 }} />
+            <button type="button" onClick={() => { setYearMode("select"); setYear(""); }} style={{ padding: "0 12px", borderRadius: 8, background: T.charcoal, border: "none", color: T.tertiary, fontFamily: sans, fontSize: 10, cursor: "pointer", letterSpacing: 1 }}>LIST</button>
+          </div>
+        )}
       </div>
+      {/* MAKE */}
+      <div style={{ marginBottom: 14 }}>
+        <label style={labelStyle}>MAKE</label>
+        {makeMode === "select" ? (
+          <select
+            value={make}
+            onChange={e => {
+              if (e.target.value === "__other__") { setMakeMode("other"); setMake(""); setModel(""); }
+              else { setMake(e.target.value); setModel(""); setModelMode("select"); }
+            }}
+            style={{ ...inputStyle, appearance: "none", backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238B7D6B' stroke-width='2'%3e%3cpolyline points='6 9 12 15 18 9'/%3e%3c/svg%3e")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 12px center", paddingRight: 32 }}
+          >
+            <option value="">Select make…</option>
+            {VEHICLE_MAKES.map(m => <option key={m} value={m}>{m}</option>)}
+            <option value="__other__">Other (enter manually)</option>
+          </select>
+        ) : (
+          <div style={{ display: "flex", gap: 6 }}>
+            <input value={make} onChange={e => setMake(e.target.value)} placeholder="e.g. Studebaker" style={{ ...inputStyle, flex: 1 }} />
+            <button type="button" onClick={() => { setMakeMode("select"); setMake(""); setModel(""); }} style={{ padding: "0 12px", borderRadius: 8, background: T.charcoal, border: "none", color: T.tertiary, fontFamily: sans, fontSize: 10, cursor: "pointer", letterSpacing: 1 }}>LIST</button>
+          </div>
+        )}
+      </div>
+      {/* MODEL + TRIM */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-        {(() => { const f = fieldGroup("MODEL", model, setModel, "Tundra"); return f; })()}
-        {(() => { const f = fieldGroup("TRIM / PACKAGE", trim, setTrim, "TRD Pro"); return f; })()}
+        <div style={{ marginBottom: 14 }}>
+          <label style={labelStyle}>MODEL</label>
+          {modelMode === "select" && makeMode === "select" && VEHICLE_MODELS[make] ? (
+            <select
+              value={model}
+              onChange={e => {
+                if (e.target.value === "__other__") { setModelMode("other"); setModel(""); }
+                else setModel(e.target.value);
+              }}
+              style={{ ...inputStyle, appearance: "none", backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238B7D6B' stroke-width='2'%3e%3cpolyline points='6 9 12 15 18 9'/%3e%3c/svg%3e")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 12px center", paddingRight: 32 }}
+            >
+              <option value="">Select model…</option>
+              {VEHICLE_MODELS[make].map(mo => <option key={mo} value={mo}>{mo}</option>)}
+              <option value="__other__">Other…</option>
+            </select>
+          ) : (
+            <input value={model} onChange={e => setModel(e.target.value)} placeholder="Model" style={inputStyle} />
+          )}
+        </div>
+        <div style={{ marginBottom: 14 }}>
+          <label style={labelStyle}>TRIM / PACKAGE</label>
+          <input value={trim} onChange={e => setTrim(e.target.value)} placeholder="TRD Pro" style={inputStyle} />
+        </div>
       </div>
 
-      {/* Main Build Photo */}
+      {/* Build Photos */}
       {sectionTitle("BUILD PHOTOS", <Camera size={16} color={T.copper} />)}
       <div style={{ marginBottom: 16 }}>
-        <label style={labelStyle}>MAIN IMAGE</label>
+        <label style={labelStyle}>HERO IMAGE</label>
         {mainPhotos.length > 0 ? (
           <div style={{ position: "relative", marginBottom: 8 }}>
             <img src={mainPhotos[0].url} alt="" style={{ width: "100%", height: 180, borderRadius: 10, objectFit: "cover", display: "block", border: `1px solid ${T.charcoal}` }} />
-            <button onClick={() => setMainPhotos([])} style={{ position: "absolute", top: 8, right: 8, width: 28, height: 28, borderRadius: "50%", background: `${T.darkBg}CC`, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <button onClick={() => setMainPhotos(prev => prev.slice(1))} style={{ position: "absolute", top: 8, right: 8, width: 28, height: 28, borderRadius: "50%", background: `${T.darkBg}CC`, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <X size={14} color={T.white} />
             </button>
+            <span style={{ position: "absolute", top: 8, left: 8, fontFamily: sans, fontSize: 9, color: T.white, background: `${T.red}CC`, padding: "4px 8px", borderRadius: 4, letterSpacing: 1, fontWeight: 600 }}>HERO</span>
           </div>
         ) : (
-          <PhotoUploader photos={mainPhotos} onChange={(p) => setMainPhotos(p.slice(0, 1))} maxPhotos={1} />
+          <PhotoUploader photos={[]} onChange={(p) => setMainPhotos(prev => [...p.slice(0, 1), ...prev])} maxPhotos={1} />
         )}
-        <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 4, display: "block" }}>This will be the hero image on your build card</span>
+        <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, display: "block" }}>This is the featured photo on your build card</span>
+      </div>
+      <div style={{ marginBottom: 16 }}>
+        <label style={labelStyle}>ADDITIONAL PHOTOS</label>
+        {mainPhotos.length > 1 && (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+            {mainPhotos.slice(1).map((p, pi) => {
+              const absoluteIdx = pi + 1;
+              return (
+                <div key={p.id || pi} style={{ position: "relative" }}>
+                  <img src={p.url} alt="" style={{ width: 90, height: 90, borderRadius: 8, objectFit: "cover", border: `1px solid ${T.charcoal}` }} />
+                  <button onClick={() => setMainPhotos(prev => prev.filter((_, i) => i !== absoluteIdx))} style={{ position: "absolute", top: 4, right: 4, width: 22, height: 22, borderRadius: "50%", background: `${T.darkBg}CC`, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <X size={11} color={T.white} />
+                  </button>
+                  <button onClick={() => setMainPhotos(prev => { const next = [...prev]; const [item] = next.splice(absoluteIdx, 1); next.unshift(item); return next; })} style={{ position: "absolute", bottom: 4, left: 4, padding: "3px 6px", borderRadius: 4, background: `${T.copper}CC`, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 8, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>SET HERO</button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <PhotoUploader photos={[]} onChange={(p) => setMainPhotos(prev => [...prev, ...p])} maxPhotos={20} />
+        <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 6, display: "block" }}>Add as many photos as you want — they appear in your build gallery</span>
       </div>
 
       {/* Suspension & Wheels */}
