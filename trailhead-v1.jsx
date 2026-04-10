@@ -183,6 +183,29 @@ if (!document.querySelector('style[data-trailhead-scroll]')) {
 const sans = "'Trebuchet MS', 'Gill Sans', sans-serif";
 const serif = "'Source Serif 4', 'Georgia', serif";
 
+/* Default avatar — headshot silhouette used when a user has no profile pic. */
+const SilhouetteAvatar = ({ size = 40, border, bg }) => (
+  <div
+    style={{
+      width: size,
+      height: size,
+      borderRadius: "50%",
+      background: bg || T.darkCard,
+      display: "flex",
+      alignItems: "flex-end",
+      justifyContent: "center",
+      border: border || undefined,
+      overflow: "hidden",
+      flexShrink: 0,
+    }}
+  >
+    <svg width={size * 0.85} height={size * 0.85} viewBox="0 0 32 32" fill={T.tertiary}>
+      <circle cx="16" cy="12" r="5.5" />
+      <path d="M16 18.5c-5.5 0-10 3.2-10 7.5V29h20v-3c0-4.3-4.5-7.5-10-7.5z" />
+    </svg>
+  </div>
+);
+
 /* ─── Helpers ─── */
 const parseCoords = (coords) => {
   if (!coords) return null;
@@ -1035,9 +1058,7 @@ function TopBar({ onProfile, onBack, showBack, title, onViewUser, onGoToRecovery
           {profilePic ? (
             <img src={profilePic} alt="" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover" }} />
           ) : (
-            <div style={{ width: 28, height: 28, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <span style={{ fontFamily: sans, fontSize: 11, fontWeight: 700, color: T.white }}>K</span>
-            </div>
+            <SilhouetteAvatar size={28} />
           )}
         </button>
       </div>
@@ -9073,9 +9094,7 @@ function ProfileScreen({ initialUserName, initialUserHandle, onViewUser, onLogou
                 {profilePic ? (
                   <img src={profilePic} alt="" style={{ width: 72, height: 72, borderRadius: "50%", objectFit: "cover", border: `3px solid ${T.copper}` }} />
                 ) : (
-                  <div style={{ width: 72, height: 72, borderRadius: "50%", background: T.charcoal, display: "flex", alignItems: "center", justifyContent: "center", border: `3px dashed ${T.copper}40` }}>
-                    <Camera size={24} color={T.copper} strokeWidth={1.2} style={{ opacity: 0.5 }} />
-                  </div>
+                  <SilhouetteAvatar size={72} border={`3px dashed ${T.copper}40`} bg={T.charcoal} />
                 )}
                 <button onClick={() => settingsPicRef.current && settingsPicRef.current.click()} style={{ position: "absolute", bottom: -2, right: -2, width: 26, height: 26, borderRadius: "50%", background: T.copper, border: `2px solid ${T.darkCard}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
                   <Camera size={11} color={T.white} />
@@ -9196,9 +9215,7 @@ function ProfileScreen({ initialUserName, initialUserHandle, onViewUser, onLogou
           {profilePic ? (
             <img src={profilePic} alt="" style={{ width: 80, height: 80, borderRadius: "50%", objectFit: "cover", border: `3px solid ${T.red}` }} />
           ) : (
-            <div style={{ width: 80, height: 80, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", border: `3px solid ${T.red}` }}>
-              <span style={{ fontFamily: sans, fontSize: 28, fontWeight: 700, color: T.white }}>K</span>
-            </div>
+            <SilhouetteAvatar size={80} border={`3px solid ${T.red}`} bg={T.darkCard} />
           )}
           <button onClick={() => profilePicRef.current && profilePicRef.current.click()} style={{ position: "absolute", bottom: -2, right: -2, width: 28, height: 28, borderRadius: "50%", background: T.charcoal, border: `2px solid ${T.darkCard}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
             <Camera size={12} color={T.white} />
@@ -10295,9 +10312,7 @@ function SignupScreen({ onSignup, onGoToLogin, onSetProfilePic, onAddBuild }) {
                 {signupPic ? (
                   <img src={signupPic} alt="" style={{ width: 80, height: 80, borderRadius: "50%", objectFit: "cover", border: `3px solid ${T.copper}` }} />
                 ) : (
-                  <div style={{ width: 80, height: 80, borderRadius: "50%", background: T.charcoal, display: "flex", alignItems: "center", justifyContent: "center", border: `3px dashed ${T.copper}40` }}>
-                    <Camera size={28} color={T.copper} strokeWidth={1.2} style={{ opacity: 0.5 }} />
-                  </div>
+                  <SilhouetteAvatar size={80} border={`3px dashed ${T.copper}40`} bg={T.charcoal} />
                 )}
                 <button onClick={() => signupPicRef.current && signupPicRef.current.click()} style={{ position: "absolute", bottom: -2, right: -2, width: 28, height: 28, borderRadius: "50%", background: T.copper, border: `2px solid ${T.darkCard}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
                   <Plus size={14} color={T.white} />
