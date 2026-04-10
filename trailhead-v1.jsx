@@ -849,12 +849,158 @@ function RecoveryNotifPanel({ onClose, onGoToRecovery, alerts, onDismiss, onClea
   );
 }
 
+function UnifiedNotifPanel({ onClose, onViewUser, notifs, onDismissNotif, onClearNotifs, recoveryAlerts, onDismissAlert, onClearAlerts, onGoToRecovery, onOpenMap, onOpenDM, initialTab }) {
+  const [tab, setTab] = useState(initialTab || "general");
+  const urgencyColor = (u) => u === "HIGH" ? T.red : T.copper;
+  const tabBtn = (key, label, count, color) => (
+    <button
+      onClick={() => setTab(key)}
+      style={{
+        flex: 1,
+        padding: "8px 10px",
+        background: tab === key ? T.charcoal : "transparent",
+        border: "none",
+        borderBottom: `2px solid ${tab === key ? color : "transparent"}`,
+        cursor: "pointer",
+        fontFamily: sans,
+        fontSize: 11,
+        letterSpacing: 1,
+        fontWeight: 600,
+        color: tab === key ? T.white : T.tertiary,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 6,
+      }}
+    >
+      {label}
+      {count > 0 && (
+        <span style={{ background: color, color: T.white, fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 8, minWidth: 16, textAlign: "center" }}>{count > 99 ? "99+" : count}</span>
+      )}
+    </button>
+  );
+
+  return (
+    <div style={{ position: "absolute", top: "100%", right: 0, width: "calc(100vw - 32px)", maxWidth: 398, background: T.darkCard, borderRadius: "0 0 12px 12px", boxShadow: `0 12px 40px rgba(0,0,0,0.6)`, zIndex: 200, maxHeight: "70vh", display: "flex", flexDirection: "column", overflow: "hidden", border: `1px solid ${T.charcoal}`, borderTop: "none" }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: `1px solid ${T.charcoal}`, flexShrink: 0 }}>
+        <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, letterSpacing: 1 }}>NOTIFICATIONS</span>
+        <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 2, display: "flex" }}>
+          <X size={16} color={T.tertiary} />
+        </button>
+      </div>
+      {/* Filter toggle */}
+      <div style={{ display: "flex", borderBottom: `1px solid ${T.charcoal}`, flexShrink: 0 }}>
+        {tabBtn("general", "GENERAL", notifs.length, T.copper)}
+        {tabBtn("recovery", "RECOVERY", recoveryAlerts.length, T.red)}
+      </div>
+
+      {/* Content */}
+      <div className="th-scroll" style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
+        {tab === "general" && (
+          notifs.length === 0 ? (
+            <div style={{ padding: "40px 16px", textAlign: "center" }}>
+              <Bell size={28} color={T.tertiary} strokeWidth={1} style={{ opacity: 0.3, marginBottom: 8 }} />
+              <p style={{ fontFamily: sans, fontSize: 13, color: T.tertiary, margin: 0 }}>No new notifications</p>
+            </div>
+          ) : notifs.map((n) => {
+            const Icon = n.icon;
+            return (
+              <div key={n.id} style={{ display: "flex", gap: 10, padding: "12px 16px", borderBottom: `1px solid ${T.charcoal}22`, cursor: "pointer", transition: "background 0.15s", position: "relative" }} onMouseEnter={(e) => e.currentTarget.style.background = `${T.charcoal}` } onMouseLeave={(e) => e.currentTarget.style.background = "transparent" }>
+                <div style={{ width: 32, height: 32, borderRadius: "50%", background: `${n.iconColor}18`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2 }}>
+                  <Icon size={14} color={n.iconColor} strokeWidth={1.8} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontFamily: serif, fontSize: 13, color: T.white, margin: 0, lineHeight: 1.45 }}>
+                    <span style={{ fontFamily: sans, fontWeight: 600, cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); onViewUser && onViewUser(n.user); }}>{n.user}</span>
+                    {" "}<span style={{ color: T.tertiary }}>{n.text}</span>
+                    {n.target && <> <span style={{ color: T.warmStone }}>{n.target}</span></>}
+                  </p>
+                  <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 2, display: "block" }}>{formatPostTime(n.time)}</span>
+                </div>
+                <button onClick={(e) => { e.stopPropagation(); onDismissNotif(n.id); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex", alignItems: "center", flexShrink: 0, opacity: 0.5 }} onMouseEnter={e => e.currentTarget.style.opacity = 1} onMouseLeave={e => e.currentTarget.style.opacity = 0.5}>
+                  <X size={12} color={T.tertiary} />
+                </button>
+              </div>
+            );
+          })
+        )}
+        {tab === "recovery" && (
+          recoveryAlerts.length === 0 ? (
+            <div style={{ padding: "40px 16px", textAlign: "center" }}>
+              <AlertTriangle size={28} color={T.tertiary} strokeWidth={1} style={{ opacity: 0.3, marginBottom: 8 }} />
+              <p style={{ fontFamily: sans, fontSize: 13, color: T.tertiary, margin: 0 }}>No active recovery alerts</p>
+            </div>
+          ) : recoveryAlerts.map((a) => (
+            <div key={a.id} style={{ padding: "14px 16px", borderBottom: `1px solid ${T.charcoal}22`, cursor: "pointer", position: "relative" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: urgencyColor(a.urgency), padding: "2px 7px", borderRadius: 3, letterSpacing: 1, fontWeight: 600 }}>{a.urgency}</span>
+                  <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{formatPostTime(a.time)}</span>
+                </div>
+                <button onClick={(e) => { e.stopPropagation(); onDismissAlert(a.id); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex", opacity: 0.5 }} onMouseEnter={e => e.currentTarget.style.opacity = 1} onMouseLeave={e => e.currentTarget.style.opacity = 0.5}>
+                  <X size={12} color={T.tertiary} />
+                </button>
+              </div>
+              <p style={{ fontFamily: sans, fontSize: 14, color: T.white, margin: "0 0 4px", fontWeight: 600 }}>{a.title}</p>
+              <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 8px", lineHeight: 1.5 }}>{a.detail}</p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <MapPin size={11} color={T.tertiary} />
+                  <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{a.location}</span>
+                </div>
+                <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{a.vehicle}</span>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => { onClose(); onOpenDM && onOpenDM(a.author, "I'm responding to your recovery request — on my way to help!", { title: `🚨 Recovery: ${a.title}`, user: a.author, initial: a.author.charAt(0).toUpperCase(), type: "recovery", location: a.location, urgency: a.urgency }); }} style={{ background: T.red, color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 600, padding: "7px 14px", borderRadius: 6, border: "none", cursor: "pointer", letterSpacing: 0.5 }}>RESPOND</button>
+                <button onClick={() => { onClose(); onOpenMap && onOpenMap(a.coords, a.location, a.title, { author: a.author, alertId: a.id, title: a.title }); }} style={{ background: "none", color: T.tertiary, fontFamily: sans, fontSize: 10, padding: "7px 14px", borderRadius: 6, border: `1px solid ${T.charcoal}`, cursor: "pointer", letterSpacing: 0.5 }}>VIEW ON MAP</button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Footer actions */}
+      {tab === "general" && notifs.length > 0 && (
+        <button onClick={onClearNotifs} style={{ padding: "10px 16px", borderTop: `1px solid ${T.charcoal}`, background: "none", border: "none", borderTopStyle: "solid", borderTopWidth: 1, borderTopColor: T.charcoal, cursor: "pointer", textAlign: "center", flexShrink: 0 }}>
+          <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, letterSpacing: 0.5, fontWeight: 600 }}>CLEAR ALL NOTIFICATIONS</span>
+        </button>
+      )}
+      {tab === "recovery" && (
+        <div style={{ display: "flex", borderTop: `1px solid ${T.charcoal}`, flexShrink: 0 }}>
+          {recoveryAlerts.length > 0 && (
+            <button onClick={onClearAlerts} style={{ flex: 1, padding: "12px 16px", background: "none", border: "none", borderRight: `1px solid ${T.charcoal}`, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, letterSpacing: 0.5, fontWeight: 600 }}>
+              CLEAR ALL
+            </button>
+          )}
+          <button onClick={() => { onClose(); onGoToRecovery && onGoToRecovery(); }} style={{ flex: 2, padding: "12px 16px", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+            <AlertTriangle size={12} color={T.red} />
+            <span style={{ fontFamily: sans, fontSize: 11, color: T.red, fontWeight: 600, letterSpacing: 0.5 }}>VIEW ALL</span>
+            <ChevronRight size={14} color={T.red} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TopBar({ onProfile, onBack, showBack, title, onViewUser, onGoToRecovery, onOpenMap, onSearch, onOpenDM, dmUnread, bellNotifs, setBellNotifs, profilePic, notifPrefs, recoveryAlerts, setRecoveryAlerts }) {
   const notifTypeMap = { like: "likes", comment: "comments", reply: "replies", follow: "follows", mention: "mentions" };
   const filteredNotifs = bellNotifs.filter(n => { const pref = notifTypeMap[n.type]; return !pref || (notifPrefs && notifPrefs[pref] !== false); });
-  const [openPanel, setOpenPanel] = useState(null); // null | "bell" | "recovery"
+  const [openPanel, setOpenPanel] = useState(null); // null | "notif"
+  // Which tab the unified panel should open to. If there are recovery alerts
+  // and no general notifs, default to recovery; otherwise general.
+  const [initialNotifTab, setInitialNotifTab] = useState("general");
 
-  const togglePanel = (panel) => setOpenPanel(openPanel === panel ? null : panel);
+  const openNotifPanel = () => {
+    if (openPanel === "notif") { setOpenPanel(null); return; }
+    setInitialNotifTab(filteredNotifs.length === 0 && recoveryAlerts.length > 0 ? "recovery" : "general");
+    setOpenPanel("notif");
+  };
+
+  const totalCount = filteredNotifs.length + recoveryAlerts.length;
+  // Badge color prioritizes recovery (red) since it's higher urgency.
+  const badgeColor = recoveryAlerts.length > 0 ? T.red : T.copper;
 
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", background: T.charcoal, zIndex: 200, borderBottom: `1px solid ${T.darkCard}`, flexShrink: 0, position: "relative" }}>
@@ -877,16 +1023,10 @@ function TopBar({ onProfile, onBack, showBack, title, onViewUser, onGoToRecovery
           <NotifBadge count={dmUnread} color={T.copper} />
         </button>
 
-        {/* Recovery Alert Icon */}
-        <button onClick={() => togglePanel("recovery")} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, position: "relative", display: "flex", alignItems: "center" }}>
-          <AlertTriangle size={19} color={openPanel === "recovery" ? T.red : T.tertiary} strokeWidth={1.5} />
-          <NotifBadge count={recoveryAlerts.length} color={T.red} />
-        </button>
-
-        {/* Bell Notification Icon */}
-        <button onClick={() => togglePanel("bell")} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, position: "relative", display: "flex", alignItems: "center" }}>
-          <Bell size={19} color={openPanel === "bell" ? T.copper : T.tertiary} strokeWidth={1.5} />
-          <NotifBadge count={filteredNotifs.length} color={T.copper} />
+        {/* Unified Notification Icon (general + recovery) */}
+        <button onClick={openNotifPanel} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, position: "relative", display: "flex", alignItems: "center" }}>
+          <Bell size={19} color={openPanel === "notif" ? badgeColor : T.tertiary} strokeWidth={1.5} />
+          <NotifBadge count={totalCount} color={badgeColor} />
         </button>
 
         {/* Avatar */}
@@ -901,25 +1041,21 @@ function TopBar({ onProfile, onBack, showBack, title, onViewUser, onGoToRecovery
         </button>
       </div>
 
-      {/* Notification Panels */}
-      {openPanel === "bell" && (
-        <BellNotifPanel
+      {/* Unified Notification Panel */}
+      {openPanel === "notif" && (
+        <UnifiedNotifPanel
           onClose={() => setOpenPanel(null)}
           onViewUser={(u) => { setOpenPanel(null); onViewUser && onViewUser(u); }}
           notifs={filteredNotifs}
-          onDismiss={(id) => setBellNotifs(prev => prev.filter(n => n.id !== id))}
-          onClearAll={() => setBellNotifs([])}
-        />
-      )}
-      {openPanel === "recovery" && (
-        <RecoveryNotifPanel
-          onClose={() => setOpenPanel(null)}
+          onDismissNotif={(id) => setBellNotifs(prev => prev.filter(n => n.id !== id))}
+          onClearNotifs={() => setBellNotifs([])}
+          recoveryAlerts={recoveryAlerts}
+          onDismissAlert={(id) => setRecoveryAlerts(prev => prev.filter(a => a.id !== id))}
+          onClearAlerts={() => setRecoveryAlerts([])}
           onGoToRecovery={() => { setOpenPanel(null); onGoToRecovery && onGoToRecovery(); }}
-          alerts={recoveryAlerts}
-          onDismiss={(id) => setRecoveryAlerts(prev => prev.filter(a => a.id !== id))}
-          onClearAll={() => setRecoveryAlerts([])}
           onOpenMap={onOpenMap}
           onOpenDM={(user, prefill, shared) => { setOpenPanel(null); onOpenDM && onOpenDM(user, prefill, shared); }}
+          initialTab={initialNotifTab}
         />
       )}
 
