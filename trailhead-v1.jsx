@@ -10528,15 +10528,26 @@ function OnboardingScreen({ session, onComplete, onSetProfilePic, onAddBuild }) 
       // public.profiles reflects the chosen handle/name/avatar. The
       // signup trigger creates the row with a placeholder handle; this
       // update replaces it with the user's real one.
+      //
+      // IMPORTANT: do NOT overwrite avatar_url unconditionally here.
+      // handleSetProfilePic may have already uploaded a user-chosen
+      // avatar and written it to public.profiles. We only fill in the
+      // OAuth-provided prefillAvatar as a fallback when no avatar is
+      // set on the row yet.
       if (session && session.user && session.user.id) {
         try {
-          await supabase.from("profiles").update({
+          const { data: existing } = await supabase
+            .from("profiles").select("avatar_url").eq("id", session.user.id).maybeSingle();
+          const patch = {
             handle: cleanHandle,
             full_name: prefillName || null,
-            avatar_url: prefillAvatar || null,
             updated_at: new Date().toISOString(),
-          }).eq("id", session.user.id);
-        } catch (e) { /* best-effort */ }
+          };
+          if (!(existing && existing.avatar_url) && prefillAvatar) {
+            patch.avatar_url = prefillAvatar;
+          }
+          await supabase.from("profiles").update(patch).eq("id", session.user.id);
+        } catch (e) { console.error("[onboarding] profiles update failed", e); }
       }
     } catch (e) { /* best-effort — handle is the only blocker */ }
     // Persist the build to local state so it shows up on the Profile screen.
@@ -12272,18 +12283,22 @@ export default function Trailhead() {
     if (!session || !session.user || !session.user.id) return;
     const uid = session.user.id;
     try {
-      const { data: profileRow } = await supabase
+      const { data: profileRow, error: profErr } = await supabase
         .from("profiles").select("*").eq("id", uid).maybeSingle();
+      if (profErr) console.error("[hydrate] profiles fetch error", profErr);
+      console.log("[hydrate] profile row", profileRow);
       if (profileRow) setCurrentProfile(profileRow);
-      const { data: buildRows } = await supabase
+      const { data: buildRows, error: buildErr } = await supabase
         .from("builds").select("*").eq("user_id", uid).order("created_at", { ascending: false });
+      if (buildErr) console.error("[hydrate] builds fetch error", buildErr);
       if (Array.isArray(buildRows)) {
         setUserBuilds(buildRows.map(r => dbRowToLocalBuild(r, profileRow)));
       }
       if (profileRow && profileRow.avatar_url) {
+        console.log("[hydrate] setting profilePic from avatar_url", profileRow.avatar_url);
         setProfilePic(prev => prev || profileRow.avatar_url);
       }
-    } catch (e) { /* best-effort; UI stays functional on empty state */ }
+    } catch (e) { console.error("[hydrate] failed", e); }
   };
   useEffect(() => {
     let cancelled = false;
@@ -12413,26 +12428,33 @@ export default function Trailhead() {
       try {
         const { data: sess } = await supabase.auth.getSession();
         uid = sess && sess.session && sess.session.user && sess.session.user.id;
-      } catch (e) {}
+      } catch (e) { console.error("[avatar] getSession failed", e); }
     }
-    if (!uid) return; // guest/unsigned — local preview only
+    if (!uid) { console.warn("[avatar] no uid — skipping upload (guest/unauthed)"); return; }
     try {
+      console.log("[avatar] compressing…", { originalSize: file.size, originalType: file.type });
       const compressed = await compressImage(file, { maxDim: 512, maxBytes: 900 * 1024 });
+      console.log("[avatar] compressed", { size: compressed && compressed.size });
       const path = `${uid}/${Date.now()}.jpg`;
-      const { error: upErr } = await supabase.storage
+      console.log("[avatar] uploading to", path);
+      const { data: upData, error: upErr } = await supabase.storage
         .from("avatars")
         .upload(path, compressed, { contentType: "image/jpeg", upsert: true });
-      if (upErr) throw upErr;
+      if (upErr) { console.error("[avatar] upload error", upErr); throw upErr; }
+      console.log("[avatar] upload ok", upData);
       const { data: pub } = supabase.storage.from("avatars").getPublicUrl(path);
       const publicUrl = pub && pub.publicUrl;
+      console.log("[avatar] public url", publicUrl);
       if (!publicUrl) return;
-      await supabase.from("profiles").update({
+      const { error: profErr } = await supabase.from("profiles").update({
         avatar_url: publicUrl,
         updated_at: new Date().toISOString(),
       }).eq("id", uid);
+      if (profErr) { console.error("[avatar] profiles update error", profErr); throw profErr; }
+      console.log("[avatar] profiles.avatar_url updated");
       setProfilePic(publicUrl);
       setCurrentProfile(prev => prev ? { ...prev, avatar_url: publicUrl } : prev);
-    } catch (e) { /* best-effort — local preview stays */ }
+    } catch (e) { console.error("[avatar] handleSetProfilePic failed", e); }
   };
   const [notifPrefs, setNotifPrefs] = useState({ likes: true, comments: true, replies: true, follows: true, mentions: true, push: false });
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
