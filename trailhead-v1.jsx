@@ -1475,156 +1475,8 @@ function ImageCarousel({ images, startIndex, onClose }) {
 }
 
 /* ─── FEED SCREEN ─── */
-const defaultFeedItems = [
-    {
-      id: "f1", type: "RECOVERY", user: "DesertRat_4x4", initial: "D", time: "2m ago",
-      title: "Stuck in Black Bear Pass: Winch Support Required",
-      body: "High-centered on a shelf. Front locker acting up. Need a heavy rig with at least 12k winch to assist.",
-      location: "San Juan, CO", urgency: "HIGH", coords: "45.89° N, 121.35° W",
-      likes: 18, comments: 24,
-      seedComments: [
-        { user: "TrailBoss_88", initial: "T", text: "I'm 20 minutes out with a 12k Warn. Hang tight.", time: "1m ago", likes: 14 },
-        { user: "Sierra_Tactical", initial: "S", text: "What's your exact pin? I can relay to the convoy group heading that way.", time: "1m ago", likes: 8 },
-        { user: "Peak_Finder", initial: "P", text: "That shelf gets everyone. Stay patient, help is close.", time: Date.now(), likes: 3 },
-      ],
-    },
-    {
-      id: "f2", type: "ROUTES", user: "Peak_Finder", initial: "P", time: "28m ago",
-      title: "Hell's Revenge Loop",
-      body: null, distance: "6.5 MI", duration: "2H 45M", badge: "TOP RATED", verified: 12,
-      likes: 142, comments: 31,
-      seedComments: [
-        { user: "Overland_Expert", initial: "O", text: "Ran this last weekend — the fin climb is no joke. Air down to 18 psi minimum.", time: "20m ago", likes: 23 },
-        { user: "BajaBound", initial: "B", text: "One of the best loops in Moab. The views at the top are unreal.", time: "15m ago", likes: 11 },
-        { user: "DirtRoadDave", initial: "D", text: "Is this doable on 33s with no lockers?", time: "8m ago", likes: 5 },
-      ],
-    },
-    {
-      id: "f3", type: "BUILDS", user: "Overland_Expert", initial: "OE", time: "1h ago",
-      title: "Stage 3: Suspension Complete",
-      subtitle: "Posted a new Build Stage", stage: "Stage 3: Suspension",
-      likes: 1200, comments: 84,
-      seedComments: [
-        { user: "LiftKing", initial: "L", text: "Icon Stage 3 is the move. How's the ride quality on highway?", time: "52m ago", likes: 34 },
-        { user: "FoxFanatic", initial: "F", text: "Clean install. What spring rate did you go with up front?", time: "45m ago", likes: 18 },
-        { user: "SuspensionGuru", initial: "S", text: "Great choice on the adjustable UCAs. Makes a huge difference for alignment.", time: "30m ago", likes: 27 },
-      ],
-    },
-    {
-      id: "f4", type: "CONVOYS", user: "Sierra_Tactical", initial: "S", time: "2h ago",
-      title: "Alpine Summit Chase",
-      body: "Join 8 other rigs for a sunrise ascent. Stock friendly with recovery points.",
-      month: "OCT", day: "24", departs: "05:00 AM", slots: 4,
-      likes: 67, comments: 12,
-      seedComments: [
-        { user: "MountainGoat", initial: "M", text: "Count me in! I'll bring my recovery kit and a SAT phone.", time: "1h ago", likes: 9 },
-        { user: "GearDump", initial: "G", text: "Is there a minimum tire size requirement?", time: "55m ago", likes: 2 },
-      ],
-    },
-    {
-      id: "f5", type: "PHOTOS", user: "Nomad_Queen", initial: "N", time: "3h ago",
-      title: "Golden hour on the Mojave — first trip with the new rack setup",
-      body: null, photoCount: 4,
-      likes: 389, comments: 42,
-      seedComments: [
-        { user: "SolarTrail", initial: "S", text: "That light is unreal. What rack system are you running?", time: "2h ago", likes: 31 },
-        { user: "DesertRat_4x4", initial: "D", text: "Mojave golden hour hits different. Amazing shots.", time: "1h ago", likes: 22 },
-        { user: "WattMaster", initial: "W", text: "The rack looks great with that setup. Clean build overall.", time: "45m ago", likes: 8 },
-      ],
-    },
-    {
-      id: "f6", type: "ROUTES", user: "TrailBoss_88", initial: "T", time: "4h ago",
-      title: "Rubicon Trail — Full GPS Track",
-      body: null, distance: "22 MI", duration: "6H 30M", badge: null, verified: 34,
-      likes: 210, comments: 56,
-      seedComments: [
-        { user: "Overland_Expert", initial: "O", text: "The Rubicon is a bucket list trail. This GPS track is solid — saved it.", time: "3h ago", likes: 19 },
-        { user: "StockHero", initial: "S", text: "Can a stock 4Runner make it through or do you need lockers?", time: "2h ago", likes: 7 },
-        { user: "LiftKing", initial: "L", text: "Did this last spring. The Sluice is the gnarliest section by far.", time: "1h ago", likes: 15 },
-      ],
-    },
-    {
-      id: "f7", type: "BUILDS", user: "Kyle Morrison", initial: "K", time: "5h ago",
-      title: "CBI Front Bumper Install",
-      subtitle: "Updated build — THE HIGHLANDER", stage: "Armor: CBI Offroad",
-      likes: 94, comments: 17,
-      seedComments: [
-        { user: "TrailBoss_88", initial: "T", text: "CBI makes the best bumpers in the game. How's the approach angle now?", time: "4h ago", likes: 12 },
-        { user: "GearDump", initial: "G", text: "Looks tank-tough. Did you add the light bar cutout?", time: "3h ago", likes: 6 },
-      ],
-    },
-    {
-      id: "f8", type: "CONVOYS", user: "BajaBound", initial: "B", time: "6h ago",
-      title: "Baja Norte Expedition — Feb 2027",
-      body: "5-day coastal run from Ensenada to Bahía de los Ángeles. Need min 33\" tires and recovery gear.",
-      month: "FEB", day: "14", departs: "06:00 AM", slots: 6,
-      likes: 156, comments: 38,
-      seedComments: [
-        { user: "Sierra_Tactical", initial: "S", text: "This sounds epic. What's the camping situation — dispersed or established sites?", time: "5h ago", likes: 16 },
-        { user: "Nomad_Queen", initial: "N", text: "I've done this route twice. Pro tip: carry extra fuel after El Rosario.", time: "4h ago", likes: 42 },
-        { user: "DesertRat_4x4", initial: "D", text: "I'm in. Running 35s with dual lockers. Will DM you.", time: "3h ago", likes: 10 },
-      ],
-    },
-    {
-      id: "f9", type: "PHOTOS", user: "MountainGoat", initial: "M", time: "8h ago",
-      title: "Snowcapped ridgeline crossing — 4Runner doing 4Runner things",
-      body: null, photoCount: 7,
-      likes: 512, comments: 63,
-      seedComments: [
-        { user: "Peak_Finder", initial: "P", text: "This is why I drive a 4Runner. Incredible shots.", time: "7h ago", likes: 38 },
-        { user: "Overland_Expert", initial: "O", text: "What tires are you running for the snow? Looks like great traction.", time: "6h ago", likes: 14 },
-        { user: "DirtRoadDave", initial: "D", text: "The snow on the ridge makes this look like a postcard. Jealous.", time: "5h ago", likes: 21 },
-      ],
-    },
-    {
-      id: "f10", type: "RECOVERY", user: "TrailBoss_88", initial: "T", time: "12h ago",
-      title: "Tow Needed — Broken Axle on Rubicon",
-      body: "Front axle snapped at the birfield. Cannot move under own power. Need a flatbed or heavy tow rig.",
-      location: "Rubicon Trail, CA", urgency: "HIGH", coords: "38.97° N, 120.16° W",
-      likes: 32, comments: 41,
-      seedComments: [
-        { user: "Overland_Expert", initial: "O", text: "That's a tough break. I know a flatbed service out of Placerville — DM me.", time: "11h ago", likes: 17 },
-        { user: "LiftKing", initial: "L", text: "Birfields are the weak link on those axles. Glad you're safe.", time: "10h ago", likes: 9 },
-      ],
-    },
-    {
-      id: "f11", type: "FORUM", user: "VoltWrangler", initial: "V", time: "6h ago",
-      title: "How to properly wire auxiliary batteries for dual setups",
-      body: "Complete guide to dual battery setups — isolators, wiring gauges, fusing, and what NOT to do. Learned some hard lessons.",
-      forumCat: "How-To Guides", forumSub: "Electrical & Wiring", replies: 124, views: "8.4K",
-      threadId: 5,
-      likes: 89, comments: 124,
-      seedComments: [
-        { user: "WattMaster", initial: "W", text: "Great write-up. One thing to add — always fuse both sides of the isolator.", time: "5h ago", likes: 45 },
-        { user: "SolarTrail", initial: "S", text: "Wish I had this guide before I fried my first isolator. Bookmarked.", time: "4h ago", likes: 28 },
-      ],
-    },
-    {
-      id: "f12", type: "FORUM", user: "TrailBoss_88", initial: "T", time: "2h ago",
-      title: "Best budget lift kit for 3rd Gen Tacoma?",
-      body: "Looking at Icon, Bilstein, or OME for my 2020 Tacoma. Budget is around $1,500. Primarily doing fire roads and moderate trails in the PNW.",
-      forumCat: "How-To Guides", forumSub: "Suspension & Lift", replies: 47, views: "2.1K",
-      threadId: 1,
-      likes: 56, comments: 47,
-      seedComments: [
-        { user: "SuspensionGuru", initial: "S", text: "For $1,500 you can't beat Bilstein 5100s with OME springs. Great combo for PNW trails.", time: "1h ago", likes: 33 },
-        { user: "FoxFanatic", initial: "F", text: "If you can stretch the budget a bit, the Icon Stage 1 is worth every penny.", time: "45m ago", likes: 19 },
-        { user: "LiftKing", initial: "L", text: "OME is the go-to for budget builds. Reliable and great ride quality.", time: "30m ago", likes: 24 },
-      ],
-    },
-    {
-      id: "f13", type: "FORUM", user: "BajaBound", initial: "B", time: "1d ago",
-      title: "Planning a Baja convoy — Feb 2027",
-      body: "Looking for 6-8 rigs for a 2-week Baja trip. Starting in San Diego, heading down to Cabo via the pacific coast.",
-      forumCat: "Trip Coordination", forumSub: "Convoy Planning", replies: 31, views: "890",
-      threadId: 7,
-      likes: 42, comments: 31,
-      seedComments: [
-        { user: "Sierra_Tactical", initial: "S", text: "I'm interested. What's the plan for border crossing logistics?", time: "20h ago", likes: 11 },
-        { user: "Nomad_Queen", initial: "N", text: "Two weeks in Baja sounds amazing. Is there a WhatsApp group yet?", time: "18h ago", likes: 15 },
-      ],
-    },
-  ];
+// Feed posts are now persisted to public.posts and hydrated on sign-in.
+// The legacy defaultFeedItems seed array was removed once the backend landed.
 
 function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onViewBuild, feedItems, onUpdateFeed, onAddNotification, forumUserReplies, forumViewCounts, savedRoutes, onSaveRoute, onUnsaveRoute, onStartNav, onAwardPoints, isGuest, onGuestTap, pendingPostNav, onConsumePendingPostNav, onSharedPostMissing }) {
   const [activeFilter, setActiveFilter] = useState("ALL");
@@ -12315,6 +12167,128 @@ function clientDataToDbBuild(data, userId) {
   };
 }
 
+// ─── Feed post ↔ DB row translation ───────────────────────────────────────
+// public.posts has a few top-level queryable columns (type, title, body,
+// hero_img, photo_urls, vehicle, build_id, thread_id, is_public, counts) and
+// a `data` jsonb blob that carries everything type-specific (location,
+// urgency, distance, forumCat, stage, month/day/departs/slots, seedComments,
+// rsvps, routes-only photos/pins/points, etc.) so we don't need a wide
+// schema per post type.
+function dbRowToFeedItem(row, profile) {
+  if (!row) return null;
+  const data = row.data || {};
+  const profileName = (profile && profile.full_name) || data.user || "User";
+  const profileHandle = (profile && profile.handle) ? profile.handle : (data.handle || "");
+  // Prefer the typed text[] column, fall back to whatever is in the jsonb
+  // (which may carry objects-with-.url for compose/route post shapes).
+  const photoUrls = Array.isArray(data.photoUrls) && data.photoUrls.length > 0
+    ? data.photoUrls
+    : (Array.isArray(row.photo_urls) && row.photo_urls.length > 0 ? row.photo_urls : undefined);
+  return {
+    ...data,
+    id: row.id,
+    rawId: row.id,
+    type: row.type,
+    user: profileName,
+    handle: profileHandle,
+    initial: (profileName || "U").charAt(0).toUpperCase(),
+    title: row.title || data.title || "",
+    body: row.body != null ? row.body : (data.body != null ? data.body : null),
+    vehicle: row.vehicle || data.vehicle || undefined,
+    image: row.hero_img || data.image || undefined,
+    heroImg: row.hero_img || data.heroImg || undefined,
+    photoUrls,
+    buildRawId: row.build_id || data.buildRawId || null,
+    threadId: row.thread_id != null ? (Number.isFinite(Number(row.thread_id)) ? Number(row.thread_id) : row.thread_id) : (data.threadId != null ? data.threadId : undefined),
+    likes: row.like_count != null ? row.like_count : (data.likes || 0),
+    comments: row.comment_count != null ? row.comment_count : (data.comments || 0),
+    isPublic: row.is_public,
+    time: data.time != null ? data.time : new Date(row.created_at).getTime(),
+    createdAt: row.created_at,
+    userId: row.user_id,
+  };
+}
+
+function feedItemToDbRow(item, userId) {
+  if (!item) return null;
+  // Pull top-level column values and pack everything else into `data`.
+  const {
+    id, rawId, type, user, handle, initial, title, body, vehicle, image, heroImg,
+    photoUrls, buildId, buildRawId, threadId, likes, comments, isPublic,
+    time, createdAt, userId: _uid, isMine,
+    ...rest
+  } = item;
+  // Flatten any photoUrl entries (strings or {url,type,caption}) into a
+  // simple text[] for fast queries; the full structure is preserved in data.
+  let photoUrlStrings = [];
+  if (Array.isArray(photoUrls)) {
+    photoUrlStrings = photoUrls
+      .map(p => typeof p === "string" ? p : (p && p.url) || null)
+      .filter(u => typeof u === "string" && u.length > 0);
+  }
+  const hero = heroImg || image || photoUrlStrings[0] || null;
+  // build_id references public.builds.id which is a uuid; only set it when
+  // we have a uuid-looking string. Numeric local ids get dropped.
+  const rawBuildRef = buildId || buildRawId;
+  const buildIdCol = (typeof rawBuildRef === "string" && rawBuildRef.length > 20) ? rawBuildRef : null;
+  const threadIdStr = threadId != null ? String(threadId) : null;
+  const data = {
+    ...rest,
+    user, handle, initial, time,
+    photoUrls: photoUrls || undefined,
+    likes: likes || 0,
+    comments: comments || 0,
+  };
+  return {
+    user_id: userId,
+    type,
+    title: title || null,
+    body: body != null ? body : null,
+    hero_img: hero,
+    photo_urls: photoUrlStrings,
+    vehicle: vehicle || null,
+    build_id: buildIdCol,
+    thread_id: threadIdStr,
+    data,
+    is_public: isPublic !== false,
+  };
+}
+
+// Walks a mixed list of photo entries (strings or objects-with-.url) and
+// uploads any data:/blob: URLs to the post-photos storage bucket, returning a
+// new list where those entries have been replaced with the resulting public
+// https URL. http/https URLs are passed through unchanged. Errors fall back
+// to the original entry so a bad upload doesn't take down the whole post.
+async function uploadPostPhotoList(list, uid) {
+  if (!Array.isArray(list) || list.length === 0) return list;
+  const out = [];
+  for (let i = 0; i < list.length; i++) {
+    const entry = list[i];
+    const url = typeof entry === "string" ? entry : (entry && entry.url);
+    if (!url || typeof url !== "string") { out.push(entry); continue; }
+    if (url.startsWith("http://") || url.startsWith("https://")) { out.push(entry); continue; }
+    if (!url.startsWith("data:") && !url.startsWith("blob:")) { out.push(entry); continue; }
+    try {
+      const resp = await fetch(url);
+      const blob = await resp.blob();
+      const compressed = await compressImage(blob, { maxDim: 1600, maxBytes: 1500 * 1024 });
+      const path = `${uid}/${Date.now()}-${i}.jpg`;
+      const { error: upErr } = await supabase.storage
+        .from("post-photos")
+        .upload(path, compressed, { contentType: "image/jpeg", upsert: true });
+      if (upErr) { console.error("[post-photos] upload error", upErr); out.push(entry); continue; }
+      const { data: pub } = supabase.storage.from("post-photos").getPublicUrl(path);
+      const publicUrl = pub && pub.publicUrl;
+      if (!publicUrl) { out.push(entry); continue; }
+      out.push(typeof entry === "string" ? publicUrl : { ...entry, url: publicUrl });
+    } catch (e) {
+      console.error("[post-photos] upload failed", e);
+      out.push(entry);
+    }
+  }
+  return out;
+}
+
 export default function Trailhead() {
   // Seed from cached module-scope URL parse so LoginScreen never mounts for shared links.
   const initialSharedLink = __INITIAL_SHARED_LINK;
@@ -12347,6 +12321,21 @@ export default function Trailhead() {
         console.log("[hydrate] setting profilePic from avatar_url", profileRow.avatar_url);
         setProfilePic(prev => prev || profileRow.avatar_url);
       }
+      // Feed posts. RLS exposes public posts plus the signed-in user's own
+      // posts (incl. private ones). We map each row back to local feed shape,
+      // passing the current profile only for the user's own posts so other
+      // users' historical name/handle (stored in data jsonb) is preserved.
+      try {
+        const { data: postRows, error: postErr } = await supabase
+          .from("posts")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(100);
+        if (postErr) console.error("[hydrate] posts fetch error", postErr);
+        if (Array.isArray(postRows)) {
+          setFeedItems(postRows.map(r => dbRowToFeedItem(r, r.user_id === uid ? profileRow : null)));
+        }
+      } catch (e) { console.error("[hydrate] posts fetch failed", e); }
     } catch (e) { console.error("[hydrate] failed", e); }
   };
   useEffect(() => {
@@ -12386,6 +12375,7 @@ export default function Trailhead() {
       if (event === "SIGNED_OUT") {
         setCurrentProfile(null);
         setUserBuilds([]);
+        setFeedItems([]);
         setAuthState("login");
       }
       // USER_UPDATED fires after supabase.auth.updateUser() — session object
@@ -12429,7 +12419,11 @@ export default function Trailhead() {
   // from re-triggering on tab switches or soft refreshes.
   const [pendingPostNav, setPendingPostNav] = useState(initialSharedLink && initialSharedLink.kind === "post" ? initialSharedLink.id : null);
   const [sharedLinkToast, setSharedLinkToast] = useState("");
-  const [feedItems, setFeedItems] = useState(defaultFeedItems);
+  const [feedItems, setFeedItems] = useState([]);
+  // Ref mirror so mutating helpers (updatePost, onRsvpConvoy, etc.) can read
+  // the latest feed state without closing over a stale snapshot.
+  const feedItemsRef = useRef(feedItems);
+  useEffect(() => { feedItemsRef.current = feedItems; }, [feedItems]);
   const [forumUserThreads, setForumUserThreads] = useState({}); // { subName: [thread, ...] }
   const [forumUserReplies, setForumUserReplies] = useState({}); // { threadId: [reply, ...] }
   const [forumLikedItems, setForumLikedItems] = useState({}); // { key: true }
@@ -12658,8 +12652,8 @@ export default function Trailhead() {
       const feedPost = {
         id: "fb_" + Date.now(),
         type: "BUILDS",
-        user: "Kyle Morrison",
-        initial: "K",
+        user: (currentProfile && currentProfile.full_name) || "You",
+        initial: ((currentProfile && currentProfile.full_name) || "U").charAt(0).toUpperCase(),
         time: Date.now(),
         title: displayName.toUpperCase(),
         subtitle: "Added a new build",
@@ -12672,7 +12666,7 @@ export default function Trailhead() {
         vehicle: `${data.year} ${data.make} ${data.model}${data.trim ? " " + data.trim : ""}`,
         buildRawId: newBuild.id,
       };
-      setFeedItems(prev => [feedPost, ...prev]);
+      addPost(feedPost);
     }
     awardPoints(POINTS.buildAdded, "Build Added");
   };
@@ -12710,10 +12704,95 @@ export default function Trailhead() {
     if (uid && typeof buildId === "string" && buildId.length > 20) {
       try {
         await supabase.from("builds").delete().eq("id", buildId).eq("user_id", uid);
+        // Clean up any feed posts that referenced this build.
+        await supabase.from("posts").delete().eq("build_id", buildId).eq("user_id", uid);
       } catch (e) { /* best-effort */ }
     }
     setUserBuilds(prev => prev.filter(b => b.id !== buildId));
     setFeedItems(prev => prev.filter(p => p.buildId !== buildId && p.buildRawId !== buildId));
+  };
+
+  // ─── Feed post CRUD (wraps setFeedItems with Supabase persistence) ──────
+  // addPost: optimistically prepend the local post, then upload any inline
+  // data-URL photos, insert into public.posts, and replace the optimistic
+  // entry with the merged DB row. Guests / signed-out callers only get the
+  // local mutation — no DB writes.
+  const addPost = async (newPost) => {
+    const tmpId = (newPost && newPost.id) || ("tmp_" + Date.now() + "_" + Math.floor(Math.random() * 1000));
+    const optimistic = { ...newPost, id: tmpId };
+    setFeedItems(prev => [optimistic, ...prev]);
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) return optimistic;
+    try {
+      // Upload photos referenced in `photoUrls` (ComposeScreen / BuildsScreen
+      // feed post shape) and `photos` (routes shape — objects with lat/lng).
+      let uploadedPhotoUrls = newPost.photoUrls;
+      if (Array.isArray(newPost.photoUrls)) {
+        uploadedPhotoUrls = await uploadPostPhotoList(newPost.photoUrls, uid);
+      }
+      let uploadedRoutePhotos = newPost.photos;
+      if (Array.isArray(newPost.photos)) {
+        uploadedRoutePhotos = await uploadPostPhotoList(newPost.photos, uid);
+      }
+      const normalized = { ...newPost, photoUrls: uploadedPhotoUrls, photos: uploadedRoutePhotos };
+      const row = feedItemToDbRow(normalized, uid);
+      const { data: inserted, error } = await supabase.from("posts").insert(row).select().single();
+      if (error) {
+        console.error("[posts] insert error", error);
+        // Leave the optimistic entry in place — user still sees their post.
+        return optimistic;
+      }
+      const clientItem = dbRowToFeedItem(inserted, currentProfile);
+      // Merge normalized (preserves route photos/pins/points not in jsonb
+      // payload when the DB column is empty) with the authoritative DB shape.
+      const merged = { ...normalized, ...clientItem };
+      setFeedItems(prev => prev.map(p => p.id === tmpId ? merged : p));
+      return merged;
+    } catch (e) {
+      console.error("[posts] addPost failed", e);
+      return optimistic;
+    }
+  };
+
+  // updatePost: merges updates into the local item and (if signed in and the
+  // id is a uuid) pushes the change to Supabase. Re-translates the merged
+  // item so the jsonb data blob stays coherent.
+  const updatePost = async (id, updates) => {
+    const current = feedItemsRef.current.find(p => p.id === id);
+    if (!current) {
+      setFeedItems(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+      return;
+    }
+    const merged = { ...current, ...updates };
+    setFeedItems(prev => prev.map(p => p.id === id ? merged : p));
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) return;
+    if (typeof id !== "string" || id.length < 20) return; // local-only post
+    try {
+      const row = feedItemToDbRow(merged, uid);
+      const { error } = await supabase.from("posts").update({
+        title: row.title,
+        body: row.body,
+        hero_img: row.hero_img,
+        photo_urls: row.photo_urls,
+        vehicle: row.vehicle,
+        data: row.data,
+        is_public: row.is_public,
+        updated_at: new Date().toISOString(),
+      }).eq("id", id).eq("user_id", uid);
+      if (error) console.error("[posts] update error", error);
+    } catch (e) { console.error("[posts] updatePost failed", e); }
+  };
+
+  const deletePost = async (id) => {
+    setFeedItems(prev => prev.filter(p => p.id !== id));
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) return;
+    if (typeof id !== "string" || id.length < 20) return;
+    try {
+      const { error } = await supabase.from("posts").delete().eq("id", id).eq("user_id", uid);
+      if (error) console.error("[posts] delete error", error);
+    } catch (e) { console.error("[posts] deletePost failed", e); }
   };
 
   const openForumThread = (threadId, catName, subName) => {
@@ -12791,17 +12870,17 @@ export default function Trailhead() {
 
       <div className="th-scroll" style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
         {showCompose ? (
-          <ComposeScreen userBuilds={myBuildsForLink} onClose={() => setShowCompose(false)} onSubmit={(newPost) => { setFeedItems(prev => [newPost, ...prev]); awardPoints(newPost.type === "RECOVERY" ? 0 : POINTS.feedPost, newPost.type === "RECOVERY" ? "" : "Feed Post"); if (newPost.photoUrls && newPost.photoUrls.length > 0) awardPoints(POINTS.photoUploaded * newPost.photoUrls.length, "Photos Uploaded"); }} onAddRecoveryAlert={addRecoveryAlert} onAddNotification={addNotification} onAddRoute={(r) => { setUserRoutes(prev => [r, ...prev]); awardPoints(POINTS.routeLogged, "Route Logged"); }} onOpenDM={openDM} />
+          <ComposeScreen userBuilds={myBuildsForLink} onClose={() => setShowCompose(false)} onSubmit={(newPost) => { addPost(newPost); awardPoints(newPost.type === "RECOVERY" ? 0 : POINTS.feedPost, newPost.type === "RECOVERY" ? "" : "Feed Post"); if (newPost.photoUrls && newPost.photoUrls.length > 0) awardPoints(POINTS.photoUploaded * newPost.photoUrls.length, "Photos Uploaded"); }} onAddRecoveryAlert={addRecoveryAlert} onAddNotification={addNotification} onAddRoute={(r) => { setUserRoutes(prev => [r, ...prev]); awardPoints(POINTS.routeLogged, "Route Logged"); }} onOpenDM={openDM} />
         ) : showRecovery ? (
           <RecoveryScreen onOpenMap={openMap} onOpenDM={openDM} />
         ) : isProfile ? (
           isOtherProfile ? (
             <OtherProfileScreen userId={profileStack[1]} onBack={goBack} onMessage={(user) => openDM(user)} />
           ) : (
-            <ProfileScreen initialUserName={(currentProfile && currentProfile.full_name) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name) || null} initialUserHandle={(currentProfile && currentProfile.handle) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle) || null} initialUserBio={currentProfile ? currentProfile.bio : null} initialIsPublic={currentProfile ? currentProfile.is_public : null} onSaveProfile={saveProfile} onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={deleteBuild} profilePic={profilePic} onSetProfilePic={handleSetProfilePic} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => setFeedItems(prev => prev.filter(p => p.id !== id))} onEditPost={(id, newText) => setFeedItems(prev => prev.map(p => p.id === id ? { ...p, title: newText } : p))} onUpdateConvoy={(convoyId, updates) => {
-              setFeedItems(prev => prev.map(p => p.id === convoyId ? { ...p, ...updates } : p));
+            <ProfileScreen initialUserName={(currentProfile && currentProfile.full_name) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name) || null} initialUserHandle={(currentProfile && currentProfile.handle) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle) || null} initialUserBio={currentProfile ? currentProfile.bio : null} initialIsPublic={currentProfile ? currentProfile.is_public : null} onSaveProfile={saveProfile} onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={deleteBuild} profilePic={profilePic} onSetProfilePic={handleSetProfilePic} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => deletePost(id)} onEditPost={(id, newText) => updatePost(id, { title: newText })} onUpdateConvoy={(convoyId, updates) => {
+              updatePost(convoyId, updates);
               // Notify going/maybe RSVPs
-              const convoy = feedItems.find(p => p.id === convoyId);
+              const convoy = feedItemsRef.current.find(p => p.id === convoyId);
               if (convoy && convoy.rsvps) {
                 const notifyHandles = Object.entries(convoy.rsvps).filter(([_, v]) => v === "going" || v === "maybe").map(([h]) => h.replace(/^@/, ""));
                 notifyHandles.forEach(handle => {
@@ -12815,9 +12894,9 @@ export default function Trailhead() {
           <>
             {isGuest && <GuestBanner onSignIn={() => setShowGuestPrompt(true)} />}
             {screen === "feed" && <FeedScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} pendingPostNav={pendingPostNav} onConsumePendingPostNav={() => setPendingPostNav(null)} onSharedPostMissing={() => { setSharedLinkToast("That post couldn't be loaded. It may have been removed or require sign-in."); setTimeout(() => setSharedLinkToast(""), 4500); }} onViewUser={openUserProfile} onOpenMap={openMap} onOpenThread={(threadId, catName, subName) => openForumThread(threadId, catName, subName)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onViewBuild={handleViewBuild} feedItems={feedItems} onUpdateFeed={requireAuth((items) => setFeedItems(items))} onAddNotification={requireAuth(addNotification)} forumUserReplies={forumUserReplies} forumViewCounts={forumViewCounts} savedRoutes={savedRoutes} onSaveRoute={requireAuth((route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev]))} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} onStartNav={(route) => setActiveNavRoute(route)} onAwardPoints={awardPoints} />}
-            {screen === "forum" && <ForumScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} pendingThread={pendingThread} onPendingHandled={() => setPendingThread(null)} onAddNotification={requireAuth(addNotification)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onAddFeedPost={requireAuth((post) => setFeedItems(prev => [post, ...prev]))} userThreads={forumUserThreads} setUserThreads={requireAuth(setForumUserThreads)} userReplies={forumUserReplies} setUserReplies={requireAuth(setForumUserReplies)} likedForumItems={forumLikedItems} setLikedForumItems={requireAuth(setForumLikedItems)} forumLikeCounts={forumLikeCounts} setForumLikeCounts={requireAuth(setForumLikeCounts)} forumViewCounts={forumViewCounts} setForumViewCounts={setForumViewCounts} onAwardPoints={awardPoints} />}
-            {screen === "routes" && <RoutesScreen userBuilds={myBuildsForLink} onRecordRoute={requireAuth(() => setShowRecorder(true))} onManualEntry={requireAuth(() => setShowManualRoute(true))} userRoutes={userRoutes} onUpdateRoute={requireAuth((routeId, updates) => setUserRoutes(prev => prev.map(r => r.id === routeId ? { ...r, ...updates } : r)))} savedRoutes={savedRoutes} onSaveRoute={requireAuth((route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev]))} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} onOpenDM={(user, msg, sharedPost) => openDM(user, msg, sharedPost)} onAddFeedPost={requireAuth((post) => setFeedItems(prev => [post, ...prev]))} onStartNav={(route) => setActiveNavRoute(route)} />}
-            {screen === "builds" && <BuildsScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onViewUser={openUserProfile} userBuilds={userBuilds} pendingBuildNav={pendingBuildNav} onConsumePendingBuildNav={() => setPendingBuildNav(null)} onAddBuild={requireAuth(addBuild)} userRoutes={userRoutes} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onUpdateBuild={requireAuth(updateBuild)} onPostBuildToFeed={requireAuth((b) => { const bd = b.buildData; const heroImg = b.image || (bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url) || null; setFeedItems(prev => [{ id: "feedbuild_" + Date.now(), type: "BUILDS", user: "KyleLPO", initial: "K", time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, vehicle: `${b.year} ${b.make} ${b.model}`, photoUrls: heroImg ? [heroImg] : undefined, image: heroImg, likes: 0, comments: 0, buildData: bd, buildRawId: b.rawId != null ? b.rawId : null }, ...prev]); awardPoints(POINTS.feedPost, "Build Shared"); })} />}
+            {screen === "forum" && <ForumScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} pendingThread={pendingThread} onPendingHandled={() => setPendingThread(null)} onAddNotification={requireAuth(addNotification)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onAddFeedPost={requireAuth((post) => addPost(post))} userThreads={forumUserThreads} setUserThreads={requireAuth(setForumUserThreads)} userReplies={forumUserReplies} setUserReplies={requireAuth(setForumUserReplies)} likedForumItems={forumLikedItems} setLikedForumItems={requireAuth(setForumLikedItems)} forumLikeCounts={forumLikeCounts} setForumLikeCounts={requireAuth(setForumLikeCounts)} forumViewCounts={forumViewCounts} setForumViewCounts={setForumViewCounts} onAwardPoints={awardPoints} />}
+            {screen === "routes" && <RoutesScreen userBuilds={myBuildsForLink} onRecordRoute={requireAuth(() => setShowRecorder(true))} onManualEntry={requireAuth(() => setShowManualRoute(true))} userRoutes={userRoutes} onUpdateRoute={requireAuth((routeId, updates) => setUserRoutes(prev => prev.map(r => r.id === routeId ? { ...r, ...updates } : r)))} savedRoutes={savedRoutes} onSaveRoute={requireAuth((route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev]))} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} onOpenDM={(user, msg, sharedPost) => openDM(user, msg, sharedPost)} onAddFeedPost={requireAuth((post) => addPost(post))} onStartNav={(route) => setActiveNavRoute(route)} />}
+            {screen === "builds" && <BuildsScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onViewUser={openUserProfile} userBuilds={userBuilds} pendingBuildNav={pendingBuildNav} onConsumePendingBuildNav={() => setPendingBuildNav(null)} onAddBuild={requireAuth(addBuild)} userRoutes={userRoutes} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onUpdateBuild={requireAuth(updateBuild)} onPostBuildToFeed={requireAuth((b) => { const bd = b.buildData; const heroImg = b.image || (bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url) || null; const meName = (currentProfile && currentProfile.full_name) || "You"; addPost({ id: "feedbuild_" + Date.now(), type: "BUILDS", user: meName, initial: meName.charAt(0).toUpperCase(), time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, vehicle: `${b.year} ${b.make} ${b.model}`, photoUrls: heroImg ? [heroImg] : undefined, image: heroImg, likes: 0, comments: 0, buildData: bd, buildRawId: b.rawId != null ? b.rawId : null }); awardPoints(POINTS.feedPost, "Build Shared"); })} />}
             {screen === "ranks" && (isGuest
               ? <GuestGateScreen title="RANKS REQUIRE AN ACCOUNT" subtitle="Sign in to see the leaderboard and start earning points from your posts, routes and builds." onSignIn={goToLoginFromGuest} />
               : <RanksScreen myPoints={myTotalPoints} pointsBreakdown={pointsBreakdown} />
@@ -12922,8 +13001,9 @@ export default function Trailhead() {
               createdAt: Date.now(),
             }, ...prev]);
             if (routeData.shareToFeed) {
-              setFeedItems(prev => [{
-                id, type: "ROUTES", user: "KyleLPO", initial: "K", time: Date.now(),
+              const meName = (currentProfile && currentProfile.full_name) || "You";
+              addPost({
+                id, type: "ROUTES", user: meName, initial: meName.charAt(0).toUpperCase(), time: Date.now(),
                 title: routeData.name, body: routeData.desc || null,
                 distance: distMi + " MI", duration: durStr,
                 badge: null, verified: 0, likes: 0, comments: 0,
@@ -12935,7 +13015,7 @@ export default function Trailhead() {
                 photos: routeData.photos || [],
                 pins: allPins,
                 points: routeData.points || [],
-              }, ...prev]);
+              });
             }
             awardPoints(POINTS.routeLogged, "Route Logged");
             if (routeData.photos && routeData.photos.length > 0) awardPoints(POINTS.photoUploaded * routeData.photos.length, "Photos Uploaded");
@@ -12973,8 +13053,9 @@ export default function Trailhead() {
               createdAt: Date.now(),
             }, ...prev]);
             if (routeData.shareToFeed) {
-              setFeedItems(prev => [{
-                id, type: "ROUTES", user: "KyleLPO", initial: "K", time: Date.now(),
+              const meName = (currentProfile && currentProfile.full_name) || "You";
+              addPost({
+                id, type: "ROUTES", user: meName, initial: meName.charAt(0).toUpperCase(), time: Date.now(),
                 title: routeData.name, body: routeData.desc || null,
                 distance: routeData.distance ? routeData.distance + " MI" : "—",
                 duration: routeData.time || "—",
@@ -12987,7 +13068,7 @@ export default function Trailhead() {
                 photos: routeData.photos || [],
                 pins: routeData.pins || [],
                 points: routeData.points || [],
-              }, ...prev]);
+              });
             }
             awardPoints(POINTS.routeLogged, "Route Logged");
             if (routeData.photos && routeData.photos.length > 0) awardPoints(POINTS.photoUploaded * routeData.photos.length, "Photos Uploaded");
@@ -13016,7 +13097,10 @@ export default function Trailhead() {
           conversations={dmConvos}
           setConversations={setDmConvos}
           onRsvpConvoy={(convoyId, status) => {
-            setFeedItems(prev => prev.map(fi => fi.id === convoyId ? { ...fi, rsvps: { ...(fi.rsvps || {}), "@KyleLPO": status } } : fi));
+            const current = feedItemsRef.current.find(fi => fi.id === convoyId);
+            const meHandle = (currentProfile && currentProfile.handle) ? ("@" + currentProfile.handle) : "@me";
+            const newRsvps = { ...((current && current.rsvps) || {}), [meHandle]: status };
+            updatePost(convoyId, { rsvps: newRsvps });
           }}
           onOpenPost={(sp) => {
             setShowDM(false); setDmInitialUser(null); setDmInitialMessage(""); setDmSharedPost(null);
