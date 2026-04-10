@@ -6036,10 +6036,11 @@ function RoutesScreen({ onRecordRoute, onManualEntry, userRoutes, onUpdateRoute,
 }
 
 /* ─── BUILDS / PROFILE SCREEN ─── */
-function BuildsScreen({ onViewUser, userBuilds, onAddBuild }) {
+function BuildsScreen({ onViewUser, userBuilds, onAddBuild, onUpdateBuild, onPostBuildToFeed }) {
   const [filter, setFilter] = useState("all"); // "all" | "mine" | "following"
   const [search, setSearch] = useState("");
-  const [expandedBuild, setExpandedBuild] = useState(null);
+  const [detailBuildId, setDetailBuildId] = useState(null);
+  const [editingBuild, setEditingBuild] = useState(null);
   const [carouselImages, setCarouselImages] = useState(null);
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [likedBuilds, setLikedBuilds] = useState({});
@@ -6090,6 +6091,7 @@ function BuildsScreen({ onViewUser, userBuilds, onAddBuild }) {
 
   const mappedUserBuilds = (userBuilds || []).map((b, i) => ({
     id: 100 + i,
+    rawId: b.id,
     name: b.name || "UNNAMED BUILD",
     owner: "Kyle Morrison",
     handle: "@KyleLPO",
@@ -6139,26 +6141,243 @@ function BuildsScreen({ onViewUser, userBuilds, onAddBuild }) {
     `linear-gradient(135deg, ${T.charcoal} 0%, ${T.green}20 100%)`,
   ];
 
-  // Show add build form overlay
-  if (showAddBuildForm) {
+  // Show add/edit build form overlay
+  if (showAddBuildForm || editingBuild) {
+    const isEdit = !!editingBuild;
+    const closeForm = () => { setShowAddBuildForm(false); setEditingBuild(null); };
     return (
       <div style={{ padding: "0 0 16px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 16px 0" }}>
-          <button onClick={() => setShowAddBuildForm(false)} style={{ background: T.darkCard, border: "none", borderRadius: 8, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+          <button onClick={closeForm} style={{ background: T.darkCard, border: "none", borderRadius: 8, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
             <ChevronLeft size={18} color={T.white} />
           </button>
           <div>
-            <h2 style={{ fontFamily: sans, fontSize: 18, color: T.white, margin: 0, fontWeight: 700 }}>Add New Build</h2>
-            <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>Enter your vehicle and mod details</span>
+            <h2 style={{ fontFamily: sans, fontSize: 18, color: T.white, margin: 0, fontWeight: 700 }}>{isEdit ? "Edit Build" : "Add New Build"}</h2>
+            <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{isEdit ? "Update your vehicle and mod details" : "Enter your vehicle and mod details"}</span>
           </div>
         </div>
         <AddBuildForm
-          onClose={() => setShowAddBuildForm(false)}
+          key={isEdit ? editingBuild.id : "new"}
+          onClose={closeForm}
+          initialData={isEdit ? editingBuild.buildData : undefined}
           onSave={(data) => {
-            onAddBuild && onAddBuild(data);
-            setShowAddBuildForm(false);
+            if (isEdit) {
+              onUpdateBuild && onUpdateBuild(editingBuild.id, data);
+            } else {
+              onAddBuild && onAddBuild(data);
+            }
+            closeForm();
           }}
         />
+      </div>
+    );
+  }
+
+  // ── Build Detail Page (full-page view) ──
+  if (detailBuildId != null) {
+    const detailBuild = allBuilds.find(b => b.id === detailBuildId);
+    if (!detailBuild) {
+      // Build vanished — fall through to gallery
+      setDetailBuildId(null);
+      return null;
+    }
+    const bd = detailBuild.buildData;
+    const heroImage = detailBuild.image || (bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url) || null;
+    const gradient = gradients[(allBuilds.indexOf(detailBuild)) % gradients.length];
+    const liked = !!likedBuilds[detailBuild.id];
+
+    const modCategories = [
+      { key: "suspension", label: "Suspension", icon: Wrench },
+      { key: "tires", label: "Tires", icon: Wrench },
+      { key: "wheels", label: "Wheels", icon: Wrench },
+      { key: "bumpers", label: "Bumpers", icon: Shield },
+      { key: "armor", label: "Armor", icon: Shield },
+      { key: "lighting", label: "Lighting", icon: Zap },
+      { key: "rack", label: "Rack / Storage", icon: Bookmark },
+      { key: "winch", label: "Winch", icon: Target },
+      { key: "otherMods", label: "Other Mods", icon: Plus },
+    ];
+    const modRows = modCategories
+      .map(c => ({ ...c, mod: bd ? bd[c.key] : null }))
+      .filter(r => r.mod && r.mod.value);
+
+    return (
+      <div style={{ padding: "0 0 16px" }}>
+        {carouselImages && (
+          <ImageCarousel images={carouselImages} startIndex={carouselIndex} onClose={() => setCarouselImages(null)} />
+        )}
+        {/* Hero */}
+        <div style={{ position: "relative", height: 280, background: heroImage ? T.darkBg : gradient, overflow: "hidden" }}>
+          {heroImage ? (
+            <img src={heroImage} alt="" onClick={() => openGalleryCarousel(detailBuild, 0)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", cursor: "pointer" }} />
+          ) : (
+            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Wrench size={120} color={T.tertiary} strokeWidth={0.15} style={{ opacity: 0.08 }} />
+            </div>
+          )}
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(transparent 35%, rgba(0,0,0,0.85))" }} />
+          {/* Back */}
+          <button onClick={() => setDetailBuildId(null)} style={{ position: "absolute", top: 14, left: 14, width: 36, height: 36, borderRadius: 10, background: `${T.darkBg}CC`, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)" }}>
+            <ChevronLeft size={20} color={T.white} />
+          </button>
+          {/* Like + Edit */}
+          <div style={{ position: "absolute", top: 14, right: 14, display: "flex", gap: 8 }}>
+            {detailBuild.isMine && detailBuild.rawId && (
+              <button onClick={() => {
+                const src = (userBuilds || []).find(ub => ub.id === detailBuild.rawId);
+                if (src) setEditingBuild(src);
+              }} style={{ width: 36, height: 36, borderRadius: 10, background: `${T.copper}40`, border: `1px solid ${T.copper}60`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)" }}>
+                <Edit3 size={15} color={T.white} />
+              </button>
+            )}
+            <button onClick={() => toggleLikeBuild(detailBuild.id)} style={{ height: 36, padding: "0 12px", borderRadius: 10, background: liked ? `${T.red}50` : `${T.darkBg}CC`, border: liked ? `1px solid ${T.red}` : "none", display: "flex", alignItems: "center", gap: 5, cursor: "pointer", backdropFilter: "blur(6px)" }}>
+              <Heart size={14} color={T.red} fill={liked ? T.red : "none"} />
+              <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>{getBuildLikes(detailBuild)}</span>
+            </button>
+          </div>
+          {/* Tags + Title */}
+          <div style={{ position: "absolute", left: 16, right: 16, bottom: 16 }}>
+            {detailBuild.tags && detailBuild.tags.length > 0 && (
+              <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
+                {detailBuild.tags.map((tag, j) => (
+                  <span key={j} style={{ fontFamily: sans, fontSize: 9, color: T.warmBg, background: `${T.darkBg}99`, padding: "4px 10px", borderRadius: 20, letterSpacing: 1, border: `1px solid ${T.charcoal}` }}>{tag}</span>
+                ))}
+              </div>
+            )}
+            <h1 style={{ fontFamily: sans, fontSize: 32, color: T.white, margin: "0 0 4px", fontWeight: 800, letterSpacing: 1, lineHeight: 1.05 }}>{detailBuild.name}</h1>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
+              <span style={{ fontFamily: serif, fontSize: 13, color: T.tertiary }}>{detailBuild.year} {detailBuild.make} {detailBuild.model}</span>
+              <span style={{ color: T.tertiary }}>·</span>
+              <button onClick={() => onViewUser && onViewUser(detailBuild.handle.replace("@", ""))} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontFamily: sans, fontSize: 12, color: T.copper }}>
+                {detailBuild.handle}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Post to Feed button */}
+        <div style={{ padding: "14px 16px 0" }}>
+          <button
+            onClick={() => onPostBuildToFeed && onPostBuildToFeed(detailBuild)}
+            style={{ width: "100%", padding: "14px", borderRadius: 10, background: T.red, border: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, cursor: "pointer" }}
+          >
+            <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 1.5 }}>POST TO FEED</span>
+            <Camera size={16} color={T.white} />
+          </button>
+        </div>
+
+        {/* Technical Specifications */}
+        <div style={{ padding: "18px 16px 0" }}>
+          <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 12 }}>TECHNICAL SPECIFICATIONS</span>
+          {modRows.length === 0 ? (
+            <div style={{ ...cardStyle, padding: 20, textAlign: "center" }}>
+              <Wrench size={28} color={T.tertiary} strokeWidth={0.8} style={{ opacity: 0.4, marginBottom: 8 }} />
+              <p style={{ fontFamily: sans, fontSize: 12, color: T.tertiary, margin: 0 }}>No specs added yet</p>
+              {detailBuild.isMine && (
+                <button onClick={() => {
+                  const src = (userBuilds || []).find(ub => ub.id === detailBuild.rawId);
+                  if (src) setEditingBuild(src);
+                }} style={{ marginTop: 10, padding: "8px 14px", borderRadius: 8, background: T.copper, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 1 }}>ADD MODS</button>
+              )}
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {modRows.map((row) => {
+                const Icon = row.icon;
+                const m = row.mod;
+                const hasPhoto = m.photo && m.photo.length > 0;
+                return (
+                  <div key={row.key} style={{ ...cardStyle, padding: 14, display: "flex", alignItems: "flex-start", gap: 12 }}>
+                    <div style={{ width: 38, height: 38, borderRadius: 8, background: `${T.red}20`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <Icon size={17} color={T.red} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.2, display: "block", marginBottom: 2 }}>{row.label.toUpperCase()}</span>
+                      <div style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, letterSpacing: 0.3, marginBottom: hasPhoto || m.link ? 6 : 0, wordBreak: "break-word" }}>{m.value}</div>
+                      {hasPhoto && (
+                        <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                          {m.photo.map((p, pi) => (
+                            <img key={pi} src={p.url} alt="" onClick={() => openGalleryCarousel(detailBuild, 0)} style={{ width: 60, height: 60, borderRadius: 6, objectFit: "cover", cursor: "pointer" }} />
+                          ))}
+                        </div>
+                      )}
+                      {m.link && (
+                        <div style={{ marginTop: 6 }}>
+                          <a href={ensureUrl(m.link)} target="_blank" rel="noopener noreferrer" style={{ fontFamily: sans, fontSize: 10, color: T.copper, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                            <ExternalLink size={10} /> View Product
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Camper section */}
+        {detailBuild.hasCamper && (
+          <div style={{ padding: "18px 16px 0" }}>
+            <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 12 }}>CAMPER SETUP</span>
+            <div style={{ ...cardStyle, padding: 14, display: "flex", alignItems: "flex-start", gap: 12 }}>
+              <div style={{ width: 38, height: 38, borderRadius: 8, background: `${T.copper}25`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <Home size={17} color={T.copper} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.2, display: "block", marginBottom: 2 }}>CAMPER</span>
+                <div style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, letterSpacing: 0.3 }}>{detailBuild.camperMake} {detailBuild.camperModel}</div>
+                {bd && bd.camperPhoto && bd.camperPhoto.length > 0 && (
+                  <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+                    {bd.camperPhoto.map((p, pi) => (
+                      <img key={pi} src={p.url} alt="" onClick={() => openGalleryCarousel(detailBuild, 0)} style={{ width: 60, height: 60, borderRadius: 6, objectFit: "cover", cursor: "pointer" }} />
+                    ))}
+                  </div>
+                )}
+                {bd && bd.camperLink && (
+                  <div style={{ marginTop: 6 }}>
+                    <a href={ensureUrl(bd.camperLink)} target="_blank" rel="noopener noreferrer" style={{ fontFamily: sans, fontSize: 10, color: T.copper, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                      <ExternalLink size={10} /> View Product
+                    </a>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Additional photos */}
+        {bd && bd.mainPhotos && bd.mainPhotos.length > 1 && (
+          <div style={{ padding: "18px 16px 0" }}>
+            <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 12 }}>GALLERY</span>
+            <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+              {bd.mainPhotos.slice(1).map((p, pi) => (
+                <img key={pi} src={p.url} alt="" onClick={() => openGalleryCarousel(detailBuild, pi + 1)} style={{ width: 100, height: 100, borderRadius: 8, objectFit: "cover", flexShrink: 0, cursor: "pointer" }} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Stats footer */}
+        <div style={{ padding: "20px 16px 0" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div style={{ ...cardStyle, padding: 16 }}>
+              <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.5, display: "block", marginBottom: 4 }}>TOTAL TRAIL MILES</span>
+              <span style={{ fontFamily: sans, fontSize: 28, color: T.white, fontWeight: 800, letterSpacing: 0.5 }}>{detailBuild.miles}</span>
+              <div style={{ width: 24, height: 2, background: T.red, marginTop: 6 }} />
+            </div>
+            <div style={{ ...cardStyle, padding: 16 }}>
+              <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.5, display: "block", marginBottom: 4 }}>ELEVATION GAIN</span>
+              <span style={{ fontFamily: sans, fontSize: 28, color: T.white, fontWeight: 800, letterSpacing: 0.5 }}>{detailBuild.elevation}</span>
+              <div style={{ width: 24, height: 2, background: T.copper, marginTop: 6 }} />
+            </div>
+          </div>
+          <div style={{ ...cardStyle, padding: 16, marginTop: 10 }}>
+            <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.5, display: "block", marginBottom: 4 }}>ROUTES COMPLETED</span>
+            <span style={{ fontFamily: sans, fontSize: 28, color: T.white, fontWeight: 800, letterSpacing: 0.5 }}>{detailBuild.routes}</span>
+            <div style={{ width: 24, height: 2, background: T.green, marginTop: 6 }} />
+          </div>
+        </div>
       </div>
     );
   }
@@ -6229,7 +6448,7 @@ function BuildsScreen({ onViewUser, userBuilds, onAddBuild }) {
           {filtered.map((b, i) => (
             <div key={b.id} style={{ ...cardStyle, overflow: "hidden" }}>
               {/* Build Header with gradient */}
-              <div onClick={() => setExpandedBuild(expandedBuild === b.id ? null : b.id)} style={{ cursor: "pointer" }}>
+              <div onClick={() => setDetailBuildId(b.id)} style={{ cursor: "pointer" }}>
                 <div style={{ height: 120, background: b.image ? "none" : gradients[i % gradients.length], position: "relative", display: "flex", flexDirection: "column", justifyContent: "flex-end", overflow: "hidden" }}>
                   {b.image ? (
                     <>
@@ -6288,8 +6507,8 @@ function BuildsScreen({ onViewUser, userBuilds, onAddBuild }) {
                 </div>
               </div>
 
-              {/* Expanded Detail */}
-              {expandedBuild === b.id && (() => {
+              {/* Expanded Detail — DISABLED: click now navigates to full BuildDetailPage */}
+              {false && (() => {
                 const bd = b.buildData;
                 const specRow = (label, val, mod) => {
                   const text = mod ? (mod.value || "") : (val || "");
@@ -11127,7 +11346,7 @@ export default function Trailhead() {
             {screen === "feed" && <FeedScreen onViewUser={openUserProfile} onOpenMap={openMap} onOpenThread={(threadId, catName, subName) => openForumThread(threadId, catName, subName)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} feedItems={feedItems} onUpdateFeed={(items) => setFeedItems(items)} onAddNotification={addNotification} forumUserReplies={forumUserReplies} forumViewCounts={forumViewCounts} savedRoutes={savedRoutes} onSaveRoute={(route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev])} onUnsaveRoute={(routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId))} onStartNav={(route) => setActiveNavRoute(route)} onAwardPoints={awardPoints} />}
             {screen === "forum" && <ForumScreen pendingThread={pendingThread} onPendingHandled={() => setPendingThread(null)} onAddNotification={addNotification} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onAddFeedPost={(post) => setFeedItems(prev => [post, ...prev])} userThreads={forumUserThreads} setUserThreads={setForumUserThreads} userReplies={forumUserReplies} setUserReplies={setForumUserReplies} likedForumItems={forumLikedItems} setLikedForumItems={setForumLikedItems} forumLikeCounts={forumLikeCounts} setForumLikeCounts={setForumLikeCounts} forumViewCounts={forumViewCounts} setForumViewCounts={setForumViewCounts} onAwardPoints={awardPoints} />}
             {screen === "routes" && <RoutesScreen onRecordRoute={() => setShowRecorder(true)} onManualEntry={() => setShowManualRoute(true)} userRoutes={userRoutes} onUpdateRoute={(routeId, updates) => setUserRoutes(prev => prev.map(r => r.id === routeId ? { ...r, ...updates } : r))} savedRoutes={savedRoutes} onSaveRoute={(route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev])} onUnsaveRoute={(routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId))} onOpenDM={(user, msg, sharedPost) => openDM(user, msg, sharedPost)} onAddFeedPost={(post) => setFeedItems(prev => [post, ...prev])} onStartNav={(route) => setActiveNavRoute(route)} />}
-            {screen === "builds" && <BuildsScreen onViewUser={openUserProfile} userBuilds={userBuilds} onAddBuild={(data) => { const id = "build_" + Date.now(); const bd = { id, name: data.buildName || `${data.year} ${data.make} ${data.model}`, year: data.year, make: data.make, model: data.model, trim: data.trim, heroImg: data.mainPhotos && data.mainPhotos.length > 0 ? data.mainPhotos[0].url : null, buildData: data, tags: [], createdAt: Date.now() }; setUserBuilds(prev => [...prev, bd]); if (data.shareToFeed) { setFeedItems(prev => [{ id, type: "BUILDS", user: "KyleLPO", initial: "K", time: Date.now(), title: data.buildName || `${data.year} ${data.make} ${data.model}`, body: `${data.year} ${data.make} ${data.model}${data.trim ? " " + data.trim : ""}`, image: data.mainPhotos && data.mainPhotos.length > 0 ? data.mainPhotos[0].url : null, likes: 0, comments: 0, buildData: data }, ...prev]); } awardPoints(POINTS.feedPost, "Build Added"); }} />}
+            {screen === "builds" && <BuildsScreen onViewUser={openUserProfile} userBuilds={userBuilds} onAddBuild={(data) => { const id = "build_" + Date.now(); const bd = { id, name: data.buildName || `${data.year} ${data.make} ${data.model}`, year: data.year, make: data.make, model: data.model, trim: data.trim, heroImg: data.mainPhotos && data.mainPhotos.length > 0 ? data.mainPhotos[0].url : null, buildData: data, tags: [], createdAt: Date.now() }; setUserBuilds(prev => [...prev, bd]); if (data.shareToFeed) { setFeedItems(prev => [{ id, type: "BUILDS", user: "KyleLPO", initial: "K", time: Date.now(), title: data.buildName || `${data.year} ${data.make} ${data.model}`, body: `${data.year} ${data.make} ${data.model}${data.trim ? " " + data.trim : ""}`, image: data.mainPhotos && data.mainPhotos.length > 0 ? data.mainPhotos[0].url : null, likes: 0, comments: 0, buildData: data }, ...prev]); } awardPoints(POINTS.feedPost, "Build Added"); }} onUpdateBuild={updateBuild} onPostBuildToFeed={(b) => { const bd = b.buildData; const heroImg = b.image || (bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url) || null; setFeedItems(prev => [{ id: "feedbuild_" + Date.now(), type: "BUILDS", user: "KyleLPO", initial: "K", time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, image: heroImg, likes: 0, comments: 0, buildData: bd }, ...prev]); awardPoints(POINTS.feedPost, "Build Shared"); }} />}
             {screen === "ranks" && <RanksScreen myPoints={myTotalPoints} pointsBreakdown={pointsBreakdown} />}
           </>
         )}
