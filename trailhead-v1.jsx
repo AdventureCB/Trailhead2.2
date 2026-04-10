@@ -10337,6 +10337,155 @@ function SignupScreen({ onSignup, onGoToLogin, onSetProfilePic }) {
   );
 }
 
+/* ─── ONBOARDING SCREEN (for OAuth users or anyone missing profile setup) ─── */
+// Runs when a user signs in but has no `handle` in their metadata — i.e.
+// they came in through Google OAuth (or some other flow that bypassed
+// SignupScreen). Collects the same profile data SignupScreen step 2 does,
+// plus a handle field at top, and writes everything to user_metadata.
+function OnboardingScreen({ session, onComplete, onSetProfilePic }) {
+  const prefillName =
+    (session && session.user && session.user.user_metadata && (session.user.user_metadata.full_name || session.user.user_metadata.name)) || "";
+  const prefillAvatar =
+    (session && session.user && session.user.user_metadata && session.user.user_metadata.avatar_url) || null;
+  const [handle, setHandle] = useState("");
+  const [rig, setRig] = useState({ year: "", make: "", model: "", buildName: "" });
+  const [signupPic, setSignupPic] = useState(prefillAvatar);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const signupPicRef = useRef(null);
+
+  const handlePicUpload = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setSignupPic(ev.target.result);
+      onSetProfilePic && onSetProfilePic(ev.target.result);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  const setR = (key, val) => setRig({ ...rig, [key]: val });
+
+  const inputStyle = {
+    width: "100%", boxSizing: "border-box", padding: "14px 16px", borderRadius: 8,
+    background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white,
+    fontFamily: serif, fontSize: 14, outline: "none", transition: "border 0.2s",
+  };
+  const labelStyle = { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 600, display: "block", marginBottom: 6 };
+
+  const handleFinish = async () => {
+    if (!handle.trim()) { setError("Choose a username to continue."); return; }
+    setError("");
+    setLoading(true);
+    try {
+      await supabase.auth.updateUser({
+        data: {
+          handle: handle.trim().replace(/^@/, ""),
+          // Preserve whatever name we already have from the OAuth provider
+          ...(prefillName ? { full_name: prefillName } : {}),
+          first_build: rig.buildName || rig.model ? {
+            name: rig.buildName, year: rig.year, make: rig.make, model: rig.model,
+          } : null,
+        },
+      });
+    } catch (e) { /* best-effort — handle is the only blocker */ }
+    setLoading(false);
+    onComplete();
+  };
+
+  return (
+    <div style={{ background: T.charcoal, height: "100vh", maxWidth: 430, margin: "0 auto", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <div className="th-scroll" style={{ flex: 1, overflowY: "auto", minHeight: 0, display: "flex", flexDirection: "column" }}>
+        <div style={{ padding: "40px 24px 24px", textAlign: "center", flexShrink: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 8 }}>
+            <Mountain size={24} color={T.red} strokeWidth={1.5} />
+          </div>
+          <h1 style={{ fontFamily: sans, fontSize: 22, color: T.white, margin: "0 0 4px", fontWeight: 700, letterSpacing: 3 }}>
+            SET UP YOUR PROFILE
+          </h1>
+          <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "8px auto 0", maxWidth: 300, lineHeight: 1.5 }}>
+            {prefillName ? `Welcome, ${prefillName.split(" ")[0]}. ` : ""}Pick a username and add your rig to join the community.
+          </p>
+        </div>
+
+        <div style={{ padding: "0 24px 32px", flex: 1 }}>
+          {error && (
+            <div style={{ background: `${T.red}15`, border: `1px solid ${T.red}30`, borderRadius: 8, padding: "10px 14px", marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
+              <AlertTriangle size={14} color={T.red} />
+              <span style={{ fontFamily: serif, fontSize: 13, color: T.red }}>{error}</span>
+            </div>
+          )}
+
+          {/* Username — required */}
+          <div style={{ marginBottom: 20 }}>
+            <label style={labelStyle}>USERNAME</label>
+            <div style={{ position: "relative" }}>
+              <span style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", fontFamily: serif, fontSize: 14, color: T.tertiary }}>@</span>
+              <input value={handle} onChange={(e) => setHandle(e.target.value)} placeholder="trailname" style={{ ...inputStyle, paddingLeft: 32 }} onFocus={(e) => e.target.style.borderColor = T.copper} onBlur={(e) => e.target.style.borderColor = T.charcoal} />
+            </div>
+          </div>
+
+          {/* Profile photo */}
+          <input ref={signupPicRef} type="file" accept="image/*" onChange={handlePicUpload} style={{ display: "none" }} />
+          <div style={{ background: T.darkCard, borderRadius: 12, padding: 20, marginBottom: 20, textAlign: "center" }}>
+            <div style={{ position: "relative", display: "inline-block", marginBottom: 12 }}>
+              {signupPic ? (
+                <img src={signupPic} alt="" style={{ width: 80, height: 80, borderRadius: "50%", objectFit: "cover", border: `3px solid ${T.copper}` }} />
+              ) : (
+                <div style={{ width: 80, height: 80, borderRadius: "50%", background: T.charcoal, display: "flex", alignItems: "center", justifyContent: "center", border: `3px dashed ${T.copper}40` }}>
+                  <Camera size={28} color={T.copper} strokeWidth={1.2} style={{ opacity: 0.5 }} />
+                </div>
+              )}
+              <button onClick={() => signupPicRef.current && signupPicRef.current.click()} style={{ position: "absolute", bottom: -2, right: -2, width: 28, height: 28, borderRadius: "50%", background: T.copper, border: `2px solid ${T.darkCard}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+                <Plus size={14} color={T.white} />
+              </button>
+            </div>
+            <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, display: "block", marginBottom: 2 }}>Profile Photo</span>
+            <span style={{ fontFamily: serif, fontSize: 11, color: T.tertiary }}>Help others recognize you on the trail</span>
+          </div>
+
+          {/* First build */}
+          <div style={{ background: T.darkCard, borderRadius: 12, padding: 20, marginBottom: 20 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+              <div style={{ width: 40, height: 40, borderRadius: 10, background: `${T.red}15`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <Wrench size={18} color={T.red} />
+              </div>
+              <div>
+                <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 600, display: "block" }}>Your First Build</span>
+                <span style={{ fontFamily: serif, fontSize: 11, color: T.tertiary }}>Optional — you can add more vehicles later</span>
+              </div>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <label style={labelStyle}>BUILD NAME</label>
+              <input value={rig.buildName} onChange={(e) => setR("buildName", e.target.value)} placeholder='e.g. "The Highlander"' style={inputStyle} onFocus={(e) => e.target.style.borderColor = T.copper} onBlur={(e) => e.target.style.borderColor = T.charcoal} />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10, marginBottom: 14 }}>
+              <div>
+                <label style={labelStyle}>YEAR</label>
+                <input value={rig.year} onChange={(e) => setR("year", e.target.value)} placeholder="2022" style={inputStyle} onFocus={(e) => e.target.style.borderColor = T.copper} onBlur={(e) => e.target.style.borderColor = T.charcoal} />
+              </div>
+              <div>
+                <label style={labelStyle}>MAKE</label>
+                <input value={rig.make} onChange={(e) => setR("make", e.target.value)} placeholder="Toyota" style={inputStyle} onFocus={(e) => e.target.style.borderColor = T.copper} onBlur={(e) => e.target.style.borderColor = T.charcoal} />
+              </div>
+            </div>
+            <div>
+              <label style={labelStyle}>MODEL</label>
+              <input value={rig.model} onChange={(e) => setR("model", e.target.value)} placeholder="Tundra TRD Pro" style={inputStyle} onFocus={(e) => e.target.style.borderColor = T.copper} onBlur={(e) => e.target.style.borderColor = T.charcoal} />
+            </div>
+          </div>
+
+          <button onClick={handleFinish} disabled={loading} style={{ width: "100%", padding: "14px 0", borderRadius: 8, background: T.red, border: "none", cursor: loading ? "wait" : "pointer", marginBottom: 12, opacity: loading ? 0.7 : 1 }}>
+            <span style={{ fontFamily: sans, fontSize: 13, fontWeight: 600, color: T.white, letterSpacing: 1.5 }}>{loading ? "SAVING..." : "ENTER TRAILHEAD"}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── PHOTO UPLOADER COMPONENT ─── */
 function PhotoUploader({ photos, onChange, maxPhotos = 10, compact = false }) {
   const fileRef = useRef(null);
@@ -11789,8 +11938,11 @@ export default function Trailhead() {
       setSupabaseSession(session || null);
       setSessionHydrated(true);
       if (session && !initialSharedLink) {
-        // Skip login screen if already signed in.
-        setAuthState("app");
+        // Skip login screen if already signed in. If this user has no
+        // handle yet (e.g. they interrupted OAuth onboarding last time),
+        // route them into the onboarding flow instead of the app.
+        const hasHandle = !!(session.user && session.user.user_metadata && session.user.user_metadata.handle);
+        setAuthState(hasHandle ? "app" : "onboarding");
       }
     });
     // 2) Subscribe to auth state changes (sign-in, sign-out, token refresh, OAuth callback).
@@ -11798,11 +11950,15 @@ export default function Trailhead() {
       if (cancelled) return;
       setSupabaseSession(session || null);
       if (event === "SIGNED_IN" && session) {
-        // Use a functional update so we can read the CURRENT authState and
-        // skip auto-advancing into the app if the user is mid-signup (the
-        // SignupScreen owns its own flow and will advance to step 2 itself).
-        // Auto-advance is only for login screen and OAuth callback re-hydration.
-        setAuthState(prev => (prev === "signup" ? prev : "app"));
+        // Route decision:
+        //   - mid-signup (email flow) → don't touch; SignupScreen owns transition
+        //   - missing handle in user_metadata → onboarding (OAuth new users)
+        //   - otherwise → into the app
+        const hasHandle = !!(session.user && session.user.user_metadata && session.user.user_metadata.handle);
+        setAuthState(prev => {
+          if (prev === "signup") return prev;
+          return hasHandle ? "app" : "onboarding";
+        });
         setIsGuest(false);
       }
       if (event === "SIGNED_OUT") {
@@ -12051,6 +12207,13 @@ export default function Trailhead() {
   }
   if (authState === "signup") {
     return <SignupScreen onSignup={() => setAuthState("app")} onGoToLogin={() => setAuthState("login")} onSetProfilePic={setProfilePic} />;
+  }
+  if (authState === "onboarding") {
+    return <OnboardingScreen
+      session={supabaseSession}
+      onSetProfilePic={setProfilePic}
+      onComplete={() => setAuthState("app")}
+    />;
   }
 
   return (
