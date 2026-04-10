@@ -62,6 +62,12 @@ const USER_POINTS = {
 };
 function getPoints(user) { return USER_POINTS[user] || 1500; }
 
+// Seed builds owned by Kyle — used as base "my builds" list for linking routes
+const SEED_MY_BUILDS = [
+  { id: 1, name: "THE HIGHLANDER", year: 2022, make: "Toyota", model: "Tundra" },
+  { id: 3, name: "DESERT HAWK", year: 2019, make: "Jeep", model: "Gladiator" },
+];
+
 // ── Badge System (tier colors per level within each category) ──
 const BADGE_TIER_COLORS = ["#8B7D6B", "#C49A6C", "#C0A060", "#FFD700", "#BD472A"]; // grey → bronze → gold → gold-bright → red
 const BADGE_CATEGORIES = [
@@ -10170,7 +10176,7 @@ function PhotoUploader({ photos, onChange, maxPhotos = 10, compact = false }) {
 }
 
 /* ─── COMPOSE / CREATE POST SCREEN ─── */
-function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotification, onAddRoute, onOpenDM }) {
+function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotification, onAddRoute, onOpenDM, userBuilds }) {
   const [postType, setPostType] = useState(null); // null = picker, "general" | "route" | "convoy" | "recovery"
   const [general, setGeneral] = useState({ text: "", photos: [], location: "" });
   const [showLocationInput, setShowLocationInput] = useState(false);
@@ -10417,6 +10423,7 @@ function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotificatio
     return (
       <RouteDetailsForm
         isManual
+        userBuilds={userBuilds}
         onBack={() => setShowRouteForm(false)}
         onPublish={(routeData) => {
           const id = "user_" + Date.now();
@@ -11450,6 +11457,11 @@ export default function Trailhead() {
   const [savedRoutes, setSavedRoutes] = useState([]); // routes saved/bookmarked by user
   const [activeNavRoute, setActiveNavRoute] = useState(null); // route data for in-app navigation
   const [userBuilds, setUserBuilds] = useState([]);
+  // Combined list of my builds (seed + user-added) for route linking selectors
+  const myBuildsForLink = [
+    ...SEED_MY_BUILDS,
+    ...(userBuilds || []).map(b => ({ id: b.id, name: b.name || `${b.year} ${b.make} ${b.model}`, year: b.year, make: b.make, model: b.model })),
+  ];
   const [profilePic, setProfilePic] = useState(null);
   const [notifPrefs, setNotifPrefs] = useState({ likes: true, comments: true, replies: true, follows: true, mentions: true, push: false });
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
@@ -11649,7 +11661,7 @@ export default function Trailhead() {
 
       <div className="th-scroll" style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
         {showCompose ? (
-          <ComposeScreen onClose={() => setShowCompose(false)} onSubmit={(newPost) => { setFeedItems(prev => [newPost, ...prev]); awardPoints(newPost.type === "RECOVERY" ? 0 : POINTS.feedPost, newPost.type === "RECOVERY" ? "" : "Feed Post"); if (newPost.photoUrls && newPost.photoUrls.length > 0) awardPoints(POINTS.photoUploaded * newPost.photoUrls.length, "Photos Uploaded"); }} onAddRecoveryAlert={addRecoveryAlert} onAddNotification={addNotification} onAddRoute={(r) => { setUserRoutes(prev => [r, ...prev]); awardPoints(POINTS.routeLogged, "Route Logged"); }} onOpenDM={openDM} />
+          <ComposeScreen userBuilds={myBuildsForLink} onClose={() => setShowCompose(false)} onSubmit={(newPost) => { setFeedItems(prev => [newPost, ...prev]); awardPoints(newPost.type === "RECOVERY" ? 0 : POINTS.feedPost, newPost.type === "RECOVERY" ? "" : "Feed Post"); if (newPost.photoUrls && newPost.photoUrls.length > 0) awardPoints(POINTS.photoUploaded * newPost.photoUrls.length, "Photos Uploaded"); }} onAddRecoveryAlert={addRecoveryAlert} onAddNotification={addNotification} onAddRoute={(r) => { setUserRoutes(prev => [r, ...prev]); awardPoints(POINTS.routeLogged, "Route Logged"); }} onOpenDM={openDM} />
         ) : showRecovery ? (
           <RecoveryScreen onOpenMap={openMap} onOpenDM={openDM} />
         ) : isProfile ? (
@@ -11673,7 +11685,7 @@ export default function Trailhead() {
           <>
             {screen === "feed" && <FeedScreen onViewUser={openUserProfile} onOpenMap={openMap} onOpenThread={(threadId, catName, subName) => openForumThread(threadId, catName, subName)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onViewBuild={handleViewBuild} feedItems={feedItems} onUpdateFeed={(items) => setFeedItems(items)} onAddNotification={addNotification} forumUserReplies={forumUserReplies} forumViewCounts={forumViewCounts} savedRoutes={savedRoutes} onSaveRoute={(route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev])} onUnsaveRoute={(routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId))} onStartNav={(route) => setActiveNavRoute(route)} onAwardPoints={awardPoints} />}
             {screen === "forum" && <ForumScreen pendingThread={pendingThread} onPendingHandled={() => setPendingThread(null)} onAddNotification={addNotification} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onAddFeedPost={(post) => setFeedItems(prev => [post, ...prev])} userThreads={forumUserThreads} setUserThreads={setForumUserThreads} userReplies={forumUserReplies} setUserReplies={setForumUserReplies} likedForumItems={forumLikedItems} setLikedForumItems={setForumLikedItems} forumLikeCounts={forumLikeCounts} setForumLikeCounts={setForumLikeCounts} forumViewCounts={forumViewCounts} setForumViewCounts={setForumViewCounts} onAwardPoints={awardPoints} />}
-            {screen === "routes" && <RoutesScreen userBuilds={userBuilds} onRecordRoute={() => setShowRecorder(true)} onManualEntry={() => setShowManualRoute(true)} userRoutes={userRoutes} onUpdateRoute={(routeId, updates) => setUserRoutes(prev => prev.map(r => r.id === routeId ? { ...r, ...updates } : r))} savedRoutes={savedRoutes} onSaveRoute={(route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev])} onUnsaveRoute={(routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId))} onOpenDM={(user, msg, sharedPost) => openDM(user, msg, sharedPost)} onAddFeedPost={(post) => setFeedItems(prev => [post, ...prev])} onStartNav={(route) => setActiveNavRoute(route)} />}
+            {screen === "routes" && <RoutesScreen userBuilds={myBuildsForLink} onRecordRoute={() => setShowRecorder(true)} onManualEntry={() => setShowManualRoute(true)} userRoutes={userRoutes} onUpdateRoute={(routeId, updates) => setUserRoutes(prev => prev.map(r => r.id === routeId ? { ...r, ...updates } : r))} savedRoutes={savedRoutes} onSaveRoute={(route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev])} onUnsaveRoute={(routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId))} onOpenDM={(user, msg, sharedPost) => openDM(user, msg, sharedPost)} onAddFeedPost={(post) => setFeedItems(prev => [post, ...prev])} onStartNav={(route) => setActiveNavRoute(route)} />}
             {screen === "builds" && <BuildsScreen onViewUser={openUserProfile} userBuilds={userBuilds} pendingBuildNav={pendingBuildNav} onConsumePendingBuildNav={() => setPendingBuildNav(null)} onAddBuild={(data) => { const id = "build_" + Date.now(); const bd = { id, name: data.buildName || `${data.year} ${data.make} ${data.model}`, year: data.year, make: data.make, model: data.model, trim: data.trim, heroImg: data.mainPhotos && data.mainPhotos.length > 0 ? data.mainPhotos[0].url : null, buildData: data, tags: [], createdAt: Date.now() }; setUserBuilds(prev => [...prev, bd]); if (data.shareToFeed) { setFeedItems(prev => [{ id, type: "BUILDS", user: "KyleLPO", initial: "K", time: Date.now(), title: (data.buildName || `${data.year} ${data.make} ${data.model}`).toUpperCase(), body: `${data.year} ${data.make} ${data.model}${data.trim ? " " + data.trim : ""}`, vehicle: `${data.year} ${data.make} ${data.model}${data.trim ? " " + data.trim : ""}`, photoUrls: data.mainPhotos && data.mainPhotos.length > 0 ? [data.mainPhotos[0].url] : undefined, image: data.mainPhotos && data.mainPhotos.length > 0 ? data.mainPhotos[0].url : null, likes: 0, comments: 0, buildData: data, buildRawId: id }, ...prev]); } awardPoints(POINTS.feedPost, "Build Added"); }} userRoutes={userRoutes} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onUpdateBuild={updateBuild} onPostBuildToFeed={(b) => { const bd = b.buildData; const heroImg = b.image || (bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url) || null; setFeedItems(prev => [{ id: "feedbuild_" + Date.now(), type: "BUILDS", user: "KyleLPO", initial: "K", time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, vehicle: `${b.year} ${b.make} ${b.model}`, photoUrls: heroImg ? [heroImg] : undefined, image: heroImg, likes: 0, comments: 0, buildData: bd, buildRawId: b.rawId != null ? b.rawId : null }, ...prev]); awardPoints(POINTS.feedPost, "Build Shared"); }} />}
             {screen === "ranks" && <RanksScreen myPoints={myTotalPoints} pointsBreakdown={pointsBreakdown} />}
           </>
@@ -11730,7 +11742,7 @@ export default function Trailhead() {
       )}
       {showRecorder && (
         <RouteRecorder
-          userBuilds={userBuilds}
+          userBuilds={myBuildsForLink}
           onClose={() => setShowRecorder(false)}
           onSave={(routeData) => {
             const id = "rec_route_" + Date.now();
@@ -11800,7 +11812,7 @@ export default function Trailhead() {
       {showManualRoute && (
         <RouteDetailsForm
           isManual
-          userBuilds={userBuilds}
+          userBuilds={myBuildsForLink}
           onBack={() => setShowManualRoute(false)}
           onPublish={(routeData) => {
             const id = "user_route_" + Date.now();
