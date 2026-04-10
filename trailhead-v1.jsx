@@ -11589,15 +11589,36 @@ function GuestPromptModal({ onClose, onSignIn }) {
   );
 }
 
+// Parse the current URL path once, synchronously, before the app mounts.
+// This lets us seed initial state directly into "app + guest + pending post"
+// when a shared link is opened, instead of mounting LoginScreen first and
+// then swapping it out inside a useEffect — which was causing React
+// reconciliation errors (removeChild NotFoundError) during the tree swap.
+function parseInitialSharedLink() {
+  try {
+    const path = (typeof window !== "undefined" && window.location && window.location.pathname) || "";
+    const postMatch = path.match(/^\/post\/(.+?)\/?$/);
+    if (postMatch) {
+      // Clean the URL immediately so soft refreshes / tab switches don't
+      // re-trigger this flow.
+      try { window.history.replaceState(null, "", "/"); } catch (e) {}
+      return { kind: "post", id: decodeURIComponent(postMatch[1]) };
+    }
+  } catch (e) { /* ignore */ }
+  return null;
+}
+
 export default function Trailhead() {
-  const [authState, setAuthState] = useState("login"); // "login" | "signup" | "app"
+  // Seed from URL synchronously so LoginScreen never mounts for shared links.
+  const initialSharedLink = (typeof window !== "undefined") ? parseInitialSharedLink() : null;
+  const [authState, setAuthState] = useState(initialSharedLink ? "app" : "login"); // "login" | "signup" | "app"
   // ─── GUEST MODE ───────────────────────────────────────────────────────────
   // NOTE FOR BACKEND INTEGRATION: when wiring this prototype to a real backend,
   // `isGuest` should be derived from auth/session state (i.e. currentUser == null),
   // NOT from local toggling. The dev-only toggle in Profile > Settings is intended
   // purely for previewing the guest experience inside this prototype and MUST be
   // removed before shipping (search for GUEST_DEV_TOGGLE to find/delete it).
-  const [isGuest, setIsGuest] = useState(false);
+  const [isGuest, setIsGuest] = useState(!!initialSharedLink);
   const [showGuestPrompt, setShowGuestPrompt] = useState(false);
   // Wraps any mutating callback so that when a guest calls it, we intercept and
   // show the sign-in prompt instead of mutating state. This keeps the read-only
@@ -11624,7 +11645,7 @@ export default function Trailhead() {
   // lookup inside FeedScreen should become a fetch, but this parser stays
   // the same. Cleaning the URL afterwards prevents the same navigation
   // from re-triggering on tab switches or soft refreshes.
-  const [pendingPostNav, setPendingPostNav] = useState(null);
+  const [pendingPostNav, setPendingPostNav] = useState(initialSharedLink && initialSharedLink.kind === "post" ? initialSharedLink.id : null);
   const [sharedLinkToast, setSharedLinkToast] = useState("");
   const [feedItems, setFeedItems] = useState(defaultFeedItems);
   const [forumUserThreads, setForumUserThreads] = useState({}); // { subName: [thread, ...] }
@@ -11693,31 +11714,10 @@ export default function Trailhead() {
     setPointsToasts(prev => [...prev, { id: toastId, amount, reason }]);
     setTimeout(() => setPointsToasts(prev => prev.filter(t => t.id !== toastId)), 2500);
   };
-  // Parse shared-link URL path. Shared links should be publicly viewable,
-  // so if the user hits one while unauthenticated we auto-drop them into
-  // guest mode and land directly on the post instead of bouncing them to
-  // the login screen. Once a real backend is wired up, the guest-by-default
-  // behavior will still be correct: guests can view posts, and they can
-  // choose to sign in from the guest banner if they want to interact.
-  const sharedLinkParsed = useRef(false);
-  useEffect(() => {
-    if (sharedLinkParsed.current) return;
-    try {
-      const path = window.location.pathname || "";
-      const postMatch = path.match(/^\/post\/(.+?)\/?$/);
-      if (!postMatch) return;
-      sharedLinkParsed.current = true;
-      // If we're sitting on login/signup, auto-enter as guest so the post
-      // is viewable without forcing sign-in.
-      if (authState !== "app") {
-        setIsGuest(true);
-        setAuthState("app");
-      }
-      setPendingPostNav(decodeURIComponent(postMatch[1]));
-      setScreen("feed");
-      window.history.replaceState(null, "", "/");
-    } catch (e) { /* ignore */ }
-  }, [authState]);
+  // Shared-link URL parsing now happens synchronously via parseInitialSharedLink()
+  // above, seeded into initial useState values. This avoids the React reconciliation
+  // error (removeChild NotFoundError) that occurred when we swapped LoginScreen for
+  // the app tree inside a useEffect.
 
   // Daily login points (once per session)
   const loginPointsAwarded = useRef(false);
