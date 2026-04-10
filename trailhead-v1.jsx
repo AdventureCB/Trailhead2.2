@@ -1477,13 +1477,37 @@ const defaultFeedItems = [
     },
   ];
 
-function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onViewBuild, feedItems, onUpdateFeed, onAddNotification, forumUserReplies, forumViewCounts, savedRoutes, onSaveRoute, onUnsaveRoute, onStartNav, onAwardPoints, isGuest, onGuestTap }) {
+function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onViewBuild, feedItems, onUpdateFeed, onAddNotification, forumUserReplies, forumViewCounts, savedRoutes, onSaveRoute, onUnsaveRoute, onStartNav, onAwardPoints, isGuest, onGuestTap, pendingPostNav, onConsumePendingPostNav, onSharedPostMissing }) {
   const [activeFilter, setActiveFilter] = useState("ALL");
   const filters = ["ALL", "BUILDS", "CONVOYS", "ROUTES", "PHOTOS", "FORUM"];
   const [likedPosts, setLikedPosts] = useState({});
   const [likedComments, setLikedComments] = useState({}); // { "postId-commentIdx": true }
   const [commentLikeCounts, setCommentLikeCounts] = useState({}); // { "postId-commentIdx": count }
   const [openComments, setOpenComments] = useState(null); // post id or null
+  const [highlightedPostId, setHighlightedPostId] = useState(null);
+  // When the app receives a shared /post/:id link, navigate to that card,
+  // open its comments, and briefly highlight it. If the post isn't in our
+  // local feed (e.g. it was user-created and only exists in someone else's
+  // session), bubble the miss up so the root can show a toast. Once the
+  // backend is wired up, this useEffect should do a fetch instead of a
+  // local lookup — the UX of "navigate → highlight → toast if missing"
+  // stays identical.
+  useEffect(() => {
+    if (!pendingPostNav) return;
+    const match = feedItems.find(f => String(f.id) === String(pendingPostNav));
+    if (match) {
+      setHighlightedPostId(match.id);
+      setOpenComments(match.id);
+      setTimeout(() => {
+        const el = document.getElementById("feed-post-" + match.id);
+        if (el && el.scrollIntoView) el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 80);
+      setTimeout(() => setHighlightedPostId(null), 2600);
+    } else {
+      onSharedPostMissing && onSharedPostMissing();
+    }
+    onConsumePendingPostNav && onConsumePendingPostNav();
+  }, [pendingPostNav]);
   const [commentText, setCommentText] = useState("");
   const [postComments, setPostComments] = useState({}); // { postId: [{ user, text, time }] }
   const [shareMenuId, setShareMenuId] = useState(null);
@@ -2538,7 +2562,11 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onViewBuild
             <Compass size={36} color={T.tertiary} strokeWidth={0.8} style={{ opacity: 0.3, marginBottom: 10 }} />
             <p style={{ fontFamily: sans, fontSize: 14, color: T.tertiary, margin: 0 }}>No {activeFilter.toLowerCase()} posts yet</p>
           </div>
-        ) : filtered.map(renderCard)}
+        ) : filtered.map(item => (
+          <div key={"w_" + item.id} id={"feed-post-" + item.id} style={{ scrollMarginTop: 16, outline: highlightedPostId === item.id ? `2px solid ${T.copper}` : "none", outlineOffset: 2, borderRadius: 12, transition: "outline 0.3s ease" }}>
+            {renderCard(item)}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -11589,6 +11617,15 @@ export default function Trailhead() {
   const [showManualRoute, setShowManualRoute] = useState(false);
   const [pendingThread, setPendingThread] = useState(null); // { threadId, catName, subName }
   const [pendingBuildNav, setPendingBuildNav] = useState(null); // { rawId, name }
+  // Shared-link deep routing. When the app first boots inside the "app"
+  // auth state, we parse window.location.pathname and convert known route
+  // shapes (currently just /post/:id) into a pending navigation. FeedScreen
+  // consumes this and scrolls/highlights. When the backend lands, the
+  // lookup inside FeedScreen should become a fetch, but this parser stays
+  // the same. Cleaning the URL afterwards prevents the same navigation
+  // from re-triggering on tab switches or soft refreshes.
+  const [pendingPostNav, setPendingPostNav] = useState(null);
+  const [sharedLinkToast, setSharedLinkToast] = useState("");
   const [feedItems, setFeedItems] = useState(defaultFeedItems);
   const [forumUserThreads, setForumUserThreads] = useState({}); // { subName: [thread, ...] }
   const [forumUserReplies, setForumUserReplies] = useState({}); // { threadId: [reply, ...] }
@@ -11656,6 +11693,23 @@ export default function Trailhead() {
     setPointsToasts(prev => [...prev, { id: toastId, amount, reason }]);
     setTimeout(() => setPointsToasts(prev => prev.filter(t => t.id !== toastId)), 2500);
   };
+  // Parse shared-link URL path once the user reaches the app surface.
+  // Supported shapes: /post/:id
+  const sharedLinkParsed = useRef(false);
+  useEffect(() => {
+    if (authState !== "app" || sharedLinkParsed.current) return;
+    sharedLinkParsed.current = true;
+    try {
+      const path = window.location.pathname || "";
+      const postMatch = path.match(/^\/post\/(.+?)\/?$/);
+      if (postMatch) {
+        setPendingPostNav(decodeURIComponent(postMatch[1]));
+        setScreen("feed");
+        window.history.replaceState(null, "", "/");
+      }
+    } catch (e) { /* ignore */ }
+  }, [authState]);
+
   // Daily login points (once per session)
   const loginPointsAwarded = useRef(false);
   useEffect(() => {
@@ -11837,7 +11891,7 @@ export default function Trailhead() {
         ) : (
           <>
             {isGuest && <GuestBanner onSignIn={() => setShowGuestPrompt(true)} />}
-            {screen === "feed" && <FeedScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onViewUser={openUserProfile} onOpenMap={openMap} onOpenThread={(threadId, catName, subName) => openForumThread(threadId, catName, subName)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onViewBuild={handleViewBuild} feedItems={feedItems} onUpdateFeed={requireAuth((items) => setFeedItems(items))} onAddNotification={requireAuth(addNotification)} forumUserReplies={forumUserReplies} forumViewCounts={forumViewCounts} savedRoutes={savedRoutes} onSaveRoute={requireAuth((route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev]))} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} onStartNav={(route) => setActiveNavRoute(route)} onAwardPoints={awardPoints} />}
+            {screen === "feed" && <FeedScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} pendingPostNav={pendingPostNav} onConsumePendingPostNav={() => setPendingPostNav(null)} onSharedPostMissing={() => { setSharedLinkToast("That post couldn't be loaded. It may have been removed or require sign-in."); setTimeout(() => setSharedLinkToast(""), 4500); }} onViewUser={openUserProfile} onOpenMap={openMap} onOpenThread={(threadId, catName, subName) => openForumThread(threadId, catName, subName)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onViewBuild={handleViewBuild} feedItems={feedItems} onUpdateFeed={requireAuth((items) => setFeedItems(items))} onAddNotification={requireAuth(addNotification)} forumUserReplies={forumUserReplies} forumViewCounts={forumViewCounts} savedRoutes={savedRoutes} onSaveRoute={requireAuth((route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev]))} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} onStartNav={(route) => setActiveNavRoute(route)} onAwardPoints={awardPoints} />}
             {screen === "forum" && <ForumScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} pendingThread={pendingThread} onPendingHandled={() => setPendingThread(null)} onAddNotification={requireAuth(addNotification)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onAddFeedPost={requireAuth((post) => setFeedItems(prev => [post, ...prev]))} userThreads={forumUserThreads} setUserThreads={requireAuth(setForumUserThreads)} userReplies={forumUserReplies} setUserReplies={requireAuth(setForumUserReplies)} likedForumItems={forumLikedItems} setLikedForumItems={requireAuth(setForumLikedItems)} forumLikeCounts={forumLikeCounts} setForumLikeCounts={requireAuth(setForumLikeCounts)} forumViewCounts={forumViewCounts} setForumViewCounts={setForumViewCounts} onAwardPoints={awardPoints} />}
             {screen === "routes" && <RoutesScreen userBuilds={myBuildsForLink} onRecordRoute={requireAuth(() => setShowRecorder(true))} onManualEntry={requireAuth(() => setShowManualRoute(true))} userRoutes={userRoutes} onUpdateRoute={requireAuth((routeId, updates) => setUserRoutes(prev => prev.map(r => r.id === routeId ? { ...r, ...updates } : r)))} savedRoutes={savedRoutes} onSaveRoute={requireAuth((route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev]))} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} onOpenDM={(user, msg, sharedPost) => openDM(user, msg, sharedPost)} onAddFeedPost={requireAuth((post) => setFeedItems(prev => [post, ...prev]))} onStartNav={(route) => setActiveNavRoute(route)} />}
             {screen === "builds" && <BuildsScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onViewUser={openUserProfile} userBuilds={userBuilds} pendingBuildNav={pendingBuildNav} onConsumePendingBuildNav={() => setPendingBuildNav(null)} onAddBuild={requireAuth((data) => { const id = "build_" + Date.now(); const bd = { id, name: data.buildName || `${data.year} ${data.make} ${data.model}`, year: data.year, make: data.make, model: data.model, trim: data.trim, heroImg: data.mainPhotos && data.mainPhotos.length > 0 ? data.mainPhotos[0].url : null, buildData: data, tags: [], createdAt: Date.now() }; setUserBuilds(prev => [...prev, bd]); if (data.shareToFeed) { setFeedItems(prev => [{ id, type: "BUILDS", user: "KyleLPO", initial: "K", time: Date.now(), title: (data.buildName || `${data.year} ${data.make} ${data.model}`).toUpperCase(), body: `${data.year} ${data.make} ${data.model}${data.trim ? " " + data.trim : ""}`, vehicle: `${data.year} ${data.make} ${data.model}${data.trim ? " " + data.trim : ""}`, photoUrls: data.mainPhotos && data.mainPhotos.length > 0 ? [data.mainPhotos[0].url] : undefined, image: data.mainPhotos && data.mainPhotos.length > 0 ? data.mainPhotos[0].url : null, likes: 0, comments: 0, buildData: data, buildRawId: id }, ...prev]); } awardPoints(POINTS.feedPost, "Build Added"); })} userRoutes={userRoutes} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onUpdateBuild={requireAuth(updateBuild)} onPostBuildToFeed={requireAuth((b) => { const bd = b.buildData; const heroImg = b.image || (bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url) || null; setFeedItems(prev => [{ id: "feedbuild_" + Date.now(), type: "BUILDS", user: "KyleLPO", initial: "K", time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, vehicle: `${b.year} ${b.make} ${b.model}`, photoUrls: heroImg ? [heroImg] : undefined, image: heroImg, likes: 0, comments: 0, buildData: bd, buildRawId: b.rawId != null ? b.rawId : null }, ...prev]); awardPoints(POINTS.feedPost, "Build Shared"); })} />}
@@ -12050,6 +12104,14 @@ export default function Trailhead() {
             }
           }}
         />
+      )}
+
+      {/* Shared-link feedback toast */}
+      {sharedLinkToast && (
+        <div style={{ position: "fixed", top: 60, left: "50%", transform: "translateX(-50%)", zIndex: 9999, background: T.darkCard, border: `1px solid ${T.copper}50`, borderRadius: 10, padding: "10px 16px", maxWidth: 340, boxShadow: "0 4px 20px rgba(0,0,0,0.5)", display: "flex", alignItems: "center", gap: 8 }}>
+          <AlertTriangle size={14} color={T.copper} />
+          <span style={{ fontFamily: serif, fontSize: 12, color: T.white, lineHeight: 1.4 }}>{sharedLinkToast}</span>
+        </div>
       )}
 
       {/* Guest sign-in prompt */}
