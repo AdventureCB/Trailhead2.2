@@ -25,6 +25,9 @@ self.addEventListener("push", (event) => {
     body: payload.body || "",
     icon: payload.icon || "/lone-peak-flag.png",
     badge: payload.badge || "/lone-peak-flag.png",
+    // Large preview image — Chrome/Edge/Android render this below the body.
+    // Firefox/Safari/iOS silently ignore the field.
+    image: payload.image || undefined,
     tag: payload.tag || undefined,
     data: payload.data || {},
   };
