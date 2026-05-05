@@ -42713,10 +42713,6 @@ ${suffix}`;
   function getPoints(user) {
     return USER_POINTS[user] || 1500;
   }
-  var SEED_MY_BUILDS = [
-    { id: 1, name: "THE HIGHLANDER", year: 2022, make: "Toyota", model: "Tundra" },
-    { id: 3, name: "DESERT HAWK", year: 2019, make: "Jeep", model: "Gladiator" }
-  ];
   var BADGE_TIER_COLORS = ["#8B7D6B", "#C49A6C", "#C0A060", "#FFD700", "#BD472A"];
   var BADGE_CATEGORIES = [
     { name: "Trail Mastery", icon: MapPin, tiers: [
@@ -47443,10 +47439,7 @@ ${suffix}`;
       points: myPointsProp || 12450,
       joinDate: "Mar 2025"
     };
-    const defaultBuilds = [
-      { name: "THE HIGHLANDER", vehicle: "2022 Toyota Tundra", tags: ["V8 OVERLAND", "CLASS 4 READY"], miles: "2,482", elevation: "84K ft", routes: 34 },
-      { name: "DESERT HAWK", vehicle: "2019 Jeep Gladiator", tags: ["TRAIL RATED", "EXPO READY"], miles: "1,120", elevation: "42K ft", routes: 18 }
-    ];
+    const defaultBuilds = [];
     const mappedUserBuilds = (userBuilds || []).map((b) => ({
       id: b.id,
       name: b.name || "UNNAMED BUILD",
@@ -47463,12 +47456,7 @@ ${suffix}`;
     const [tripFilter, setTripFilter] = (0, import_react4.useState)("all");
     const [editingConvoy, setEditingConvoy] = (0, import_react4.useState)(null);
     const [convoyEditData, setConvoyEditData] = (0, import_react4.useState)({});
-    const staticTrips = [
-      { name: "Shadow Peak Traverse", date: "Oct 12, 2025", distance: "42.5 mi", grade: 7, build: "THE HIGHLANDER", role: "went" },
-      { name: "Eagle Rim Loop", date: "Oct 8, 2025", distance: "38.0 mi", grade: 5, build: "THE HIGHLANDER", role: "went" },
-      { name: "Baja Norte Expedition", date: "Sep 22, 2025", distance: "286 mi", grade: 4, build: "DESERT HAWK", role: "organized" },
-      { name: "Rubicon Trail", date: "Sep 5, 2025", distance: "22 mi", grade: 9, build: "THE HIGHLANDER", role: "went" }
-    ];
+    const staticTrips = [];
     const convoyTrips = (feedItems || []).filter((p) => p.type === "CONVOYS").map((c) => {
       const isOrganizer = !!(currentUserId && c.userId === currentUserId);
       const myRsvpEntry = currentUserId && convoyRsvps && convoyRsvps[c.id] ? convoyRsvps[c.id][currentUserId] : null;
@@ -47485,19 +47473,12 @@ ${suffix}`;
     const [deleteConfirmId, setDeleteConfirmId] = (0, import_react4.useState)(null);
     const [tappedBadge, setTappedBadge] = (0, import_react4.useState)(null);
     const userPosts = (feedItems || []).filter((p) => currentUserId ? p.userId === currentUserId : false);
-    const staticActivity = [
-      { type: "forum", title: "Best budget lift kit for 3rd Gen Tacoma?", time: "5 days ago", replies: 47, category: "FORUM REPLY" },
-      { type: "forum", title: "Custom skid plate fabrication \u2014 my walkthrough", time: "2 weeks ago", replies: 89, category: "FORUM POST" },
-      { type: "forum", title: "ARB bumper install tips for 200 Series", time: "1 month ago", replies: 56, category: "FORUM REPLY" }
-    ];
+    const staticActivity = [];
     const activity = [
       ...userPosts.map((p) => ({ type: "post", title: p.title, time: p.time, likes: p.likes, comments: p.comments, category: p.type, feedId: p.id, isOwn: true })),
       ...staticActivity
     ];
-    const pendingRequests = [
-      { name: "TrailRunner_88", badge: "Scout" },
-      { name: "MountainGoat", badge: "Explorer" }
-    ];
+    const pendingRequests = [];
     const tabs = ["builds", "trips", "activity"];
     if (showAddBuild || editingBuild) {
       const isEdit = !!editingBuild;
@@ -50172,10 +50153,7 @@ ${suffix}`;
     const [savedRoutes, setSavedRoutes] = (0, import_react4.useState)([]);
     const [activeNavRoute, setActiveNavRoute] = (0, import_react4.useState)(null);
     const [userBuilds, setUserBuilds] = (0, import_react4.useState)([]);
-    const myBuildsForLink = [
-      ...SEED_MY_BUILDS,
-      ...(userBuilds || []).map((b) => ({ id: b.id, name: b.name || `${b.year} ${b.make} ${b.model}`, year: b.year, make: b.make, model: b.model }))
-    ];
+    const myBuildsForLink = (userBuilds || []).map((b) => ({ id: b.id, name: b.name || `${b.year} ${b.make} ${b.model}`, year: b.year, make: b.make, model: b.model }));
     const [profilePic, setProfilePic] = (0, import_react4.useState)(null);
     const handleSetProfilePic = async (input) => {
       if (!input) {
