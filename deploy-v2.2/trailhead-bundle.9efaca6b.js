@@ -46459,7 +46459,9 @@ ${suffix}`;
         setTimeout(() => setShareToast(""), 2e3);
       }, style: { width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "none", border: "none", cursor: "pointer", borderRadius: 6 } }, /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 } }, "Copy Link")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
         const bd2 = detailBuild.buildData;
-        const heroImg = detailBuild.image || bd2 && bd2.mainPhotos && bd2.mainPhotos[0] && bd2.mainPhotos[0].url || null;
+        const rawHero = detailBuild.image || bd2 && bd2.mainPhotos && bd2.mainPhotos[0] && bd2.mainPhotos[0].url || null;
+        const isLocalUrl = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:"));
+        const heroImg = isLocalUrl(rawHero) ? null : rawHero;
         const isReshare = !!(currentUserId && detailBuild.userId && detailBuild.userId !== currentUserId);
         const ownerHandle = isReshare ? (detailBuild.handle || "").replace(/^@/, "") : null;
         const ownerName = isReshare ? detailBuild.owner || null : null;
@@ -50634,7 +50636,8 @@ ${suffix}`;
         } : c));
         return real;
       } catch (e) {
-        console.error("[dm] sendDmMessage failed", e);
+        console.error("[dm] sendDmMessage threw", e);
+        showErrorToast(`Couldn't send message: ${e && (e.message || e.code) || String(e)}`);
         setDmConvos((prev) => prev.map((c) => c.id === convId ? { ...c, messages: (c.messages || []).filter((m) => m.id !== tempId) } : c));
         return null;
       }
@@ -51233,18 +51236,22 @@ ${suffix}`;
         }
         const normalized = { ...newPost, photoUrls: uploadedPhotoUrls, photos: uploadedRoutePhotos };
         const row = feedItemToDbRow(normalized, uid);
+        console.log("[posts] inserting row", { type: row.type, build_id: row.build_id, has_data: !!row.data, hero_img: row.hero_img });
         const { data: inserted, error } = await supabase.from("posts").insert(row).select().single();
-        if (error) {
-          console.error("[posts] insert error", error, "row was:", row);
-          showErrorToast(`Couldn't save post: ${error.message || error.code || "unknown error"}`);
+        if (error || !inserted) {
+          console.error("[posts] insert failed", { error, inserted, row });
+          const msg = error && (error.message || error.code) || "no row returned (possible RLS block on SELECT after insert)";
+          showErrorToast(`Couldn't save post: ${msg}`);
           return optimistic;
         }
+        console.log("[posts] insert ok", { id: inserted.id, type: inserted.type });
         const clientItem = dbRowToFeedItem(inserted, currentProfile);
         const merged = { ...normalized, ...clientItem };
         setFeedItems((prev) => prev.map((p) => p.id === tmpId ? merged : p));
         return merged;
       } catch (e) {
-        console.error("[posts] addPost failed", e);
+        console.error("[posts] addPost threw", e);
+        showErrorToast(`Couldn't save post: ${e && (e.message || e.code) || String(e)}`);
         return optimistic;
       }
     };
