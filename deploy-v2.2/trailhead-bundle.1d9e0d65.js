@@ -46458,10 +46458,11 @@ ${suffix}`;
         setShareToast("Link copied");
         setTimeout(() => setShareToast(""), 2e3);
       }, style: { width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "none", border: "none", cursor: "pointer", borderRadius: 6 } }, /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 } }, "Copy Link")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
-        const bd2 = detailBuild.buildData;
-        const rawHero = detailBuild.image || bd2 && bd2.mainPhotos && bd2.mainPhotos[0] && bd2.mainPhotos[0].url || null;
         const isLocalUrl = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:"));
-        const heroImg = isLocalUrl(rawHero) ? null : rawHero;
+        const bd2 = scrubLocalPhotosFromBuildData(detailBuild.buildData);
+        const rawHero = detailBuild.image || detailBuild.buildData && detailBuild.buildData.mainPhotos && detailBuild.buildData.mainPhotos[0] && detailBuild.buildData.mainPhotos[0].url || null;
+        const cleanHero = isLocalUrl(rawHero) ? bd2 && bd2.mainPhotos && bd2.mainPhotos[0] && bd2.mainPhotos[0].url || null : rawHero;
+        const heroImg = isLocalUrl(cleanHero) ? null : cleanHero;
         const isReshare = !!(currentUserId && detailBuild.userId && detailBuild.userId !== currentUserId);
         const ownerHandle = isReshare ? (detailBuild.handle || "").replace(/^@/, "") : null;
         const ownerName = isReshare ? detailBuild.owner || null : null;
@@ -49540,6 +49541,35 @@ ${suffix}`;
     }
     return out;
   }
+  async function uploadBuildPhotos(data, uid) {
+    if (!data) return data;
+    const out = { ...data };
+    if (Array.isArray(data.mainPhotos)) out.mainPhotos = await uploadPostPhotoList(data.mainPhotos, uid);
+    if (Array.isArray(data.camperPhoto)) out.camperPhoto = await uploadPostPhotoList(data.camperPhoto, uid);
+    for (const key of ["suspension", "tires", "wheels", "bumpers", "armor", "lighting", "rack", "winch", "otherMods"]) {
+      if (out[key] && Array.isArray(out[key].photo)) {
+        out[key] = { ...out[key], photo: await uploadPostPhotoList(out[key].photo, uid) };
+      }
+    }
+    return out;
+  }
+  function scrubLocalPhotosFromBuildData(bd) {
+    if (!bd) return bd;
+    const isLocal = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:"));
+    const filterList = (list) => Array.isArray(list) ? list.filter((p) => {
+      const u = typeof p === "string" ? p : p && p.url;
+      return typeof u === "string" && !isLocal(u);
+    }) : list;
+    const out = { ...bd };
+    if (Array.isArray(out.mainPhotos)) out.mainPhotos = filterList(out.mainPhotos);
+    if (Array.isArray(out.camperPhoto)) out.camperPhoto = filterList(out.camperPhoto);
+    for (const key of ["suspension", "tires", "wheels", "bumpers", "armor", "lighting", "rack", "winch", "otherMods"]) {
+      if (out[key] && Array.isArray(out[key].photo)) {
+        out[key] = { ...out[key], photo: filterList(out[key].photo) };
+      }
+    }
+    return out;
+  }
   function Trailhead() {
     const initialSharedLink = __INITIAL_SHARED_LINK;
     const [authState, setAuthState] = (0, import_react4.useState)(initialSharedLink ? "app" : "login");
@@ -51104,12 +51134,20 @@ ${suffix}`;
     };
     const addBuild = async (data) => {
       const displayName = data.buildName || `${data.year} ${data.make} ${data.model}`;
-      const heroImg = data.mainPhotos && data.mainPhotos.length > 0 ? data.mainPhotos[0].url : null;
       let newBuild = null;
       const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+      let uploadedData = data;
       if (uid) {
         try {
-          const dbRow = clientDataToDbBuild(data, uid);
+          uploadedData = await uploadBuildPhotos(data, uid);
+        } catch (e) {
+          console.error("[builds] photo upload failed", e);
+        }
+      }
+      const heroImg = uploadedData.mainPhotos && uploadedData.mainPhotos.length > 0 ? uploadedData.mainPhotos[0].url : null;
+      if (uid) {
+        try {
+          const dbRow = clientDataToDbBuild(uploadedData, uid);
           const { data: inserted, error } = await supabase.from("builds").insert(dbRow).select().single();
           if (!error && inserted) {
             newBuild = dbRowToLocalBuild(inserted, currentProfile);
@@ -51124,29 +51162,29 @@ ${suffix}`;
           owner: currentProfile && currentProfile.full_name || "You",
           handle: currentProfile && currentProfile.handle ? "@" + currentProfile.handle : "",
           initial: (currentProfile && currentProfile.full_name || "U").charAt(0).toUpperCase(),
-          year: parseInt(data.year) || 2024,
-          make: data.make,
-          model: data.model,
-          tags: [data.trim ? data.trim.toUpperCase() : (data.make || "").toUpperCase(), "NEW BUILD"],
-          suspension: data.suspension.value || "",
-          tires: data.tires.value || "",
-          bumpers: data.bumpers.value || "",
+          year: parseInt(uploadedData.year) || 2024,
+          make: uploadedData.make,
+          model: uploadedData.model,
+          tags: [uploadedData.trim ? uploadedData.trim.toUpperCase() : (uploadedData.make || "").toUpperCase(), "NEW BUILD"],
+          suspension: uploadedData.suspension.value || "",
+          tires: uploadedData.tires.value || "",
+          bumpers: uploadedData.bumpers.value || "",
           miles: "0",
           elevation: "0 ft",
           routes: 0,
-          hasCamper: data.hasCamper,
-          camperMake: data.camperMake || "",
-          camperModel: data.camperModel || "",
+          hasCamper: uploadedData.hasCamper,
+          camperMake: uploadedData.camperMake || "",
+          camperModel: uploadedData.camperModel || "",
           isMine: true,
           isFollowing: true,
           likes: 0,
           heroImg,
-          buildData: data
+          buildData: uploadedData
         };
       }
       setUserBuilds((prev) => [newBuild, ...prev]);
       setAllBuilds((prev) => [newBuild, ...prev]);
-      if (data.shareToFeed) {
+      if (uploadedData.shareToFeed) {
         const feedPost = {
           id: "fb_" + Date.now(),
           type: "BUILDS",
@@ -51155,13 +51193,13 @@ ${suffix}`;
           time: Date.now(),
           title: displayName.toUpperCase(),
           subtitle: "Added a new build",
-          stage: data.suspension.value ? "Suspension: " + data.suspension.value : data.bumpers.value ? "Armor: " + data.bumpers.value : "New Build",
+          stage: uploadedData.suspension.value ? "Suspension: " + uploadedData.suspension.value : uploadedData.bumpers.value ? "Armor: " + uploadedData.bumpers.value : "New Build",
           likes: 0,
           comments: 0,
           seedComments: [],
           photoUrls: heroImg ? [heroImg] : void 0,
-          buildData: data,
-          vehicle: `${data.year} ${data.make} ${data.model}${data.trim ? " " + data.trim : ""}`,
+          buildData: uploadedData,
+          vehicle: `${uploadedData.year} ${uploadedData.make} ${uploadedData.model}${uploadedData.trim ? " " + uploadedData.trim : ""}`,
           buildRawId: newBuild.id
         };
         addPost(feedPost);
@@ -51170,11 +51208,19 @@ ${suffix}`;
     };
     const updateBuild = async (buildId, data) => {
       const displayName = data.buildName || `${data.year} ${data.make} ${data.model}`;
-      const heroImg = data.mainPhotos && data.mainPhotos.length > 0 ? data.mainPhotos[0].url : null;
       const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+      let uploadedData = data;
+      if (uid) {
+        try {
+          uploadedData = await uploadBuildPhotos(data, uid);
+        } catch (e) {
+          console.error("[builds] photo upload failed", e);
+        }
+      }
+      const heroImg = uploadedData.mainPhotos && uploadedData.mainPhotos.length > 0 ? uploadedData.mainPhotos[0].url : null;
       if (uid && typeof buildId === "string" && buildId.length > 20) {
         try {
-          const dbRow = clientDataToDbBuild(data, uid);
+          const dbRow = clientDataToDbBuild(uploadedData, uid);
           await supabase.from("builds").update({
             ...dbRow,
             updated_at: (/* @__PURE__ */ new Date()).toISOString()
@@ -51185,16 +51231,16 @@ ${suffix}`;
       const patch = (b) => b.id === buildId ? {
         ...b,
         name: displayName.toUpperCase(),
-        year: parseInt(data.year) || b.year,
-        make: data.make || b.make,
-        model: data.model || b.model,
-        tags: [data.trim ? data.trim.toUpperCase() : (data.make || "").toUpperCase(), "UPDATED"],
+        year: parseInt(uploadedData.year) || b.year,
+        make: uploadedData.make || b.make,
+        model: uploadedData.model || b.model,
+        tags: [uploadedData.trim ? uploadedData.trim.toUpperCase() : (uploadedData.make || "").toUpperCase(), "UPDATED"],
         heroImg,
         image: heroImg,
-        buildData: data,
-        hasCamper: data.hasCamper,
-        camperMake: data.camperMake || "",
-        camperModel: data.camperModel || ""
+        buildData: uploadedData,
+        hasCamper: uploadedData.hasCamper,
+        camperMake: uploadedData.camperMake || "",
+        camperModel: uploadedData.camperModel || ""
       } : b;
       setUserBuilds((prev) => prev.map(patch));
       setAllBuilds((prev) => prev.map(patch));
@@ -51687,8 +51733,12 @@ ${suffix}`;
       setProfileStack([]);
       setScreen("feed");
     }, myPoints: myTotalPoints }) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, isGuest && /* @__PURE__ */ import_react4.default.createElement(GuestBanner, { onSignIn: () => setShowGuestPrompt(true) }), screen === "feed" && renderFeedScopedTo({ hideFilters: false }), screen === "forum" && /* @__PURE__ */ import_react4.default.createElement(ForumScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), pendingThread, onPendingHandled: () => setPendingThread(null), onAddNotification: requireAuth(addNotification), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onAddFeedPost: requireAuth((post2) => addPost(post2)), userThreads: forumUserThreads, setUserThreads: requireAuth(setForumUserThreads), userReplies: forumUserReplies, setUserReplies: requireAuth(setForumUserReplies), likedForumItems: forumLikedItems, setLikedForumItems: requireAuth(setForumLikedItems), forumLikeCounts, setForumLikeCounts: requireAuth(setForumLikeCounts), forumViewCounts, setForumViewCounts, onAwardPoints: awardPoints }), screen === "routes" && /* @__PURE__ */ import_react4.default.createElement(RoutesScreen, { userBuilds: myBuildsForLink, onRecordRoute: requireAuth(() => setShowRecorder(true)), onManualEntry: requireAuth(() => setShowManualRoute(true)), userRoutes, onUpdateRoute: requireAuth((routeId, updates) => setUserRoutes((prev) => prev.map((r) => r.id === routeId ? { ...r, ...updates } : r))), savedRoutes, onSaveRoute: requireAuth((route) => setSavedRoutes((prev) => prev.some((r) => r.id === route.id || r.name === route.name) ? prev : [route, ...prev])), onUnsaveRoute: requireAuth((routeId) => setSavedRoutes((prev) => prev.filter((r) => r.id !== routeId && r.name !== routeId))), onOpenDM: (user, msg, sharedPost) => openDM(user, msg, sharedPost), onAddFeedPost: requireAuth((post2) => addPost(post2)), onStartNav: (route) => setActiveNavRoute(route) }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onPostBuildToFeed: requireAuth((b, opts) => {
-      const bd = b.buildData;
-      const heroImg = b.image || bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url || null;
+      const rawBd = b.buildData;
+      const bd = scrubLocalPhotosFromBuildData(rawBd);
+      const isLocalUrl = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:"));
+      const rawHero = b.image || rawBd && rawBd.mainPhotos && rawBd.mainPhotos[0] && rawBd.mainPhotos[0].url || null;
+      const cleanHero = isLocalUrl(rawHero) ? bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url || null : rawHero;
+      const heroImg = isLocalUrl(cleanHero) ? null : cleanHero;
       const meName = currentProfile && currentProfile.full_name || "You";
       const myUid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
       const isReshare = b.userId && myUid && b.userId !== myUid;
