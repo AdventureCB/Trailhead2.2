@@ -48998,10 +48998,14 @@ ${suffix}`;
           const url = typeof p === "string" ? p : p && p.url;
           const isVid = typeof p === "object" && p && p.type === "video";
           if (!url) return null;
+          const isLocalOnly = url.startsWith("blob:") || url.startsWith("data:");
+          if (isLocalOnly) {
+            return /* @__PURE__ */ import_react4.default.createElement("div", { key: pi, style: { width: msg.photos.length === 1 ? 200 : 80, height: msg.photos.length === 1 ? 120 : 80, borderRadius: 8, background: T.charcoal, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, padding: 8, border: `1px dashed ${T.tertiary}40` } }, /* @__PURE__ */ import_react4.default.createElement(TriangleAlert, { size: 16, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, textAlign: "center", letterSpacing: 0.3 } }, "Attachment unavailable"));
+          }
           if (isVid) {
             return /* @__PURE__ */ import_react4.default.createElement("video", { key: pi, src: url, preload: "metadata", playsInline: true, controls: true, style: { width: msg.photos.length === 1 ? "100%" : 120, maxHeight: 240, borderRadius: 8, objectFit: "contain", display: "block", background: "#000" } });
           }
-          const imageUrls = msg.photos.filter((x) => !(typeof x === "object" && x && x.type === "video")).map((x) => typeof x === "string" ? x : x.url);
+          const imageUrls = msg.photos.filter((x) => !(typeof x === "object" && x && x.type === "video")).map((x) => typeof x === "string" ? x : x.url).filter((u) => u && !u.startsWith("blob:") && !u.startsWith("data:"));
           const carouselIdx = imageUrls.indexOf(url);
           return /* @__PURE__ */ import_react4.default.createElement("img", { key: pi, src: url, alt: "", onClick: () => {
             setCarouselImages(imageUrls);
