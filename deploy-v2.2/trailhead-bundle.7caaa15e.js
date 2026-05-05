@@ -48863,7 +48863,7 @@ ${suffix}`;
       if (!msgText.trim() && !pendingSharedPost && chatPhotos.length === 0 || !activeConvo) return;
       const payload = {};
       if (pendingSharedPost) payload.sharedPost = pendingSharedPost;
-      if (chatPhotos.length > 0) payload.photos = chatPhotos.map((p) => p.url);
+      if (chatPhotos.length > 0) payload.photos = chatPhotos.map((p) => ({ url: p.url, type: p.type || "image", name: p.name }));
       onSendMessage && onSendMessage(activeConvo.id, msgText.trim(), Object.keys(payload).length > 0 ? payload : null);
       setMsgText("");
       setPendingSharedPost(null);
@@ -48873,12 +48873,19 @@ ${suffix}`;
       const files = Array.from(e.target.files || []);
       if (chatFileRef.current) chatFileRef.current.value = "";
       files.forEach((file) => {
-        if (!file.type.startsWith("image/")) return;
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-          setChatPhotos((prev) => [...prev, { id: Date.now() + Math.random(), url: ev.target.result, name: file.name }]);
-        };
-        reader.readAsDataURL(file);
+        const isVideo = file.type.startsWith("video/");
+        const isImage = file.type.startsWith("image/");
+        if (!isVideo && !isImage) return;
+        if (isVideo) {
+          const blobUrl = URL.createObjectURL(file);
+          setChatPhotos((prev) => [...prev, { id: Date.now() + Math.random(), url: blobUrl, name: file.name, type: "video" }]);
+        } else {
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            setChatPhotos((prev) => [...prev, { id: Date.now() + Math.random(), url: ev.target.result, name: file.name }]);
+          };
+          reader.readAsDataURL(file);
+        }
       });
     };
     const [vv, setVv] = (0, import_react4.useState)({ height: typeof window !== "undefined" ? window.innerHeight : 800, top: 0 });
@@ -48965,11 +48972,21 @@ ${suffix}`;
             e.stopPropagation();
             onRsvpConvoy && onRsvpConvoy(convoyId, myStatus === opt.value ? null : opt.value);
           }, style: { flex: 1, fontFamily: sans, fontSize: 10, letterSpacing: 0.8, fontWeight: 600, padding: "10px 0", background: myStatus === opt.value ? `${opt.color}25` : "transparent", color: myStatus === opt.value ? opt.color : T.tertiary, border: "none", borderRight: oi < 2 ? `1px solid ${isMe ? "rgba(255,255,255,0.1)" : T.charcoal}` : "none", cursor: "pointer", transition: "all 0.15s" } }, myStatus === opt.value ? `\u2713 ${opt.label}` : opt.label))));
-        })() : msg.sharedPost ? /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => onOpenPost && onOpenPost(msg.sharedPost), style: { borderRadius: 8, overflow: "hidden", border: `1px solid ${isMe ? "rgba(255,255,255,0.15)" : T.charcoal}`, marginBottom: msg.text ? 8 : 0, background: isMe ? "rgba(0,0,0,0.15)" : `${T.charcoal}80`, cursor: "pointer", transition: "opacity 0.15s" }, onMouseEnter: (e) => e.currentTarget.style.opacity = "0.85", onMouseLeave: (e) => e.currentTarget.style.opacity = "1" }, msg.sharedPost.image && /* @__PURE__ */ import_react4.default.createElement("img", { src: msg.sharedPost.image, alt: "", style: { width: "100%", height: 120, objectFit: "cover", display: "block" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "10px 12px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 6 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 20, height: 20, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 8, fontWeight: 700, color: T.white } }, msg.sharedPost.initial)), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: isMe ? "rgba(255,255,255,0.7)" : T.tertiary } }, "@", msg.sharedPost.user), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: isMe ? "rgba(255,255,255,0.45)" : `${T.tertiary}80`, marginLeft: "auto", textTransform: "uppercase", letterSpacing: 0.5 } }, msg.sharedPost.type)), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.white, margin: 0, lineHeight: 1.4 } }, msg.sharedPost.title), msg.sharedPost.type === "recovery" && msg.sharedPost.location && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, marginTop: 4 } }, /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 10, color: T.red }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, msg.sharedPost.location), msg.sharedPost.urgency && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 8, color: T.white, background: msg.sharedPost.urgency === "HIGH" ? T.red : T.copper, padding: "1px 5px", borderRadius: 3, fontWeight: 600, marginLeft: 4 } }, msg.sharedPost.urgency)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, marginTop: 6 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600 } }, msg.sharedPost.type === "recovery" ? "VIEW ALERT" : "VIEW POST"), /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 12, color: T.copper })))) : null, msg.photos && msg.photos.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 4, marginBottom: msg.text ? 8 : 0, flexWrap: "wrap" } }, msg.photos.map((url, pi) => /* @__PURE__ */ import_react4.default.createElement("img", { key: pi, src: url, alt: "", onClick: () => {
-          setCarouselImages(msg.photos);
-          setCarouselIndex(pi);
-        }, style: { width: msg.photos.length === 1 ? "100%" : 80, height: msg.photos.length === 1 ? "auto" : 80, maxHeight: 200, borderRadius: 8, objectFit: "cover", display: "block", cursor: "pointer" } }))), msg.text && /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 14, color: T.white, margin: 0, lineHeight: 1.5 } }, msg.text), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: isMe ? `${T.white}90` : T.tertiary, display: "block", textAlign: "right", marginTop: 4 } }, formatPostTime(msg.time))));
-      }), /* @__PURE__ */ import_react4.default.createElement("div", { ref: chatEndRef })), pendingSharedPost && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "8px 16px", background: T.charcoal, borderTop: `1px solid ${T.darkCard}`, display: "flex", gap: 10, alignItems: "center" } }, pendingSharedPost.image && /* @__PURE__ */ import_react4.default.createElement("img", { src: pendingSharedPost.image, alt: "", style: { width: 48, height: 48, borderRadius: 6, objectFit: "cover", flexShrink: 0 } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, marginBottom: 2 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 0.5, fontWeight: 600 } }, "SHARED POST"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary } }, "by @", pendingSharedPost.user)), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 12, color: T.white, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, pendingSharedPost.title)), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setPendingSharedPost(null), style: { background: "none", border: "none", cursor: "pointer", padding: 2, display: "flex", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 14, color: T.tertiary }))), chatPhotos.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "8px 16px 0", background: T.charcoal, display: "flex", gap: 8, overflowX: "auto", flexShrink: 0 } }, chatPhotos.map((p) => /* @__PURE__ */ import_react4.default.createElement("div", { key: p.id, style: { position: "relative", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("img", { src: p.url, alt: p.name, style: { width: 56, height: 56, borderRadius: 8, objectFit: "cover", display: "block", border: `1px solid ${T.charcoal}` } }), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setChatPhotos((prev) => prev.filter((x) => x.id !== p.id)), style: { position: "absolute", top: -5, right: -5, width: 18, height: 18, borderRadius: "50%", background: T.red, border: `2px solid ${T.charcoal}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 8, color: T.white }))))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "10px 16px max(10px, env(safe-area-inset-bottom))", background: T.charcoal, borderTop: pendingSharedPost || chatPhotos.length > 0 ? "none" : `1px solid ${T.darkCard}`, display: "flex", alignItems: "center", gap: 10, flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("input", { ref: chatFileRef, type: "file", accept: "image/*", multiple: true, onChange: handleChatFiles, style: { display: "none" } }), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => chatFileRef.current && chatFileRef.current.click(), style: { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" } }, /* @__PURE__ */ import_react4.default.createElement(Image, { size: 20, color: T.tertiary })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, display: "flex", alignItems: "center", background: T.darkCard, borderRadius: 20, padding: "8px 14px", border: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("input", { value: msgText, onChange: (e) => setMsgText(e.target.value), onKeyDown: (e) => {
+        })() : msg.sharedPost ? /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => onOpenPost && onOpenPost(msg.sharedPost), style: { borderRadius: 8, overflow: "hidden", border: `1px solid ${isMe ? "rgba(255,255,255,0.15)" : T.charcoal}`, marginBottom: msg.text ? 8 : 0, background: isMe ? "rgba(0,0,0,0.15)" : `${T.charcoal}80`, cursor: "pointer", transition: "opacity 0.15s" }, onMouseEnter: (e) => e.currentTarget.style.opacity = "0.85", onMouseLeave: (e) => e.currentTarget.style.opacity = "1" }, msg.sharedPost.image && /* @__PURE__ */ import_react4.default.createElement("img", { src: msg.sharedPost.image, alt: "", style: { width: "100%", height: 120, objectFit: "cover", display: "block" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "10px 12px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 6 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 20, height: 20, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 8, fontWeight: 700, color: T.white } }, msg.sharedPost.initial)), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: isMe ? "rgba(255,255,255,0.7)" : T.tertiary } }, "@", msg.sharedPost.user), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: isMe ? "rgba(255,255,255,0.45)" : `${T.tertiary}80`, marginLeft: "auto", textTransform: "uppercase", letterSpacing: 0.5 } }, msg.sharedPost.type)), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.white, margin: 0, lineHeight: 1.4 } }, msg.sharedPost.title), msg.sharedPost.type === "recovery" && msg.sharedPost.location && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, marginTop: 4 } }, /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 10, color: T.red }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, msg.sharedPost.location), msg.sharedPost.urgency && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 8, color: T.white, background: msg.sharedPost.urgency === "HIGH" ? T.red : T.copper, padding: "1px 5px", borderRadius: 3, fontWeight: 600, marginLeft: 4 } }, msg.sharedPost.urgency)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, marginTop: 6 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600 } }, msg.sharedPost.type === "recovery" ? "VIEW ALERT" : "VIEW POST"), /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 12, color: T.copper })))) : null, msg.photos && msg.photos.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 4, marginBottom: msg.text ? 8 : 0, flexWrap: "wrap" } }, msg.photos.map((p, pi) => {
+          const url = typeof p === "string" ? p : p && p.url;
+          const isVid = typeof p === "object" && p && p.type === "video";
+          if (!url) return null;
+          if (isVid) {
+            return /* @__PURE__ */ import_react4.default.createElement("video", { key: pi, src: url, preload: "metadata", playsInline: true, controls: true, style: { width: msg.photos.length === 1 ? "100%" : 120, maxHeight: 240, borderRadius: 8, objectFit: "contain", display: "block", background: "#000" } });
+          }
+          const imageUrls = msg.photos.filter((x) => !(typeof x === "object" && x && x.type === "video")).map((x) => typeof x === "string" ? x : x.url);
+          const carouselIdx = imageUrls.indexOf(url);
+          return /* @__PURE__ */ import_react4.default.createElement("img", { key: pi, src: url, alt: "", onClick: () => {
+            setCarouselImages(imageUrls);
+            setCarouselIndex(carouselIdx >= 0 ? carouselIdx : 0);
+          }, style: { width: msg.photos.length === 1 ? "100%" : 80, height: msg.photos.length === 1 ? "auto" : 80, maxHeight: 200, borderRadius: 8, objectFit: "cover", display: "block", cursor: "pointer" } });
+        })), msg.text && /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 14, color: T.white, margin: 0, lineHeight: 1.5 } }, msg.text), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: isMe ? `${T.white}90` : T.tertiary, display: "block", textAlign: "right", marginTop: 4 } }, formatPostTime(msg.time))));
+      }), /* @__PURE__ */ import_react4.default.createElement("div", { ref: chatEndRef })), pendingSharedPost && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "8px 16px", background: T.charcoal, borderTop: `1px solid ${T.darkCard}`, display: "flex", gap: 10, alignItems: "center" } }, pendingSharedPost.image && /* @__PURE__ */ import_react4.default.createElement("img", { src: pendingSharedPost.image, alt: "", style: { width: 48, height: 48, borderRadius: 6, objectFit: "cover", flexShrink: 0 } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, marginBottom: 2 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 0.5, fontWeight: 600 } }, "SHARED POST"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary } }, "by @", pendingSharedPost.user)), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 12, color: T.white, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, pendingSharedPost.title)), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setPendingSharedPost(null), style: { background: "none", border: "none", cursor: "pointer", padding: 2, display: "flex", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 14, color: T.tertiary }))), chatPhotos.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "8px 16px 0", background: T.charcoal, display: "flex", gap: 8, overflowX: "auto", flexShrink: 0 } }, chatPhotos.map((p) => /* @__PURE__ */ import_react4.default.createElement("div", { key: p.id, style: { position: "relative", flexShrink: 0 } }, p.type === "video" ? /* @__PURE__ */ import_react4.default.createElement("video", { src: p.url + "#t=0.001", preload: "metadata", muted: true, playsInline: true, style: { width: 56, height: 56, borderRadius: 8, objectFit: "cover", display: "block", border: `1px solid ${T.charcoal}`, background: "#000" } }) : /* @__PURE__ */ import_react4.default.createElement("img", { src: p.url, alt: p.name, style: { width: 56, height: 56, borderRadius: 8, objectFit: "cover", display: "block", border: `1px solid ${T.charcoal}` } }), p.type === "video" && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", bottom: 2, left: 2, background: "rgba(0,0,0,0.6)", borderRadius: 3, padding: "1px 4px", display: "flex", alignItems: "center", gap: 2 } }, /* @__PURE__ */ import_react4.default.createElement(Video, { size: 8, color: T.white })), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setChatPhotos((prev) => prev.filter((x) => x.id !== p.id)), style: { position: "absolute", top: -5, right: -5, width: 18, height: 18, borderRadius: "50%", background: T.red, border: `2px solid ${T.charcoal}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 8, color: T.white }))))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "10px 16px max(10px, env(safe-area-inset-bottom))", background: T.charcoal, borderTop: pendingSharedPost || chatPhotos.length > 0 ? "none" : `1px solid ${T.darkCard}`, display: "flex", alignItems: "center", gap: 10, flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("input", { ref: chatFileRef, type: "file", accept: "image/*,video/*", multiple: true, onChange: handleChatFiles, style: { display: "none" } }), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => chatFileRef.current && chatFileRef.current.click(), style: { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" } }, /* @__PURE__ */ import_react4.default.createElement(Image, { size: 20, color: T.tertiary })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, display: "flex", alignItems: "center", background: T.darkCard, borderRadius: 20, padding: "8px 14px", border: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("input", { value: msgText, onChange: (e) => setMsgText(e.target.value), onKeyDown: (e) => {
         if (e.key === "Enter" && !e.shiftKey) {
           e.preventDefault();
           sendMessage();
@@ -49237,10 +49254,18 @@ ${suffix}`;
       ...rest
     } = item;
     let photoUrlStrings = [];
+    let firstImageUrl = null;
     if (Array.isArray(photoUrls)) {
-      photoUrlStrings = photoUrls.map((p) => typeof p === "string" ? p : p && p.url || null).filter((u) => typeof u === "string" && u.length > 0);
+      photoUrls.forEach((p) => {
+        const url = typeof p === "string" ? p : p && p.url || null;
+        const isVid = typeof p === "object" && p && p.type === "video";
+        if (typeof url === "string" && url.length > 0) {
+          photoUrlStrings.push(url);
+          if (!firstImageUrl && !isVid) firstImageUrl = url;
+        }
+      });
     }
-    const hero = heroImg || image || photoUrlStrings[0] || null;
+    const hero = heroImg || image || firstImageUrl || null;
     const rawBuildRef = buildId || buildRawId;
     const buildIdCol = typeof rawBuildRef === "string" && rawBuildRef.length > 20 ? rawBuildRef : null;
     const threadIdStr = threadId != null ? String(threadId) : null;
@@ -49289,6 +49314,7 @@ ${suffix}`;
     for (let i = 0; i < list.length; i++) {
       const entry = list[i];
       const url = typeof entry === "string" ? entry : entry && entry.url;
+      const isVideo = typeof entry === "object" && entry && entry.type === "video";
       if (!url || typeof url !== "string") {
         out.push(entry);
         continue;
@@ -49304,9 +49330,19 @@ ${suffix}`;
       try {
         const resp = await fetch(url);
         const blob = await resp.blob();
-        const compressed = await compressImage(blob, { maxDim: 1600, maxBytes: 1500 * 1024 });
-        const path = `${uid}/${Date.now()}-${i}.jpg`;
-        const { error: upErr } = await supabase.storage.from("dm-attachments").upload(path, compressed, { contentType: "image/jpeg", upsert: true });
+        let uploadBlob, contentType, ext;
+        if (isVideo) {
+          contentType = blob.type || "video/mp4";
+          ext = (contentType.split("/")[1] || "mp4").split(";")[0];
+          if (ext === "quicktime") ext = "mov";
+          uploadBlob = blob;
+        } else {
+          uploadBlob = await compressImage(blob, { maxDim: 1600, maxBytes: 1500 * 1024 });
+          contentType = "image/jpeg";
+          ext = "jpg";
+        }
+        const path = `${uid}/${Date.now()}-${i}.${ext}`;
+        const { error: upErr } = await supabase.storage.from("dm-attachments").upload(path, uploadBlob, { contentType, upsert: true });
         if (upErr) {
           console.error("[dm-attachments] upload error", upErr);
           out.push(entry);
@@ -49332,6 +49368,7 @@ ${suffix}`;
     for (let i = 0; i < list.length; i++) {
       const entry = list[i];
       const url = typeof entry === "string" ? entry : entry && entry.url;
+      const isVideo = typeof entry === "object" && entry && entry.type === "video";
       if (!url || typeof url !== "string") {
         out.push(entry);
         continue;
@@ -49347,9 +49384,19 @@ ${suffix}`;
       try {
         const resp = await fetch(url);
         const blob = await resp.blob();
-        const compressed = await compressImage(blob, { maxDim: 1600, maxBytes: 1500 * 1024 });
-        const path = `${uid}/${Date.now()}-${i}.jpg`;
-        const { error: upErr } = await supabase.storage.from("post-photos").upload(path, compressed, { contentType: "image/jpeg", upsert: true });
+        let uploadBlob, contentType, ext;
+        if (isVideo) {
+          contentType = blob.type || "video/mp4";
+          ext = (contentType.split("/")[1] || "mp4").split(";")[0];
+          if (ext === "quicktime") ext = "mov";
+          uploadBlob = blob;
+        } else {
+          uploadBlob = await compressImage(blob, { maxDim: 1600, maxBytes: 1500 * 1024 });
+          contentType = "image/jpeg";
+          ext = "jpg";
+        }
+        const path = `${uid}/${Date.now()}-${i}.${ext}`;
+        const { error: upErr } = await supabase.storage.from("post-photos").upload(path, uploadBlob, { contentType, upsert: true });
         if (upErr) {
           console.error("[post-photos] upload error", upErr);
           out.push(entry);
