@@ -49613,22 +49613,21 @@ ${suffix}`;
           setUserBuilds(all.filter((b) => b.userId === uid));
           const buildIds = all.map((b) => b.id).filter((id) => typeof id === "string");
           if (buildIds.length > 0) {
-            try {
-              const { data: blRows, error: blErr } = await supabase.from("build_likes").select("build_id, user_id").in("build_id", buildIds);
-              if (blErr) console.error("[hydrate] build_likes fetch error", blErr);
-              if (Array.isArray(blRows)) {
-                const counts = {};
-                const mine = {};
-                blRows.forEach((r) => {
-                  counts[r.build_id] = (counts[r.build_id] || 0) + 1;
-                  if (r.user_id === uid) mine[r.build_id] = true;
-                });
-                setBuildLikeCounts(counts);
-                setLikedBuildIds(mine);
+            supabase.from("build_likes").select("build_id, user_id").in("build_id", buildIds).then(({ data: blRows, error: blErr }) => {
+              if (blErr) {
+                console.error("[hydrate] build_likes fetch error", blErr);
+                return;
               }
-            } catch (e) {
-              console.error("[hydrate] build_likes fetch failed", e);
-            }
+              if (!Array.isArray(blRows)) return;
+              const counts = {};
+              const mine = {};
+              blRows.forEach((r) => {
+                counts[r.build_id] = (counts[r.build_id] || 0) + 1;
+                if (r.user_id === uid) mine[r.build_id] = true;
+              });
+              setBuildLikeCounts(counts);
+              setLikedBuildIds(mine);
+            });
           }
         }
         if (profileRow && profileRow.avatar_url) {
