@@ -50622,7 +50622,11 @@ ${suffix}`;
           showErrorToast("Couldn't upload one or more attachments \u2014 they may be too large. Recipient won't see them.");
         }
         const { data: inserted, error } = await supabase.from("dm_messages").insert({ conversation_id: convId, sender_id: uid, body: trimmed || null, payload: persistedPayload }).select().single();
-        if (error) throw error;
+        if (error) {
+          console.error("[dm] insert error", error, "payload was:", persistedPayload);
+          showErrorToast(`Couldn't send message: ${error.message || error.code || "unknown error"}`);
+          throw error;
+        }
         const real = dmRowToLocalMessage(inserted);
         setDmConvos((prev) => prev.map((c) => c.id === convId ? {
           ...c,
@@ -51231,7 +51235,8 @@ ${suffix}`;
         const row = feedItemToDbRow(normalized, uid);
         const { data: inserted, error } = await supabase.from("posts").insert(row).select().single();
         if (error) {
-          console.error("[posts] insert error", error);
+          console.error("[posts] insert error", error, "row was:", row);
+          showErrorToast(`Couldn't save post: ${error.message || error.code || "unknown error"}`);
           return optimistic;
         }
         const clientItem = dbRowToFeedItem(inserted, currentProfile);
