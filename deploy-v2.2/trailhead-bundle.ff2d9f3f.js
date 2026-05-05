@@ -51139,20 +51139,31 @@ ${suffix}`;
       let uploadedData = data;
       if (uid) {
         try {
+          console.log("[builds] uploading photos\u2026");
           uploadedData = await uploadBuildPhotos(data, uid);
+          console.log("[builds] photo upload ok");
         } catch (e) {
           console.error("[builds] photo upload failed", e);
+          showErrorToast(`Couldn't upload build photos: ${e && (e.message || e.code) || String(e)}`);
         }
       }
       const heroImg = uploadedData.mainPhotos && uploadedData.mainPhotos.length > 0 ? uploadedData.mainPhotos[0].url : null;
       if (uid) {
         try {
           const dbRow = clientDataToDbBuild(uploadedData, uid);
+          console.log("[builds] inserting row", { name: dbRow.name, hero_img_len: (dbRow.hero_img || "").length, build_data_keys: Object.keys(dbRow.build_data || {}) });
           const { data: inserted, error } = await supabase.from("builds").insert(dbRow).select().single();
-          if (!error && inserted) {
+          if (error || !inserted) {
+            console.error("[builds] insert failed", { error, inserted });
+            const msg = error && (error.message || error.code) || "no row returned";
+            showErrorToast(`Couldn't save build: ${msg}`);
+          } else {
+            console.log("[builds] insert ok", { id: inserted.id });
             newBuild = dbRowToLocalBuild(inserted, currentProfile);
           }
         } catch (e) {
+          console.error("[builds] insert threw", e);
+          showErrorToast(`Couldn't save build: ${e && (e.message || e.code) || String(e)}`);
         }
       }
       if (!newBuild) {
@@ -51214,18 +51225,25 @@ ${suffix}`;
         try {
           uploadedData = await uploadBuildPhotos(data, uid);
         } catch (e) {
-          console.error("[builds] photo upload failed", e);
+          console.error("[builds] photo upload failed (update)", e);
+          showErrorToast(`Couldn't upload build photos: ${e && (e.message || e.code) || String(e)}`);
         }
       }
       const heroImg = uploadedData.mainPhotos && uploadedData.mainPhotos.length > 0 ? uploadedData.mainPhotos[0].url : null;
       if (uid && typeof buildId === "string" && buildId.length > 20) {
         try {
           const dbRow = clientDataToDbBuild(uploadedData, uid);
-          await supabase.from("builds").update({
+          const { error } = await supabase.from("builds").update({
             ...dbRow,
             updated_at: (/* @__PURE__ */ new Date()).toISOString()
           }).eq("id", buildId).eq("user_id", uid);
+          if (error) {
+            console.error("[builds] update failed", error);
+            showErrorToast(`Couldn't update build: ${error.message || error.code || "unknown error"}`);
+          }
         } catch (e) {
+          console.error("[builds] update threw", e);
+          showErrorToast(`Couldn't update build: ${e && (e.message || e.code) || String(e)}`);
         }
       }
       const patch = (b) => b.id === buildId ? {
