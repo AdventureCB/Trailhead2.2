@@ -42643,6 +42643,15 @@ ${suffix}`;
   });
 
   // trailhead-v1.jsx
+  var VAPID_PUBLIC_KEY = "BKNmoN_428cxssoAL_Jca5zquLJnTKyfq3QAihVqpeP_4VNin8lxNrHdRvUvzP-4dKa4cbSooK8VC8OxVwgVvsc";
+  function urlBase64ToUint8Array(base64String) {
+    const padding = "=".repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+    const rawData = atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+    return outputArray;
+  }
   var T = {
     red: "#BD472A",
     copper: "#C49A6C",
@@ -47293,7 +47302,7 @@ ${suffix}`;
     )));
     return showPreview ? previewView : formView;
   }
-  function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, initialUserBio, initialIsPublic, onViewUser, onLogout, userBuilds, onAddBuild, onUpdateBuild, onDeleteBuild, profilePic, onSetProfilePic, notifPrefs, onSetNotifPrefs, feedItems, onDeletePost, onEditPost, onUpdateConvoy, onGoToPost, myPoints: myPointsProp, onSaveProfile, followerCount, followingCount, convoyRsvps }) {
+  function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, initialUserBio, initialIsPublic, onViewUser, onLogout, userBuilds, onAddBuild, onUpdateBuild, onDeleteBuild, profilePic, onSetProfilePic, notifPrefs, onSetNotifPrefs, feedItems, onDeletePost, onEditPost, onUpdateConvoy, onGoToPost, myPoints: myPointsProp, onSaveProfile, followerCount, followingCount, convoyRsvps, onSubscribePush, onUnsubscribePush }) {
     const [isPublic, setIsPublic] = (0, import_react4.useState)(initialIsPublic == null ? true : !!initialIsPublic);
     const [activeTab, setActiveTab] = (0, import_react4.useState)("builds");
     const [activeBuild, setActiveBuild] = (0, import_react4.useState)(0);
@@ -47476,12 +47485,10 @@ ${suffix}`;
         return /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 0 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12, padding: "16px 16px 20px" } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setShowNotifSettings(false), style: { background: T.darkCard, border: "none", borderRadius: 8, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(ChevronLeft, { size: 18, color: T.white })), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("h2", { style: { fontFamily: sans, fontSize: 18, color: T.white, margin: 0, fontWeight: 700 } }, "Notifications"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, "Choose what alerts you receive"))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkCard, borderRadius: 12, padding: "4px 16px 0" } }, prefToggle("Likes", "When someone likes your posts or routes", "likes", Heart, T.red), prefToggle("Comments", "When someone comments on your posts", "comments", MessageCircle, T.copper), prefToggle("Replies", "When someone replies to your threads", "replies", MessageCircle, T.copper), prefToggle("Follows", "When someone follows you or requests to follow", "follows", UserPlus, T.green), prefToggle("Mentions", "When someone mentions you in a post or comment", "mentions", AtSign, T.copper)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginTop: 16, background: T.darkCard, borderRadius: 12, padding: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12, flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement(Smartphone, { size: 16, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, display: "block" } }, "Push Notifications"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 11, color: T.tertiary } }, notifPrefs.push ? "Enabled \u2014 you'll receive alerts on this device" : typeof Notification === "undefined" ? "Not supported on this browser" : Notification.permission === "denied" ? "Blocked \u2014 enable in browser settings" : "Get notified even when the app is closed"))), /* @__PURE__ */ import_react4.default.createElement("div", { onClick: async () => {
           if (typeof Notification === "undefined") return;
           if (!notifPrefs.push) {
-            const perm = await Notification.requestPermission();
-            if (perm === "granted") {
-              onSetNotifPrefs && onSetNotifPrefs((prev) => ({ ...prev, push: true }));
-              new Notification("Trailhead", { body: "Push notifications enabled! You'll stay in the loop.", icon: "" });
-            }
+            const ok = onSubscribePush ? await onSubscribePush() : false;
+            if (ok) onSetNotifPrefs && onSetNotifPrefs((prev) => ({ ...prev, push: true }));
           } else {
+            if (onUnsubscribePush) await onUnsubscribePush();
             onSetNotifPrefs && onSetNotifPrefs((prev) => ({ ...prev, push: false }));
           }
         }, style: { width: 44, height: 24, borderRadius: 12, background: notifPrefs.push ? T.green : T.charcoal, position: "relative", cursor: "pointer", transition: "background 0.2s", flexShrink: 0, opacity: typeof Notification !== "undefined" && Notification.permission !== "denied" ? 1 : 0.4 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 20, height: 20, borderRadius: "50%", background: T.white, position: "absolute", top: 2, left: notifPrefs.push ? 22 : 2, transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" } })))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginTop: 16, background: T.darkCard, borderRadius: 12, padding: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between" } }, /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, display: "block" } }, "Mute All"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 11, color: T.tertiary } }, "Temporarily silence all notifications")), /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => {
@@ -50376,6 +50383,92 @@ ${suffix}`;
         return null;
       }
     };
+    const subscribeToPush = async () => {
+      const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+      if (!uid) return false;
+      if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+        console.warn("[push] not supported in this browser");
+        return false;
+      }
+      try {
+        const reg = await navigator.serviceWorker.register("/sw.js");
+        await navigator.serviceWorker.ready;
+        const perm = await Notification.requestPermission();
+        if (perm !== "granted") {
+          console.warn("[push] permission not granted:", perm);
+          return false;
+        }
+        let sub = await reg.pushManager.getSubscription();
+        if (!sub) {
+          sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+          });
+        }
+        const json = sub.toJSON();
+        if (!json || !json.endpoint || !json.keys || !json.keys.p256dh || !json.keys.auth) {
+          console.error("[push] subscription shape unexpected", json);
+          return false;
+        }
+        const { error } = await supabase.from("push_subscriptions").upsert({
+          endpoint: json.endpoint,
+          user_id: uid,
+          p256dh: json.keys.p256dh,
+          auth: json.keys.auth,
+          user_agent: navigator.userAgent,
+          last_seen_at: (/* @__PURE__ */ new Date()).toISOString()
+        }, { onConflict: "endpoint" });
+        if (error) {
+          console.error("[push] subscription upsert error", error);
+          return false;
+        }
+        return true;
+      } catch (e) {
+        console.error("[push] subscribe failed", e);
+        return false;
+      }
+    };
+    const unsubscribeFromPush = async () => {
+      const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+      if (typeof window === "undefined" || !("serviceWorker" in navigator)) return false;
+      try {
+        const reg = await navigator.serviceWorker.getRegistration("/sw.js");
+        if (!reg) return true;
+        const sub = await reg.pushManager.getSubscription();
+        if (!sub) return true;
+        const endpoint = sub.endpoint;
+        await sub.unsubscribe();
+        if (uid && endpoint) {
+          await supabase.from("push_subscriptions").delete().eq("endpoint", endpoint).eq("user_id", uid);
+        }
+        return true;
+      } catch (e) {
+        console.error("[push] unsubscribe failed", e);
+        return false;
+      }
+    };
+    (0, import_react4.useEffect)(() => {
+      if (typeof navigator === "undefined" || !navigator.serviceWorker) return;
+      const onMsg = (e) => {
+        const data = e && e.data;
+        if (!data || data.type !== "navigate" || !data.url) return;
+        const m = String(data.url).match(/^\/post\/([\w-]+)$/);
+        if (m) {
+          setProfileStack([]);
+          setShowRecovery(false);
+          setShowCompose(false);
+          setScreen("feed");
+          setPendingPostNav(m[1]);
+        } else {
+          setProfileStack([]);
+          setShowRecovery(false);
+          setShowCompose(false);
+          setScreen("feed");
+        }
+      };
+      navigator.serviceWorker.addEventListener("message", onMsg);
+      return () => navigator.serviceWorker.removeEventListener("message", onMsg);
+    }, []);
     const sendDmInvite = async (recipientHandleOrId, sharedPost, body) => {
       const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
       if (!uid || !recipientHandleOrId) return false;
@@ -51126,10 +51219,31 @@ ${suffix}`;
         }
       );
     }
+    const [iosHintDismissed, setIosHintDismissed] = (0, import_react4.useState)(() => {
+      try {
+        return localStorage.getItem("th-ios-install-dismissed") === "1";
+      } catch (e) {
+        return false;
+      }
+    });
+    const isIosNotInstalled = (() => {
+      if (typeof window === "undefined" || typeof navigator === "undefined") return false;
+      const ua = navigator.userAgent || "";
+      const isIos = /iphone|ipad|ipod/i.test(ua) && !/crios|fxios|edgios/i.test(ua);
+      const isStandalone = window.matchMedia && window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+      return isIos && !isStandalone;
+    })();
+    const dismissIosHint = () => {
+      setIosHintDismissed(true);
+      try {
+        localStorage.setItem("th-ios-install-dismissed", "1");
+      } catch (e) {
+      }
+    };
     if (authState === "app" && !appReady && !isGuest) {
       return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "fixed", inset: 0, height: "100dvh", background: T.darkBg, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", alignItems: "center" } }, /* @__PURE__ */ import_react4.default.createElement("h1", { style: { fontFamily: sans, fontSize: 26, color: T.red, letterSpacing: 5, fontWeight: 700, margin: "0 0 14px" } }, "TRAILHEAD"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 11, color: T.tertiary, letterSpacing: 1.2, fontStyle: "italic", marginBottom: 6 } }, "By"), /* @__PURE__ */ import_react4.default.createElement("img", { src: "/lone-peak-flag.png", alt: "Lone Peak Overland", style: { height: 44, width: "auto", display: "block", marginBottom: 22 } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 14, height: 14, borderRadius: "50%", border: `2px solid ${T.copper}40`, borderTopColor: T.copper, animation: "th-spin 0.7s linear infinite" } }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary, letterSpacing: 1.5 } }, "LOADING")), /* @__PURE__ */ import_react4.default.createElement("style", null, `@keyframes th-spin { to { transform: rotate(360deg); } }`)));
     }
-    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.charcoal, height: "100vh", maxWidth: 430, margin: "0 auto", position: "relative", fontFamily: sans, color: T.white, display: "flex", flexDirection: "column", overflow: "hidden" } }, /* @__PURE__ */ import_react4.default.createElement(
+    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.charcoal, height: "100vh", maxWidth: 430, margin: "0 auto", position: "relative", fontFamily: sans, color: T.white, display: "flex", flexDirection: "column", overflow: "hidden" } }, isIosNotInstalled && !iosHintDismissed && authState === "app" && !isGuest && /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: `${T.copper}20`, borderBottom: `1px solid ${T.copper}40`, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(Bell, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { flex: 1, fontFamily: serif, fontSize: 11, color: T.warmStone, lineHeight: 1.4 } }, "For push notifications, tap ", /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 11, color: T.copper, style: { verticalAlign: "middle", margin: "0 2px" } }), ' in Safari and "Add to Home Screen".'), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: dismissIosHint, style: { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 12, color: T.tertiary }))), /* @__PURE__ */ import_react4.default.createElement(
       TopBar,
       {
         onProfile: openProfile,
@@ -51182,7 +51296,7 @@ ${suffix}`;
     }, onAddRecoveryAlert: addRecoveryAlert, onAddNotification: addNotification, onAddRoute: (r) => {
       setUserRoutes((prev) => [r, ...prev]);
       awardPoints(POINTS.routeLogged, "Route Logged");
-    }, onOpenDM: openDM, onSendDmInvite: sendDmInvite }) : showRecovery ? /* @__PURE__ */ import_react4.default.createElement(RecoveryScreen, { onOpenMap: openMap, onOpenDM: openDM }) : isProfile ? isOtherProfile ? /* @__PURE__ */ import_react4.default.createElement(OtherProfileScreen, { userId: profileStack[1], onBack: goBack, onMessage: (user) => openDM(user), currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, onFollow: requireAuth(followUser), onUnfollow: requireAuth(unfollowUser), fetchFollowCounts }) : /* @__PURE__ */ import_react4.default.createElement(ProfileScreen, { currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, convoyRsvps, followerCount: myFollowerCount, followingCount: myFollowingCount, initialUserName: currentProfile && currentProfile.full_name || supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name || null, initialUserHandle: currentProfile && currentProfile.handle || supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle || null, initialUserBio: currentProfile ? currentProfile.bio : null, initialIsPublic: currentProfile ? currentProfile.is_public : null, onSaveProfile: saveProfile, onViewUser: openUserProfile, onLogout: async () => {
+    }, onOpenDM: openDM, onSendDmInvite: sendDmInvite }) : showRecovery ? /* @__PURE__ */ import_react4.default.createElement(RecoveryScreen, { onOpenMap: openMap, onOpenDM: openDM }) : isProfile ? isOtherProfile ? /* @__PURE__ */ import_react4.default.createElement(OtherProfileScreen, { userId: profileStack[1], onBack: goBack, onMessage: (user) => openDM(user), currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, onFollow: requireAuth(followUser), onUnfollow: requireAuth(unfollowUser), fetchFollowCounts }) : /* @__PURE__ */ import_react4.default.createElement(ProfileScreen, { currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, convoyRsvps, followerCount: myFollowerCount, followingCount: myFollowingCount, onSubscribePush: subscribeToPush, onUnsubscribePush: unsubscribeFromPush, initialUserName: currentProfile && currentProfile.full_name || supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name || null, initialUserHandle: currentProfile && currentProfile.handle || supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle || null, initialUserBio: currentProfile ? currentProfile.bio : null, initialIsPublic: currentProfile ? currentProfile.is_public : null, onSaveProfile: saveProfile, onViewUser: openUserProfile, onLogout: async () => {
       try {
         await supabase.auth.signOut();
       } catch (e) {
