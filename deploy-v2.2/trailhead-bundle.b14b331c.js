@@ -49057,7 +49057,7 @@ ${suffix}`;
         /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 48, height: 48, borderRadius: "50%", background: T.charcoal, display: "flex", alignItems: "center", justifyContent: "center", border: `2px solid ${convo.unread > 0 ? T.copper : T.charcoal}`, overflow: "hidden" } }, convo.avatarUrl ? /* @__PURE__ */ import_react4.default.createElement("img", { src: convo.avatarUrl, alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 18, fontWeight: 700, color: T.white } }, convo.initial))),
         /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 3 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: convo.unread > 0 ? 700 : 500 } }, convo.type === "direct" ? "@" + (convo.user || convo.name) : convo.name), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: convo.unread > 0 ? T.copper : T.tertiary, flexShrink: 0 } }, convo.lastTime)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 12, color: convo.unread > 0 ? T.white : T.tertiary, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, fontWeight: convo.unread > 0 ? 500 : 400 } }, convo.lastMessage), convo.unread > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { minWidth: 20, height: 20, borderRadius: 10, background: T.red, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.white } }, convo.unread))))
       ));
-    }))), confirmingLeave && /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => setConfirmingLeave(null), style: { position: "absolute", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 600, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 } }, /* @__PURE__ */ import_react4.default.createElement("div", { onClick: (e) => e.stopPropagation(), style: { background: T.darkCard, borderRadius: 12, padding: 20, maxWidth: 320, width: "100%", border: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("h3", { style: { fontFamily: sans, fontSize: 15, color: T.white, margin: "0 0 8px", fontWeight: 700, letterSpacing: 0.5 } }, confirmingLeave.type === "group" ? "Leave group?" : "Delete conversation?"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "0 0 16px", lineHeight: 1.5 } }, confirmingLeave.type === "group" ? `You'll be removed from "${confirmingLeave.name}" and stop receiving messages from this group.` : `This conversation will be removed from your inbox. ${confirmingLeave.name} will still see your past messages on their side.`), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setConfirmingLeave(null), style: { flex: 1, padding: "10px 14px", borderRadius: 8, background: T.charcoal, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 12, color: T.tertiary, fontWeight: 600, letterSpacing: 0.5 } }, "Cancel"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: async () => {
+    }))), confirmingLeave && /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => setConfirmingLeave(null), style: { position: "absolute", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 600, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 } }, /* @__PURE__ */ import_react4.default.createElement("div", { onClick: (e) => e.stopPropagation(), style: { background: T.darkCard, borderRadius: 12, padding: 20, maxWidth: 320, width: "100%", border: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("h3", { style: { fontFamily: sans, fontSize: 15, color: T.white, margin: "0 0 8px", fontWeight: 700, letterSpacing: 0.5 } }, confirmingLeave.type === "group" ? "Leave group?" : "Delete conversation?"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "0 0 16px", lineHeight: 1.5 } }, confirmingLeave.type === "group" ? `You'll be removed from "${confirmingLeave.name}" and stop receiving messages from this group.` : `Removes the thread from your inbox. ${confirmingLeave.name} will still see past messages, and the thread will reappear if they message you again.`), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setConfirmingLeave(null), style: { flex: 1, padding: "10px 14px", borderRadius: 8, background: T.charcoal, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 12, color: T.tertiary, fontWeight: 600, letterSpacing: 0.5 } }, "Cancel"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: async () => {
       const target = confirmingLeave;
       setConfirmingLeave(null);
       if (onLeaveConversation) await onLeaveConversation(target.id);
@@ -49503,7 +49503,7 @@ ${suffix}`;
           console.error("[hydrate] notifications fetch failed", e);
         }
         try {
-          const { data: myParts, error: mpErr } = await supabase.from("dm_participants").select("*").eq("user_id", uid);
+          const { data: myParts, error: mpErr } = await supabase.from("dm_participants").select("*").eq("user_id", uid).is("hidden_at", null);
           if (mpErr) console.error("[hydrate] dm_participants self fetch error", mpErr);
           const myConvIds = Array.isArray(myParts) ? myParts.map((p) => p.conversation_id) : [];
           if (myConvIds.length > 0) {
@@ -49917,6 +49917,9 @@ ${suffix}`;
           const existing = prev.find((c) => c.id === row.conversation_id);
           if (!existing) {
             ensureLocalConvoLoaded(row.conversation_id, msg);
+            supabase.from("dm_participants").update({ hidden_at: null }).eq("conversation_id", row.conversation_id).eq("user_id", uid).then(({ error: unhideErr }) => {
+              if (unhideErr) console.error("[dm] unhide error", unhideErr);
+            });
             return prev;
           }
           return prev.map((c) => c.id === row.conversation_id ? {
@@ -50395,9 +50398,15 @@ ${suffix}`;
       const prev = dmConvosRef.current.find((c) => c.id === convId) || null;
       setDmConvos((arr) => arr.filter((c) => c.id !== convId));
       if (activeDmConvIdRef.current === convId) setActiveDmConvId(null);
+      const isGroup = prev && prev.type === "group";
       try {
-        const { error } = await supabase.from("dm_participants").delete().eq("conversation_id", convId).eq("user_id", uid);
-        if (error) throw error;
+        if (isGroup) {
+          const { error } = await supabase.from("dm_participants").delete().eq("conversation_id", convId).eq("user_id", uid);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase.from("dm_participants").update({ hidden_at: (/* @__PURE__ */ new Date()).toISOString() }).eq("conversation_id", convId).eq("user_id", uid);
+          if (error) throw error;
+        }
         return true;
       } catch (e) {
         console.error("[dm] leaveDmConversation failed", e);
