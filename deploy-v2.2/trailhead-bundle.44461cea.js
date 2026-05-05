@@ -46284,11 +46284,10 @@ ${suffix}`;
       }
     ));
   }
-  function BuildsScreen({ onViewUser, userBuilds, onAddBuild, onUpdateBuild, onPostBuildToFeed, onOpenDM, userRoutes, pendingBuildNav, onConsumePendingBuildNav, isGuest, onGuestTap }) {
+  function BuildsScreen({ onViewUser, userBuilds, allBuilds: allBuildsProp, currentUserId, followingIds, onAddBuild, onUpdateBuild, onPostBuildToFeed, onOpenDM, userRoutes, pendingBuildNav, onConsumePendingBuildNav, isGuest, onGuestTap }) {
     const [filter, setFilter] = (0, import_react4.useState)("all");
     const [search, setSearch] = (0, import_react4.useState)("");
     const [detailBuildId, setDetailBuildId] = (0, import_react4.useState)(null);
-    const [externalBuilds, setExternalBuilds] = (0, import_react4.useState)([]);
     const [editingBuild, setEditingBuild] = (0, import_react4.useState)(null);
     const [expandedModKey, setExpandedModKey] = (0, import_react4.useState)(null);
     const [shareMenuOpen, setShareMenuOpen] = (0, import_react4.useState)(false);
@@ -46329,134 +46328,42 @@ ${suffix}`;
         setCarouselIndex(startIdx || 0);
       }
     };
-    const defaultBuilds = [
-      { id: 1, name: "THE HIGHLANDER", owner: "Kyle Morrison", handle: "@KyleLPO", initial: "K", year: 2022, make: "Toyota", model: "Tundra", tags: ["V8 OVERLAND", "CLASS 4 READY"], suspension: 'Icon Stage 3, 2.5" lift', tires: "BFG KO2 35x12.5R17", bumpers: "CBI front & rear", miles: "2,482", elevation: "84K ft", routes: 34, hasCamper: true, camperMake: "Four Wheel Campers", camperModel: "Fleet Flatbed", isMine: true, isFollowing: true, likes: 312 },
-      { id: 2, name: "PROJECT VULCAN", owner: "Overland Expert", handle: "@Overland_Expert", initial: "O", year: 2022, make: "Toyota", model: "Tacoma", tags: ["TACOMA 22", '35" TIRES'], suspension: "Fox 2.5 Factory Race Series", tires: 'Toyo Open Country M/T 35"', bumpers: "Pelfreybilt front bumper", miles: "3,800", elevation: "112K ft", routes: 56, hasCamper: false, isMine: false, isFollowing: true, likes: 540 },
-      { id: 3, name: "DESERT HAWK", owner: "Kyle Morrison", handle: "@KyleLPO", initial: "K", year: 2019, make: "Jeep", model: "Gladiator", tags: ["TRAIL RATED", "EXPO READY"], suspension: 'AEV 3.5" DualSport', tires: 'Falken Wildpeak A/T3W 37"', bumpers: "AEV front & rear", miles: "1,120", elevation: "42K ft", routes: 18, hasCamper: false, isMine: true, isFollowing: true, likes: 189 },
-      { id: 4, name: "IRON MAIDEN", owner: "DesertRat 4x4", handle: "@DesertRat_4x4", initial: "D", year: 2021, make: "Ford", model: "Bronco", tags: ["SASQUATCH", "FULL ARMOR"], suspension: 'Bilstein 5100 Series, 2" lift', tires: 'Nitto Ridge Grappler 37"', bumpers: "ARB Hoopless front", miles: "1,950", elevation: "56K ft", routes: 28, hasCamper: false, isMine: false, isFollowing: true, likes: 273 },
-      { id: 5, name: "GHOST RUNNER", owner: "Sierra Tactical", handle: "@Sierra_Tactical", initial: "S", year: 2023, make: "Lexus", model: "GX 550", tags: ["LUXURY OVERLAND", "AIR SUSPENSION"], suspension: 'Ironman Foam Cell Pro, 2" lift', tires: 'BFG Trail Terrain 33"', bumpers: "RCI Rock Armor", miles: "980", elevation: "38K ft", routes: 12, hasCamper: true, camperMake: "Go Fast Campers", camperModel: "V2", isMine: false, isFollowing: false, likes: 421 },
-      { id: 6, name: "MUD WITCH", owner: "TrailBoss_88", handle: "@TrailBoss_88", initial: "T", year: 2020, make: "Toyota", model: "4Runner TRD Pro", tags: ["CRAWL RIG", "LOCKED"], suspension: "King 2.5 Extended Travel", tires: 'Mickey Thompson Baja Boss 35"', bumpers: "C4 Fabrication Lo-Pro", miles: "4,200", elevation: "132K ft", routes: 72, hasCamper: false, isMine: false, isFollowing: false, likes: 687 },
-      { id: 7, name: "RIDGE REAPER", owner: "Nomad Queen", handle: "@Nomad_Queen", initial: "N", year: 2024, make: "Land Rover", model: "Defender 110", tags: ["EXPEDITION", "ROOF TENT"], suspension: 'Old Man Emu BP-51, 2" lift', tires: 'Cooper Discoverer STT Pro 33"', bumpers: "Terrafirma front winch bumper", miles: "1,640", elevation: "68K ft", routes: 24, hasCamper: true, camperMake: "Alu-Cab", camperModel: "Canopy Camper", isMine: false, isFollowing: false, likes: 358 },
-      { id: 8, name: "BLACK MAMBA", owner: "Peak Finder", handle: "@Peak_Finder", initial: "P", year: 2023, make: "Ram", model: "2500 Power Wagon", tags: ["HEAVY DUTY", "WINCH READY"], suspension: 'Carli Backcountry 2.0, 3" lift', tires: 'Toyo Open Country R/T 37"', bumpers: "Expedition One front & rear", miles: "2,870", elevation: "94K ft", routes: 41, hasCamper: true, camperMake: "Bundutop", camperModel: "Explorer", isMine: false, isFollowing: false, likes: 512 }
-    ];
-    const mappedUserBuilds = (userBuilds || []).map((b, i) => {
+    const defaultBuilds = [];
+    const mappedUserBuilds = (allBuildsProp || []).map((b) => {
+      const isMine = !!(currentUserId && b.userId === currentUserId);
+      const isFollowing = !!(followingIds && followingIds.has && followingIds.has(b.userId));
+      if (!isMine) {
+        return { ...b, isMine, isFollowing, image: b.heroImg || b.image || null };
+      }
       const linked = (userRoutes || []).filter((r) => r.buildId === b.id);
       const totalMi = linked.reduce((acc, r) => acc + (Number(r.distanceMi) || 0), 0);
       const totalElev = linked.reduce((acc, r) => acc + (Number(r.elevGainFt) || 0), 0);
       const fmtMi = totalMi >= 1e3 ? (totalMi / 1e3).toFixed(1) + "K" : Math.round(totalMi).toLocaleString();
       const fmtElev = totalElev >= 1e3 ? (totalElev / 1e3).toFixed(0) + "K ft" : totalElev.toLocaleString() + " ft";
       return {
-        id: 100 + i,
-        rawId: b.id,
-        name: b.name || "UNNAMED BUILD",
-        owner: "Kyle Morrison",
-        handle: "@KyleLPO",
-        initial: "K",
-        year: parseInt(b.year) || 2024,
-        make: b.make || "",
-        model: b.model || "",
-        tags: b.tags || [],
-        suspension: b.buildData && b.buildData.suspension && b.buildData.suspension.value || "",
-        tires: b.buildData && b.buildData.tires && b.buildData.tires.value || "",
-        bumpers: b.buildData && b.buildData.bumpers && b.buildData.bumpers.value || "",
+        ...b,
+        isMine,
+        isFollowing,
         miles: linked.length > 0 ? fmtMi : "0",
         elevation: linked.length > 0 ? fmtElev : "0 ft",
         routes: linked.length,
-        hasCamper: !!(b.camperMake || b.camperModel),
-        camperMake: b.camperMake || "",
-        camperModel: b.camperModel || "",
-        isMine: true,
-        isFollowing: true,
-        likes: 0,
-        image: b.heroImg || null,
-        buildData: b.buildData || null
+        image: b.heroImg || b.image || null
       };
     });
-    const allBuilds = [...defaultBuilds, ...mappedUserBuilds, ...externalBuilds];
+    const allBuilds = [...defaultBuilds, ...mappedUserBuilds];
     (0, import_react4.useEffect)(() => {
       if (!pendingBuildNav) return;
       const { rawId, name } = pendingBuildNav;
-      console.log("[builds] pendingBuildNav", { rawId, name, localCount: allBuilds.length });
       let match = null;
       if (rawId != null) match = allBuilds.find((b) => b.rawId === rawId || b.id === rawId);
       if (!match && name) {
         const lc = String(name).toLowerCase();
         match = allBuilds.find((b) => (b.name || "").toLowerCase() === lc);
       }
-      if (match) {
-        console.log("[builds] local match found", match.id);
-        setDetailBuildId(match.id);
-        onConsumePendingBuildNav && onConsumePendingBuildNav();
-        return;
-      }
-      if (typeof rawId === "string" && rawId.length > 20 && rawId.includes("-")) {
-        console.log("[builds] no local match, fetching by id", rawId);
-        let cancelled = false;
-        (async () => {
-          try {
-            const { data: row, error } = await supabase.from("builds").select("*").eq("id", rawId).maybeSingle();
-            if (cancelled) return;
-            console.log("[builds] external fetch result", { row, error });
-            if (error || !row) {
-              console.error("[builds] external fetch failed", error);
-              onConsumePendingBuildNav && onConsumePendingBuildNav();
-              return;
-            }
-            let prof = null;
-            if (row.user_id) {
-              try {
-                const { data } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").eq("id", row.user_id).maybeSingle();
-                prof = data;
-              } catch (_) {
-              }
-            }
-            const bd = row.build_data || {};
-            const heroImage = row.hero_img || bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url || null;
-            const synthId = "ext_" + row.id;
-            const ownerName = prof && prof.full_name || prof && prof.handle || "User";
-            const ownerHandle = prof && prof.handle ? "@" + prof.handle : "";
-            const synth = {
-              id: synthId,
-              rawId: row.id,
-              name: (row.name || `${row.year || ""} ${row.make || ""} ${row.model || ""}`.trim() || "UNNAMED BUILD").toUpperCase(),
-              owner: ownerName,
-              handle: ownerHandle,
-              initial: (ownerName || "U").charAt(0).toUpperCase(),
-              year: row.year,
-              make: row.make || "",
-              model: row.model || "",
-              tags: [row.trim ? row.trim.toUpperCase() : (row.make || "").toUpperCase(), "BUILD"].filter(Boolean),
-              suspension: bd.suspension && bd.suspension.value || "",
-              tires: bd.tires && bd.tires.value || "",
-              bumpers: bd.bumpers && bd.bumpers.value || "",
-              miles: "0",
-              elevation: "0 ft",
-              routes: 0,
-              hasCamper: !!bd.hasCamper,
-              camperMake: bd.camperMake || "",
-              camperModel: bd.camperModel || "",
-              isMine: false,
-              isFollowing: false,
-              likes: 0,
-              image: heroImage,
-              buildData: bd,
-              avatarUrl: prof && prof.avatar_url || null
-            };
-            console.log("[builds] adding external build", synthId, synth);
-            setExternalBuilds((prev) => prev.some((b) => b.id === synthId) ? prev : [...prev, synth]);
-            setDetailBuildId(synthId);
-          } catch (e) {
-            console.error("[builds] external fetch threw", e);
-          } finally {
-            onConsumePendingBuildNav && onConsumePendingBuildNav();
-          }
-        })();
-        return () => {
-          cancelled = true;
-        };
-      }
+      if (match) setDetailBuildId(match.id);
+      else console.warn("[builds] pendingBuildNav not found", { rawId, name, localCount: allBuilds.length });
       onConsumePendingBuildNav && onConsumePendingBuildNav();
-    }, [pendingBuildNav]);
+    }, [pendingBuildNav, allBuildsProp]);
     const filters = [
       { key: "all", label: "ALL BUILDS", icon: Globe },
       { key: "mine", label: "MY BUILDS", icon: Wrench },
@@ -47701,7 +47608,7 @@ ${suffix}`;
       filterFn: (p) => !!(currentUserId && p.userId === currentUserId && p.type !== "CONVOYS")
     }));
   }
-  function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, followingIds, onFollow, onUnfollow, fetchFollowCounts, renderFeedScopedTo, currentProfile, convoyRsvps, onViewBuild }) {
+  function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, followingIds, onFollow, onUnfollow, fetchFollowCounts, renderFeedScopedTo, currentProfile, convoyRsvps, onViewBuild, allBuilds }) {
     const [activeTab, setActiveTab] = (0, import_react4.useState)("builds");
     const [tappedBadge, setTappedBadge] = (0, import_react4.useState)(null);
     const [dbProfile, setDbProfile] = (0, import_react4.useState)(null);
@@ -47782,31 +47689,12 @@ ${suffix}`;
             activity: []
           });
           try {
-            const [buildsRes, postsRes, rsvpsRes] = await Promise.all([
-              supabase.from("builds").select("*").eq("user_id", data.id).order("created_at", { ascending: false }),
+            const [postsRes, rsvpsRes] = await Promise.all([
               supabase.from("posts").select("*").eq("user_id", data.id).order("created_at", { ascending: false }).limit(30),
               supabase.from("convoy_rsvps").select("post_id, status, posts(id, title, data, user_id, created_at)").eq("user_id", data.id).in("status", ["going", "maybe"])
             ]);
-            if (buildsRes.error) console.error("[OtherProfile] builds error", buildsRes.error);
             if (postsRes.error) console.error("[OtherProfile] posts error", postsRes.error);
             if (rsvpsRes.error) console.error("[OtherProfile] rsvps error", rsvpsRes.error);
-            const builds = (buildsRes.data || []).map((b) => {
-              const bd = b.build_data || {};
-              const heroImg = b.hero_img || bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url || null;
-              const displayName = (b.name || `${b.year || ""} ${b.make || ""} ${b.model || ""}`.trim() || "UNNAMED BUILD").toUpperCase();
-              const fallbackTag = b.trim ? b.trim.toUpperCase() : (b.make || "").toUpperCase();
-              const tags = Array.isArray(bd.tags) && bd.tags.length > 0 ? bd.tags : [fallbackTag, "BUILD"].filter(Boolean);
-              return {
-                id: b.id,
-                name: displayName,
-                vehicle: `${b.year || ""} ${b.make || ""} ${b.model || ""}`.trim(),
-                tags,
-                miles: "0",
-                elevation: "0 ft",
-                routes: 0,
-                heroImg
-              };
-            });
             let userPostsAsFeed = (postsRes.data || []).map((p2) => dbRowToFeedItem(p2, data)).filter(Boolean);
             const postIds = userPostsAsFeed.map((p2) => p2.id);
             if (postIds.length > 0) {
@@ -47838,7 +47726,7 @@ ${suffix}`;
               ...userPostsAsFeed.filter((p2) => p2.type === "CONVOYS"),
               ...rsvpedConvoys
             ];
-            setDbProfile((prev) => prev ? { ...prev, builds, activityItems, tripItems } : prev);
+            setDbProfile((prev) => prev ? { ...prev, activityItems, tripItems } : prev);
           } catch (e) {
             console.error("[OtherProfile] sub-data fetch failed", e);
           }
@@ -47908,7 +47796,7 @@ ${suffix}`;
       color: !canFollow ? T.tertiary : isFollowing ? T.green : T.white,
       opacity: canFollow ? 1 : 0.5,
       ...isFollowing ? { border: `1px solid ${T.green}40` } : {}
-    } }, isFollowing ? /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement(UserCheck, { size: 14 }), " FOLLOWING") : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement(UserPlus, { size: 14 }), " FOLLOW")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => onMessage && onMessage(userId), style: { display: "inline-flex", alignItems: "center", gap: 6, padding: "10px 24px", borderRadius: 8, cursor: "pointer", fontFamily: sans, fontSize: 12, fontWeight: 600, letterSpacing: 1, background: T.darkCard, border: `1px solid ${T.copper}40`, color: T.copper, transition: "all 0.2s" } }, /* @__PURE__ */ import_react4.default.createElement(Mail, { size: 14 }), " MESSAGE")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", justifyContent: "center", gap: 24, marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 18, color: T.white, fontWeight: 700, display: "block" } }, (liveCounts ? liveCounts.followers : p.followers).toLocaleString()), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1 } }, "FOLLOWERS")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 1, background: T.charcoal } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 18, color: T.white, fontWeight: 700, display: "block" } }, (liveCounts ? liveCounts.following : p.following).toLocaleString()), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1 } }, "FOLLOWING")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 1, background: T.charcoal } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 18, color: T.copper, fontWeight: 700, display: "block" } }, p.points.toLocaleString()), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1 } }, "POINTS")))), isPrivateAndNotFollowing ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "40px 16px", textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Lock, { size: 40, color: T.tertiary, strokeWidth: 1, style: { marginBottom: 12, opacity: 0.5 } }), /* @__PURE__ */ import_react4.default.createElement("h3", { style: { fontFamily: sans, fontSize: 16, color: T.white, margin: "0 0 6px" } }, "This Account is Private"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary, margin: 0, lineHeight: 1.6, maxWidth: 280, marginLeft: "auto", marginRight: "auto" } }, "Follow this explorer to see their builds, trips, and activity on Trailhead.")) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", borderBottom: `1px solid ${T.charcoal}`, margin: "0 16px", marginBottom: 16 } }, tabs.map((t) => /* @__PURE__ */ import_react4.default.createElement("button", { key: t, onClick: () => setActiveTab(t), style: { flex: 1, background: "none", border: "none", cursor: "pointer", padding: "12px 0 10px", borderBottom: activeTab === t ? `2px solid ${T.red}` : "2px solid transparent" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: activeTab === t ? T.white : T.tertiary, letterSpacing: 1.5, fontWeight: 600 } }, t.toUpperCase())))), activeTab === "builds" && p.builds.map((b, i) => /* @__PURE__ */ import_react4.default.createElement("div", { key: b.id || i, onClick: () => onViewBuild && onViewBuild({ rawId: b.id || null, name: b.name }), style: { ...cardStyle, margin: "0 16px 12px", overflow: "hidden", cursor: onViewBuild ? "pointer" : "default" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { height: 160, background: b.heroImg ? `#000` : `linear-gradient(135deg, ${T.charcoal} 0%, ${T.tertiary}30 100%)`, position: "relative", display: "flex", flexDirection: "column", justifyContent: "flex-end", overflow: "hidden" } }, b.heroImg ? /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("img", { src: b.heroImg, alt: "", style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, background: "linear-gradient(transparent 20%, rgba(0,0,0,0.75))", pointerEvents: "none" } })) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Wrench, { size: 60, color: T.tertiary, strokeWidth: 0.2, style: { opacity: 0.08 } })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", padding: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 6 } }, b.tags.map((tag, j) => /* @__PURE__ */ import_react4.default.createElement("span", { key: j, style: { fontFamily: sans, fontSize: 9, color: T.warmBg, background: "#3D3D3A", padding: "3px 8px", borderRadius: 4, letterSpacing: 1 } }, tag))), /* @__PURE__ */ import_react4.default.createElement("h3", { style: { fontFamily: sans, fontSize: 28, color: T.warmBg, margin: 0, fontWeight: 700, letterSpacing: 1 } }, b.name), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary } }, b.vehicle))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", borderTop: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: 12, textAlign: "center", borderRight: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block" } }, "MILES"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 } }, b.miles)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: 12, textAlign: "center", borderRight: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block" } }, "ELEVATION"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 } }, b.elevation)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: 12, textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block" } }, "ROUTES"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 } }, b.routes))))), activeTab === "trips" && renderFeedScopedTo && renderFeedScopedTo({
+    } }, isFollowing ? /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement(UserCheck, { size: 14 }), " FOLLOWING") : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement(UserPlus, { size: 14 }), " FOLLOW")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => onMessage && onMessage(userId), style: { display: "inline-flex", alignItems: "center", gap: 6, padding: "10px 24px", borderRadius: 8, cursor: "pointer", fontFamily: sans, fontSize: 12, fontWeight: 600, letterSpacing: 1, background: T.darkCard, border: `1px solid ${T.copper}40`, color: T.copper, transition: "all 0.2s" } }, /* @__PURE__ */ import_react4.default.createElement(Mail, { size: 14 }), " MESSAGE")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", justifyContent: "center", gap: 24, marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 18, color: T.white, fontWeight: 700, display: "block" } }, (liveCounts ? liveCounts.followers : p.followers).toLocaleString()), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1 } }, "FOLLOWERS")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 1, background: T.charcoal } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 18, color: T.white, fontWeight: 700, display: "block" } }, (liveCounts ? liveCounts.following : p.following).toLocaleString()), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1 } }, "FOLLOWING")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 1, background: T.charcoal } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 18, color: T.copper, fontWeight: 700, display: "block" } }, p.points.toLocaleString()), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1 } }, "POINTS")))), isPrivateAndNotFollowing ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "40px 16px", textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Lock, { size: 40, color: T.tertiary, strokeWidth: 1, style: { marginBottom: 12, opacity: 0.5 } }), /* @__PURE__ */ import_react4.default.createElement("h3", { style: { fontFamily: sans, fontSize: 16, color: T.white, margin: "0 0 6px" } }, "This Account is Private"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary, margin: 0, lineHeight: 1.6, maxWidth: 280, marginLeft: "auto", marginRight: "auto" } }, "Follow this explorer to see their builds, trips, and activity on Trailhead.")) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", borderBottom: `1px solid ${T.charcoal}`, margin: "0 16px", marginBottom: 16 } }, tabs.map((t) => /* @__PURE__ */ import_react4.default.createElement("button", { key: t, onClick: () => setActiveTab(t), style: { flex: 1, background: "none", border: "none", cursor: "pointer", padding: "12px 0 10px", borderBottom: activeTab === t ? `2px solid ${T.red}` : "2px solid transparent" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: activeTab === t ? T.white : T.tertiary, letterSpacing: 1.5, fontWeight: 600 } }, t.toUpperCase())))), activeTab === "builds" && (allBuilds || []).filter((b) => b.userId === resolvedTargetId).map((b, i) => /* @__PURE__ */ import_react4.default.createElement("div", { key: b.id || i, onClick: () => onViewBuild && onViewBuild({ rawId: b.id || null, name: b.name }), style: { ...cardStyle, margin: "0 16px 12px", overflow: "hidden", cursor: onViewBuild ? "pointer" : "default" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { height: 160, background: b.heroImg ? `#000` : `linear-gradient(135deg, ${T.charcoal} 0%, ${T.tertiary}30 100%)`, position: "relative", display: "flex", flexDirection: "column", justifyContent: "flex-end", overflow: "hidden" } }, b.heroImg ? /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("img", { src: b.heroImg, alt: "", style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, background: "linear-gradient(transparent 20%, rgba(0,0,0,0.75))", pointerEvents: "none" } })) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Wrench, { size: 60, color: T.tertiary, strokeWidth: 0.2, style: { opacity: 0.08 } })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", padding: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 6 } }, b.tags.map((tag, j) => /* @__PURE__ */ import_react4.default.createElement("span", { key: j, style: { fontFamily: sans, fontSize: 9, color: T.warmBg, background: "#3D3D3A", padding: "3px 8px", borderRadius: 4, letterSpacing: 1 } }, tag))), /* @__PURE__ */ import_react4.default.createElement("h3", { style: { fontFamily: sans, fontSize: 28, color: T.warmBg, margin: 0, fontWeight: 700, letterSpacing: 1 } }, b.name), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary } }, b.vehicle))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", borderTop: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: 12, textAlign: "center", borderRight: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block" } }, "MILES"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 } }, b.miles)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: 12, textAlign: "center", borderRight: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block" } }, "ELEVATION"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 } }, b.elevation)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: 12, textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block" } }, "ROUTES"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 } }, b.routes))))), activeTab === "trips" && renderFeedScopedTo && renderFeedScopedTo({
       items: p.tripItems || []
     }), activeTab === "activity" && renderFeedScopedTo && renderFeedScopedTo({
       items: p.activityItems || []
@@ -49355,14 +49243,17 @@ ${suffix}`;
     const bd = row.build_data || {};
     const displayName = (row.name || `${row.year || ""} ${row.make || ""} ${row.model || ""}`.trim() || "UNNAMED BUILD").toUpperCase();
     const profileHandle = profile && profile.handle ? "@" + profile.handle : "";
-    const profileName = profile && profile.full_name || "You";
+    const profileName = profile && profile.full_name || "User";
     return {
       id: row.id,
       rawId: row.id,
+      userId: row.user_id,
+      // for filter-by-owner in profile views
       name: displayName,
       owner: profileName,
       handle: profileHandle,
       initial: (profileName || "U").charAt(0).toUpperCase(),
+      avatarUrl: profile && profile.avatar_url || null,
       year: row.year,
       make: row.make || "",
       model: row.model || "",
@@ -49376,8 +49267,11 @@ ${suffix}`;
       hasCamper: !!bd.hasCamper,
       camperMake: bd.camperMake || "",
       camperModel: bd.camperModel || "",
-      isMine: true,
-      isFollowing: true,
+      // isMine / isFollowing now set per-viewer in the consuming screen
+      // (via filter on userId), since the same build row is rendered for
+      // multiple viewers from the unified allBuilds source.
+      isMine: false,
+      isFollowing: false,
       likes: 0,
       heroImg: row.hero_img,
       image: row.hero_img,
@@ -49657,10 +49551,25 @@ ${suffix}`;
         if (profErr) console.error("[hydrate] profiles fetch error", profErr);
         console.log("[hydrate] profile row", profileRow);
         if (profileRow) setCurrentProfile(profileRow);
-        const { data: buildRows, error: buildErr } = await supabase.from("builds").select("*").eq("user_id", uid).order("created_at", { ascending: false });
+        const { data: buildRows, error: buildErr } = await supabase.from("builds").select("*").order("created_at", { ascending: false });
         if (buildErr) console.error("[hydrate] builds fetch error", buildErr);
         if (Array.isArray(buildRows)) {
-          setUserBuilds(buildRows.map((r) => dbRowToLocalBuild(r, profileRow)));
+          const ownerIds = Array.from(new Set(buildRows.map((b) => b.user_id).filter(Boolean)));
+          const profByUid = {};
+          if (profileRow) profByUid[uid] = profileRow;
+          const otherOwnerIds = ownerIds.filter((id) => id !== uid);
+          if (otherOwnerIds.length > 0) {
+            try {
+              const { data: ownerProfs } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").in("id", otherOwnerIds);
+              if (Array.isArray(ownerProfs)) ownerProfs.forEach((p) => {
+                profByUid[p.id] = p;
+              });
+            } catch (e) {
+            }
+          }
+          const all = buildRows.map((r) => dbRowToLocalBuild(r, profByUid[r.user_id] || null)).filter(Boolean);
+          setAllBuilds(all);
+          setUserBuilds(all.filter((b) => b.userId === uid));
         }
         if (profileRow && profileRow.avatar_url) {
           console.log("[hydrate] setting profilePic from avatar_url", profileRow.avatar_url);
@@ -49956,6 +49865,7 @@ ${suffix}`;
         if (event === "SIGNED_OUT") {
           setCurrentProfile(null);
           setUserBuilds([]);
+          setAllBuilds([]);
           setFeedItems([]);
           setFollowingIds(/* @__PURE__ */ new Set());
           setMyFollowerCount(0);
@@ -50034,6 +49944,37 @@ ${suffix}`;
         if (!row || !row.post_id) return;
         if (row.user_id === uid) return;
         setFeedItems((prev) => prev.map((p) => p.id === row.post_id ? { ...p, likes: Math.max((p.likes || 0) - 1, 0) } : p));
+      }).on("postgres_changes", { event: "INSERT", schema: "public", table: "builds" }, async (payload) => {
+        const row = payload.new;
+        if (!row || !row.id) return;
+        if (row.user_id === uid) return;
+        let prof = null;
+        try {
+          const { data } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").eq("id", row.user_id).single();
+          prof = data;
+        } catch (e) {
+        }
+        const local = dbRowToLocalBuild(row, prof);
+        if (local) {
+          setAllBuilds((prev) => prev.some((b) => b.id === local.id) ? prev : [local, ...prev]);
+        }
+      }).on("postgres_changes", { event: "UPDATE", schema: "public", table: "builds" }, async (payload) => {
+        const row = payload.new;
+        if (!row || !row.id) return;
+        if (row.user_id === uid) return;
+        let prof = null;
+        try {
+          const { data } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").eq("id", row.user_id).single();
+          prof = data;
+        } catch (e) {
+        }
+        const local = dbRowToLocalBuild(row, prof);
+        if (local) setAllBuilds((prev) => prev.map((b) => b.id === local.id ? local : b));
+      }).on("postgres_changes", { event: "DELETE", schema: "public", table: "builds" }, (payload) => {
+        const row = payload.old;
+        if (!row || !row.id) return;
+        if (row.user_id === uid) return;
+        setAllBuilds((prev) => prev.filter((b) => b.id !== row.id));
       }).on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles" }, (payload) => {
         const row = payload.new;
         if (!row || !row.id) return;
@@ -50268,6 +50209,7 @@ ${suffix}`;
     const [savedRoutes, setSavedRoutes] = (0, import_react4.useState)([]);
     const [activeNavRoute, setActiveNavRoute] = (0, import_react4.useState)(null);
     const [userBuilds, setUserBuilds] = (0, import_react4.useState)([]);
+    const [allBuilds, setAllBuilds] = (0, import_react4.useState)([]);
     const myBuildsForLink = (userBuilds || []).map((b) => ({ id: b.id, name: b.name || `${b.year} ${b.make} ${b.model}`, year: b.year, make: b.make, model: b.model }));
     const [profilePic, setProfilePic] = (0, import_react4.useState)(null);
     const handleSetProfilePic = async (input) => {
@@ -51154,6 +51096,7 @@ ${suffix}`;
         };
       }
       setUserBuilds((prev) => [newBuild, ...prev]);
+      setAllBuilds((prev) => [newBuild, ...prev]);
       if (data.shareToFeed) {
         const feedPost = {
           id: "fb_" + Date.now(),
@@ -51190,7 +51133,7 @@ ${suffix}`;
         } catch (e) {
         }
       }
-      setUserBuilds((prev) => prev.map((b) => b.id === buildId ? {
+      const patch = (b) => b.id === buildId ? {
         ...b,
         name: displayName.toUpperCase(),
         year: parseInt(data.year) || b.year,
@@ -51198,11 +51141,14 @@ ${suffix}`;
         model: data.model || b.model,
         tags: [data.trim ? data.trim.toUpperCase() : (data.make || "").toUpperCase(), "UPDATED"],
         heroImg,
+        image: heroImg,
         buildData: data,
         hasCamper: data.hasCamper,
         camperMake: data.camperMake || "",
         camperModel: data.camperModel || ""
-      } : b));
+      } : b;
+      setUserBuilds((prev) => prev.map(patch));
+      setAllBuilds((prev) => prev.map(patch));
     };
     const deleteBuild = async (buildId) => {
       const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
@@ -51214,6 +51160,7 @@ ${suffix}`;
         }
       }
       setUserBuilds((prev) => prev.filter((b) => b.id !== buildId));
+      setAllBuilds((prev) => prev.filter((b) => b.id !== buildId));
       setFeedItems((prev) => prev.filter((p) => p.buildId !== buildId && p.buildRawId !== buildId));
     };
     const addPost = async (newPost) => {
@@ -51621,7 +51568,7 @@ ${suffix}`;
     }, onAddRecoveryAlert: addRecoveryAlert, onAddNotification: addNotification, onAddRoute: (r) => {
       setUserRoutes((prev) => [r, ...prev]);
       awardPoints(POINTS.routeLogged, "Route Logged");
-    }, onOpenDM: openDM, onSendDmInvite: sendDmInvite }) : showRecovery ? /* @__PURE__ */ import_react4.default.createElement(RecoveryScreen, { onOpenMap: openMap, onOpenDM: openDM }) : isProfile ? isOtherProfile ? /* @__PURE__ */ import_react4.default.createElement(OtherProfileScreen, { userId: profileStack[1], onBack: goBack, onMessage: (user) => openDM(user), currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, onFollow: requireAuth(followUser), onUnfollow: requireAuth(unfollowUser), fetchFollowCounts, renderFeedScopedTo, onViewBuild: handleViewBuild }) : /* @__PURE__ */ import_react4.default.createElement(ProfileScreen, { currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, convoyRsvps, followerCount: myFollowerCount, followingCount: myFollowingCount, onSubscribePush: subscribeToPush, onUnsubscribePush: unsubscribeFromPush, renderFeedScopedTo, onViewBuild: handleViewBuild, initialUserName: currentProfile && currentProfile.full_name || supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name || null, initialUserHandle: currentProfile && currentProfile.handle || supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle || null, initialUserBio: currentProfile ? currentProfile.bio : null, initialIsPublic: currentProfile ? currentProfile.is_public : null, onSaveProfile: saveProfile, onViewUser: openUserProfile, onLogout: async () => {
+    }, onOpenDM: openDM, onSendDmInvite: sendDmInvite }) : showRecovery ? /* @__PURE__ */ import_react4.default.createElement(RecoveryScreen, { onOpenMap: openMap, onOpenDM: openDM }) : isProfile ? isOtherProfile ? /* @__PURE__ */ import_react4.default.createElement(OtherProfileScreen, { userId: profileStack[1], onBack: goBack, onMessage: (user) => openDM(user), currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, onFollow: requireAuth(followUser), onUnfollow: requireAuth(unfollowUser), fetchFollowCounts, renderFeedScopedTo, onViewBuild: handleViewBuild, allBuilds }) : /* @__PURE__ */ import_react4.default.createElement(ProfileScreen, { currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, convoyRsvps, followerCount: myFollowerCount, followingCount: myFollowingCount, onSubscribePush: subscribeToPush, onUnsubscribePush: unsubscribeFromPush, renderFeedScopedTo, onViewBuild: handleViewBuild, initialUserName: currentProfile && currentProfile.full_name || supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name || null, initialUserHandle: currentProfile && currentProfile.handle || supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle || null, initialUserBio: currentProfile ? currentProfile.bio : null, initialIsPublic: currentProfile ? currentProfile.is_public : null, onSaveProfile: saveProfile, onViewUser: openUserProfile, onLogout: async () => {
       try {
         await supabase.auth.signOut();
       } catch (e) {
@@ -51640,7 +51587,7 @@ ${suffix}`;
     }, onGoToPost: (id) => {
       setProfileStack([]);
       setScreen("feed");
-    }, myPoints: myTotalPoints }) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, isGuest && /* @__PURE__ */ import_react4.default.createElement(GuestBanner, { onSignIn: () => setShowGuestPrompt(true) }), screen === "feed" && renderFeedScopedTo({ hideFilters: false }), screen === "forum" && /* @__PURE__ */ import_react4.default.createElement(ForumScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), pendingThread, onPendingHandled: () => setPendingThread(null), onAddNotification: requireAuth(addNotification), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onAddFeedPost: requireAuth((post2) => addPost(post2)), userThreads: forumUserThreads, setUserThreads: requireAuth(setForumUserThreads), userReplies: forumUserReplies, setUserReplies: requireAuth(setForumUserReplies), likedForumItems: forumLikedItems, setLikedForumItems: requireAuth(setForumLikedItems), forumLikeCounts, setForumLikeCounts: requireAuth(setForumLikeCounts), forumViewCounts, setForumViewCounts, onAwardPoints: awardPoints }), screen === "routes" && /* @__PURE__ */ import_react4.default.createElement(RoutesScreen, { userBuilds: myBuildsForLink, onRecordRoute: requireAuth(() => setShowRecorder(true)), onManualEntry: requireAuth(() => setShowManualRoute(true)), userRoutes, onUpdateRoute: requireAuth((routeId, updates) => setUserRoutes((prev) => prev.map((r) => r.id === routeId ? { ...r, ...updates } : r))), savedRoutes, onSaveRoute: requireAuth((route) => setSavedRoutes((prev) => prev.some((r) => r.id === route.id || r.name === route.name) ? prev : [route, ...prev])), onUnsaveRoute: requireAuth((routeId) => setSavedRoutes((prev) => prev.filter((r) => r.id !== routeId && r.name !== routeId))), onOpenDM: (user, msg, sharedPost) => openDM(user, msg, sharedPost), onAddFeedPost: requireAuth((post2) => addPost(post2)), onStartNav: (route) => setActiveNavRoute(route) }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onUpdateBuild: requireAuth(updateBuild), onPostBuildToFeed: requireAuth((b) => {
+    }, myPoints: myTotalPoints }) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, isGuest && /* @__PURE__ */ import_react4.default.createElement(GuestBanner, { onSignIn: () => setShowGuestPrompt(true) }), screen === "feed" && renderFeedScopedTo({ hideFilters: false }), screen === "forum" && /* @__PURE__ */ import_react4.default.createElement(ForumScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), pendingThread, onPendingHandled: () => setPendingThread(null), onAddNotification: requireAuth(addNotification), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onAddFeedPost: requireAuth((post2) => addPost(post2)), userThreads: forumUserThreads, setUserThreads: requireAuth(setForumUserThreads), userReplies: forumUserReplies, setUserReplies: requireAuth(setForumUserReplies), likedForumItems: forumLikedItems, setLikedForumItems: requireAuth(setForumLikedItems), forumLikeCounts, setForumLikeCounts: requireAuth(setForumLikeCounts), forumViewCounts, setForumViewCounts, onAwardPoints: awardPoints }), screen === "routes" && /* @__PURE__ */ import_react4.default.createElement(RoutesScreen, { userBuilds: myBuildsForLink, onRecordRoute: requireAuth(() => setShowRecorder(true)), onManualEntry: requireAuth(() => setShowManualRoute(true)), userRoutes, onUpdateRoute: requireAuth((routeId, updates) => setUserRoutes((prev) => prev.map((r) => r.id === routeId ? { ...r, ...updates } : r))), savedRoutes, onSaveRoute: requireAuth((route) => setSavedRoutes((prev) => prev.some((r) => r.id === route.id || r.name === route.name) ? prev : [route, ...prev])), onUnsaveRoute: requireAuth((routeId) => setSavedRoutes((prev) => prev.filter((r) => r.id !== routeId && r.name !== routeId))), onOpenDM: (user, msg, sharedPost) => openDM(user, msg, sharedPost), onAddFeedPost: requireAuth((post2) => addPost(post2)), onStartNav: (route) => setActiveNavRoute(route) }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onUpdateBuild: requireAuth(updateBuild), onPostBuildToFeed: requireAuth((b) => {
       const bd = b.buildData;
       const heroImg = b.image || bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url || null;
       const meName = currentProfile && currentProfile.full_name || "You";
