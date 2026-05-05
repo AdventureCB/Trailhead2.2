@@ -22,6 +22,13 @@ cat > ${DEPLOY_DIR}/index.html << HTMLEOF
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Trailhead</title>
+<!-- PWA + iOS install support so Add-to-Home-Screen works (required for iOS web push). -->
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#BD472A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Trailhead">
+<link rel="apple-touch-icon" href="/lone-peak-flag.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@400;600;700&display=swap" rel="stylesheet">
 <style>

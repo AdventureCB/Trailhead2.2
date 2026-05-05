@@ -1,4 +1,1 @@
-import React from "react";
-import { createRoot } from "react-dom/client";
-import App from "./trailhead-v1.jsx";
-createRoot(document.getElementById("root")).render(React.createElement(App));
+import Trailhead from "./trailhead-v1.jsx"; import React from "react"; import { createRoot } from "react-dom/client"; const root = createRoot(document.getElementById("root")); root.render(React.createElement(Trailhead));

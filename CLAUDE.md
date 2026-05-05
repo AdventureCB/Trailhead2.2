@@ -29,16 +29,35 @@ Live at: Deployed on Vercel via GitHub (https://github.com/AdventureCB/Trailhead
 | `post_likes` | Like join table | `post_id` → `posts(id)` CASCADE, `user_id` → `auth.users(id)` CASCADE |
 | `post_comments` | Comments on posts | `post_id` → `posts(id)` CASCADE, `user_id` → `auth.users(id)` CASCADE |
 | `post_comment_likes` | Likes on comments | `comment_id` → `post_comments(id)` CASCADE, `user_id` → `auth.users(id)` CASCADE |
-| `notifications` | Bell notifications (like, comment, mention, reply, follow) | `user_id` → `auth.users(id)` CASCADE, `actor_id` → `auth.users(id)` SET NULL |
+| `notifications` | Bell notifications (like, comment, mention, reply, follow, rsvp) | `user_id` → `auth.users(id)` CASCADE, `actor_id` → `auth.users(id)` SET NULL |
 | `builds` | Vehicle builds | `user_id` → `auth.users(id)` CASCADE |
+| `follows` | Follow graph (composite PK on follower_id+following_id) | `follower_id`, `following_id` → `auth.users(id)` CASCADE |
+| `convoy_rsvps` | RSVPs to CONVOYS posts (status: going/maybe/declined) | `post_id` → `posts(id)` CASCADE, `user_id` → `auth.users(id)` CASCADE; composite PK |
+| `dm_conversations` | Direct + group DMs. `type ∈ {direct, group}`. `convoy_post_id` links a group to a convoy post (auto-created when first RSVPs going) | `created_by` → `auth.users(id)` SET NULL; `convoy_post_id` → `posts(id)` SET NULL; UNIQUE(convoy_post_id) for group |
+| `dm_participants` | Membership join. `last_read_at` for unread counts; `hidden_at` for soft-delete (direct convos reappear on next inbound message) | composite PK on conv_id+user_id |
+| `dm_messages` | DM messages. `body` text + `payload` jsonb (photos, sharedPost, convoy_invite) | `conversation_id` CASCADE, `sender_id` CASCADE |
+| `push_subscriptions` | Web Push endpoints, one row per device. PK is the endpoint URL | `user_id` → `auth.users(id)` CASCADE |
 
 **Row Level Security (RLS):** Enabled on all tables. Public posts readable by anyone, mutations restricted to authenticated owner.
 
-**Realtime:** Enabled on `posts`, `post_likes`, `post_comments`, `notifications`. The app subscribes to two channels:
-- `notifs_{uid}` — filtered INSERT on notifications for the current user
-- `feed_realtime_{uid}` — INSERT on posts, post_comments; INSERT/DELETE on post_likes (unfiltered, skips own user_id to avoid double-counting optimistic updates)
+**`is_dm_participant(conv_id, uid)` SECURITY DEFINER function** — used by all `dm_*` policies to avoid recursion when a participant policy needs to self-reference dm_participants. Required because Postgres RLS would infinitely recurse otherwise.
 
-**Storage:** Supabase Storage used for profile avatars and post photos. Uploads go through the client SDK with public URLs.
+**Realtime:** Publication includes `posts`, `post_likes`, `post_comments`, `post_comment_likes`, `notifications`, `profiles`, `follows`, `convoy_rsvps`, `dm_conversations`, `dm_participants`, `dm_messages`. REPLICA IDENTITY FULL on `posts`, `post_comments`, `post_likes`, `post_comment_likes`, `follows`, `convoy_rsvps`, `dm_*` (so DELETE payloads carry user_id for self-echo skipping). The app subscribes to two channels:
+- `notifs_{uid}` — filtered INSERT on notifications for the current user
+- `feed_realtime_{uid}` — broad listener for posts (INSERT/UPDATE/DELETE), post_comments (INSERT/DELETE), post_likes (INSERT/DELETE), post_comment_likes (INSERT/DELETE), profiles (UPDATE — propagates name/avatar changes to existing posts/comments), follows (INSERT/DELETE — own follower count), convoy_rsvps (INSERT/UPDATE/DELETE), dm_messages (INSERT — recipient un-hides hidden direct convos), dm_participants (INSERT/DELETE — keeps participant lists live)
+
+**Storage buckets:** `avatars` (profile pics), `post-photos` (feed photos), `dm-attachments` (DM photo messages). All public-read; URLs are unguessable uuids and the message body containing them is RLS-protected.
+
+**DB triggers (push notifications):**
+- `notifications_send_push` AFTER INSERT on `notifications` → calls `notify_push_on_notification_insert()` which uses `net.http_post` (pg_net extension) to POST the row to the `send-push` Edge Function
+- `dm_messages_send_push` AFTER INSERT on `dm_messages` → same pattern; Edge Function looks up convo participants and pushes to all but the sender
+- `dm_messages_bump_conv` AFTER INSERT on `dm_messages` → updates `dm_conversations.updated_at` for inbox sort
+
+**Web Push:**
+- VAPID public key embedded in `trailhead-v1.jsx` (`VAPID_PUBLIC_KEY` const at top); private key stored ONLY as Supabase secret (`VAPID_PRIVATE_KEY`)
+- Service worker at `deploy-v2.2/sw.js` handles `push` + `notificationclick` events; sends `{ type: "navigate", url }` postMessages back to the SPA for deep-linking
+- Edge Function source: `supabase/functions/send-push/index.ts` (Deno, uses `npm:web-push@3.6.7`). Deploy via `supabase functions deploy send-push --no-verify-jwt`
+- iOS push only works for installed PWAs — manifest at `deploy-v2.2/manifest.json` + iOS meta tags in build.sh's index.html template; banner hint in app prompts iOS Safari users to "Add to Home Screen"
 
 ### Cascade Deletion
 
@@ -49,13 +68,19 @@ When a user is deleted from `auth.users`, all their data cascades: profile, post
 ```
 Trailhead/
 ├── entry.jsx                    # Mount point — createRoot + render
-├── trailhead-v1.jsx             # Entire app (~13,700 lines)
+├── trailhead-v1.jsx             # Entire app (~15,000 lines)
 ├── supabase-client.js           # Supabase client init
 ├── build.sh                     # Build script (cleans old bundles, builds, updates index.html)
 ├── vercel.json                  # Vercel config — outputDirectory: deploy-v2.2, SPA rewrites
-├── deploy-v2.2/                 # Production deploy directory
-│   ├── index.html               # Shell HTML — loads bundle via <script> tag
-│   └── trailhead-bundle.*.js    # Hashed esbuild bundles (many old ones accumulate)
+├── package.json                 # React/Supabase/Lucide deps for esbuild (untracked is fine)
+├── deploy-v2.2/                 # Production deploy directory (Vercel serves this)
+│   ├── index.html               # Shell HTML (regenerated by build.sh — has PWA + iOS meta)
+│   ├── manifest.json            # PWA manifest (required for iOS web push)
+│   ├── sw.js                    # Service worker for web push + click routing
+│   ├── lone-peak-flag.png       # Logo / PWA icon / push icon
+│   └── trailhead-bundle.*.js    # Single hashed esbuild bundle (one at a time after cleanup)
+├── supabase/functions/send-push/  # Edge Function (Deno) for sending web push
+│   └── index.ts                 # Reads from notifications + dm_messages triggers
 └── Trailhead Concept.pen        # Pencil design file with brand system
 ```
 
@@ -84,6 +109,16 @@ cd /Users/cainen/Documents/Claude/Projects/Trailhead && git add -A deploy-v2.2/ 
 - Include the `cd` path prefix
 
 Vercel auto-deploys from main branch. The `vercel.json` serves `deploy-v2.2/` as the output directory with SPA rewrites.
+
+## Edge Function Deploy
+
+The `send-push` Edge Function lives at `supabase/functions/send-push/index.ts`. To redeploy after editing it:
+
+```bash
+cd /Users/cainen/Documents/Claude/Projects/Trailhead && supabase functions deploy send-push --no-verify-jwt
+```
+
+`--no-verify-jwt` is required because the Postgres triggers call the function without an auth header. Secrets (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`) are already set in Supabase — only re-set them if the VAPID key pair is rotated.
 
 ## Design System
 

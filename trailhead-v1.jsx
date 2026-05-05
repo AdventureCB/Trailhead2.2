@@ -1,7 +1,23 @@
 import React, { useState, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
-import { Heart, MessageCircle, MapPin, Clock, Mountain, ChevronRight, ChevronLeft, ChevronDown, Search, Plus, Home, Compass, Map, Wrench, Trophy, AlertTriangle, Navigation, Star, Share2, Bookmark, MoreHorizontal, ArrowUp, Users, Radio, CloudSun, CheckCircle, Target, Gift, ChevronUp, ExternalLink, Lock, Globe, Shield, UserPlus, UserCheck, Settings, Camera, Eye, EyeOff, X, Bell, ThumbsUp, UserPlus as UserPlusIcon, AtSign, Mail, Send, Image, Smartphone, Trash2, Edit3, Award, Zap, TrendingUp, Flame, DollarSign, Route, Video, Play, Maximize2, Minimize2, LogOut } from "lucide-react";
+import { Heart, MessageCircle, MapPin, Clock, Mountain, ChevronRight, ChevronLeft, ChevronDown, Search, Plus, Home, Compass, Map, Wrench, Trophy, AlertTriangle, Navigation, Star, Share2, Bookmark, MoreHorizontal, ArrowUp, Users, Radio, CloudSun, CheckCircle, Target, Gift, ChevronUp, ExternalLink, Lock, Globe, Shield, UserPlus, UserCheck, Settings, Camera, Eye, EyeOff, X, Bell, ThumbsUp, UserPlus as UserPlusIcon, AtSign, Mail, Send, Image, Smartphone, Trash2, Edit3, Award, Zap, TrendingUp, Flame, DollarSign, Route, Video, Play, Maximize2, Minimize2, LogOut, Binoculars } from "lucide-react";
 import { supabase } from "./supabase-client.js";
+
+// Web Push VAPID public key. Safe to embed (the corresponding PRIVATE key
+// lives only on the Edge Function as a Supabase secret). If you ever rotate
+// the key pair, update both this constant and the Edge Function secret.
+const VAPID_PUBLIC_KEY = "BKNmoN_428cxssoAL_Jca5zquLJnTKyfq3QAihVqpeP_4VNin8lxNrHdRvUvzP-4dKa4cbSooK8VC8OxVwgVvsc";
+
+// Convert a base64url VAPID key into the Uint8Array applicationServerKey
+// that PushManager.subscribe() expects.
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
 
 /* ─── Design Tokens from Lone Peak Concept ─── */
 const T = {
@@ -23,14 +39,14 @@ const T = {
 /* ─── Community Rank System ─── */
 const RANK_TIERS = [
   { name: "Scout", min: 0, max: 999, color: "#8B7D6B", icon: "Compass" },
-  { name: "Explorer", min: 1000, max: 4999, color: "#4A7C59", icon: "Map" },
+  { name: "Explorer", min: 1000, max: 4999, color: "#4A7C59", icon: "Binoculars" },
   { name: "Pathfinder", min: 5000, max: 14999, color: "#C49A6C", icon: "Navigation" },
   { name: "Trailblazer", min: 15000, max: 29999, color: "#C49A6C", icon: "Flame" },
   { name: "Navigator", min: 30000, max: 49999, color: "#C0A060", icon: "Star" },
   { name: "Expedition Lead", min: 50000, max: 99999, color: "#BD472A", icon: "Shield" },
   { name: "Legend", min: 100000, max: Infinity, color: "#FFD700", icon: "Trophy" },
 ];
-const RANK_ICON_MAP = { Compass, Map, Navigation, Flame, Star, Shield, Trophy };
+const RANK_ICON_MAP = { Compass, Map, Binoculars, Navigation, Flame, Star, Shield, Trophy };
 function getUserRank(points) {
   return RANK_TIERS.find(r => points >= r.min && points <= r.max) || RANK_TIERS[0];
 }
@@ -873,7 +889,7 @@ function RecoveryNotifPanel({ onClose, onGoToRecovery, alerts, onDismiss, onClea
   );
 }
 
-function UnifiedNotifPanel({ onClose, onViewUser, notifs, onDismissNotif, onClearNotifs, recoveryAlerts, onDismissAlert, onClearAlerts, onGoToRecovery, onOpenMap, onOpenDM, initialTab }) {
+function UnifiedNotifPanel({ onClose, onViewUser, onGoToPost, notifs, onDismissNotif, onClearNotifs, recoveryAlerts, onDismissAlert, onClearAlerts, onGoToRecovery, onOpenMap, onOpenDM, initialTab }) {
   const [tab, setTab] = useState(initialTab || "general");
   const urgencyColor = (u) => u === "HIGH" ? T.red : T.copper;
   const tabBtn = (key, label, count, color) => (
@@ -930,13 +946,13 @@ function UnifiedNotifPanel({ onClose, onViewUser, notifs, onDismissNotif, onClea
           ) : notifs.map((n) => {
             const Icon = n.icon;
             return (
-              <div key={n.id} style={{ display: "flex", gap: 10, padding: "12px 16px", borderBottom: `1px solid ${T.charcoal}22`, cursor: "pointer", transition: "background 0.15s", position: "relative" }} onMouseEnter={(e) => e.currentTarget.style.background = `${T.charcoal}` } onMouseLeave={(e) => e.currentTarget.style.background = "transparent" }>
+              <div key={n.id} onClick={() => { if (n.postId) { onGoToPost && onGoToPost(n.postId); } }} style={{ display: "flex", gap: 10, padding: "12px 16px", borderBottom: `1px solid ${T.charcoal}22`, cursor: "pointer", transition: "background 0.15s", position: "relative" }} onMouseEnter={(e) => e.currentTarget.style.background = `${T.charcoal}` } onMouseLeave={(e) => e.currentTarget.style.background = "transparent" }>
                 <div style={{ width: 32, height: 32, borderRadius: "50%", background: `${n.iconColor}18`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2 }}>
                   <Icon size={14} color={n.iconColor} strokeWidth={1.8} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ fontFamily: serif, fontSize: 13, color: T.white, margin: 0, lineHeight: 1.45 }}>
-                    <span style={{ fontFamily: sans, fontWeight: 600, cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); onViewUser && onViewUser(n.user); }}>{n.user}</span>
+                    <span style={{ fontFamily: sans, fontWeight: 600, cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); onViewUser && onViewUser(n.actorId || n.user); }}>{n.user}</span>
                     {" "}<span style={{ color: T.tertiary }}>{n.text}</span>
                     {n.target && <> <span style={{ color: T.warmStone }}>{n.target}</span></>}
                   </p>
@@ -1008,7 +1024,7 @@ function UnifiedNotifPanel({ onClose, onViewUser, notifs, onDismissNotif, onClea
   );
 }
 
-function TopBar({ onProfile, onBack, showBack, title, onViewUser, onGoToRecovery, onOpenMap, onSearch, onOpenDM, dmUnread, bellNotifs, setBellNotifs, profilePic, notifPrefs, recoveryAlerts, setRecoveryAlerts }) {
+function TopBar({ onProfile, onBack, showBack, title, onViewUser, onGoToPost, onGoToRecovery, onOpenMap, onSearch, onOpenDM, dmUnread, bellNotifs, onDismissNotif, onClearNotifs, profilePic, notifPrefs, recoveryAlerts, setRecoveryAlerts }) {
   const notifTypeMap = { like: "likes", comment: "comments", reply: "replies", follow: "follows", mention: "mentions" };
   const filteredNotifs = bellNotifs.filter(n => { const pref = notifTypeMap[n.type]; return !pref || (notifPrefs && notifPrefs[pref] !== false); });
   const [openPanel, setOpenPanel] = useState(null); // null | "notif"
@@ -1068,9 +1084,10 @@ function TopBar({ onProfile, onBack, showBack, title, onViewUser, onGoToRecovery
         <UnifiedNotifPanel
           onClose={() => setOpenPanel(null)}
           onViewUser={(u) => { setOpenPanel(null); onViewUser && onViewUser(u); }}
+          onGoToPost={(postId) => { setOpenPanel(null); onGoToPost && onGoToPost(postId); }}
           notifs={filteredNotifs}
-          onDismissNotif={(id) => setBellNotifs(prev => prev.filter(n => n.id !== id))}
-          onClearNotifs={() => setBellNotifs([])}
+          onDismissNotif={onDismissNotif}
+          onClearNotifs={onClearNotifs}
           recoveryAlerts={recoveryAlerts}
           onDismissAlert={(id) => setRecoveryAlerts(prev => prev.filter(a => a.id !== id))}
           onClearAlerts={() => setRecoveryAlerts([])}
@@ -1158,7 +1175,7 @@ function GlobalSearch({ onClose, onViewUser, onOpenThread, onNavigate, forumUser
   const badgeColor = (b) => b === "Founder" ? T.red : b === "Master Builder" ? T.copper : b === "Navigator" ? T.green : T.tertiary;
 
   return (
-    <div style={{ position: "absolute", inset: 0, background: T.darkBg, zIndex: 500, display: "flex", flexDirection: "column" }}>
+    <div style={{ position: "fixed", inset: 0, height: "100dvh", background: T.darkBg, zIndex: 500, display: "flex", flexDirection: "column" }}>
       {/* Search header */}
       <div style={{ padding: "14px 16px", background: T.charcoal, borderBottom: `1px solid ${T.darkCard}`, flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -1478,14 +1495,20 @@ function ImageCarousel({ images, startIndex, onClose }) {
 // Feed posts are now persisted to public.posts and hydrated on sign-in.
 // The legacy defaultFeedItems seed array was removed once the backend landed.
 
-function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onViewBuild, feedItems, onUpdateFeed, onAddNotification, forumUserReplies, forumViewCounts, savedRoutes, onSaveRoute, onUnsaveRoute, onStartNav, onAwardPoints, isGuest, onGuestTap, pendingPostNav, onConsumePendingPostNav, onSharedPostMissing }) {
+function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onViewBuild, feedItems, onUpdateFeed, onUpdatePost, likedPostIds, onTogglePostLike, postComments, onAddComment, onDeleteComment, likedCommentIds, onToggleCommentLike, currentUserId, currentUserName, currentUserHandle, currentUserAvatar, onDeletePost, onEditPost, onAddNotification, forumUserReplies, forumViewCounts, savedRoutes, onSaveRoute, onUnsaveRoute, onStartNav, onAwardPoints, isGuest, onGuestTap, pendingPostNav, onConsumePendingPostNav, onSharedPostMissing, convoyRsvps, onRsvpConvoy, onSearchUsers }) {
   const [activeFilter, setActiveFilter] = useState("ALL");
   const filters = ["ALL", "BUILDS", "CONVOYS", "ROUTES", "PHOTOS", "FORUM"];
-  const [likedPosts, setLikedPosts] = useState({});
-  const [likedComments, setLikedComments] = useState({}); // { "postId-commentIdx": true }
-  const [commentLikeCounts, setCommentLikeCounts] = useState({}); // { "postId-commentIdx": count }
+  // Likes and comments are now hoisted to the root and backed by Supabase.
+  // FeedScreen just reflects the props it's given. We kept `openComments`
+  // local because it's pure UI state (which post's drawer is expanded).
+  const likedPosts = likedPostIds || {};
+  const likedComments = likedCommentIds || {};
   const [openComments, setOpenComments] = useState(null); // post id or null
   const [highlightedPostId, setHighlightedPostId] = useState(null);
+  const [postMenuOpen, setPostMenuOpen] = useState(null); // post id or null
+  const [editingFeedPost, setEditingFeedPost] = useState(null); // post id
+  const [editFeedText, setEditFeedText] = useState("");
+  const [deleteConfirmFeed, setDeleteConfirmFeed] = useState(null); // post id
   // When the app receives a shared /post/:id link, navigate to that card,
   // open its comments, and briefly highlight it. If the post isn't in our
   // local feed (e.g. it was user-created and only exists in someone else's
@@ -1510,14 +1533,27 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onViewBuild
     onConsumePendingPostNav && onConsumePendingPostNav();
   }, [pendingPostNav]);
   const [commentText, setCommentText] = useState("");
-  const [postComments, setPostComments] = useState({}); // { postId: [{ user, text, time }] }
+  // `postComments` now comes in as a prop — rendered from parent state.
   const [shareMenuId, setShareMenuId] = useState(null);
   const [sharePickerId, setSharePickerId] = useState(null); // post id when showing user picker
   const [shareSearch, setShareSearch] = useState("");
+  const [shareResults, setShareResults] = useState([]);
+  // Debounced live user search backed by Supabase profiles.
+  useEffect(() => {
+    const q = shareSearch.trim();
+    if (!q || !onSearchUsers) { setShareResults([]); return; }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      const results = await onSearchUsers(q);
+      if (!cancelled) setShareResults(results || []);
+    }, 250);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [shareSearch]);
   const [copiedToast, setCopiedToast] = useState(false);
   const [expandedBuildPost, setExpandedBuildPost] = useState(null);
   const [expandedRoutePost, setExpandedRoutePost] = useState(null);
   const [expandedConvoyPost, setExpandedConvoyPost] = useState(null);
+  const [expandedRsvpList, setExpandedRsvpList] = useState(null); // postId of expanded "who's going" list
   const [routeShareMenu, setRouteShareMenu] = useState(null); // item.id when share/save dropdown open
   const [fullscreenMapItem, setFullscreenMapItem] = useState(null); // route item for fullscreen map
   const [highlightedPinIdx, setHighlightedPinIdx] = useState(null); // pin index to highlight when photo clicked
@@ -1543,50 +1579,43 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onViewBuild
   const commentInputRef = useRef(null);
   const shareSearchRef = useRef(null);
 
+  // Toggle like — delegates to the root handler (which writes post_likes).
+  // We intentionally do NOT create a local notification here: the liker
+  // shouldn't see "you liked X", and cross-user push requires a server-side
+  // notifications table (future work).
   const toggleLike = (id) => {
     if (isGuest) { onGuestTap && onGuestTap(); return; }
-    const wasLiked = likedPosts[id];
-    setLikedPosts(prev => ({ ...prev, [id]: !prev[id] }));
-    onUpdateFeed && onUpdateFeed(feedItems.map(item =>
-      item.id === id ? { ...item, likes: item.likes + (wasLiked ? -1 : 1) } : item
-    ));
-    if (!wasLiked) {
-      const post = feedItems.find(p => p.id === id);
-      if (post) onAddNotification && onAddNotification({ type: "like", user: "KyleLPO", text: "liked a post by @" + post.user, target: post.title, icon: Heart, iconColor: T.red });
-    }
+    onTogglePostLike && onTogglePostLike(id);
   };
 
-  const toggleCommentLike = (postId, commentIdx, comment) => {
-    const key = postId + "-" + commentIdx;
-    const wasLiked = likedComments[key];
-    setLikedComments(prev => ({ ...prev, [key]: !prev[key] }));
-    setCommentLikeCounts(prev => ({ ...prev, [key]: (prev[key] || (comment.likes || 0)) + (wasLiked ? -1 : 1) }));
-    if (!wasLiked) {
-      const post = feedItems.find(p => p.id === postId);
-      onAddNotification && onAddNotification({ type: "like", user: "KyleLPO", text: "liked @" + comment.user + "'s comment on", target: post ? post.title : "", icon: Heart, iconColor: T.red });
-    }
+  // Toggle comment like — delegates to root (writes post_comment_likes).
+  // Same notification rationale as toggleLike above.
+  const handleCommentLike = (postId, comment) => {
+    if (isGuest) { onGuestTap && onGuestTap(); return; }
+    if (!comment || !comment.id) return;
+    onToggleCommentLike && onToggleCommentLike(postId, comment.id);
   };
 
-  const addComment = (id) => {
+  // Submit a comment. Writes through the root addComment → post_comments.
+  const submitComment = async (id) => {
     if (isGuest) { onGuestTap && onGuestTap(); return; }
     if (!commentText.trim()) return;
-    const newComment = { user: "KyleLPO", initial: "K", text: commentText.trim(), time: Date.now(), likes: 0 };
-    setPostComments(prev => ({ ...prev, [id]: [...(prev[id] || []), newComment] }));
-    onUpdateFeed && onUpdateFeed(feedItems.map(item =>
-      item.id === id ? { ...item, comments: item.comments + 1 } : item
-    ));
+    const body = commentText.trim();
     const post = feedItems.find(p => p.id === id);
-    if (post) onAddNotification && onAddNotification({ type: "comment", user: "KyleLPO", text: "commented on @" + post.user + "'s post", target: post.title, icon: MessageCircle, iconColor: T.copper });
-    // Send mention notifications for @tagged users
-    const mentions = extractMentions(commentText);
+    setCommentText("");
+    const result = onAddComment && await onAddComment(id, body);
+    if (!result) return;
+    // No self-notification for the commenter; cross-user notifications
+    // require a server-side notifications table (future work).
+    const mentions = extractMentions(body);
     mentions.forEach(handle => {
-      if (handle !== "KyleLPO") {
-        onAddNotification && onAddNotification({ type: "mention", user: "KyleLPO", text: "mentioned you in a comment", target: post ? post.title : "", icon: AtSign, iconColor: T.copper });
+      // TODO(phase3): route @-mentions to the mentioned user via a notifications
+      // table. For now we suppress the self-notification to avoid confusion.
+      if (false && handle !== currentUserHandle) {
+        onAddNotification && onAddNotification({ type: "mention", user: currentUserName || "You", text: "mentioned you in a comment", target: post ? post.title : "", icon: AtSign, iconColor: T.copper });
       }
     });
-    // Award points for commenting
     onAwardPoints && onAwardPoints(3, "Comment Posted");
-    setCommentText("");
   };
 
   const toggleComments = (id) => {
@@ -1613,8 +1642,13 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onViewBuild
 
   const actionBar = (item, extraLeft) => {
     const liked = likedPosts[item.id];
-    const allComments = [...(item.seedComments || []), ...(postComments[item.id] || [])];
-    const shareFilteredUsers = globalSearchUsers.filter(u => u.handle !== "KyleLPO" && (shareSearch === "" || u.name.toLowerCase().includes(shareSearch.toLowerCase()) || u.handle.toLowerCase().includes(shareSearch.toLowerCase())));
+    // seedComments were dropped when Phase 2 landed — only real DB comments
+    // render here now.
+    const allComments = postComments && postComments[item.id] ? postComments[item.id] : [];
+    // shareResults is fetched async by the debounced effect above when
+    // shareSearch is non-empty; empty query → empty list (the picker shows
+    // a "type to search" placeholder instead of seed users).
+    const shareFilteredUsers = shareResults;
     return (
       <>
         <div style={{ padding: "0 16px 4px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -1675,21 +1709,31 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onViewBuild
               <p style={{ fontFamily: serif, fontSize: 11, color: T.warmStone, margin: 0, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</p>
             </div>
             <div style={{ maxHeight: 200, overflowY: "auto" }}>
-              {shareFilteredUsers.slice(0, 8).map(u => (
-                <button key={u.handle} onClick={() => sendShareToUser(u.handle, item)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "none", border: "none", borderBottom: `1px solid ${T.charcoal}20`, cursor: "pointer", width: "100%" }}>
-                  <div style={{ width: 30, height: 30, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                    <span style={{ fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.white }}>{u.initial}</span>
-                  </div>
-                  <div style={{ flex: 1, textAlign: "left" }}>
-                    <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, display: "block" }}>{u.name}</span>
-                    <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>@{u.handle}</span>
-                  </div>
-                  <Send size={14} color={T.copper} />
-                </button>
-              ))}
-              {shareFilteredUsers.length === 0 && (
+              {shareFilteredUsers.slice(0, 8).map(u => {
+                const initial = (u.full_name || u.handle || "U").charAt(0).toUpperCase();
+                return (
+                  <button key={u.id} onClick={() => sendShareToUser(u.id, item)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "none", border: "none", borderBottom: `1px solid ${T.charcoal}20`, cursor: "pointer", width: "100%" }}>
+                    <div style={{ width: 30, height: 30, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" }}>
+                      {u.avatar_url
+                        ? <img src={u.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        : <span style={{ fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.white }}>{initial}</span>}
+                    </div>
+                    <div style={{ flex: 1, textAlign: "left" }}>
+                      <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, display: "block" }}>{u.full_name || u.handle}</span>
+                      <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>@{u.handle}</span>
+                    </div>
+                    <Send size={14} color={T.copper} />
+                  </button>
+                );
+              })}
+              {shareSearch.trim().length > 0 && shareFilteredUsers.length === 0 && (
                 <div style={{ padding: "16px 12px", textAlign: "center" }}>
                   <span style={{ fontFamily: sans, fontSize: 12, color: T.tertiary }}>No users found</span>
+                </div>
+              )}
+              {shareSearch.trim().length === 0 && (
+                <div style={{ padding: "16px 12px", textAlign: "center" }}>
+                  <span style={{ fontFamily: sans, fontSize: 12, color: T.tertiary }}>Type a name or handle to search</span>
                 </div>
               )}
             </div>
@@ -1702,22 +1746,23 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onViewBuild
             {allComments.length > 0 && (
               <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10, maxHeight: 280, overflowY: "auto" }}>
                 {allComments.map((c, ci) => {
-                  const cmtKey = item.id + "-" + ci;
-                  const cmtLiked = likedComments[cmtKey];
-                  const cmtLikeCount = commentLikeCounts[cmtKey] !== undefined ? commentLikeCounts[cmtKey] : (c.likes || 0);
+                  const cmtLiked = !!(c && c.id && likedComments[c.id]);
+                  const cmtLikeCount = c.likes || 0;
                   return (
-                    <div key={ci} style={{ display: "flex", gap: 8 }}>
-                      <div style={{ width: 28, height: 28, borderRadius: "50%", background: T.charcoal, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2 }}>
-                        <span style={{ fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.copper }}>{c.initial}</span>
+                    <div key={c.id || ci} style={{ display: "flex", gap: 8 }}>
+                      <div style={{ width: 28, height: 28, borderRadius: "50%", background: T.charcoal, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2, overflow: "hidden" }}>
+                        {c.avatarUrl
+                          ? <img src={c.avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          : <span style={{ fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.copper }}>{c.initial}</span>}
                       </div>
                       <div style={{ flex: 1 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <span onClick={() => onViewUser && onViewUser(c.user.replace(/\s/g, "_"))} style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, cursor: "pointer" }}>@{c.user}</span>
+                          <span onClick={() => onViewUser && onViewUser(c.handle || c.userId || (c.user || "").replace(/\s/g, "_"))} style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, cursor: "pointer" }}>@{c.handle || c.user}</span>
                           <RankBadge points={getPoints(c.user)} size={10} />
                           <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>{formatPostTime(c.time)}</span>
                         </div>
                         <p style={{ fontFamily: serif, fontSize: 13, color: T.warmStone, margin: "2px 0 0", lineHeight: 1.4 }}>{c.text}</p>
-                        <button onClick={() => toggleCommentLike(item.id, ci, c)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 0 0 0", marginTop: 2 }}>
+                        <button onClick={() => handleCommentLike(item.id, c)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 0 0 0", marginTop: 2 }}>
                           <Heart size={12} color={cmtLiked ? T.red : T.tertiary} strokeWidth={1.5} fill={cmtLiked ? T.red : "none"} />
                           {cmtLikeCount > 0 && <span style={{ fontFamily: sans, fontSize: 10, color: cmtLiked ? T.red : T.tertiary }}>{cmtLikeCount}</span>}
                         </button>
@@ -1728,13 +1773,15 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onViewBuild
               </div>
             )}
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <div style={{ width: 28, height: 28, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <span style={{ fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.white }}>K</span>
+              <div style={{ width: 28, height: 28, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" }}>
+                {currentUserAvatar
+                  ? <img src={currentUserAvatar} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  : <span style={{ fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.white }}>{(currentUserName || "U").charAt(0).toUpperCase()}</span>}
               </div>
               <div style={{ flex: 1, display: "flex", alignItems: "center", background: T.darkCard, borderRadius: 20, padding: "8px 12px", border: `1px solid ${T.charcoal}` }}>
-                <MentionInput inputRef={openComments === item.id ? commentInputRef : null} value={commentText} onChange={setCommentText} onKeyDown={e => { if (e.key === "Enter") addComment(item.id); }} onFocus={isGuest ? (e) => { e.target && e.target.blur && e.target.blur(); onGuestTap && onGuestTap(); } : undefined} placeholder={isGuest ? "Sign in to comment..." : "Add a comment..."} style={{ flex: 1, background: "none", border: "none", outline: "none", color: T.white, fontFamily: serif, fontSize: 12, padding: 0, width: "100%" }} />
+                <MentionInput inputRef={openComments === item.id ? commentInputRef : null} value={commentText} onChange={setCommentText} onKeyDown={e => { if (e.key === "Enter") submitComment(item.id); }} onFocus={isGuest ? (e) => { e.target && e.target.blur && e.target.blur(); onGuestTap && onGuestTap(); } : undefined} placeholder={isGuest ? "Sign in to comment..." : "Add a comment..."} style={{ flex: 1, background: "none", border: "none", outline: "none", color: T.white, fontFamily: serif, fontSize: 12, padding: 0, width: "100%" }} />
               </div>
-              <button onClick={() => addComment(item.id)} disabled={!commentText.trim()} style={{ background: commentText.trim() ? T.red : T.charcoal, border: "none", cursor: commentText.trim() ? "pointer" : "default", width: 30, height: 30, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", opacity: commentText.trim() ? 1 : 0.4, padding: 0, flexShrink: 0 }}>
+              <button onClick={() => submitComment(item.id)} disabled={!commentText.trim()} style={{ background: commentText.trim() ? T.red : T.charcoal, border: "none", cursor: commentText.trim() ? "pointer" : "default", width: 30, height: 30, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", opacity: commentText.trim() ? 1 : 0.4, padding: 0, flexShrink: 0 }}>
                 <ArrowUp size={14} color={T.white} />
               </button>
             </div>
@@ -1744,24 +1791,82 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onViewBuild
     );
   };
 
+  // Three-dot overflow menu for the current user's own posts.
+  const ownPostMenu = (item) => {
+    if (!currentUserId || item.userId !== currentUserId) return null;
+    const isOpen = postMenuOpen === item.id;
+    return (
+      <div style={{ position: "relative", marginLeft: "auto", flexShrink: 0 }}>
+        <button onClick={(e) => { e.stopPropagation(); setPostMenuOpen(isOpen ? null : item.id); setDeleteConfirmFeed(null); setEditingFeedPost(null); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex", alignItems: "center" }}>
+          <MoreHorizontal size={16} color={T.tertiary} />
+        </button>
+        {isOpen && (
+          <div style={{ position: "absolute", top: "100%", right: 0, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", zIndex: 50, minWidth: 130, overflow: "hidden" }}>
+            <button onClick={(e) => { e.stopPropagation(); setEditingFeedPost(item.id); setEditFeedText(item.title || ""); setPostMenuOpen(null); }} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "10px 14px", background: "none", border: "none", cursor: "pointer", borderBottom: `1px solid ${T.charcoal}` }}>
+              <Settings size={13} color={T.tertiary} />
+              <span style={{ fontFamily: sans, fontSize: 12, color: T.white }}>Edit</span>
+            </button>
+            <button onClick={(e) => { e.stopPropagation(); setDeleteConfirmFeed(item.id); setPostMenuOpen(null); }} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "10px 14px", background: "none", border: "none", cursor: "pointer" }}>
+              <Trash2 size={13} color={T.red} />
+              <span style={{ fontFamily: sans, fontSize: 12, color: T.red }}>Delete</span>
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Inline edit bar shown when editing a feed post.
+  const feedEditBar = (item) => {
+    if (editingFeedPost !== item.id) return null;
+    return (
+      <div style={{ padding: "0 16px 12px" }}>
+        <textarea value={editFeedText} onChange={(e) => setEditFeedText(e.target.value)} onClick={(e) => e.stopPropagation()} style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, background: T.darkBg, border: `1px solid ${T.copper}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none", resize: "vertical", minHeight: 60, lineHeight: 1.5 }} />
+        <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+          <button onClick={(e) => { e.stopPropagation(); onEditPost && onEditPost(item.id, editFeedText.trim()); setEditingFeedPost(null); }} style={{ padding: "6px 14px", borderRadius: 6, background: T.green, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, letterSpacing: 0.5 }}>Save</button>
+          <button onClick={(e) => { e.stopPropagation(); setEditingFeedPost(null); }} style={{ padding: "6px 14px", borderRadius: 6, background: T.charcoal, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 600, letterSpacing: 0.5 }}>Cancel</button>
+        </div>
+      </div>
+    );
+  };
+
+  // Delete confirmation bar shown when confirming a feed post delete.
+  const feedDeleteConfirm = (item) => {
+    if (deleteConfirmFeed !== item.id) return null;
+    return (
+      <div style={{ padding: "0 16px 12px" }}>
+        <div style={{ background: `${T.red}15`, border: `1px solid ${T.red}40`, borderRadius: 8, padding: 12 }}>
+          <p style={{ fontFamily: sans, fontSize: 12, color: T.white, margin: "0 0 8px" }}>Delete this post? This can't be undone.</p>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={(e) => { e.stopPropagation(); onDeletePost && onDeletePost(item.id); setDeleteConfirmFeed(null); }} style={{ padding: "6px 14px", borderRadius: 6, background: T.red, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, letterSpacing: 0.5 }}>Delete</button>
+            <button onClick={(e) => { e.stopPropagation(); setDeleteConfirmFeed(null); }} style={{ padding: "6px 14px", borderRadius: 6, background: T.charcoal, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 600, letterSpacing: 0.5 }}>Cancel</button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderCard = (item) => {
     if (item.type === "POST") {
       return (
         <div key={item.id} style={cardStyle}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px" }}>
-            <div style={{ width: 32, height: 32, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <span style={{ fontFamily: sans, fontSize: 11, fontWeight: 700, color: T.white }}>{item.initial}</span>
+            <div style={{ width: 32, height: 32, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+              {item.avatarUrl ? <img src={item.avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontFamily: sans, fontSize: 11, fontWeight: 700, color: T.white }}>{item.initial}</span>}
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                <span onClick={() => onViewUser && onViewUser(item.user.replace(/\s/g, "_"))} style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, cursor: "pointer" }}>{item.user}</span>
+                <span onClick={() => onViewUser && onViewUser(item.userId || item.handle || item.user.replace(/\s/g, "_"))} style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, cursor: "pointer" }}>{item.user}</span>
                 <RankBadge points={getPoints(item.user)} size={12} />
               </div>
               <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, display: "block" }}>{formatPostTime(item.time)}</span>
             </div>
+            {ownPostMenu(item)}
           </div>
+          {feedEditBar(item)}
+          {feedDeleteConfirm(item)}
           <div style={{ padding: "0 16px 14px" }}>
-            <p style={{ fontFamily: serif, fontSize: 15, color: T.white, margin: "0 0 8px", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{item.title}</p>
+            <p style={{ fontFamily: serif, fontSize: 15, color: T.white, margin: "0 0 8px", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{editingFeedPost === item.id ? "" : item.title}</p>
             {item.location && (
               <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 4 }}>
                 <MapPin size={11} color={T.tertiary} />
@@ -1789,7 +1894,7 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onViewBuild
               <div style={{ width: 24, height: 24, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <span style={{ fontFamily: sans, fontSize: 9, fontWeight: 700, color: T.white }}>{item.initial}</span>
               </div>
-              <span onClick={() => onViewUser && onViewUser(item.user.replace(/\s/g, "_"))} style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, cursor: "pointer" }}>{item.user}</span>
+              <span onClick={() => onViewUser && onViewUser(item.userId || item.handle || item.user.replace(/\s/g, "_"))} style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, cursor: "pointer" }}>{item.user}</span>
               <RankBadge points={getPoints(item.user)} size={11} />
             </div>
             <p style={{ fontFamily: serif, fontSize: 15, color: T.white, margin: "0 0 8px", lineHeight: 1.5 }}>{item.title}</p>
@@ -1883,12 +1988,15 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onViewBuild
               <div style={{ width: 22, height: 22, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <span style={{ fontFamily: sans, fontSize: 9, fontWeight: 700, color: T.white }}>{item.initial}</span>
               </div>
-              <span onClick={(e) => { e.stopPropagation(); onViewUser && onViewUser(item.user.replace(/\s/g, "_")); }} style={{ fontFamily: sans, fontSize: 10, color: T.white, cursor: "pointer" }}>{item.user}</span>
+              <span onClick={(e) => { e.stopPropagation(); onViewUser && onViewUser(item.userId || item.handle || item.user.replace(/\s/g, "_")); }} style={{ fontFamily: sans, fontSize: 10, color: T.white, cursor: "pointer" }}>{item.user}</span>
               <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{formatPostTime(item.time)}</span>
             </div>
           </div>
           <div onClick={() => setExpandedRoutePost(isRouteExp ? null : item.id)} style={{ padding: 16, cursor: "pointer" }}>
-            <h3 style={{ fontFamily: serif, fontSize: 15, color: T.white, margin: "0 0 8px" }}>{item.title}</h3>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+              <h3 style={{ fontFamily: serif, fontSize: 15, color: T.white, margin: "0 0 8px", flex: 1 }}>{item.title}</h3>
+              {ownPostMenu(item)}
+            </div>
             <div style={{ display: "flex", gap: 16, marginBottom: 8 }}>
               <span style={{ fontFamily: sans, fontSize: 12, color: T.copper, fontWeight: 600 }}>{item.distance}</span>
               <span style={{ fontFamily: sans, fontSize: 12, color: T.copper, fontWeight: 600 }}>{item.duration}</span>
@@ -2061,6 +2169,8 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onViewBuild
               })()}
             </div>
           )}
+          {feedEditBar(item)}
+          {feedDeleteConfirm(item)}
           {actionBar(item)}
         </div>
       );
@@ -2091,12 +2201,12 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onViewBuild
       return (
         <div key={item.id} style={cardStyle}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px" }}>
-            <div style={{ width: 32, height: 32, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <span style={{ fontFamily: sans, fontSize: 11, fontWeight: 700, color: T.white }}>{item.initial}</span>
+            <div style={{ width: 32, height: 32, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+              {item.avatarUrl ? <img src={item.avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontFamily: sans, fontSize: 11, fontWeight: 700, color: T.white }}>{item.initial}</span>}
             </div>
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                <span onClick={() => onViewUser && onViewUser(item.user.replace(/\s/g, "_"))} style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, cursor: "pointer" }}>{item.user}</span>
+                <span onClick={() => onViewUser && onViewUser(item.userId || item.handle || item.user.replace(/\s/g, "_"))} style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, cursor: "pointer" }}>{item.user}</span>
                 <RankBadge points={getPoints(item.user)} size={12} />
               </div>
               <span style={{ fontFamily: sans, fontSize: 12, color: T.tertiary, display: "block" }}>{item.subtitle}</span>
@@ -2106,8 +2216,10 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onViewBuild
                 </span>
               )}
             </div>
-            <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginLeft: "auto" }}>{formatPostTime(item.time)}</span>
+            {ownPostMenu(item)}
           </div>
+          {feedEditBar(item)}
+          {feedDeleteConfirm(item)}
           {/* Hero image or gradient placeholder */}
           <div style={{ position: "relative" }}>
             {item.photoUrls && item.photoUrls[0] ? (() => {
@@ -2238,14 +2350,24 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onViewBuild
     }
 
     if (item.type === "CONVOYS") {
-      const myRsvp = item.rsvps ? item.rsvps["@KyleLPO"] : null;
-      const rsvpCounts = item.rsvps ? Object.values(item.rsvps).reduce((acc, v) => { acc[v] = (acc[v] || 0) + 1; return acc; }, {}) : {};
-      const handleRsvp = (status) => {
-        const updated = feedItems.map(fi => fi.id === item.id ? { ...fi, rsvps: { ...(fi.rsvps || {}), "@KyleLPO": status } } : fi);
-        onUpdateFeed(updated);
-      };
+      // RSVPs are sourced from convoyRsvps (DB-backed, realtime), keyed by user_id.
+      const rsvpMap = (convoyRsvps && convoyRsvps[item.id]) || {};
+      const rsvpEntries = Object.entries(rsvpMap); // [[userId, { status, name, ... }], ...]
+      const rsvpCounts = rsvpEntries.reduce((acc, [, v]) => { acc[v.status] = (acc[v.status] || 0) + 1; return acc; }, {});
+      const goingCount = rsvpCounts.going || 0;
+      const maybeCount = rsvpCounts.maybe || 0;
+      const declinedCount = rsvpCounts.declined || 0;
+      const myRsvpEntry = currentUserId ? rsvpMap[currentUserId] : null;
+      const myRsvp = myRsvpEntry ? myRsvpEntry.status : null;
+      const handleRsvp = (status) => { onRsvpConvoy && onRsvpConvoy(item.id, status); };
       const isConvExp = expandedConvoyPost === item.id;
       const hasPin = item.pin && item.pin.lat != null;
+      const slotsTotal = item.slots && item.slots > 0 ? item.slots : null;
+      const goingLabel = slotsTotal ? `${goingCount}/${slotsTotal} GOING` : `${goingCount} GOING`;
+      const isRsvpListExp = expandedRsvpList === item.id;
+      // Sort responders: going first, then maybe, then declined.
+      const statusOrder = { going: 0, maybe: 1, declined: 2 };
+      const sortedResponders = rsvpEntries.slice().sort((a, b) => (statusOrder[a[1].status] ?? 9) - (statusOrder[b[1].status] ?? 9));
       return (
         <div key={item.id} style={cardStyle}>
           {/* Convoy photos */}
@@ -2279,20 +2401,23 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onViewBuild
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
                 <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, background: `${T.copper}20`, padding: "3px 8px", borderRadius: 4, letterSpacing: 1, fontWeight: 600 }}>CONVOY GROUP</span>
                 <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{formatPostTime(item.time)}</span>
-                <ChevronDown size={14} color={T.tertiary} style={{ marginLeft: "auto", transform: isConvExp ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
+                {ownPostMenu(item)}
+                <ChevronDown size={14} color={T.tertiary} style={{ marginLeft: ownPostMenu(item) ? 0 : "auto", transform: isConvExp ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
               </div>
               <p style={{ fontFamily: serif, fontSize: 14, color: T.white, margin: "0 0 4px" }}>{item.title}</p>
               {!isConvExp && item.body && <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 6px", lineHeight: 1.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.body}</p>}
-              <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+              <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
                 <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 0.5 }}>DEPARTS {item.departs}</span>
-                <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 0.5 }}>{item.slots} SLOTS</span>
-                {rsvpCounts.going && <span style={{ fontFamily: sans, fontSize: 10, color: T.green, letterSpacing: 0.5 }}>{rsvpCounts.going} GOING</span>}
+                <span style={{ fontFamily: sans, fontSize: 10, color: T.green, letterSpacing: 0.5 }}>{goingLabel}</span>
+                {maybeCount > 0 && <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 0.5 }}>{maybeCount} MAYBE</span>}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8 }}>
-                <div style={{ width: 20, height: 20, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <span style={{ fontFamily: sans, fontSize: 8, fontWeight: 700, color: T.white }}>{item.initial}</span>
+                <div style={{ width: 20, height: 20, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+                  {item.avatarUrl
+                    ? <img src={item.avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    : <span style={{ fontFamily: sans, fontSize: 8, fontWeight: 700, color: T.white }}>{item.initial}</span>}
                 </div>
-                <span onClick={(e) => { e.stopPropagation(); onViewUser && onViewUser(item.user.replace(/\s/g, "_")); }} style={{ fontFamily: sans, fontSize: 11, color: T.white, cursor: "pointer" }}>{item.user}</span>
+                <span onClick={(e) => { e.stopPropagation(); onViewUser && onViewUser(item.userId || item.handle || item.user.replace(/\s/g, "_")); }} style={{ fontFamily: sans, fontSize: 11, color: T.white, cursor: "pointer" }}>{item.user}</span>
               </div>
             </div>
           </div>
@@ -2340,33 +2465,53 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onViewBuild
                     <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600 }}>{item.slots}</span>
                   </div>
                 </div>
-                {/* Invites with RSVP status */}
+                {/* Invites with RSVP status — status looked up from convoyRsvps
+                    by matching the invited handle to a responder's profile. */}
+                {/* Invitee count only — the per-name list has moved to the
+                    "see who's going" expandable below, which surfaces the
+                    actually relevant subset (people who responded). */}
                 {item.invites && item.invites.length > 0 && (
-                  <div>
-                    <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>INVITED ({item.invites.length})</span>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                      {item.invites.map((h, idx) => {
-                        const handle = h.replace(/^@/, "");
-                        const rsvpStatus = item.rsvps ? item.rsvps["@" + handle] : null;
-                        return (
-                          <div key={idx} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", background: T.charcoal, borderRadius: 6 }}>
-                            <div style={{ width: 24, height: 24, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                              <span style={{ fontFamily: sans, fontSize: 9, fontWeight: 700, color: T.white }}>{handle.charAt(0).toUpperCase()}</span>
-                            </div>
-                            <span onClick={(e) => { e.stopPropagation(); onViewUser && onViewUser(handle); }} style={{ fontFamily: sans, fontSize: 12, color: T.white, cursor: "pointer", flex: 1 }}>@{handle}</span>
-                            <span style={{ fontFamily: sans, fontSize: 9, fontWeight: 600, letterSpacing: 0.5, color: rsvpStatus === "going" ? T.green : rsvpStatus === "maybe" ? T.copper : rsvpStatus === "declined" ? T.tertiary : `${T.tertiary}80`, textTransform: "uppercase" }}>{rsvpStatus || "pending"}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <Users size={12} color={T.tertiary} />
+                    <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, letterSpacing: 0.5 }}>{item.invites.length} invited</span>
                   </div>
                 )}
-                {/* RSVP summary */}
-                {(rsvpCounts.going || rsvpCounts.maybe || rsvpCounts.declined) && (
-                  <div style={{ display: "flex", gap: 12 }}>
-                    {rsvpCounts.going && <span style={{ fontFamily: sans, fontSize: 11, color: T.green, fontWeight: 600 }}>{rsvpCounts.going} Going</span>}
-                    {rsvpCounts.maybe && <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600 }}>{rsvpCounts.maybe} Maybe</span>}
-                    {rsvpCounts.declined && <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{rsvpCounts.declined} Can't make it</span>}
+                {/* RSVP summary + collapsible responders list */}
+                {sortedResponders.length > 0 && (
+                  <div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setExpandedRsvpList(isRsvpListExp ? null : item.id); }}
+                      style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", background: T.charcoal, border: "none", borderRadius: 6, cursor: "pointer" }}
+                    >
+                      <Users size={13} color={T.green} />
+                      <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, letterSpacing: 0.5 }}>SEE WHO'S GOING</span>
+                      <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+                        {goingCount > 0 && <span style={{ fontFamily: sans, fontSize: 11, color: T.green, fontWeight: 600 }}>{goingLabel}</span>}
+                        {maybeCount > 0 && <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600 }}>{maybeCount} Maybe</span>}
+                        {declinedCount > 0 && <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{declinedCount} Can't</span>}
+                        <ChevronDown size={13} color={T.tertiary} style={{ transform: isRsvpListExp ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
+                      </div>
+                    </button>
+                    {isRsvpListExp && (
+                      <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+                        {sortedResponders.map(([uid, r]) => {
+                          const pillColor = r.status === "going" ? T.green : r.status === "maybe" ? T.copper : T.tertiary;
+                          const pillLabel = r.status === "going" ? "GOING" : r.status === "maybe" ? "MAYBE" : "CAN'T";
+                          return (
+                            <div key={uid} onClick={(e) => { e.stopPropagation(); onViewUser && onViewUser(uid); }} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", background: T.darkBg, borderRadius: 6, cursor: "pointer" }}>
+                              <div style={{ width: 26, height: 26, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" }}>
+                                {r.avatarUrl
+                                  ? <img src={r.avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                  : <span style={{ fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.white }}>{r.initial}</span>}
+                              </div>
+                              <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, flex: 1 }}>{r.name}</span>
+                              {r.handle && <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>@{r.handle}</span>}
+                              <span style={{ fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, color: pillColor, background: `${pillColor}20`, padding: "3px 8px", borderRadius: 4 }}>{pillLabel}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
                 {/* RSVP buttons */}
@@ -2407,6 +2552,8 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onViewBuild
               ))}
             </div>
           )}
+          {feedEditBar(item)}
+          {feedDeleteConfirm(item)}
           {actionBar(item)}
         </div>
       );
@@ -2416,18 +2563,20 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onViewBuild
       return (
         <div key={item.id} style={cardStyle}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px" }}>
-            <div style={{ width: 32, height: 32, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <span style={{ fontFamily: sans, fontSize: 11, fontWeight: 700, color: T.white }}>{item.initial}</span>
+            <div style={{ width: 32, height: 32, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+              {item.avatarUrl ? <img src={item.avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontFamily: sans, fontSize: 11, fontWeight: 700, color: T.white }}>{item.initial}</span>}
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                <span onClick={() => onViewUser && onViewUser(item.user.replace(/\s/g, "_"))} style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, cursor: "pointer" }}>{item.user}</span>
+                <span onClick={() => onViewUser && onViewUser(item.userId || item.handle || item.user.replace(/\s/g, "_"))} style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, cursor: "pointer" }}>{item.user}</span>
                 <RankBadge points={getPoints(item.user)} size={12} />
               </div>
-              <span style={{ fontFamily: sans, fontSize: 12, color: T.tertiary, display: "block" }}>Shared {item.photoCount} photos</span>
+              <span style={{ fontFamily: sans, fontSize: 12, color: T.tertiary, display: "block" }}>{item.photoCount ? `Shared ${item.photoCount} photo${item.photoCount > 1 ? "s" : ""}` : formatPostTime(item.time)}</span>
             </div>
-            <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{formatPostTime(item.time)}</span>
+            {ownPostMenu(item)}
           </div>
+          {feedEditBar(item)}
+          {feedDeleteConfirm(item)}
           {item.photoUrls && item.photoUrls.length > 0 ? (() => {
             const firstP = item.photoUrls[0];
             const firstUrl = typeof firstP === "string" ? firstP : firstP.url;
@@ -2484,7 +2633,7 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onViewBuild
               <div style={{ width: 28, height: 28, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <span style={{ fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.white }}>{item.initial}</span>
               </div>
-              <span onClick={(e) => { e.stopPropagation(); onViewUser && onViewUser(item.user.replace(/\s/g, "_")); }} style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, cursor: "pointer" }}>{item.user}</span>
+              <span onClick={(e) => { e.stopPropagation(); onViewUser && onViewUser(item.userId || item.handle || item.user.replace(/\s/g, "_")); }} style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, cursor: "pointer" }}>{item.user}</span>
               <RankBadge points={getPoints(item.user)} size={11} />
             </div>
             <h3 style={{ fontFamily: serif, fontSize: 15, color: T.white, margin: "0 0 6px", lineHeight: 1.3 }}>{item.title}</h3>
@@ -8669,7 +8818,7 @@ function AddBuildForm({ onClose, onSave, initialData }) {
 }
 
 /* ─── PROFILE SCREEN (Own Profile) ─── */
-function ProfileScreen({ initialUserName, initialUserHandle, initialUserBio, initialIsPublic, onViewUser, onLogout, userBuilds, onAddBuild, onUpdateBuild, onDeleteBuild, profilePic, onSetProfilePic, notifPrefs, onSetNotifPrefs, feedItems, onDeletePost, onEditPost, onUpdateConvoy, onGoToPost, myPoints: myPointsProp, onSaveProfile }) {
+function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, initialUserBio, initialIsPublic, onViewUser, onLogout, userBuilds, onAddBuild, onUpdateBuild, onDeleteBuild, profilePic, onSetProfilePic, notifPrefs, onSetNotifPrefs, feedItems, onDeletePost, onEditPost, onUpdateConvoy, onGoToPost, myPoints: myPointsProp, onSaveProfile, followerCount, followingCount, convoyRsvps, onSubscribePush, onUnsubscribePush }) {
   const [isPublic, setIsPublic] = useState(initialIsPublic == null ? true : !!initialIsPublic);
   const [activeTab, setActiveTab] = useState("builds");
   const [activeBuild, setActiveBuild] = useState(0);
@@ -8751,8 +8900,8 @@ function ProfileScreen({ initialUserName, initialUserHandle, initialUserBio, ini
   const user = {
     name: userName,
     handle: userHandle,
-    followers: 847,
-    following: 234,
+    followers: followerCount != null ? followerCount : 0,
+    following: followingCount != null ? followingCount : 0,
     points: myPointsProp || 12450,
     joinDate: "Mar 2025",
   };
@@ -8786,14 +8935,16 @@ function ProfileScreen({ initialUserName, initialUserHandle, initialUserBio, ini
     { name: "Rubicon Trail", date: "Sep 5, 2025", distance: "22 mi", grade: 9, build: "THE HIGHLANDER", role: "went" },
   ];
 
-  // Build trips from convoy feed items
+  // Build trips from convoy feed items. Role lookups now use the real
+  // currentUserId against convoyRsvps (DB-backed) instead of the legacy
+  // hardcoded "@KyleLPO" handle on the post's jsonb.
   const convoyTrips = (feedItems || []).filter(p => p.type === "CONVOYS").map(c => {
-    const isOrganizer = c.user === "KyleLPO";
-    const myRsvp = c.rsvps ? c.rsvps["@KyleLPO"] : null;
+    const isOrganizer = !!(currentUserId && c.userId === currentUserId);
+    const myRsvpEntry = currentUserId && convoyRsvps && convoyRsvps[c.id] ? convoyRsvps[c.id][currentUserId] : null;
+    const myRsvp = myRsvpEntry ? myRsvpEntry.status : null;
     let role = "none";
     if (isOrganizer) role = "organized";
-    else if (myRsvp === "going") role = "attending";
-    else if (myRsvp === "maybe") role = "attending";
+    else if (myRsvp === "going" || myRsvp === "maybe") role = "attending";
     return { name: c.title, date: c.month && c.day ? `${c.month} ${c.day}` : "TBD", distance: c.location || "—", grade: null, build: null, role, convoyId: c.id, rsvp: myRsvp, isConvoy: true, slots: c.slots, invites: c.invites };
   }).filter(t => t.role !== "none");
 
@@ -8805,7 +8956,7 @@ function ProfileScreen({ initialUserName, initialUserHandle, initialUserBio, ini
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [tappedBadge, setTappedBadge] = useState(null);
 
-  const userPosts = (feedItems || []).filter(p => p.user === "KyleLPO");
+  const userPosts = (feedItems || []).filter(p => currentUserId ? p.userId === currentUserId : false);
   const staticActivity = [
     { type: "forum", title: "Best budget lift kit for 3rd Gen Tacoma?", time: "5 days ago", replies: 47, category: "FORUM REPLY" },
     { type: "forum", title: "Custom skid plate fabrication — my walkthrough", time: "2 weeks ago", replies: 89, category: "FORUM POST" },
@@ -8913,12 +9064,13 @@ function ProfileScreen({ initialUserName, initialUserHandle, initialUserBio, ini
                 <div onClick={async () => {
                   if (typeof Notification === "undefined") return;
                   if (!notifPrefs.push) {
-                    const perm = await Notification.requestPermission();
-                    if (perm === "granted") {
-                      onSetNotifPrefs && onSetNotifPrefs(prev => ({ ...prev, push: true }));
-                      new Notification("Trailhead", { body: "Push notifications enabled! You'll stay in the loop.", icon: "" });
-                    }
+                    // Register service worker, request permission, persist
+                    // the PushSubscription. The helper handles the whole flow
+                    // and returns true only on full success.
+                    const ok = onSubscribePush ? await onSubscribePush() : false;
+                    if (ok) onSetNotifPrefs && onSetNotifPrefs(prev => ({ ...prev, push: true }));
                   } else {
+                    if (onUnsubscribePush) await onUnsubscribePush();
                     onSetNotifPrefs && onSetNotifPrefs(prev => ({ ...prev, push: false }));
                   }
                 }} style={{ width: 44, height: 24, borderRadius: 12, background: notifPrefs.push ? T.green : T.charcoal, position: "relative", cursor: "pointer", transition: "background 0.2s", flexShrink: 0, opacity: (typeof Notification !== "undefined" && Notification.permission !== "denied") ? 1 : 0.4 }}>
@@ -9601,10 +9753,16 @@ function ProfileScreen({ initialUserName, initialUserHandle, initialUserBio, ini
 }
 
 /* ─── OTHER USER PROFILE (Public view / Follow logic) ─── */
-function OtherProfileScreen({ userId, onBack, onMessage }) {
-  const [followState, setFollowState] = useState("none"); // none | requested | following
+function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, followingIds, onFollow, onUnfollow, fetchFollowCounts }) {
   const [activeTab, setActiveTab] = useState("builds");
   const [tappedBadge, setTappedBadge] = useState(null);
+  const [dbProfile, setDbProfile] = useState(null);
+  const [dbLoading, setDbLoading] = useState(false);
+  // Resolved auth user_id of the profile being viewed. May arrive as a handle
+  // (seed users) or a uuid (real Supabase users); we normalize to uuid here so
+  // follow CRUD always uses the FK-stable id. Null until the lookup lands.
+  const [resolvedTargetId, setResolvedTargetId] = useState(null);
+  const [liveCounts, setLiveCounts] = useState(null); // { followers, following } once fetched
 
   // Mock different user based on userId
   const profiles = {
@@ -9623,28 +9781,129 @@ function OtherProfileScreen({ userId, onBack, onMessage }) {
     },
   };
 
-  const p = profiles[userId] || profiles["Overland_Expert"];
-  const isPrivateAndNotFollowing = !p.isPublic && followState !== "following";
+  // Resolve the target's auth.users uuid + display profile. Two cases:
+  //   1. userId arrived as a uuid (from a notification's actor_id, etc.) — we
+  //      can set resolvedTargetId immediately so the follow button is live
+  //      even if the profile fetch later fails or is slow.
+  //   2. userId arrived as a handle — we need the lookup to discover the uuid.
+  // We always run the lookup so dbProfile gets populated for display, but the
+  // follow button is no longer blocked on it.
+  useEffect(() => {
+    setLiveCounts(null);
+    const seedHit = profiles[userId];
+    const isUuid = typeof userId === "string" && userId.length > 20 && userId.includes("-");
+    // Optimistic uuid resolution — lets the follow button enable instantly.
+    if (isUuid) setResolvedTargetId(userId);
+    else if (!seedHit) setResolvedTargetId(null);
+    if (seedHit) {
+      // Seed profiles aren't real auth.users; clear any stale resolved id and
+      // skip the Supabase fetch entirely. Follow button stays disabled.
+      setResolvedTargetId(null);
+      setDbProfile(null);
+      return;
+    }
+    setDbLoading(true);
+    const query = isUuid
+      ? supabase.from("profiles").select("*").eq("id", userId).maybeSingle()
+      : supabase.from("profiles").select("*").eq("handle", userId).maybeSingle();
+    query.then(({ data, error }) => {
+      if (error) console.error("[OtherProfile] profile lookup error", { userId, isUuid, error });
+      if (!data && !error) console.warn("[OtherProfile] no profile row for", { userId, isUuid });
+      if (data) {
+        setResolvedTargetId(data.id);
+        setDbProfile({
+          name: data.full_name || data.handle || "User",
+          handle: "@" + (data.handle || "user"),
+          badge: "Explorer",
+          followers: 0, following: 0,
+          points: 0,
+          isPublic: true,
+          initial: ((data.full_name || data.handle || "U").charAt(0)).toUpperCase(),
+          avatarUrl: data.avatar_url || null,
+          builds: [], trips: [], activity: [],
+        });
+      }
+      setDbLoading(false);
+    });
+  }, [userId]);
+
+  // Fetch live follower/following counts for the resolved target. Re-runs
+  // when the target changes or when the signed-in user follows/unfollows
+  // them (followingIds membership flip), so counts stay accurate without
+  // realtime.
+  const isFollowing = !!(resolvedTargetId && followingIds && followingIds.has && followingIds.has(resolvedTargetId));
+  useEffect(() => {
+    if (!resolvedTargetId || !fetchFollowCounts) { setLiveCounts(null); return; }
+    let cancelled = false;
+    fetchFollowCounts(resolvedTargetId).then(c => { if (!cancelled && c) setLiveCounts(c); });
+    return () => { cancelled = true; };
+  }, [resolvedTargetId, isFollowing]);
+
+  // Realtime: refetch counts when ANY follow event involves the user being
+  // viewed — either as follower (their following count changes) or following
+  // (their follower count changes). Per-target channel scoped to this screen
+  // so it tears down on navigation. We refetch rather than ±1 locally so
+  // overlapping events stay correct.
+  useEffect(() => {
+    if (!resolvedTargetId || !fetchFollowCounts) return;
+    const refresh = () => { fetchFollowCounts(resolvedTargetId).then(c => { if (c) setLiveCounts(c); }); };
+    const channel = supabase
+      .channel("follows_target_" + resolvedTargetId)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "follows", filter: "following_id=eq." + resolvedTargetId }, refresh)
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "follows", filter: "following_id=eq." + resolvedTargetId }, refresh)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "follows", filter: "follower_id=eq." + resolvedTargetId }, refresh)
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "follows", filter: "follower_id=eq." + resolvedTargetId }, refresh)
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [resolvedTargetId]);
+
+  // Profile resolution. Order matters: seed match wins (it's static demo data
+  // with no real DB row), then the live DB profile we fetched, then null.
+  // Crucially we do NOT fall back to a different seed user — that hides
+  // failures by showing the wrong person's data and avatar.
+  const p = profiles[userId] || dbProfile || null;
+  const isPrivateAndNotFollowing = !!p && !p.isPublic && !isFollowing;
+  // Disable the FOLLOW button for seed users (no auth.users row to FK to) and
+  // self-view (you can't follow yourself).
+  const canFollow = !!resolvedTargetId && resolvedTargetId !== currentUserId;
 
   const handleFollow = () => {
-    if (followState === "none") {
-      setFollowState(p.isPublic ? "following" : "requested");
-    } else if (followState === "following") {
-      setFollowState("none");
-    } else if (followState === "requested") {
-      setFollowState("none");
-    }
+    if (!canFollow || !p) return;
+    if (isFollowing) onUnfollow && onUnfollow(resolvedTargetId);
+    else onFollow && onFollow(resolvedTargetId, p.name);
   };
 
   const tabs = ["builds", "trips", "activity"];
+
+  if (dbLoading && !p) {
+    return (
+      <div style={{ padding: "60px 16px", textAlign: "center" }}>
+        <span style={{ fontFamily: sans, fontSize: 13, color: T.tertiary }}>Loading profile…</span>
+      </div>
+    );
+  }
+  // Lookup completed but found nothing — likely a stale handle/uuid from an
+  // old feed snapshot. Show an explicit not-found state instead of silently
+  // falling back to a seed user (which previously masked this as "wrong avatar").
+  if (!p) {
+    return (
+      <div style={{ padding: "60px 16px", textAlign: "center" }}>
+        <span style={{ fontFamily: sans, fontSize: 13, color: T.tertiary }}>Profile not found.</span>
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: "0 0 16px" }}>
       {/* Profile Header */}
       <div style={{ padding: "24px 16px 0", textAlign: "center" }}>
         <div style={{ position: "relative", display: "inline-block", marginBottom: 12 }}>
-          <div style={{ width: 80, height: 80, borderRadius: "50%", background: T.charcoal, display: "flex", alignItems: "center", justifyContent: "center", border: `3px solid ${p.isPublic ? T.copper : T.tertiary}` }}>
-            <span style={{ fontFamily: sans, fontSize: 28, fontWeight: 700, color: T.white }}>{p.initial}</span>
+          <div style={{ width: 80, height: 80, borderRadius: "50%", background: T.charcoal, display: "flex", alignItems: "center", justifyContent: "center", border: `3px solid ${p.isPublic ? T.copper : T.tertiary}`, overflow: "hidden" }}>
+            {p.avatarUrl ? (
+              <img src={p.avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            ) : (
+              <span style={{ fontFamily: sans, fontSize: 28, fontWeight: 700, color: T.white }}>{p.initial}</span>
+            )}
           </div>
           {!p.isPublic && (
             <div style={{ position: "absolute", bottom: -2, right: -2, width: 24, height: 24, borderRadius: "50%", background: T.charcoal, border: `2px solid ${T.darkCard}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -9664,14 +9923,13 @@ function OtherProfileScreen({ userId, onBack, onMessage }) {
 
         {/* Follow + Message Buttons */}
         <div style={{ display: "flex", justifyContent: "center", gap: 10, marginBottom: 16 }}>
-          <button onClick={handleFollow} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "10px 24px", borderRadius: 8, cursor: "pointer", fontFamily: sans, fontSize: 12, fontWeight: 600, letterSpacing: 1, border: "none", transition: "all 0.2s",
-            background: followState === "none" ? T.red : followState === "requested" ? T.darkCard : T.darkCard,
-            color: followState === "none" ? T.white : followState === "requested" ? T.copper : T.green,
-            ...(followState !== "none" ? { border: `1px solid ${followState === "requested" ? T.copper : T.green}40` } : {}),
+          <button onClick={handleFollow} disabled={!canFollow} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "10px 24px", borderRadius: 8, cursor: canFollow ? "pointer" : "not-allowed", fontFamily: sans, fontSize: 12, fontWeight: 600, letterSpacing: 1, border: "none", transition: "all 0.2s",
+            background: !canFollow ? T.darkCard : isFollowing ? T.darkCard : T.red,
+            color: !canFollow ? T.tertiary : isFollowing ? T.green : T.white,
+            opacity: canFollow ? 1 : 0.5,
+            ...(isFollowing ? { border: `1px solid ${T.green}40` } : {}),
           }}>
-            {followState === "none" && <><UserPlus size={14} /> FOLLOW</>}
-            {followState === "requested" && <><Clock size={14} /> REQUESTED</>}
-            {followState === "following" && <><UserCheck size={14} /> FOLLOWING</>}
+            {isFollowing ? <><UserCheck size={14} /> FOLLOWING</> : <><UserPlus size={14} /> FOLLOW</>}
           </button>
           <button onClick={() => onMessage && onMessage(userId)} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "10px 24px", borderRadius: 8, cursor: "pointer", fontFamily: sans, fontSize: 12, fontWeight: 600, letterSpacing: 1, background: T.darkCard, border: `1px solid ${T.copper}40`, color: T.copper, transition: "all 0.2s" }}>
             <Mail size={14} /> MESSAGE
@@ -9681,12 +9939,12 @@ function OtherProfileScreen({ userId, onBack, onMessage }) {
         {/* Stats Row */}
         <div style={{ display: "flex", justifyContent: "center", gap: 24, marginBottom: 16 }}>
           <div style={{ textAlign: "center" }}>
-            <span style={{ fontFamily: sans, fontSize: 18, color: T.white, fontWeight: 700, display: "block" }}>{p.followers.toLocaleString()}</span>
+            <span style={{ fontFamily: sans, fontSize: 18, color: T.white, fontWeight: 700, display: "block" }}>{(liveCounts ? liveCounts.followers : p.followers).toLocaleString()}</span>
             <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1 }}>FOLLOWERS</span>
           </div>
           <div style={{ width: 1, background: T.charcoal }} />
           <div style={{ textAlign: "center" }}>
-            <span style={{ fontFamily: sans, fontSize: 18, color: T.white, fontWeight: 700, display: "block" }}>{p.following.toLocaleString()}</span>
+            <span style={{ fontFamily: sans, fontSize: 18, color: T.white, fontWeight: 700, display: "block" }}>{(liveCounts ? liveCounts.following : p.following).toLocaleString()}</span>
             <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1 }}>FOLLOWING</span>
           </div>
           <div style={{ width: 1, background: T.charcoal }} />
@@ -10741,7 +10999,7 @@ function PhotoUploader({ photos, onChange, maxPhotos = 10, compact = false }) {
 }
 
 /* ─── COMPOSE / CREATE POST SCREEN ─── */
-function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotification, onAddRoute, onOpenDM, userBuilds }) {
+function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotification, onAddRoute, onOpenDM, onSendDmInvite, userBuilds, currentUserName, currentUserHandle, onSearchUsers }) {
   const [postType, setPostType] = useState(null); // null = picker, "general" | "route" | "convoy" | "recovery"
   const [general, setGeneral] = useState({ text: "", photos: [], location: "" });
   const [showLocationInput, setShowLocationInput] = useState(false);
@@ -10760,6 +11018,20 @@ function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotificatio
   const convoyPinAutocompleteRef = useRef(null);
   const [convoyInvites, setConvoyInvites] = useState([]); // ["@handle1", "@handle2"]
   const [convoyInviteInput, setConvoyInviteInput] = useState("");
+  const [convoyInviteResults, setConvoyInviteResults] = useState([]);
+  // Debounced async search for the convoy-invite picker. Falls back gracefully
+  // if onSearchUsers isn't wired (returns empty list — typing @handle + Enter
+  // still works as a manual add).
+  useEffect(() => {
+    const q = convoyInviteInput.trim().replace(/^@/, "");
+    if (!q || !onSearchUsers) { setConvoyInviteResults([]); return; }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      const results = await onSearchUsers(q);
+      if (!cancelled) setConvoyInviteResults(results || []);
+    }, 250);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [convoyInviteInput]);
   const convoyPhotoRef = useRef(null);
   const [recovery, setRecovery] = useState({ title: "", vehicle: "", description: "", urgency: "HIGH", location: "", coords: "" });
   const convoyPinMapInst = useRef(null);
@@ -10855,24 +11127,27 @@ function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotificatio
     { key: "recovery", label: "Recovery Request", desc: "Request help from nearby overlanders", icon: AlertTriangle, color: T.red },
   ];
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const id = "user_" + Date.now();
+    const meName = currentUserName || "You";
+    const meHandle = currentUserHandle || "";
+    const meInitial = meName.charAt(0).toUpperCase();
     let newPost = null;
     if (postType === "general") {
       if (!general.text.trim() && general.photos.length === 0) return;
       const hasPhotos = general.photos.length > 0;
       newPost = {
-        id, type: hasPhotos ? "PHOTOS" : "POST", user: "KyleLPO", initial: "K", time: Date.now(),
+        id, type: hasPhotos ? "PHOTOS" : "POST", user: meName, handle: meHandle, initial: meInitial, time: Date.now(),
         title: general.text.trim() || "New post",
         body: null,
-        ...(hasPhotos ? { photoCount: general.photos.length, photoUrls: general.photos.map(p => ({ url: p.url, type: p.type || "image", caption: p.caption || "" })) } : {}),
+        ...(general.photos.length > 0 ? { photoCount: general.photos.length, photoUrls: general.photos.map(p => ({ url: p.url, type: p.type || "image", caption: p.caption || "" })) } : {}),
         ...(general.location ? { location: general.location } : {}),
         likes: 0, comments: 0,
       };
     } else if (postType === "route") {
       if (!route.name.trim()) return;
       newPost = {
-        id, type: "ROUTES", user: "KyleLPO", initial: "K", time: Date.now(),
+        id, type: "ROUTES", user: meName, handle: meHandle, initial: meInitial, time: Date.now(),
         title: route.name, body: route.description || null,
         distance: route.distance || "—", duration: route.time || "—",
         badge: null, verified: 0,
@@ -10883,7 +11158,7 @@ function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotificatio
       const d = convoy.departDate ? new Date(convoy.departDate) : null;
       const hasConvoyPhotos = convoyPhotos.length > 0;
       newPost = {
-        id, type: "CONVOYS", user: "KyleLPO", initial: "K", time: Date.now(),
+        id, type: "CONVOYS", user: meName, handle: meHandle, initial: meInitial, time: Date.now(),
         title: convoy.title, body: convoy.description || null,
         month: d ? d.toLocaleString("en", { month: "short" }).toUpperCase() : "TBD",
         day: d ? String(d.getDate()) : "—",
@@ -10894,31 +11169,17 @@ function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotificatio
         returnDate: convoy.returnDate || "",
         returnTime: convoy.returnTime || "",
         invites: convoyInvites.length > 0 ? convoyInvites : [],
-        rsvps: {}, // { "@handle": "going" | "maybe" | "declined" }
         likes: 0, comments: 0,
       };
-      // Send DM invites to each invited user
-      if (convoyInvites.length > 0 && onOpenDM) {
-        const dateStr = d ? d.toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" }) : "TBD";
-        convoyInvites.forEach(handle => {
-          const cleanHandle = handle.replace(/^@/, "");
-          onOpenDM(cleanHandle, null, {
-            type: "convoy_invite",
-            convoyId: id,
-            title: convoy.title,
-            location: convoy.location || "TBD",
-            date: dateStr,
-            time: convoy.departTime || "TBD",
-            slots: parseInt(convoy.slots) || 0,
-            from: "KyleLPO",
-          });
-        });
-      }
+      // Convoy invite DMs are sent further down — only after onSubmit resolves
+      // so we can stamp the real Supabase UUID on the convoyId. Sending here
+      // would freeze the client-side temp id ("user_<ts>") into the payload
+      // and break RSVP later (post_id type uuid wouldn't accept it).
       // Notification for invites
       if (convoyInvites.length > 0) {
         onAddNotification && onAddNotification({
           type: "convoy",
-          user: "KyleLPO",
+          user: meName,
           text: `invited ${convoyInvites.length} user${convoyInvites.length > 1 ? "s" : ""} to`,
           target: convoy.title,
           icon: Users,
@@ -10929,7 +11190,7 @@ function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotificatio
       if (!recovery.title.trim()) return;
       const hasRecPhotos = recoveryPhotos.length > 0;
       newPost = {
-        id, type: "RECOVERY", user: "KyleLPO", initial: "K", time: Date.now(),
+        id, type: "RECOVERY", user: meName, handle: meHandle, initial: meInitial, time: Date.now(),
         title: recovery.title, body: recovery.description || null,
         location: recovery.location || "Unknown", urgency: recovery.urgency,
         coords: recovery.coords || "—",
@@ -10947,7 +11208,7 @@ function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotificatio
         time: Date.now(),
         vehicle: recovery.vehicle || "",
         detail: recovery.description || "",
-        author: "KyleLPO",
+        author: meHandle || meName,
       });
       onAddNotification && onAddNotification({
         type: "recovery",
@@ -10959,7 +11220,13 @@ function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotificatio
       });
     }
     if (newPost) {
-      onSubmit && onSubmit(newPost);
+      // Await onSubmit so we can pull the real Supabase post id off the
+      // resolved item — needed to stamp convoy invites with a valid UUID.
+      // Falls back gracefully if onSubmit doesn't return a Promise (older
+      // call sites or guest mode).
+      const submitResult = onSubmit && onSubmit(newPost);
+      const created = submitResult && typeof submitResult.then === "function" ? await submitResult : null;
+      const realPostId = created && typeof created.id === "string" && created.id.length > 20 && created.id.includes("-") ? created.id : null;
       // Send mention notifications for @tagged users in the post
       const postText = newPost.title || "";
       const mentions = extractMentions(postText);
@@ -10968,6 +11235,26 @@ function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotificatio
           onAddNotification && onAddNotification({ type: "mention", user: "KyleLPO", text: "mentioned you in a post", target: newPost.title, icon: AtSign, iconColor: T.copper });
         }
       });
+      // Convoy DM invites — fire only once we have a real UUID for the post
+      // so the recipient's RSVP buttons reference the actual convoy_rsvps.post_id.
+      // Send via onSendDmInvite (silent — doesn't touch the DM screen UI),
+      // not onOpenDM, so multi-invite doesn't trample shared state across
+      // sequential calls. Sends are launched in parallel.
+      if (postType === "convoy" && convoyInvites.length > 0 && onSendDmInvite && realPostId) {
+        const dConvoy = convoy.departDate ? new Date(convoy.departDate) : null;
+        const dateStr = dConvoy ? dConvoy.toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" }) : "TBD";
+        const sharedPost = {
+          type: "convoy_invite",
+          convoyId: realPostId,
+          title: convoy.title,
+          location: convoy.location || "TBD",
+          date: dateStr,
+          time: convoy.departTime || "TBD",
+          slots: parseInt(convoy.slots) || 0,
+          from: meHandle || meName,
+        };
+        await Promise.all(convoyInvites.map(handle => onSendDmInvite(handle.replace(/^@/, ""), sharedPost)));
+      }
     }
     onClose();
   };
@@ -11338,30 +11625,32 @@ function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotificatio
                     }} placeholder="Search users by handle..." style={{ ...inputStyle, paddingLeft: 34 }} onFocus={(e) => e.target.style.borderColor = T.copper} onBlur={(e) => e.target.style.borderColor = T.charcoal} />
                   </div>
                 </div>
-                {/* User search dropdown */}
+                {/* User search dropdown — backed by Supabase profiles search */}
                 {convoyInviteInput.trim().length > 0 && (() => {
-                  const q = convoyInviteInput.trim().replace(/^@/, "").toLowerCase();
-                  const matches = globalSearchUsers.filter(u => u.handle !== "KyleLPO" && (u.handle.toLowerCase().includes(q) || u.name.toLowerCase().includes(q)) && !convoyInvites.includes("@" + u.handle));
+                  const matches = (convoyInviteResults || []).filter(u => u.handle && !convoyInvites.includes("@" + u.handle));
                   if (matches.length === 0) return null;
                   return (
                     <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 50, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8, marginTop: 4, maxHeight: 200, overflowY: "auto", boxShadow: `0 8px 24px rgba(0,0,0,0.5)` }}>
-                      {matches.slice(0, 6).map(u => (
-                        <div key={u.handle} onClick={() => {
-                          if (!convoyInvites.includes("@" + u.handle)) {
-                            setConvoyInvites(prev => [...prev, "@" + u.handle]);
-                          }
-                          setConvoyInviteInput("");
-                        }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", cursor: "pointer", borderBottom: `1px solid ${T.charcoal}40`, transition: "background 0.1s" }} onMouseEnter={e => e.currentTarget.style.background = `${T.charcoal}80`} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                          <div style={{ width: 32, height: 32, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                            <span style={{ fontFamily: sans, fontSize: 12, fontWeight: 700, color: T.white }}>{u.initial}</span>
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, display: "block" }}>@{u.handle}</span>
-                            <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{u.name}</span>
-                          </div>
-                          <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, background: `${T.copper}18`, padding: "3px 8px", borderRadius: 4, letterSpacing: 0.5 }}>{u.badge}</span>
-                        </div>
-                      ))}
+                      {matches.slice(0, 6).map(u => {
+                        const initial = (u.full_name || u.handle || "U").charAt(0).toUpperCase();
+                        return (
+                          <div key={u.id} onClick={() => {
+                            if (!convoyInvites.includes("@" + u.handle)) {
+                              setConvoyInvites(prev => [...prev, "@" + u.handle]);
+                            }
+                            setConvoyInviteInput("");
+                          }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", cursor: "pointer", borderBottom: `1px solid ${T.charcoal}40`, transition: "background 0.1s" }} onMouseEnter={e => e.currentTarget.style.background = `${T.charcoal}80`} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                            <div style={{ width: 32, height: 32, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" }}>
+                              {u.avatar_url
+                                ? <img src={u.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                : <span style={{ fontFamily: sans, fontSize: 12, fontWeight: 700, color: T.white }}>{initial}</span>}
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, display: "block" }}>@{u.handle}</span>
+                              <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{u.full_name}</span>
+                            </div>
+                          </div>);
+                      })}
                     </div>
                   );
                 })()}
@@ -11596,152 +11885,313 @@ const dmConversations = [
   },
 ];
 
-function DMScreen({ onClose, onViewUser, initialUser, initialMessage, initialSharedPost, conversations, setConversations, onOpenPost, onRsvpConvoy }) {
-  const [view, setView] = useState(initialUser ? "chat" : "inbox"); // "inbox" | "chat" | "new"
-  const [activeConvo, setActiveConvo] = useState(() => {
-    if (initialUser) {
-      const existing = conversations.find(c => c.user === initialUser);
-      if (existing) return { ...existing, unread: 0 };
-      return { id: "new_" + initialUser, user: initialUser, initial: initialUser.charAt(0).toUpperCase(), name: initialUser, badge: "", online: false, unread: 0, messages: [], lastMessage: "", lastTime: "now" };
-    }
-    return null;
-  });
+function DMScreen({ onClose, onViewUser, initialConvId, initialMessage, initialSharedPost, conversations, currentUserId, onSendMessage, onMarkRead, onLoadMessages, onSearchUsers, onCreateGroup, onOpenPost, onRsvpConvoy, convoyRsvps, onLeaveConversation }) {
+  const [view, setView] = useState(initialConvId ? "chat" : "inbox"); // "inbox" | "chat" | "new"
+  const [activeConvId, setActiveConvId] = useState(initialConvId || null);
+  // Always derive the active convo from the source-of-truth `conversations`
+  // prop so realtime updates (new messages, unread changes) flow through.
+  const activeConvo = activeConvId ? conversations.find(c => c.id === activeConvId) || null : null;
   const [msgText, setMsgText] = useState(initialMessage || "");
   const [chatPhotos, setChatPhotos] = useState([]);
+  const chatFileRef = useRef(null);
   const [pendingSharedPost, setPendingSharedPost] = useState(initialSharedPost || null);
+  // Image carousel for tapping a photo attachment in a message.
+  const [carouselImages, setCarouselImages] = useState(null);
+  const [carouselIndex, setCarouselIndex] = useState(0);
+  // Participants dropdown — collapsible roster shown below the chat header.
+  // Available for both group + direct convos so users can quickly see/click
+  // the other party even from the dropdown.
+  const [participantsExpanded, setParticipantsExpanded] = useState(false);
+  // Swipe-to-leave on inbox rows. swipedConvoId tracks which row currently
+  // has its delete/leave action revealed; touchStartX is the gesture origin.
+  const [swipedConvoId, setSwipedConvoId] = useState(null);
+  const touchStartXRef = useRef(0);
+  const touchDeltaXRef = useRef(0);
+  const SWIPE_REVEAL_PX = 84; // width of the action button revealed on full swipe
+  // Conversation pending leave-confirmation modal.
+  const [confirmingLeave, setConfirmingLeave] = useState(null); // convo object or null
   const [searchQ, setSearchQ] = useState("");
   const [newRecipient, setNewRecipient] = useState("");
+  const [recipientResults, setRecipientResults] = useState([]);
+  // Multi-select for group creation. Each entry: { id, full_name, handle, avatar_url, initial }
+  const [selectedRecipients, setSelectedRecipients] = useState([]);
+  const [groupTitle, setGroupTitle] = useState("");
+  // First-message draft typed inline on the new-message screen so the user
+  // can type-and-send in one step without an intermediate OPEN tap.
+  const [firstMsgText, setFirstMsgText] = useState("");
+  const [creatingConvo, setCreatingConvo] = useState(false);
   const chatEndRef = useRef(null);
-  const chatFileRef = useRef(null);
 
-  // Clear unread when opening via initialUser
+  // Mark active conversation as read whenever it becomes active or its
+  // unread count changes (e.g. realtime delivered a new msg while open).
   useEffect(() => {
-    if (initialUser) {
-      setConversations(prev => prev.map(c => c.user === initialUser ? { ...c, unread: 0 } : c));
-    }
-  }, [initialUser]);
+    if (activeConvId && onMarkRead) onMarkRead(activeConvId);
+  }, [activeConvId, activeConvo && activeConvo.unread]);
 
-  // Auto-send recovery response message
+  // React to a deferred initialConvId arrival — openDM in root resolves the
+  // conversation asynchronously (handle → uuid → find/create), so the
+  // initial value is null at mount time and lands moments later. Switch to
+  // the chat view as soon as it does.
+  useEffect(() => {
+    if (initialConvId && initialConvId !== activeConvId) {
+      setActiveConvId(initialConvId);
+      setView("chat");
+    }
+  }, [initialConvId]);
+
+  // Lazy-load message history when entering a chat.
+  useEffect(() => {
+    if (activeConvId && onLoadMessages) onLoadMessages(activeConvId);
+  }, [activeConvId]);
+
+  // Debounced async user search for the new-convo recipient picker.
+  useEffect(() => {
+    const q = newRecipient.trim();
+    if (!q) { setRecipientResults([]); return; }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      const results = onSearchUsers ? await onSearchUsers(q) : [];
+      if (!cancelled) {
+        // Exclude already-selected recipients from results.
+        const selectedIds = new Set(selectedRecipients.map(r => r.id));
+        setRecipientResults(results.filter(r => !selectedIds.has(r.id)));
+      }
+    }, 250);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [newRecipient, selectedRecipients]);
+
+  // Auto-send any initial message + shared post once the active convo lands
+  // (used by recovery responses, convoy invites from compose, etc).
   const autoSentRef = useRef(false);
   useEffect(() => {
-    if (autoSentRef.current || !initialUser || !initialMessage || !initialSharedPost || !activeConvo) return;
+    if (autoSentRef.current || !activeConvo || (!initialMessage && !initialSharedPost)) return;
     autoSentRef.current = true;
-    const timer = setTimeout(() => {
-      const newMsg = { id: Date.now(), from: "me", text: initialMessage, time: Date.now(), sharedPost: initialSharedPost };
-      const lastMsg = "Shared: " + initialSharedPost.title;
-      const updated = { ...activeConvo, messages: [...activeConvo.messages, newMsg], lastMessage: lastMsg, lastTime: "Just now", unread: 0 };
-      setActiveConvo(updated);
-      setConversations(prev => {
-        const exists = prev.find(c => c.id === updated.id);
-        if (exists) return prev.map(c => c.id === updated.id ? updated : c);
-        return [updated, ...prev];
-      });
+    const t = setTimeout(() => {
+      const payload = initialSharedPost ? { sharedPost: initialSharedPost } : null;
+      onSendMessage && onSendMessage(activeConvo.id, initialMessage || "", payload);
       setMsgText("");
       setPendingSharedPost(null);
     }, 300);
-    return () => clearTimeout(timer);
-  }, [initialUser, initialMessage, initialSharedPost, activeConvo]);
+    return () => clearTimeout(t);
+  }, [activeConvo && activeConvo.id, initialMessage, initialSharedPost]);
 
   useEffect(() => {
     if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: "smooth" });
   }, [activeConvo?.messages?.length]);
 
   const openConvo = (convo) => {
-    const cleared = { ...convo, unread: 0 };
-    setActiveConvo(cleared);
-    setConversations(prev => prev.map(c => c.id === convo.id ? cleared : c));
+    setActiveConvId(convo.id);
     setView("chat");
   };
 
+  const sendMessage = () => {
+    if ((!msgText.trim() && !pendingSharedPost && chatPhotos.length === 0) || !activeConvo) return;
+    const payload = {};
+    if (pendingSharedPost) payload.sharedPost = pendingSharedPost;
+    // Pass through type/name alongside url so videos persist as videos. The
+    // upload helper later swaps url for the public storage URL but preserves
+    // the surrounding shape including type === "video" for render branching.
+    if (chatPhotos.length > 0) payload.photos = chatPhotos.map(p => ({ url: p.url, type: p.type || "image", name: p.name }));
+    onSendMessage && onSendMessage(activeConvo.id, msgText.trim(), Object.keys(payload).length > 0 ? payload : null);
+    setMsgText("");
+    setPendingSharedPost(null);
+    setChatPhotos([]);
+  };
+
+  // File picker handler — stages each selected image/video locally for preview.
+  // Actual upload happens inside sendDmMessage when the user hits send (so
+  // failed sends don't waste bandwidth). Images are read as data URLs (small
+  // enough to embed); videos use blob URLs (data URLs would be huge).
   const handleChatFiles = (e) => {
     const files = Array.from(e.target.files || []);
     if (chatFileRef.current) chatFileRef.current.value = "";
     files.forEach(file => {
       const isVideo = file.type.startsWith("video/");
+      const isImage = file.type.startsWith("image/");
+      if (!isVideo && !isImage) return;
       if (isVideo) {
         const blobUrl = URL.createObjectURL(file);
         setChatPhotos(prev => [...prev, { id: Date.now() + Math.random(), url: blobUrl, name: file.name, type: "video" }]);
       } else {
         const reader = new FileReader();
         reader.onload = (ev) => {
-          setChatPhotos(prev => [...prev, { id: Date.now() + Math.random(), url: ev.target.result, name: file.name, type: "image" }]);
+          setChatPhotos(prev => [...prev, { id: Date.now() + Math.random(), url: ev.target.result, name: file.name }]);
         };
         reader.readAsDataURL(file);
       }
     });
   };
 
-  const sendMessage = () => {
-    if ((!msgText.trim() && chatPhotos.length === 0 && !pendingSharedPost) || !activeConvo) return;
-    const newMsg = { id: Date.now(), from: "me", text: msgText.trim(), time: Date.now(), photos: chatPhotos.length > 0 ? chatPhotos.map(p => p.url) : undefined, sharedPost: pendingSharedPost || undefined };
-    const lastMsg = pendingSharedPost ? ("Shared: " + pendingSharedPost.title) : msgText.trim();
-    const updated = { ...activeConvo, messages: [...activeConvo.messages, newMsg], lastMessage: lastMsg, lastTime: "Just now", unread: 0 };
-    setActiveConvo(updated);
-    setConversations(prev => {
-      const exists = prev.find(c => c.id === updated.id);
-      if (exists) return prev.map(c => c.id === updated.id ? updated : c);
-      return [updated, ...prev];
-    });
-    setMsgText("");
-    setChatPhotos([]);
-    setPendingSharedPost(null);
+  // ─── Mobile keyboard handling ─────────────────────────────────────────
+  // Two iOS Safari quirks the DM screen has to fight:
+  //   1. When the keyboard opens, Safari shifts the visual viewport up but
+  //      `position: fixed` and `100dvh` don't always match the visible area
+  //      reliably — fixed elements can drift behind the keyboard or off the
+  //      top of the visible region as the user scrolls inside the chat.
+  //   2. Overscroll inside the messages list bubbles to the body and lets
+  //      Safari scroll the page, dragging our header off-screen.
+  // The robust pattern is: lock body scroll while the DM is mounted and
+  // size the container to window.visualViewport (not just CSS dvh) so it
+  // tracks the keyboard precisely on every resize/scroll event.
+  const [vv, setVv] = useState({ height: typeof window !== "undefined" ? window.innerHeight : 800, top: 0 });
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.visualViewport) return;
+    const update = () => setVv({ height: window.visualViewport.height, top: window.visualViewport.offsetTop });
+    update();
+    window.visualViewport.addEventListener("resize", update);
+    window.visualViewport.addEventListener("scroll", update);
+    return () => {
+      window.visualViewport.removeEventListener("resize", update);
+      window.visualViewport.removeEventListener("scroll", update);
+    };
+  }, []);
+  // Lock body scroll while DMScreen is mounted. We restore the previous
+  // scroll position on unmount so closing the DM puts the user back where
+  // they were on the feed/profile beneath.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const scrollY = window.scrollY;
+    const orig = {
+      overflow: document.body.style.overflow,
+      position: document.body.style.position,
+      top: document.body.style.top,
+      width: document.body.style.width,
+      htmlOverflow: document.documentElement.style.overflow,
+    };
+    document.body.style.overflow = "hidden";
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = "100%";
+    document.documentElement.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = orig.overflow;
+      document.body.style.position = orig.position;
+      document.body.style.top = orig.top;
+      document.body.style.width = orig.width;
+      document.documentElement.style.overflow = orig.htmlOverflow;
+      window.scrollTo(0, scrollY);
+    };
+  }, []);
+  // Style applied to every full-screen DM view — pins to the visual viewport
+  // so header + input never drift when the keyboard opens.
+  const overlayStyle = { position: "fixed", top: vv.top, left: 0, right: 0, height: vv.height, background: T.darkBg, zIndex: 500, display: "flex", flexDirection: "column" };
+
+  // Unified flow used by the inline message input on the new-message screen.
+  // Creates (or finds) the conversation, optionally sends the first message,
+  // and opens the chat. Empty body is fine — that just creates the convo
+  // (used by the explicit OPEN/CREATE button without a draft message).
+  const startAndOpenConvo = async (body) => {
+    if (selectedRecipients.length === 0 || !onCreateGroup || creatingConvo) return;
+    setCreatingConvo(true);
+    try {
+      const convId = await onCreateGroup(selectedRecipients.map(r => r.id), groupTitle.trim());
+      if (!convId) return;
+      const trimmed = (body || "").trim();
+      if (trimmed && onSendMessage) await onSendMessage(convId, trimmed, null);
+      setActiveConvId(convId);
+      setView("chat");
+      setNewRecipient("");
+      setSelectedRecipients([]);
+      setGroupTitle("");
+      setFirstMsgText("");
+    } finally {
+      setCreatingConvo(false);
+    }
   };
 
-  const badgeColor = (b) => b === "Founder" ? T.red : b === "Master Builder" ? T.copper : b === "Navigator" ? T.green : T.tertiary;
-  const totalUnread = conversations.reduce((sum, c) => sum + c.unread, 0);
+  const totalUnread = conversations.reduce((sum, c) => sum + (c.unread || 0), 0);
 
   const filteredConvos = searchQ.trim()
-    ? conversations.filter(c => c.user.toLowerCase().includes(searchQ.toLowerCase()) || c.name.toLowerCase().includes(searchQ.toLowerCase()))
+    ? conversations.filter(c => (c.name || "").toLowerCase().includes(searchQ.toLowerCase()) || (c.user || "").toLowerCase().includes(searchQ.toLowerCase()))
     : conversations;
-
-  // New message recipient search
-  const recipientResults = newRecipient.trim().length > 0
-    ? globalSearchUsers.filter(u => (u.handle.toLowerCase().includes(newRecipient.toLowerCase()) || u.name.toLowerCase().includes(newRecipient.toLowerCase())) && !conversations.find(c => c.user === u.handle))
-    : [];
 
   // ─── Chat View ───
   if (view === "chat" && activeConvo) {
     return (
-      <div style={{ position: "absolute", inset: 0, background: T.darkBg, zIndex: 500, display: "flex", flexDirection: "column" }}>
+      <div style={overlayStyle}>
         {/* Chat header */}
         <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", background: T.charcoal, borderBottom: `1px solid ${T.darkCard}`, flexShrink: 0 }}>
-          <button onClick={() => { setView("inbox"); setActiveConvo(null); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" }}>
+          <button onClick={() => { setView("inbox"); setActiveConvId(null); setParticipantsExpanded(false); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" }}>
             <ChevronLeft size={22} color={T.white} strokeWidth={1.5} />
           </button>
-          <div onClick={() => { onViewUser && onViewUser(activeConvo.user); }} style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, cursor: "pointer" }}>
-            <div style={{ position: "relative" }}>
-              <div style={{ width: 36, height: 36, borderRadius: "50%", background: T.charcoal, border: `2px solid ${T.copper}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <span style={{ fontFamily: sans, fontSize: 14, fontWeight: 700, color: T.white }}>{activeConvo.initial}</span>
-              </div>
-              {activeConvo.online && <div style={{ position: "absolute", bottom: 0, right: 0, width: 10, height: 10, borderRadius: "50%", background: T.green, border: `2px solid ${T.charcoal}` }} />}
+          <div onClick={() => setParticipantsExpanded(v => !v)} style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, cursor: "pointer" }}>
+            <div style={{ width: 36, height: 36, borderRadius: "50%", background: T.charcoal, border: `2px solid ${T.copper}`, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+              {activeConvo.avatarUrl
+                ? <img src={activeConvo.avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                : <span style={{ fontFamily: sans, fontSize: 14, fontWeight: 700, color: T.white }}>{activeConvo.initial}</span>}
             </div>
-            <div>
-              <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 600, display: "block" }}>@{activeConvo.user}</span>
-              <span style={{ fontFamily: sans, fontSize: 10, color: activeConvo.online ? T.green : T.tertiary }}>{activeConvo.online ? "Online" : "Offline"}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 600, display: "block" }}>{activeConvo.type === "direct" ? "@" + (activeConvo.user || "") : activeConvo.name}</span>
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>
+                {activeConvo.type === "direct" ? activeConvo.name : `${(activeConvo.participants || []).length} participants`}
+              </span>
             </div>
+            <ChevronDown size={16} color={T.tertiary} style={{ transform: participantsExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
           </div>
         </div>
+        {/* Participants dropdown — expanded under the header. Tap a row to
+            open that user's profile. Works for both direct + group convos. */}
+        {participantsExpanded && (
+          <div style={{ background: T.darkCard, borderBottom: `1px solid ${T.charcoal}`, padding: "8px 16px 12px", flexShrink: 0, maxHeight: 240, overflowY: "auto" }}>
+            <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 8 }}>{(activeConvo.participants || []).length} {((activeConvo.participants || []).length === 1) ? "PARTICIPANT" : "PARTICIPANTS"}</span>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {(activeConvo.participants || []).map(p => {
+                const isMe = p.userId === currentUserId;
+                return (
+                  <div key={p.userId} onClick={() => { if (!isMe) { setParticipantsExpanded(false); onViewUser && onViewUser(p.userId); } }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 8px", borderRadius: 6, cursor: isMe ? "default" : "pointer", background: T.charcoal }}>
+                    <div style={{ width: 32, height: 32, borderRadius: "50%", background: T.charcoal, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0, border: `1px solid ${T.copper}40` }}>
+                      {p.avatarUrl
+                        ? <img src={p.avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        : <span style={{ fontFamily: sans, fontSize: 12, fontWeight: 700, color: T.white }}>{p.initial}</span>}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, display: "block" }}>{p.fullName}{isMe && <span style={{ color: T.tertiary, fontWeight: 400, marginLeft: 6 }}>· you</span>}</span>
+                      {p.handle && <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>@{p.handle}</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
-        {/* Messages */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: 8 }}>
-          {activeConvo.messages.length === 0 && (
+        {/* Messages — overscrollBehavior contains rubber-band scroll inside this list
+            so it can't bubble up and drag the page on iOS. */}
+        <div style={{ flex: 1, overflowY: "auto", overscrollBehavior: "contain", WebkitOverflowScrolling: "touch", padding: "16px", display: "flex", flexDirection: "column", gap: 8 }}>
+          {(activeConvo.messages || []).length === 0 && (
             <div style={{ textAlign: "center", padding: "40px 16px" }}>
               <Mail size={32} color={T.tertiary} style={{ opacity: 0.3, marginBottom: 12 }} />
               <p style={{ fontFamily: serif, fontSize: 14, color: T.tertiary, margin: "0 0 4px" }}>Start a conversation</p>
-              <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: 0 }}>Send a message to @{activeConvo.user}</p>
+              <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: 0 }}>{activeConvo.type === "direct" ? `Send a message to @${activeConvo.user || activeConvo.name}` : `Send a message to ${activeConvo.name}`}</p>
             </div>
           )}
-          {activeConvo.messages.map((msg) => {
+          {(activeConvo.messages || []).map((msg) => {
             const isMe = msg.from === "me";
+            // For groups, label non-self messages with the sender's name.
+            const sender = !isMe && activeConvo.type === "group"
+              ? (activeConvo.participants || []).find(p => p.userId === msg.senderId)
+              : null;
             return (
               <div key={msg.id} style={{ display: "flex", justifyContent: isMe ? "flex-end" : "flex-start" }}>
                 <div style={{ maxWidth: "78%", padding: "10px 14px", borderRadius: isMe ? "14px 14px 4px 14px" : "14px 14px 14px 4px", background: isMe ? T.red : T.darkCard, border: isMe ? "none" : `1px solid ${T.charcoal}` }}>
-                  {msg.sharedPost && msg.sharedPost.type === "convoy_invite" ? (
+                  {sender && (
+                    <span onClick={(e) => { e.stopPropagation(); onViewUser && onViewUser(sender.userId); }} style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600, display: "block", marginBottom: 3, cursor: "pointer" }}>{sender.fullName}</span>
+                  )}
+                  {msg.sharedPost && msg.sharedPost.type === "convoy_invite" ? (() => {
+                    // Source the current RSVP from convoyRsvps (DB-backed,
+                    // realtime) so the button state stays correct after the
+                    // user taps GOING/MAYBE/CAN'T from anywhere \u2014 DM card,
+                    // feed card, another device, etc.
+                    const convoyId = msg.sharedPost.convoyId;
+                    const myRsvpEntry = convoyRsvps && currentUserId && convoyRsvps[convoyId] ? convoyRsvps[convoyId][currentUserId] : null;
+                    const myStatus = myRsvpEntry ? myRsvpEntry.status : null;
+                    return (
                     <div style={{ borderRadius: 8, overflow: "hidden", border: `1px solid ${T.copper}40`, marginBottom: msg.text ? 8 : 0, background: isMe ? "rgba(0,0,0,0.15)" : `${T.charcoal}80` }}>
-                      <div style={{ padding: "10px 12px 0" }}>
+                      <div onClick={() => onOpenPost && onOpenPost(msg.sharedPost)} style={{ padding: "10px 12px 0", cursor: "pointer" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
                           <Users size={14} color={T.copper} />
                           <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1, fontWeight: 600 }}>CONVOY INVITE</span>
+                          <ChevronRight size={12} color={T.copper} style={{ marginLeft: "auto" }} />
                         </div>
                         <p style={{ fontFamily: serif, fontSize: 14, color: T.white, margin: "0 0 6px", fontWeight: 600, lineHeight: 1.3 }}>{msg.sharedPost.title}</p>
                         <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 8 }}>
@@ -11766,13 +12216,14 @@ function DMScreen({ onClose, onViewUser, initialUser, initialMessage, initialSha
                       </div>
                       <div style={{ display: "flex", borderTop: `1px solid ${isMe ? "rgba(255,255,255,0.1)" : T.charcoal}` }}>
                         {[{ label: "GOING", value: "going", color: T.green }, { label: "MAYBE", value: "maybe", color: T.copper }, { label: "CAN'T", value: "declined", color: T.tertiary }].map((opt, oi) => (
-                          <button key={opt.value} onClick={(e) => { e.stopPropagation(); const convoyId = msg.sharedPost.convoyId; onRsvpConvoy && onRsvpConvoy(convoyId, msg.rsvpStatus === opt.value ? null : opt.value); const updatedMsgs = activeConvo.messages.map(m => m.id === msg.id ? { ...m, rsvpStatus: m.rsvpStatus === opt.value ? null : opt.value } : m); setConversations(prev => prev.map(c => c.id === activeConvo.id ? { ...c, messages: updatedMsgs } : c)); }} style={{ flex: 1, fontFamily: sans, fontSize: 10, letterSpacing: 0.8, fontWeight: 600, padding: "10px 0", background: msg.rsvpStatus === opt.value ? `${opt.color}25` : "transparent", color: msg.rsvpStatus === opt.value ? opt.color : T.tertiary, border: "none", borderRight: oi < 2 ? `1px solid ${isMe ? "rgba(255,255,255,0.1)" : T.charcoal}` : "none", cursor: "pointer", transition: "all 0.15s" }}>
-                            {msg.rsvpStatus === opt.value ? `\u2713 ${opt.label}` : opt.label}
+                          <button key={opt.value} onClick={(e) => { e.stopPropagation(); onRsvpConvoy && onRsvpConvoy(convoyId, myStatus === opt.value ? null : opt.value); }} style={{ flex: 1, fontFamily: sans, fontSize: 10, letterSpacing: 0.8, fontWeight: 600, padding: "10px 0", background: myStatus === opt.value ? `${opt.color}25` : "transparent", color: myStatus === opt.value ? opt.color : T.tertiary, border: "none", borderRight: oi < 2 ? `1px solid ${isMe ? "rgba(255,255,255,0.1)" : T.charcoal}` : "none", cursor: "pointer", transition: "all 0.15s" }}>
+                            {myStatus === opt.value ? `\u2713 ${opt.label}` : opt.label}
                           </button>
                         ))}
                       </div>
                     </div>
-                  ) : msg.sharedPost ? (
+                    );
+                  })() : msg.sharedPost ? (
                     <div onClick={() => onOpenPost && onOpenPost(msg.sharedPost)} style={{ borderRadius: 8, overflow: "hidden", border: `1px solid ${isMe ? "rgba(255,255,255,0.15)" : T.charcoal}`, marginBottom: msg.text ? 8 : 0, background: isMe ? "rgba(0,0,0,0.15)" : `${T.charcoal}80`, cursor: "pointer", transition: "opacity 0.15s" }} onMouseEnter={e => e.currentTarget.style.opacity = "0.85"} onMouseLeave={e => e.currentTarget.style.opacity = "1"}>
                       {msg.sharedPost.image && (
                         <img src={msg.sharedPost.image} alt="" style={{ width: "100%", height: 120, objectFit: "cover", display: "block" }} />
@@ -11802,9 +12253,20 @@ function DMScreen({ onClose, onViewUser, initialUser, initialMessage, initialSha
                   ) : null}
                   {msg.photos && msg.photos.length > 0 && (
                     <div style={{ display: "flex", gap: 4, marginBottom: msg.text ? 8 : 0, flexWrap: "wrap" }}>
-                      {msg.photos.map((url, pi) => (
-                        <img key={pi} src={url} alt="" style={{ width: msg.photos.length === 1 ? "100%" : 80, height: msg.photos.length === 1 ? "auto" : 80, maxHeight: 200, borderRadius: 8, objectFit: "cover", display: "block" }} />
-                      ))}
+                      {msg.photos.map((p, pi) => {
+                        // Backward-compat: string entries (legacy DMs) treated
+                        // as images; object entries may carry type === "video".
+                        const url = typeof p === "string" ? p : (p && p.url);
+                        const isVid = typeof p === "object" && p && p.type === "video";
+                        if (!url) return null;
+                        if (isVid) {
+                          return <video key={pi} src={url} preload="metadata" playsInline controls style={{ width: msg.photos.length === 1 ? "100%" : 120, maxHeight: 240, borderRadius: 8, objectFit: "contain", display: "block", background: "#000" }} />;
+                        }
+                        // Carousel only includes image URLs (videos play inline).
+                        const imageUrls = msg.photos.filter(x => !(typeof x === "object" && x && x.type === "video")).map(x => typeof x === "string" ? x : x.url);
+                        const carouselIdx = imageUrls.indexOf(url);
+                        return <img key={pi} src={url} alt="" onClick={() => { setCarouselImages(imageUrls); setCarouselIndex(carouselIdx >= 0 ? carouselIdx : 0); }} style={{ width: msg.photos.length === 1 ? "100%" : 80, height: msg.photos.length === 1 ? "auto" : 80, maxHeight: 200, borderRadius: 8, objectFit: "cover", display: "block", cursor: "pointer" }} />;
+                      })}
                     </div>
                   )}
                   {msg.text && <p style={{ fontFamily: serif, fontSize: 14, color: T.white, margin: 0, lineHeight: 1.5 }}>{msg.text}</p>}
@@ -11835,12 +12297,21 @@ function DMScreen({ onClose, onViewUser, initialUser, initialMessage, initialSha
           </div>
         )}
 
-        {/* Photo preview strip */}
+        {/* Photo preview strip — local data URLs. Get uploaded on send. */}
         {chatPhotos.length > 0 && (
-          <div style={{ padding: "8px 16px 0", background: T.charcoal, display: "flex", gap: 8, overflowX: "auto" }}>
+          <div style={{ padding: "8px 16px 0", background: T.charcoal, display: "flex", gap: 8, overflowX: "auto", flexShrink: 0 }}>
             {chatPhotos.map(p => (
               <div key={p.id} style={{ position: "relative", flexShrink: 0 }}>
-                <img src={p.url} alt={p.name} style={{ width: 56, height: 56, borderRadius: 8, objectFit: "cover", display: "block", border: `1px solid ${T.charcoal}` }} />
+                {p.type === "video" ? (
+                  <video src={p.url + "#t=0.001"} preload="metadata" muted playsInline style={{ width: 56, height: 56, borderRadius: 8, objectFit: "cover", display: "block", border: `1px solid ${T.charcoal}`, background: "#000" }} />
+                ) : (
+                  <img src={p.url} alt={p.name} style={{ width: 56, height: 56, borderRadius: 8, objectFit: "cover", display: "block", border: `1px solid ${T.charcoal}` }} />
+                )}
+                {p.type === "video" && (
+                  <div style={{ position: "absolute", bottom: 2, left: 2, background: "rgba(0,0,0,0.6)", borderRadius: 3, padding: "1px 4px", display: "flex", alignItems: "center", gap: 2 }}>
+                    <Video size={8} color={T.white} />
+                  </div>
+                )}
                 <button onClick={() => setChatPhotos(prev => prev.filter(x => x.id !== p.id))} style={{ position: "absolute", top: -5, right: -5, width: 18, height: 18, borderRadius: "50%", background: T.red, border: `2px solid ${T.charcoal}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
                   <X size={8} color={T.white} />
                 </button>
@@ -11850,7 +12321,7 @@ function DMScreen({ onClose, onViewUser, initialUser, initialMessage, initialSha
         )}
 
         {/* Input bar */}
-        <div style={{ padding: "10px 16px max(10px, env(safe-area-inset-bottom))", background: T.charcoal, borderTop: (chatPhotos.length > 0 || pendingSharedPost) ? "none" : `1px solid ${T.darkCard}`, display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+        <div style={{ padding: "10px 16px max(10px, env(safe-area-inset-bottom))", background: T.charcoal, borderTop: (pendingSharedPost || chatPhotos.length > 0) ? "none" : `1px solid ${T.darkCard}`, display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
           <input ref={chatFileRef} type="file" accept="image/*,video/*" multiple onChange={handleChatFiles} style={{ display: "none" }} />
           <button onClick={() => chatFileRef.current && chatFileRef.current.click()} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" }}>
             <Image size={20} color={T.tertiary} />
@@ -11858,72 +12329,119 @@ function DMScreen({ onClose, onViewUser, initialUser, initialMessage, initialSha
           <div style={{ flex: 1, display: "flex", alignItems: "center", background: T.darkCard, borderRadius: 20, padding: "8px 14px", border: `1px solid ${T.charcoal}` }}>
             <input value={msgText} onChange={e => setMsgText(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }} placeholder={pendingSharedPost ? "Add a message..." : "Type a message..."} style={{ flex: 1, background: "none", border: "none", outline: "none", color: T.white, fontFamily: serif, fontSize: 13, padding: 0 }} />
           </div>
-          <button onClick={sendMessage} disabled={!msgText.trim() && chatPhotos.length === 0 && !pendingSharedPost} style={{ background: (msgText.trim() || chatPhotos.length > 0 || pendingSharedPost) ? T.red : T.charcoal, border: "none", cursor: (msgText.trim() || chatPhotos.length > 0 || pendingSharedPost) ? "pointer" : "default", padding: 0, width: 36, height: 36, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", opacity: (msgText.trim() || chatPhotos.length > 0 || pendingSharedPost) ? 1 : 0.4, transition: "all 0.15s" }}>
+          <button onClick={sendMessage} disabled={!msgText.trim() && !pendingSharedPost && chatPhotos.length === 0} style={{ background: (msgText.trim() || pendingSharedPost || chatPhotos.length > 0) ? T.red : T.charcoal, border: "none", cursor: (msgText.trim() || pendingSharedPost || chatPhotos.length > 0) ? "pointer" : "default", padding: 0, width: 36, height: 36, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", opacity: (msgText.trim() || pendingSharedPost || chatPhotos.length > 0) ? 1 : 0.4, transition: "all 0.15s" }}>
             <Send size={16} color={T.white} style={{ marginLeft: 2 }} />
           </button>
         </div>
+        {/* Fullscreen image viewer — mounts above everything else when a
+            message attachment is tapped. Reuses the same component the
+            feed uses for post photos. */}
+        {carouselImages && (
+          <ImageCarousel images={carouselImages} startIndex={carouselIndex} onClose={() => setCarouselImages(null)} />
+        )}
       </div>
     );
   }
 
   // ─── New Message ───
+  // Multi-select picker with an inline first-message input. One recipient →
+  // direct DM. Two or more → group DM (optional title). Sending the inline
+  // draft creates the conversation, sends the message, and opens the chat
+  // in one action — no intermediate "OPEN" step.
   if (view === "new") {
+    const isGroup = selectedRecipients.length > 1;
+    const canSend = selectedRecipients.length > 0 && !creatingConvo;
     return (
-      <div style={{ position: "absolute", inset: 0, background: T.darkBg, zIndex: 500, display: "flex", flexDirection: "column" }}>
+      <div style={overlayStyle}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", background: T.charcoal, borderBottom: `1px solid ${T.darkCard}`, flexShrink: 0 }}>
-          <button onClick={() => setView("inbox")} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" }}>
+          <button onClick={() => { setView("inbox"); setSelectedRecipients([]); setNewRecipient(""); setGroupTitle(""); setFirstMsgText(""); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" }}>
             <ChevronLeft size={22} color={T.white} strokeWidth={1.5} />
           </button>
-          <span style={{ fontFamily: sans, fontSize: 16, fontWeight: 700, color: T.white, letterSpacing: 1 }}>New Message</span>
+          <span style={{ fontFamily: sans, fontSize: 16, fontWeight: 700, color: T.white, letterSpacing: 1, flex: 1 }}>New Message</span>
         </div>
-        <div style={{ padding: "16px" }}>
-          <div style={{ display: "flex", alignItems: "center", background: T.darkCard, borderRadius: 8, padding: "10px 14px", marginBottom: 16, border: `1px solid ${T.copper}40` }}>
+        <div style={{ flex: 1, overflowY: "auto", padding: "16px" }}>
+          {/* TO: search field */}
+          <div style={{ display: "flex", alignItems: "center", background: T.darkCard, borderRadius: 8, padding: "10px 14px", marginBottom: 12, border: `1px solid ${T.copper}40` }}>
             <span style={{ fontFamily: sans, fontSize: 12, color: T.copper, fontWeight: 600, marginRight: 8 }}>TO:</span>
-            <input value={newRecipient} onChange={e => setNewRecipient(e.target.value)} placeholder="Search for a user..." autoFocus style={{ flex: 1, background: "none", border: "none", outline: "none", color: T.white, fontFamily: serif, fontSize: 13, padding: 0 }} />
+            <input value={newRecipient} onChange={e => setNewRecipient(e.target.value)} placeholder={selectedRecipients.length === 0 ? "Search by name or handle..." : "Add another for a group..."} autoFocus style={{ flex: 1, background: "none", border: "none", outline: "none", color: T.white, fontFamily: serif, fontSize: 13, padding: 0 }} />
             {newRecipient && (
               <button onClick={() => setNewRecipient("")} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" }}>
                 <X size={14} color={T.tertiary} />
               </button>
             )}
           </div>
+          {/* Selected recipients chips */}
+          {selectedRecipients.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+              {selectedRecipients.map(r => (
+                <button key={r.id} onClick={() => setSelectedRecipients(prev => prev.filter(x => x.id !== r.id))} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 10px", borderRadius: 16, background: `${T.copper}20`, border: `1px solid ${T.copper}50`, cursor: "pointer" }}>
+                  <span style={{ fontFamily: sans, fontSize: 12, color: T.copper, fontWeight: 600 }}>{r.full_name || r.handle}</span>
+                  <X size={11} color={T.copper} />
+                </button>
+              ))}
+            </div>
+          )}
+          {/* Group title input (shown only when 2+ selected) */}
+          {isGroup && (
+            <div style={{ marginBottom: 12 }}>
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 4 }}>GROUP NAME (OPTIONAL)</span>
+              <input value={groupTitle} onChange={e => setGroupTitle(e.target.value)} placeholder="e.g. Moab Crew" style={{ width: "100%", boxSizing: "border-box", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8, padding: "10px 14px", color: T.white, fontFamily: serif, fontSize: 13, outline: "none" }} />
+            </div>
+          )}
+          {/* User search results */}
           {recipientResults.length > 0 ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              {recipientResults.map((u, i) => (
-                <div key={u.handle} onClick={() => {
-                  const newConvo = { id: "new_" + u.handle, user: u.handle, initial: u.initial, name: u.name, badge: u.badge, online: false, unread: 0, messages: [], lastMessage: "", lastTime: "now" };
-                  setActiveConvo(newConvo);
-                  setView("chat");
-                  setNewRecipient("");
-                }} style={{ background: T.darkCard, padding: "12px 16px", cursor: "pointer", borderRadius: i === 0 ? "8px 8px 0 0" : i === recipientResults.length - 1 ? "0 0 8px 8px" : 0, borderBottom: i < recipientResults.length - 1 ? `1px solid ${T.charcoal}` : "none", display: "flex", alignItems: "center", gap: 12 }}>
-                  <div style={{ width: 40, height: 40, borderRadius: "50%", background: T.charcoal, display: "flex", alignItems: "center", justifyContent: "center", border: `2px solid ${badgeColor(u.badge)}` }}>
-                    <span style={{ fontFamily: sans, fontSize: 15, fontWeight: 700, color: T.white }}>{u.initial}</span>
+              {recipientResults.map((u, i) => {
+                const initial = (u.full_name || u.handle || "U").charAt(0).toUpperCase();
+                return (
+                  <div key={u.id} onClick={() => {
+                    setSelectedRecipients(prev => prev.some(x => x.id === u.id) ? prev : [...prev, u]);
+                    setNewRecipient("");
+                  }} style={{ background: T.darkCard, padding: "12px 16px", cursor: "pointer", borderRadius: i === 0 ? "8px 8px 0 0" : i === recipientResults.length - 1 ? "0 0 8px 8px" : 0, borderBottom: i < recipientResults.length - 1 ? `1px solid ${T.charcoal}` : "none", display: "flex", alignItems: "center", gap: 12 }}>
+                    <div style={{ width: 40, height: 40, borderRadius: "50%", background: T.charcoal, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", border: `2px solid ${T.copper}40` }}>
+                      {u.avatar_url
+                        ? <img src={u.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        : <span style={{ fontFamily: sans, fontSize: 15, fontWeight: 700, color: T.white }}>{initial}</span>}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, display: "block" }}>{u.full_name || u.handle}</span>
+                      {u.handle && <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>@{u.handle}</span>}
+                    </div>
+                    <Plus size={14} color={T.copper} />
                   </div>
-                  <div style={{ flex: 1 }}>
-                    <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, display: "block" }}>@{u.handle}</span>
-                    <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{u.name}</span>
-                  </div>
-                  <ChevronRight size={14} color={T.tertiary} />
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : newRecipient.trim().length > 0 ? (
             <div style={{ textAlign: "center", padding: "24px" }}>
               <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, margin: 0 }}>No users found for "{newRecipient}"</p>
             </div>
-          ) : (
+          ) : selectedRecipients.length === 0 ? (
             <div style={{ textAlign: "center", padding: "24px" }}>
               <Users size={24} color={T.tertiary} style={{ opacity: 0.3, marginBottom: 8 }} />
-              <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, margin: 0 }}>Search for a user to start a conversation</p>
+              <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, margin: 0 }}>Search for a user to start a conversation. Add multiple to make a group.</p>
             </div>
-          )}
+          ) : null}
         </div>
+        {/* Inline message input — visible once a recipient is selected.
+            Sending creates the conversation and opens the chat in one step. */}
+        {selectedRecipients.length > 0 && (
+          <div style={{ padding: "10px 16px max(10px, env(safe-area-inset-bottom))", background: T.charcoal, borderTop: `1px solid ${T.darkCard}`, display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+            <div style={{ flex: 1, display: "flex", alignItems: "center", background: T.darkCard, borderRadius: 20, padding: "8px 14px", border: `1px solid ${T.charcoal}` }}>
+              <input value={firstMsgText} onChange={e => setFirstMsgText(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && firstMsgText.trim() && canSend) { e.preventDefault(); startAndOpenConvo(firstMsgText); } }} placeholder={isGroup ? `Message ${selectedRecipients.length} people...` : `Message @${selectedRecipients[0].handle || selectedRecipients[0].full_name}...`} style={{ flex: 1, background: "none", border: "none", outline: "none", color: T.white, fontFamily: serif, fontSize: 13, padding: 0 }} />
+            </div>
+            <button onClick={() => startAndOpenConvo(firstMsgText)} disabled={!canSend || !firstMsgText.trim()} style={{ background: (canSend && firstMsgText.trim()) ? T.red : T.charcoal, border: "none", cursor: (canSend && firstMsgText.trim()) ? "pointer" : "default", padding: 0, width: 36, height: 36, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", opacity: (canSend && firstMsgText.trim()) ? 1 : 0.4, transition: "all 0.15s" }}>
+              <Send size={16} color={T.white} style={{ marginLeft: 2 }} />
+            </button>
+          </div>
+        )}
       </div>
     );
   }
 
   // ─── Inbox View ───
   return (
-    <div style={{ position: "absolute", inset: 0, background: T.darkBg, zIndex: 500, display: "flex", flexDirection: "column" }}>
+    <div style={overlayStyle}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", background: T.charcoal, borderBottom: `1px solid ${T.darkCard}`, flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -11961,33 +12479,83 @@ function DMScreen({ onClose, onViewUser, initialUser, initialMessage, initialSha
           </div>
         ) : (
           <div style={{ padding: "0 16px" }}>
-            {filteredConvos.map((convo, i) => (
-              <div key={convo.id} onClick={() => openConvo({ ...convo, unread: 0 })} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 0", cursor: "pointer", borderBottom: i < filteredConvos.length - 1 ? `1px solid ${T.charcoal}` : "none" }}>
-                <div style={{ position: "relative", flexShrink: 0 }}>
-                  <div style={{ width: 48, height: 48, borderRadius: "50%", background: T.charcoal, display: "flex", alignItems: "center", justifyContent: "center", border: `2px solid ${convo.unread > 0 ? T.copper : T.charcoal}` }}>
-                    <span style={{ fontFamily: sans, fontSize: 18, fontWeight: 700, color: T.white }}>{convo.initial}</span>
-                  </div>
-                  {convo.online && <div style={{ position: "absolute", bottom: 2, right: 2, width: 12, height: 12, borderRadius: "50%", background: T.green, border: `2px solid ${T.darkBg}` }} />}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 3 }}>
-                    <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: convo.unread > 0 ? 700 : 500 }}>@{convo.user}</span>
-                    <span style={{ fontFamily: sans, fontSize: 10, color: convo.unread > 0 ? T.copper : T.tertiary, flexShrink: 0 }}>{convo.lastTime}</span>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <p style={{ fontFamily: serif, fontSize: 12, color: convo.unread > 0 ? T.white : T.tertiary, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, fontWeight: convo.unread > 0 ? 500 : 400 }}>{convo.lastMessage}</p>
-                    {convo.unread > 0 && (
-                      <div style={{ minWidth: 20, height: 20, borderRadius: 10, background: T.red, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        <span style={{ fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.white }}>{convo.unread}</span>
+            {filteredConvos.map((convo, i) => {
+              const isSwiped = swipedConvoId === convo.id;
+              const actionLabel = convo.type === "group" ? "LEAVE" : "DELETE";
+              return (
+                <div key={convo.id} style={{ position: "relative", overflow: "hidden", borderBottom: i < filteredConvos.length - 1 ? `1px solid ${T.charcoal}` : "none" }}>
+                  {/* Action button revealed under the row by the swipe. Tap → confirm modal. */}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setConfirmingLeave(convo); setSwipedConvoId(null); }}
+                    style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: SWIPE_REVEAL_PX, background: T.red, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}
+                    aria-label={actionLabel}
+                  >
+                    <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.6 }}>{actionLabel}</span>
+                  </button>
+                  {/* Swipeable row content. translateX driven by swipedConvoId. */}
+                  <div
+                    onClick={() => { if (isSwiped) { setSwipedConvoId(null); } else { openConvo(convo); } }}
+                    onTouchStart={(e) => { touchStartXRef.current = e.touches[0].clientX; touchDeltaXRef.current = 0; }}
+                    onTouchMove={(e) => { touchDeltaXRef.current = e.touches[0].clientX - touchStartXRef.current; }}
+                    onTouchEnd={() => {
+                      // Open at -threshold, close at +threshold (or any rightward drag)
+                      const dx = touchDeltaXRef.current;
+                      if (dx < -40) setSwipedConvoId(convo.id);
+                      else if (dx > 20 && isSwiped) setSwipedConvoId(null);
+                    }}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 12, padding: "14px 0", cursor: "pointer",
+                      background: T.darkBg,
+                      transform: isSwiped ? `translateX(-${SWIPE_REVEAL_PX}px)` : "translateX(0)",
+                      transition: "transform 0.18s ease-out",
+                      paddingLeft: 0, paddingRight: 0,
+                    }}
+                  >
+                    <div style={{ position: "relative", flexShrink: 0 }}>
+                      <div style={{ width: 48, height: 48, borderRadius: "50%", background: T.charcoal, display: "flex", alignItems: "center", justifyContent: "center", border: `2px solid ${convo.unread > 0 ? T.copper : T.charcoal}`, overflow: "hidden" }}>
+                        {convo.avatarUrl
+                          ? <img src={convo.avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          : <span style={{ fontFamily: sans, fontSize: 18, fontWeight: 700, color: T.white }}>{convo.initial}</span>}
                       </div>
-                    )}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 3 }}>
+                        <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: convo.unread > 0 ? 700 : 500 }}>{convo.type === "direct" ? "@" + (convo.user || convo.name) : convo.name}</span>
+                        <span style={{ fontFamily: sans, fontSize: 10, color: convo.unread > 0 ? T.copper : T.tertiary, flexShrink: 0 }}>{convo.lastTime}</span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <p style={{ fontFamily: serif, fontSize: 12, color: convo.unread > 0 ? T.white : T.tertiary, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, fontWeight: convo.unread > 0 ? 500 : 400 }}>{convo.lastMessage}</p>
+                        {convo.unread > 0 && (
+                          <div style={{ minWidth: 20, height: 20, borderRadius: 10, background: T.red, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            <span style={{ fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.white }}>{convo.unread}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
+      {/* Leave/delete confirmation modal */}
+      {confirmingLeave && (
+        <div onClick={() => setConfirmingLeave(null)} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 600, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: T.darkCard, borderRadius: 12, padding: 20, maxWidth: 320, width: "100%", border: `1px solid ${T.charcoal}` }}>
+            <h3 style={{ fontFamily: sans, fontSize: 15, color: T.white, margin: "0 0 8px", fontWeight: 700, letterSpacing: 0.5 }}>{confirmingLeave.type === "group" ? "Leave group?" : "Delete conversation?"}</h3>
+            <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "0 0 16px", lineHeight: 1.5 }}>
+              {confirmingLeave.type === "group"
+                ? `You'll be removed from "${confirmingLeave.name}" and stop receiving messages from this group.`
+                : `Removes the thread from your inbox. ${confirmingLeave.name} will still see past messages, and the thread will reappear if they message you again.`}
+            </p>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => setConfirmingLeave(null)} style={{ flex: 1, padding: "10px 14px", borderRadius: 8, background: T.charcoal, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 12, color: T.tertiary, fontWeight: 600, letterSpacing: 0.5 }}>Cancel</button>
+              <button onClick={async () => { const target = confirmingLeave; setConfirmingLeave(null); if (onLeaveConversation) await onLeaveConversation(target.id); }} style={{ flex: 1, padding: "10px 14px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>{confirmingLeave.type === "group" ? "Leave" : "Delete"}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -12167,6 +12735,28 @@ function clientDataToDbBuild(data, userId) {
   };
 }
 
+// ─── Notification DB row → bell panel shape ──────────────────────────────
+// The DB stores type/actor_name/text/target/created_at. Icon + iconColor are
+// derived client-side from the type field.
+function dbNotifToBell(row) {
+  if (!row) return null;
+  const iconMap = { like: { icon: Heart, iconColor: T.red }, comment: { icon: MessageCircle, iconColor: T.copper }, mention: { icon: AtSign, iconColor: T.copper }, reply: { icon: MessageCircle, iconColor: T.copper }, follow: { icon: UserPlus, iconColor: T.green }, rsvp: { icon: Users, iconColor: T.green } };
+  const ic = iconMap[row.type] || { icon: Bell, iconColor: T.tertiary };
+  return {
+    id: row.id,
+    type: row.type,
+    user: row.actor_name || "Someone",
+    actorId: row.actor_id || null,
+    text: row.text || "",
+    target: row.target || null,
+    postId: row.post_id || null,
+    time: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+    isRead: row.is_read || false,
+    icon: ic.icon,
+    iconColor: ic.iconColor,
+  };
+}
+
 // ─── Feed post ↔ DB row translation ───────────────────────────────────────
 // public.posts has a few top-level queryable columns (type, title, body,
 // hero_img, photo_urls, vehicle, build_id, thread_id, is_public, counts) and
@@ -12206,6 +12796,7 @@ function dbRowToFeedItem(row, profile) {
     time: data.time != null ? data.time : new Date(row.created_at).getTime(),
     createdAt: row.created_at,
     userId: row.user_id,
+    avatarUrl: (profile && profile.avatar_url) || data.avatarUrl || null,
   };
 }
 
@@ -12220,13 +12811,22 @@ function feedItemToDbRow(item, userId) {
   } = item;
   // Flatten any photoUrl entries (strings or {url,type,caption}) into a
   // simple text[] for fast queries; the full structure is preserved in data.
+  // Also pick the first non-video URL as the hero candidate — hero_img is
+  // used by render fallbacks and share-link previews where a still image
+  // is more appropriate than a video URL.
   let photoUrlStrings = [];
+  let firstImageUrl = null;
   if (Array.isArray(photoUrls)) {
-    photoUrlStrings = photoUrls
-      .map(p => typeof p === "string" ? p : (p && p.url) || null)
-      .filter(u => typeof u === "string" && u.length > 0);
+    photoUrls.forEach(p => {
+      const url = typeof p === "string" ? p : (p && p.url) || null;
+      const isVid = typeof p === "object" && p && p.type === "video";
+      if (typeof url === "string" && url.length > 0) {
+        photoUrlStrings.push(url);
+        if (!firstImageUrl && !isVid) firstImageUrl = url;
+      }
+    });
   }
-  const hero = heroImg || image || photoUrlStrings[0] || null;
+  const hero = heroImg || image || firstImageUrl || null;
   // build_id references public.builds.id which is a uuid; only set it when
   // we have a uuid-looking string. Numeric local ids get dropped.
   const rawBuildRef = buildId || buildRawId;
@@ -12254,28 +12854,107 @@ function feedItemToDbRow(item, userId) {
   };
 }
 
+// Translate a public.post_comments row into the shape the feed UI expects.
+// The feed already renders {user, initial, text, time, likes, id} objects, so
+// we just map columns into that shape. `profile` is the commenter's profile
+// row (may be null for users we couldn't look up).
+function dbRowToComment(row, profile) {
+  if (!row) return null;
+  const name = (profile && profile.full_name) || "User";
+  return {
+    id: row.id,
+    user: name,
+    handle: profile && profile.handle ? profile.handle : "",
+    initial: (name || "U").charAt(0).toUpperCase(),
+    avatarUrl: (profile && profile.avatar_url) || null,
+    text: row.body || "",
+    time: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+    likes: row.like_count || 0,
+    userId: row.user_id,
+  };
+}
+
 // Walks a mixed list of photo entries (strings or objects-with-.url) and
 // uploads any data:/blob: URLs to the post-photos storage bucket, returning a
 // new list where those entries have been replaced with the resulting public
 // https URL. http/https URLs are passed through unchanged. Errors fall back
 // to the original entry so a bad upload doesn't take down the whole post.
-async function uploadPostPhotoList(list, uid) {
+// Upload any local data:/blob: image entries in `list` to the dm-attachments
+// storage bucket and return a new list where those entries have been replaced
+// with their public URLs. http(s) entries are passed through unchanged. Same
+// shape as uploadPostPhotoList but writes to a separate, DM-scoped bucket.
+async function uploadDmAttachmentList(list, uid) {
   if (!Array.isArray(list) || list.length === 0) return list;
   const out = [];
   for (let i = 0; i < list.length; i++) {
     const entry = list[i];
     const url = typeof entry === "string" ? entry : (entry && entry.url);
+    const isVideo = typeof entry === "object" && entry && entry.type === "video";
     if (!url || typeof url !== "string") { out.push(entry); continue; }
     if (url.startsWith("http://") || url.startsWith("https://")) { out.push(entry); continue; }
     if (!url.startsWith("data:") && !url.startsWith("blob:")) { out.push(entry); continue; }
     try {
       const resp = await fetch(url);
       const blob = await resp.blob();
-      const compressed = await compressImage(blob, { maxDim: 1600, maxBytes: 1500 * 1024 });
-      const path = `${uid}/${Date.now()}-${i}.jpg`;
+      let uploadBlob, contentType, ext;
+      if (isVideo) {
+        contentType = blob.type || "video/mp4";
+        ext = (contentType.split("/")[1] || "mp4").split(";")[0];
+        if (ext === "quicktime") ext = "mov";
+        uploadBlob = blob;
+      } else {
+        uploadBlob = await compressImage(blob, { maxDim: 1600, maxBytes: 1500 * 1024 });
+        contentType = "image/jpeg";
+        ext = "jpg";
+      }
+      const path = `${uid}/${Date.now()}-${i}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("dm-attachments")
+        .upload(path, uploadBlob, { contentType, upsert: true });
+      if (upErr) { console.error("[dm-attachments] upload error", upErr); out.push(entry); continue; }
+      const { data: pub } = supabase.storage.from("dm-attachments").getPublicUrl(path);
+      const publicUrl = pub && pub.publicUrl;
+      if (!publicUrl) { out.push(entry); continue; }
+      out.push(typeof entry === "string" ? publicUrl : { ...entry, url: publicUrl });
+    } catch (e) {
+      console.error("[dm-attachments] upload failed", e);
+      out.push(entry);
+    }
+  }
+  return out;
+}
+
+async function uploadPostPhotoList(list, uid) {
+  if (!Array.isArray(list) || list.length === 0) return list;
+  const out = [];
+  for (let i = 0; i < list.length; i++) {
+    const entry = list[i];
+    const url = typeof entry === "string" ? entry : (entry && entry.url);
+    const isVideo = typeof entry === "object" && entry && entry.type === "video";
+    if (!url || typeof url !== "string") { out.push(entry); continue; }
+    if (url.startsWith("http://") || url.startsWith("https://")) { out.push(entry); continue; }
+    if (!url.startsWith("data:") && !url.startsWith("blob:")) { out.push(entry); continue; }
+    try {
+      const resp = await fetch(url);
+      const blob = await resp.blob();
+      let uploadBlob, contentType, ext;
+      if (isVideo) {
+        // Videos can't go through compressImage (Canvas-based, image-only).
+        // Upload the raw blob with its native MIME type. Path extension is
+        // derived from MIME so Supabase serves it with a reasonable suffix.
+        contentType = blob.type || "video/mp4";
+        ext = (contentType.split("/")[1] || "mp4").split(";")[0];
+        if (ext === "quicktime") ext = "mov"; // iOS native recording
+        uploadBlob = blob;
+      } else {
+        uploadBlob = await compressImage(blob, { maxDim: 1600, maxBytes: 1500 * 1024 });
+        contentType = "image/jpeg";
+        ext = "jpg";
+      }
+      const path = `${uid}/${Date.now()}-${i}.${ext}`;
       const { error: upErr } = await supabase.storage
         .from("post-photos")
-        .upload(path, compressed, { contentType: "image/jpeg", upsert: true });
+        .upload(path, uploadBlob, { contentType, upsert: true });
       if (upErr) { console.error("[post-photos] upload error", upErr); out.push(entry); continue; }
       const { data: pub } = supabase.storage.from("post-photos").getPublicUrl(path);
       const publicUrl = pub && pub.publicUrl;
@@ -12297,6 +12976,18 @@ export default function Trailhead() {
   // show the login screen (unless we're in guest/shared-link mode).
   const [supabaseSession, setSupabaseSession] = useState(null);
   const [sessionHydrated, setSessionHydrated] = useState(false);
+  // appReady: gates the main app shell behind the splash on cold boot.
+  // Starts false. Flips true once the FIRST hydrate completes (or right
+  // away if there's no hydrate to do — login screen / onboarding / guest).
+  // Doesn't toggle back: later token refreshes/re-hydrates won't re-show
+  // the splash, since the user already has the app rendered.
+  const [appReady, setAppReady] = useState(false);
+  // iOS install hint dismissal — sticky via localStorage so we don't nag.
+  // (Keep useState up here with the other hooks so it always runs every
+  // render, regardless of which auth-state branch returns early below.)
+  const [iosHintDismissed, setIosHintDismissed] = useState(() => {
+    try { return localStorage.getItem("th-ios-install-dismissed") === "1"; } catch (e) { return false; }
+  });
   // Profile row from public.profiles, fetched after sign-in. Source of truth
   // for handle / full_name / avatar_url — supersedes user_metadata reads.
   const [currentProfile, setCurrentProfile] = useState(null);
@@ -12325,6 +13016,7 @@ export default function Trailhead() {
       // posts (incl. private ones). We map each row back to local feed shape,
       // passing the current profile only for the user's own posts so other
       // users' historical name/handle (stored in data jsonb) is preserved.
+      let loadedPostIds = [];
       try {
         const { data: postRows, error: postErr } = await supabase
           .from("posts")
@@ -12333,10 +13025,292 @@ export default function Trailhead() {
           .limit(100);
         if (postErr) console.error("[hydrate] posts fetch error", postErr);
         if (Array.isArray(postRows)) {
-          setFeedItems(postRows.map(r => dbRowToFeedItem(r, r.user_id === uid ? profileRow : null)));
+          loadedPostIds = postRows.map(r => r.id);
+          // Resolve profiles for ALL post authors so names/handles are correct.
+          const authorIds = Array.from(new Set(postRows.map(r => r.user_id).filter(Boolean)));
+          const authorsById = {};
+          if (profileRow) authorsById[uid] = profileRow;
+          const otherAuthorIds = authorIds.filter(id => id !== uid);
+          if (otherAuthorIds.length > 0) {
+            try {
+              const { data: authorProfs } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").in("id", otherAuthorIds);
+              if (Array.isArray(authorProfs)) authorProfs.forEach(p => { authorsById[p.id] = p; });
+            } catch (e) { /* non-fatal */ }
+          }
+          setFeedItems(postRows.map(r => dbRowToFeedItem(r, authorsById[r.user_id] || null)));
         }
       } catch (e) { console.error("[hydrate] posts fetch failed", e); }
+      // Hydrate likes / comments / comment likes for the posts we just loaded.
+      // We compute counts in JS from the actual child rows rather than trusting
+      // posts.like_count / comment_count, so counts are accurate even if the
+      // count triggers aren't installed on the DB.
+      const postLikeCounts = {};   // { postId: n }
+      const postCommentCounts = {}; // { postId: n }
+      const commentLikeCounts = {}; // { commentId: n }
+      if (loadedPostIds.length > 0) {
+        try {
+          // ALL likes on the loaded posts (not filtered by user).
+          const { data: likeRows, error: likeErr } = await supabase
+            .from("post_likes")
+            .select("post_id, user_id")
+            .in("post_id", loadedPostIds);
+          if (likeErr) console.error("[hydrate] post_likes fetch error", likeErr);
+          if (Array.isArray(likeRows)) {
+            const mine = {};
+            likeRows.forEach(r => {
+              postLikeCounts[r.post_id] = (postLikeCounts[r.post_id] || 0) + 1;
+              if (r.user_id === uid) mine[r.post_id] = true;
+            });
+            setLikedPostIds(mine);
+          }
+        } catch (e) { console.error("[hydrate] post_likes fetch failed", e); }
+        try {
+          // All comments on loaded posts, oldest first (we render in order).
+          const { data: commentRows, error: commentErr } = await supabase
+            .from("post_comments")
+            .select("*")
+            .in("post_id", loadedPostIds)
+            .order("created_at", { ascending: true });
+          if (commentErr) console.error("[hydrate] post_comments fetch error", commentErr);
+          if (Array.isArray(commentRows)) {
+            // Collect unique commenter user_ids so we can resolve handles.
+            const commenterIds = Array.from(new Set(commentRows.map(r => r.user_id)));
+            let profilesById = {};
+            if (commenterIds.length > 0) {
+              try {
+                const { data: profs } = await supabase
+                  .from("profiles").select("id, full_name, handle, avatar_url")
+                  .in("id", commenterIds);
+                if (Array.isArray(profs)) profs.forEach(p => { profilesById[p.id] = p; });
+              } catch (e) { /* non-fatal */ }
+            }
+            const grouped = {};
+            commentRows.forEach(r => {
+              if (!grouped[r.post_id]) grouped[r.post_id] = [];
+              postCommentCounts[r.post_id] = (postCommentCounts[r.post_id] || 0) + 1;
+            });
+            // Hydrate ALL comment likes in the same pass so each commenter
+            // sees the true like count on every comment.
+            const commentIds = commentRows.map(r => r.id);
+            let mineComments = {};
+            if (commentIds.length > 0) {
+              try {
+                const { data: cLikeRows, error: cLikeErr } = await supabase
+                  .from("post_comment_likes")
+                  .select("comment_id, user_id")
+                  .in("comment_id", commentIds);
+                if (cLikeErr) console.error("[hydrate] post_comment_likes fetch error", cLikeErr);
+                if (Array.isArray(cLikeRows)) {
+                  cLikeRows.forEach(r => {
+                    commentLikeCounts[r.comment_id] = (commentLikeCounts[r.comment_id] || 0) + 1;
+                    if (r.user_id === uid) mineComments[r.comment_id] = true;
+                  });
+                  setLikedCommentIds(mineComments);
+                }
+              } catch (e) { console.error("[hydrate] post_comment_likes failed", e); }
+            }
+            // Build grouped comments with computed like counts baked in.
+            commentRows.forEach(r => {
+              const c = dbRowToComment(r, profilesById[r.user_id]);
+              if (c) c.likes = commentLikeCounts[r.id] || 0;
+              grouped[r.post_id].push(c);
+            });
+            setPostComments(grouped);
+          }
+        } catch (e) { console.error("[hydrate] post_comments fetch failed", e); }
+        // Overlay computed counts onto feedItems so the counts shown match
+        // reality regardless of whether DB triggers are keeping posts.like_count
+        // and posts.comment_count in sync.
+        setFeedItems(prev => prev.map(p => ({
+          ...p,
+          likes: postLikeCounts[p.id] != null ? postLikeCounts[p.id] : (p.likes || 0),
+          comments: postCommentCounts[p.id] != null ? postCommentCounts[p.id] : (p.comments || 0),
+        })));
+      }
+      // ── Hydrate bell notifications from DB ──
+      try {
+        const { data: notifRows, error: notifErr } = await supabase
+          .from("notifications")
+          .select("*")
+          .eq("user_id", uid)
+          .order("created_at", { ascending: false })
+          .limit(50);
+        if (notifErr) console.error("[hydrate] notifications fetch error", notifErr);
+        if (Array.isArray(notifRows)) {
+          setBellNotifs(notifRows.map(dbNotifToBell).filter(Boolean));
+        }
+      } catch (e) { console.error("[hydrate] notifications fetch failed", e); }
+      // ── Hydrate DM conversations the current user is part of ──
+      // Pulls all conversations + participants + the latest message per
+      // conversation. We resolve participant profiles in one batched query
+      // to populate names/handles/avatars. Per-message history for each
+      // conversation is fetched lazily when the user opens it (loadDmMessages).
+      try {
+        // Only pull rows where I haven't soft-hidden the convo. Hidden rows
+        // come back into the inbox via the realtime path when a new message
+        // arrives (which also clears hidden_at server-side).
+        const { data: myParts, error: mpErr } = await supabase
+          .from("dm_participants").select("*")
+          .eq("user_id", uid)
+          .is("hidden_at", null);
+        if (mpErr) console.error("[hydrate] dm_participants self fetch error", mpErr);
+        const myConvIds = Array.isArray(myParts) ? myParts.map(p => p.conversation_id) : [];
+        if (myConvIds.length > 0) {
+          const lastReadByConv = {};
+          (myParts || []).forEach(p => { lastReadByConv[p.conversation_id] = p.last_read_at; });
+          // Conversations + all participants of those convos in parallel.
+          const [{ data: convRows, error: cErr }, { data: partRows, error: pErr }] = await Promise.all([
+            supabase.from("dm_conversations").select("*").in("id", myConvIds).order("updated_at", { ascending: false }),
+            supabase.from("dm_participants").select("*").in("conversation_id", myConvIds),
+          ]);
+          if (cErr) console.error("[hydrate] dm_conversations fetch error", cErr);
+          if (pErr) console.error("[hydrate] dm_participants fetch error", pErr);
+          // Resolve all referenced profiles in one query.
+          const allUserIds = Array.from(new Set((partRows || []).map(p => p.user_id)));
+          const profByUid = {};
+          if (allUserIds.length > 0) {
+            try {
+              const { data: profs } = await supabase
+                .from("profiles").select("id, full_name, handle, avatar_url")
+                .in("id", allUserIds);
+              if (Array.isArray(profs)) profs.forEach(p => { profByUid[p.id] = p; });
+            } catch (e) { /* non-fatal */ }
+          }
+          // Group participants by conversation.
+          const partsByConv = {};
+          (partRows || []).forEach(p => {
+            if (!partsByConv[p.conversation_id]) partsByConv[p.conversation_id] = [];
+            const prof = profByUid[p.user_id] || {};
+            const name = prof.full_name || "User";
+            partsByConv[p.conversation_id].push({
+              userId: p.user_id,
+              fullName: name,
+              handle: prof.handle || "",
+              avatarUrl: prof.avatar_url || null,
+              initial: name.charAt(0).toUpperCase(),
+            });
+          });
+          // Last message per conversation (used for inbox preview + lastTime).
+          // We grab the most-recent message id per convo via a single query.
+          let lastMsgByConv = {};
+          let unreadByConv = {};
+          try {
+            const { data: msgRows } = await supabase
+              .from("dm_messages")
+              .select("id, conversation_id, sender_id, body, payload, created_at")
+              .in("conversation_id", myConvIds)
+              .order("created_at", { ascending: false })
+              .limit(myConvIds.length * 50); // reasonable cap to compute last + unread
+            if (Array.isArray(msgRows)) {
+              msgRows.forEach(m => {
+                if (!lastMsgByConv[m.conversation_id]) lastMsgByConv[m.conversation_id] = m;
+                const lr = lastReadByConv[m.conversation_id];
+                if (m.sender_id !== uid && (!lr || m.created_at > lr)) {
+                  unreadByConv[m.conversation_id] = (unreadByConv[m.conversation_id] || 0) + 1;
+                }
+              });
+            }
+          } catch (e) { console.error("[hydrate] dm last-message fetch failed", e); }
+          // Build the inbox-shaped convo summaries.
+          const summaries = (convRows || []).map(c => {
+            const participants = partsByConv[c.id] || [];
+            const others = participants.filter(p => p.userId !== uid);
+            const lastM = lastMsgByConv[c.id];
+            const lastBody = lastM ? (lastM.body || (lastM.payload && lastM.payload.kind ? `[${lastM.payload.kind}]` : "")) : "";
+            // Display surface: for direct convos use the other participant.
+            // For groups use title or a comma-joined name list.
+            let displayName, displayHandle, displayAvatar, displayInitial;
+            if (c.type === "direct") {
+              const other = others[0] || { fullName: "User", handle: "", avatarUrl: null, initial: "U" };
+              displayName = other.fullName; displayHandle = other.handle; displayAvatar = other.avatarUrl; displayInitial = other.initial;
+            } else {
+              displayName = c.title || others.map(o => o.fullName).join(", ") || "Group";
+              displayHandle = ""; displayAvatar = null;
+              displayInitial = (c.title || (others[0] && others[0].fullName) || "G").charAt(0).toUpperCase();
+            }
+            return {
+              id: c.id,
+              type: c.type,
+              title: c.title || null,
+              participants,
+              user: displayHandle, // for backward-compat with @user header rendering
+              name: displayName,
+              initial: displayInitial,
+              avatarUrl: displayAvatar,
+              online: false,
+              unread: unreadByConv[c.id] || 0,
+              lastMessage: lastBody,
+              lastTime: lastM ? formatPostTime(new Date(lastM.created_at).getTime()) : "",
+              updatedAt: c.updated_at,
+              messages: [], // lazy — loaded by loadDmMessages on open
+              messagesLoaded: false,
+            };
+          });
+          setDmConvos(summaries);
+        } else {
+          setDmConvos([]);
+        }
+      } catch (e) { console.error("[hydrate] dm conversations failed", e); }
+      // ── Hydrate convoy RSVPs for any loaded CONVOYS posts ──
+      // We only fetch RSVPs for the posts we have in memory (convoy posts
+      // only) rather than all RSVPs ever, so the load stays bounded. Profile
+      // lookups for responders are batched into a single .in() query.
+      try {
+        const convoyPostIds = Array.isArray(loadedPostIds)
+          ? loadedPostIds.filter(pid => true) // we'll narrow with the rows below
+          : [];
+        if (convoyPostIds.length > 0) {
+          const { data: rsvpRows, error: rsvpErr } = await supabase
+            .from("convoy_rsvps")
+            .select("*")
+            .in("post_id", convoyPostIds);
+          if (rsvpErr) console.error("[hydrate] convoy_rsvps fetch error", rsvpErr);
+          if (Array.isArray(rsvpRows) && rsvpRows.length > 0) {
+            const responderIds = Array.from(new Set(rsvpRows.map(r => r.user_id)));
+            const profByUid = {};
+            try {
+              const { data: profs } = await supabase
+                .from("profiles").select("id, full_name, handle, avatar_url")
+                .in("id", responderIds);
+              if (Array.isArray(profs)) profs.forEach(p => { profByUid[p.id] = p; });
+            } catch (e) { /* non-fatal */ }
+            const grouped = {};
+            rsvpRows.forEach(r => {
+              if (!grouped[r.post_id]) grouped[r.post_id] = {};
+              const prof = profByUid[r.user_id];
+              const name = (prof && prof.full_name) || "User";
+              grouped[r.post_id][r.user_id] = {
+                status: r.status,
+                name,
+                handle: (prof && prof.handle) || "",
+                avatarUrl: (prof && prof.avatar_url) || null,
+                initial: name.charAt(0).toUpperCase(),
+              };
+            });
+            setConvoyRsvps(grouped);
+          }
+        }
+      } catch (e) { console.error("[hydrate] convoy_rsvps failed", e); }
+      // ── Hydrate follow graph for the current user ──
+      // Two parallel queries: who I follow (drives FOLLOW button state) and
+      // counts of followers/following for my own profile screen. We pull all
+      // following_id rows so isFollowing(id) is a Set lookup, and use head:true
+      // count queries for the totals to avoid pulling unneeded rows.
+      try {
+        const [{ data: outRows, error: outErr }, { count: followerCount, error: fcErr }] = await Promise.all([
+          supabase.from("follows").select("following_id").eq("follower_id", uid),
+          supabase.from("follows").select("*", { count: "exact", head: true }).eq("following_id", uid),
+        ]);
+        if (outErr) console.error("[hydrate] follows out fetch error", outErr);
+        if (fcErr) console.error("[hydrate] follower count fetch error", fcErr);
+        if (Array.isArray(outRows)) {
+          setFollowingIds(new Set(outRows.map(r => r.following_id)));
+          setMyFollowingCount(outRows.length);
+        }
+        if (typeof followerCount === "number") setMyFollowerCount(followerCount);
+      } catch (e) { console.error("[hydrate] follows fetch failed", e); }
     } catch (e) { console.error("[hydrate] failed", e); }
+    finally { setAppReady(true); }
   };
   useEffect(() => {
     let cancelled = false;
@@ -12352,7 +13326,11 @@ export default function Trailhead() {
         // route them into the onboarding flow instead of the app.
         const hasHandle = !!(session.user && session.user.user_metadata && session.user.user_metadata.handle);
         setAuthState(hasHandle ? "app" : "onboarding");
-        if (hasHandle) hydrateUserData(session);
+        if (hasHandle) hydrateUserData(session); // sets appReady when complete
+        else setAppReady(true); // onboarding screen needs no hydrate
+      } else {
+        // No session OR shared-link guest mode — neither needs hydrate.
+        setAppReady(true);
       }
     });
     // 2) Subscribe to auth state changes (sign-in, sign-out, token refresh, OAuth callback).
@@ -12376,6 +13354,11 @@ export default function Trailhead() {
         setCurrentProfile(null);
         setUserBuilds([]);
         setFeedItems([]);
+        setFollowingIds(new Set());
+        setMyFollowerCount(0);
+        setMyFollowingCount(0);
+        setDmConvos([]);
+        setActiveDmConvId(null);
         setAuthState("login");
       }
       // USER_UPDATED fires after supabase.auth.updateUser() — session object
@@ -12387,6 +13370,334 @@ export default function Trailhead() {
     });
     return () => { cancelled = true; sub && sub.subscription && sub.subscription.unsubscribe && sub.subscription.unsubscribe(); };
   }, []);
+  // ─── Realtime: live notification subscription ──────────────────────────
+  // Subscribes to INSERT events on public.notifications filtered to the
+  // current user. Prepends new rows into bellNotifs so the badge updates
+  // without a page refresh.
+  useEffect(() => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) return;
+    const channel = supabase
+      .channel("notifs_" + uid)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications", filter: "user_id=eq." + uid }, (payload) => {
+        const bell = dbNotifToBell(payload.new);
+        if (bell) setBellNotifs(prev => [bell, ...prev]);
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [supabaseSession && supabaseSession.user && supabaseSession.user.id]);
+
+  // ─── Realtime: live comment + like updates ─────────────────────────────
+  // When another user comments on or likes a post, the change appears
+  // immediately without a refresh. We subscribe to the full table (no
+  // row-level filter) because the listener is cheap and we want to cover
+  // all loaded posts.
+  useEffect(() => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) return;
+    const channel = supabase
+      .channel("feed_realtime_" + uid)
+      // New posts — prepend into feedItems so they appear instantly.
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "posts" }, async (payload) => {
+        const row = payload.new;
+        if (!row || !row.id) return;
+        // Skip if the insert came from this client (already added optimistically by addPost).
+        if (row.user_id === uid) return;
+        // Avoid duplicates.
+        if (feedItemsRef.current.some(p => p.id === row.id)) return;
+        // Resolve the author's profile for name/handle/avatar.
+        let prof = null;
+        try {
+          const { data } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").eq("id", row.user_id).single();
+          prof = data;
+        } catch (e) { /* non-fatal */ }
+        const item = dbRowToFeedItem(row, prof);
+        if (item) {
+          setFeedItems(prev => {
+            if (prev.some(p => p.id === item.id)) return prev;
+            return [item, ...prev];
+          });
+        }
+      })
+      // New comments — append into postComments and bump count.
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "post_comments" }, async (payload) => {
+        const row = payload.new;
+        if (!row || !row.post_id) return;
+        // Skip if the insert came from this client (already handled optimistically).
+        if (row.user_id === uid) return;
+        // Resolve commenter profile.
+        let prof = null;
+        try {
+          const { data } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").eq("id", row.user_id).single();
+          prof = data;
+        } catch (e) { /* non-fatal */ }
+        const c = dbRowToComment(row, prof);
+        if (c) {
+          setPostComments(prev => {
+            const list = prev[row.post_id] || [];
+            // Avoid duplicates (race between hydrate and realtime).
+            if (list.some(x => x.id === c.id)) return prev;
+            return { ...prev, [row.post_id]: [...list, c] };
+          });
+          setFeedItems(prev => prev.map(p => p.id === row.post_id ? { ...p, comments: (p.comments || 0) + 1 } : p));
+        }
+      })
+      // New likes — bump the post's like count.
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "post_likes" }, (payload) => {
+        const row = payload.new;
+        if (!row || !row.post_id) return;
+        if (row.user_id === uid) return; // already handled optimistically
+        setFeedItems(prev => prev.map(p => p.id === row.post_id ? { ...p, likes: (p.likes || 0) + 1 } : p));
+      })
+      // Deleted likes — decrement the count.
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "post_likes" }, (payload) => {
+        const row = payload.old;
+        if (!row || !row.post_id) return;
+        if (row.user_id === uid) return;
+        setFeedItems(prev => prev.map(p => p.id === row.post_id ? { ...p, likes: Math.max((p.likes || 0) - 1, 0) } : p));
+      })
+      // Profile updates — when any user changes their handle/name/avatar,
+      // patch all their previous posts and comments in this client's feed
+      // state so their new identity shows up without a reload. Skips own
+      // updates since saveProfile / handleSetProfilePic already patched
+      // locally and we'd otherwise echo a redundant update.
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles" }, (payload) => {
+        const row = payload.new;
+        if (!row || !row.id) return;
+        if (row.id === uid) return;
+        applyProfileUpdate(row.id, row);
+      })
+      // Post edits — title/body/photo edits land in other clients' feeds
+      // immediately. Skip own edits (already patched optimistically by
+      // updatePost). We re-run the canonical translator so the type column
+      // wins over any stale jsonb `type` field (this otherwise flipped
+      // normal posts into ROUTES whenever the like/comment trigger fired
+      // an UPDATE on the row).
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "posts" }, (payload) => {
+        const row = payload.new;
+        if (!row || !row.id) return;
+        if (row.user_id === uid) return;
+        setFeedItems(prev => prev.map(p => {
+          if (p.id !== row.id) return p;
+          const fakeProfile = { id: p.userId, full_name: p.user, handle: p.handle, avatar_url: p.avatarUrl };
+          const next = dbRowToFeedItem(row, fakeProfile);
+          // Preserve any client-only state on p (route photos/pins/points
+          // from compose that may not be in the jsonb if the column is empty).
+          return { ...p, ...next };
+        }));
+      })
+      // Post deletes — drop the post from the feed and clean up any local
+      // state for it. Skip own deletes (already handled by deletePost).
+      // Requires REPLICA IDENTITY FULL on posts so payload.old carries
+      // user_id (for the self-echo skip).
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "posts" }, (payload) => {
+        const row = payload.old;
+        if (!row || !row.id) return;
+        if (row.user_id && row.user_id === uid) return;
+        setFeedItems(prev => prev.filter(p => p.id !== row.id));
+        setLikedPostIds(prev => { if (!prev[row.id]) return prev; const next = { ...prev }; delete next[row.id]; return next; });
+        setPostComments(prev => { if (!prev[row.id]) return prev; const next = { ...prev }; delete next[row.id]; return next; });
+      })
+      // Comment deletes — remove from postComments and decrement the post's
+      // comment count. Requires REPLICA IDENTITY FULL on post_comments.
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "post_comments" }, (payload) => {
+        const row = payload.old;
+        if (!row || !row.id || !row.post_id) return;
+        if (row.user_id && row.user_id === uid) return;
+        let removed = false;
+        setPostComments(prev => {
+          const list = prev[row.post_id];
+          if (!list) return prev;
+          const next = list.filter(c => c.id !== row.id);
+          if (next.length === list.length) return prev;
+          removed = true;
+          return { ...prev, [row.post_id]: next };
+        });
+        if (removed) {
+          setFeedItems(prev => prev.map(p => p.id === row.post_id ? { ...p, comments: Math.max((p.comments || 0) - 1, 0) } : p));
+        }
+      })
+      // Comment likes — bump/decrement the like count on a comment when
+      // someone else likes or unlikes it. We walk every loaded post's
+      // comment list to find the match (small lists, cheap). Skip self.
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "post_comment_likes" }, (payload) => {
+        const row = payload.new;
+        if (!row || !row.comment_id) return;
+        if (row.user_id === uid) return;
+        setPostComments(prev => {
+          let touched = false;
+          const out = {};
+          for (const postId of Object.keys(prev)) {
+            const list = prev[postId];
+            const next = list.map(c => {
+              if (c.id !== row.comment_id) return c;
+              touched = true;
+              return { ...c, likes: (c.likes || 0) + 1 };
+            });
+            out[postId] = next;
+          }
+          return touched ? out : prev;
+        });
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "post_comment_likes" }, (payload) => {
+        const row = payload.old;
+        if (!row || !row.comment_id) return;
+        if (row.user_id && row.user_id === uid) return;
+        setPostComments(prev => {
+          let touched = false;
+          const out = {};
+          for (const postId of Object.keys(prev)) {
+            const list = prev[postId];
+            const next = list.map(c => {
+              if (c.id !== row.comment_id) return c;
+              touched = true;
+              return { ...c, likes: Math.max((c.likes || 0) - 1, 0) };
+            });
+            out[postId] = next;
+          }
+          return touched ? out : prev;
+        });
+      })
+      // Convoy RSVP events — keep convoyRsvps in sync as anyone responds.
+      // We resolve the responder's profile lazily for INSERT/UPDATE since we
+      // need their name/handle/avatar to render. Skip self echoes (already
+      // patched optimistically by setConvoyRsvp).
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "convoy_rsvps" }, async (payload) => {
+        const row = payload.new;
+        if (!row || !row.post_id || !row.user_id) return;
+        if (row.user_id === uid) return;
+        let prof = null;
+        try {
+          const { data } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").eq("id", row.user_id).single();
+          prof = data;
+        } catch (e) { /* non-fatal */ }
+        const name = (prof && prof.full_name) || "User";
+        setConvoyRsvps(curr => ({
+          ...curr,
+          [row.post_id]: {
+            ...(curr[row.post_id] || {}),
+            [row.user_id]: { status: row.status, name, handle: (prof && prof.handle) || "", avatarUrl: (prof && prof.avatar_url) || null, initial: name.charAt(0).toUpperCase() },
+          },
+        }));
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "convoy_rsvps" }, (payload) => {
+        const row = payload.new;
+        if (!row || !row.post_id || !row.user_id) return;
+        if (row.user_id === uid) return;
+        // Status change for an existing responder — patch in place; we
+        // already have their profile shape from a prior INSERT/hydrate.
+        setConvoyRsvps(curr => {
+          const existing = curr[row.post_id] && curr[row.post_id][row.user_id];
+          if (!existing) return curr;
+          return {
+            ...curr,
+            [row.post_id]: { ...curr[row.post_id], [row.user_id]: { ...existing, status: row.status } },
+          };
+        });
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "convoy_rsvps" }, (payload) => {
+        const row = payload.old;
+        if (!row || !row.post_id || !row.user_id) return;
+        if (row.user_id === uid) return;
+        setConvoyRsvps(curr => {
+          if (!curr[row.post_id] || !curr[row.post_id][row.user_id]) return curr;
+          const next = { ...curr[row.post_id] };
+          delete next[row.user_id];
+          return { ...curr, [row.post_id]: next };
+        });
+      })
+      // DM participants — when anyone joins a convo I'm in (e.g. an invitee
+      // RSVPs going to a convoy and auto-joins the group), append them to my
+      // local participants list so the "N participants" count + dropdown
+      // reflect the new member without a reload. RLS-filtered delivery means
+      // I only see INSERTs for convos I'm a participant of.
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "dm_participants" }, async (payload) => {
+        const row = payload.new;
+        if (!row || !row.conversation_id || !row.user_id) return;
+        // Skip if I'm the new participant (we already update locally on
+        // self-add via ensureLocalConvoLoaded / ensureConvoyGroupMembership).
+        if (row.user_id === uid) return;
+        // Skip if not a convo we know about.
+        const exists = dmConvosRef.current.find(c => c.id === row.conversation_id);
+        if (!exists) return;
+        // Skip if already in the participants list.
+        if (exists.participants && exists.participants.some(p => p.userId === row.user_id)) return;
+        // Resolve their profile for display.
+        let prof = null;
+        try {
+          const { data } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").eq("id", row.user_id).single();
+          prof = data;
+        } catch (e) { /* non-fatal */ }
+        const name = (prof && prof.full_name) || "User";
+        const newPart = { userId: row.user_id, fullName: name, handle: (prof && prof.handle) || "", avatarUrl: (prof && prof.avatar_url) || null, initial: name.charAt(0).toUpperCase() };
+        setDmConvos(prev => prev.map(c => c.id === row.conversation_id ? { ...c, participants: [...(c.participants || []), newPart] } : c));
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "dm_participants" }, (payload) => {
+        const row = payload.old;
+        if (!row || !row.conversation_id || !row.user_id) return;
+        if (row.user_id === uid) return;
+        setDmConvos(prev => prev.map(c => c.id === row.conversation_id ? { ...c, participants: (c.participants || []).filter(p => p.userId !== row.user_id) } : c));
+      })
+      // DM messages — RLS already filters delivery to messages from convos
+      // I'm a participant of, so we don't need a filter clause. Skip own
+      // messages (already optimistically added by sendDmMessage). For
+      // others' messages: append to the right conversation, bump unread
+      // (or auto-mark-read if the convo is currently open), update preview.
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "dm_messages" }, (payload) => {
+        const row = payload.new;
+        if (!row || !row.id || !row.conversation_id) return;
+        if (row.sender_id === uid) return;
+        const msg = dmRowToLocalMessage(row);
+        const isActive = activeDmConvIdRef.current === row.conversation_id;
+        const previewText = msg.text || (msg.sharedPost && ("Shared: " + (msg.sharedPost.title || ""))) || "";
+        setDmConvos(prev => {
+          const existing = prev.find(c => c.id === row.conversation_id);
+          if (!existing) {
+            // New conversation OR a previously-soft-hidden direct convo. Pull
+            // it lazily and seed it with this message so the unread badge +
+            // preview are correct on first paint. Also clear hidden_at on
+            // the server so the next hydrate keeps it visible — this is what
+            // makes "delete" act like archive instead of block.
+            ensureLocalConvoLoaded(row.conversation_id, msg);
+            supabase.from("dm_participants")
+              .update({ hidden_at: null })
+              .eq("conversation_id", row.conversation_id)
+              .eq("user_id", uid)
+              .then(({ error: unhideErr }) => { if (unhideErr) console.error("[dm] unhide error", unhideErr); });
+            return prev;
+          }
+          return prev.map(c => c.id === row.conversation_id ? {
+            ...c,
+            messages: c.messagesLoaded ? [...(c.messages || []), msg] : c.messages,
+            unread: isActive ? c.unread : (c.unread || 0) + 1,
+            lastMessage: previewText,
+            lastTime: "Just now",
+            updatedAt: row.created_at,
+          } : c);
+        });
+        // If the convo is currently open, also persist read marker.
+        if (isActive) markDmConvRead(row.conversation_id);
+      })
+      // Follow events affecting ME — when someone else follows or unfollows
+      // me, my own follower count updates without a reload. Skip self-echoes
+      // (when I follow/unfollow someone else) since followUser/unfollowUser
+      // already updated myFollowingCount locally.
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "follows" }, (payload) => {
+        const row = payload.new;
+        if (!row) return;
+        if (row.follower_id === uid) return;
+        if (row.following_id === uid) setMyFollowerCount(c => c + 1);
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "follows" }, (payload) => {
+        const row = payload.old;
+        if (!row) return;
+        if (row.follower_id === uid) return;
+        if (row.following_id === uid) setMyFollowerCount(c => Math.max(c - 1, 0));
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [supabaseSession && supabaseSession.user && supabaseSession.user.id]);
+
   // ─── GUEST MODE ───────────────────────────────────────────────────────────
   // Guests are only created by following a shared link without an active
   // session. Normal app use requires sign-in.
@@ -12424,6 +13735,16 @@ export default function Trailhead() {
   // the latest feed state without closing over a stale snapshot.
   const feedItemsRef = useRef(feedItems);
   useEffect(() => { feedItemsRef.current = feedItems; }, [feedItems]);
+  // ─── Feed likes / comments persistence state ──────────────────────────
+  // likedPostIds: set of post ids the signed-in user has liked. Rendered in
+  // the feed as a red heart and used to drive the like/unlike toggle.
+  const [likedPostIds, setLikedPostIds] = useState({}); // { postId: true }
+  // postComments: comments loaded per post, keyed by post id. We fetch all
+  // comments for visible posts at hydrate time so they're ready when a user
+  // opens the comment drawer — no lazy loading yet.
+  const [postComments, setPostComments] = useState({}); // { postId: [comment,...] }
+  // likedCommentIds: set of comment ids the user has liked.
+  const [likedCommentIds, setLikedCommentIds] = useState({}); // { commentId: true }
   const [forumUserThreads, setForumUserThreads] = useState({}); // { subName: [thread, ...] }
   const [forumUserReplies, setForumUserReplies] = useState({}); // { threadId: [reply, ...] }
   const [forumLikedItems, setForumLikedItems] = useState({}); // { key: true }
@@ -12494,6 +13815,9 @@ export default function Trailhead() {
       console.log("[avatar] profiles.avatar_url updated");
       setProfilePic(publicUrl);
       setCurrentProfile(prev => prev ? { ...prev, avatar_url: publicUrl } : prev);
+      // Patch own posts/comments so the new avatar shows up in the feed
+      // immediately, without waiting for the next reload's hydrate.
+      applyProfileUpdate(uid, { avatar_url: publicUrl });
     } catch (e) { console.error("[avatar] handleSetProfilePic failed", e); }
   };
   // Persist profile edits to public.profiles. Returns { ok } or { error }.
@@ -12521,6 +13845,7 @@ export default function Trailhead() {
         await supabase.auth.updateUser({ data: { full_name, handle } });
       } catch (e) { /* best-effort */ }
       setCurrentProfile(data);
+      applyProfileUpdate(uid, data);
       return { ok: true };
     } catch (e) {
       console.error("[saveProfile] failed", e);
@@ -12530,21 +13855,32 @@ export default function Trailhead() {
   const [notifPrefs, setNotifPrefs] = useState({ likes: true, comments: true, replies: true, follows: true, mentions: true, push: false });
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [showDM, setShowDM] = useState(false);
-  const [dmInitialUser, setDmInitialUser] = useState(null);
+  // initialConvId — set after find/create resolves; DMScreen consumes once.
+  const [dmInitialConvId, setDmInitialConvId] = useState(null);
   const [dmInitialMessage, setDmInitialMessage] = useState("");
-  const [dmConvos, setDmConvos] = useState(dmConversations);
-  const dmUnreadCount = dmConvos.reduce((sum, c) => sum + c.unread, 0);
+  // ─── DM state (DB-backed, realtime) ───────────────────────────────────────
+  // dmConvos: array of conversation summaries used by the inbox view. Shape
+  // matches what DMScreen has historically expected (`user`, `initial`,
+  // `name`, `unread`, `lastMessage`, `lastTime`, `messages`) plus a few new
+  // fields for groups (`type`, `title`, `participants`).
+  const [dmConvos, setDmConvos] = useState([]);
+  // dmConvosRef mirror so realtime callbacks can read latest without stale closures.
+  const dmConvosRef = useRef([]);
+  useEffect(() => { dmConvosRef.current = dmConvos; }, [dmConvos]);
+  // Active conversation id (used by realtime to auto-mark-read when a
+  // message lands while the convo is open).
+  const [activeDmConvId, setActiveDmConvId] = useState(null);
+  const activeDmConvIdRef = useRef(null);
+  useEffect(() => { activeDmConvIdRef.current = activeDmConvId; }, [activeDmConvId]);
+  const dmUnreadCount = dmConvos.reduce((sum, c) => sum + (c.unread || 0), 0);
   const [dmSharedPost, setDmSharedPost] = useState(null); // { title, user, initial, image }
 
-  const [bellNotifs, setBellNotifs] = useState([
-    { id: "b1", type: "like", user: "Overland_Expert", text: "liked your post", target: "Stage 3 Suspension Build Complete", time: "2m ago", icon: Heart, iconColor: T.red },
-    { id: "b2", type: "reply", user: "TrailBoss", text: "replied to your thread", target: "Best budget lift kit for 3rd Gen Tacoma?", time: "18m ago", icon: MessageCircle, iconColor: T.copper },
-    { id: "b3", type: "follow", user: "MountainGoat", text: "started following you", target: null, time: "1h ago", icon: UserPlus, iconColor: T.green },
-    { id: "b4", type: "like", user: "Peak_Finder", text: "liked your route", target: "Hell's Revenge Loop", time: "3h ago", icon: Heart, iconColor: T.red },
-    { id: "b5", type: "mention", user: "BajaBound", text: "mentioned you in", target: "Planning a Baja convoy — Feb 2027", time: "5h ago", icon: AtSign, iconColor: T.copper },
-    { id: "b6", type: "reply", user: "SteelCraft", text: "replied to your comment in", target: "Custom skid plate fabrication", time: "8h ago", icon: MessageCircle, iconColor: T.copper },
-    { id: "b7", type: "like", user: "Nomad_Queen", text: "and 4 others liked your post", target: "Black Bear Pass Recovery", time: "1d ago", icon: Heart, iconColor: T.red },
-  ]);
+  const [bellNotifs, setBellNotifs] = useState([]);
+  // Convoy RSVPs — per-post map of responder user_id → { status, name, handle, avatarUrl, initial }.
+  // Populated at hydrate by joining convoy_rsvps with profiles, kept in sync
+  // by the convoy_rsvps realtime subscription, and mutated optimistically by
+  // setConvoyRsvp below. Keying by user_id (not handle) keeps renames safe.
+  const [convoyRsvps, setConvoyRsvps] = useState({}); // { [postId]: { [userId]: { status, name, handle, avatarUrl, initial } } }
 
   const [recoveryAlerts, setRecoveryAlerts] = useState([
     { id: "r1", title: "Winch Support Required", location: "Black Bear Pass, CO", coords: "37.8106° N, 107.6992° W", urgency: "HIGH", time: "2m ago", vehicle: "Jeep Gladiator on 37s", detail: "High-centered on a shelf. Front locker acting up.", author: "DesertRat_4x4" },
@@ -12554,6 +13890,715 @@ export default function Trailhead() {
 
   const addNotification = (notif) => {
     setBellNotifs(prev => [{ id: "bn_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6), time: Date.now(), ...notif }, ...prev]);
+  };
+
+  // Patches in-memory feed items + comments to reflect a profile change for
+  // the given user uuid. Used to make handle/avatar/name edits propagate
+  // instantly — both for the editing user (called from saveProfile + avatar
+  // upload) and for everyone watching them (called from the profiles realtime
+  // subscription below). New fields default to undefined and are skipped, so
+  // partial updates (e.g. avatar only) don't clobber other fields.
+  const applyProfileUpdate = (uid, prof) => {
+    if (!uid || !prof) return;
+    const newName = prof.full_name || null;
+    const newHandle = prof.handle || null;
+    const newAvatar = prof.avatar_url !== undefined ? prof.avatar_url : null;
+    setFeedItems(prev => prev.map(p => {
+      if (p.userId !== uid) return p;
+      const next = { ...p };
+      if (newName) { next.user = newName; next.initial = newName.charAt(0).toUpperCase(); }
+      if (newHandle) next.handle = newHandle;
+      if (prof.avatar_url !== undefined) next.avatarUrl = newAvatar;
+      return next;
+    }));
+    setPostComments(prev => {
+      let touched = false;
+      const out = {};
+      for (const postId of Object.keys(prev)) {
+        const list = prev[postId];
+        const patched = list.map(c => {
+          if (c.userId !== uid) return c;
+          touched = true;
+          const next = { ...c };
+          if (newName) { next.user = newName; next.initial = newName.charAt(0).toUpperCase(); }
+          if (newHandle) next.handle = newHandle;
+          if (prof.avatar_url !== undefined) next.avatarUrl = newAvatar;
+          return next;
+        });
+        out[postId] = patched;
+      }
+      return touched ? out : prev;
+    });
+  };
+
+  // ─── DM helpers ────────────────────────────────────────────────────────
+  // Translate a dm_messages row into the local message shape DMScreen expects.
+  const dmRowToLocalMessage = (row) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    const isMe = !!(uid && row.sender_id === uid);
+    const payload = row.payload || {};
+    return {
+      id: row.id,
+      senderId: row.sender_id,
+      from: isMe ? "me" : row.sender_id, // back-compat: existing render checks msg.from === "me"
+      text: row.body || "",
+      time: new Date(row.created_at).getTime(),
+      sharedPost: payload.sharedPost || undefined,
+      photos: Array.isArray(payload.photos) && payload.photos.length > 0 ? payload.photos : undefined,
+      rsvpStatus: payload.rsvpStatus || null,
+    };
+  };
+
+  // Async user search by handle or full_name. Used by DMScreen new-convo
+  // picker and the convoy invite picker. Excludes self.
+  const searchUsers = async (q, limit = 10) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    const trimmed = (q || "").trim();
+    if (!trimmed) return [];
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, full_name, handle, avatar_url")
+        .or(`handle.ilike.%${trimmed}%,full_name.ilike.%${trimmed}%`)
+        .limit(limit);
+      if (error) { console.error("[searchUsers] error", error); return []; }
+      return (data || []).filter(u => u.id !== uid);
+    } catch (e) { console.error("[searchUsers] failed", e); return []; }
+  };
+
+  // Find an existing direct conversation with otherUserId or create a new one.
+  // Returns the conversation row id. Atomicity: there's a benign race where two
+  // clients can race to create — we accept the duplicate; future cleanup can
+  // unify them.
+  const findOrCreateDirectDm = async (otherUserId) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid || !otherUserId || otherUserId === uid) return null;
+    // Look in local first.
+    const existingLocal = dmConvosRef.current.find(c => c.type === "direct" && c.participants.some(p => p.userId === otherUserId));
+    if (existingLocal) return existingLocal.id;
+    // Query DB for a direct conv between us and them.
+    try {
+      const { data: myParts } = await supabase.from("dm_participants").select("conversation_id").eq("user_id", uid);
+      const myConvIds = (myParts || []).map(p => p.conversation_id);
+      if (myConvIds.length > 0) {
+        const { data: candidates } = await supabase
+          .from("dm_participants")
+          .select("conversation_id")
+          .eq("user_id", otherUserId)
+          .in("conversation_id", myConvIds);
+        const sharedConvIds = (candidates || []).map(c => c.conversation_id);
+        if (sharedConvIds.length > 0) {
+          const { data: directOnes } = await supabase
+            .from("dm_conversations")
+            .select("id")
+            .in("id", sharedConvIds)
+            .eq("type", "direct")
+            .limit(1);
+          if (Array.isArray(directOnes) && directOnes.length > 0) {
+            await ensureLocalConvoLoaded(directOnes[0].id);
+            return directOnes[0].id;
+          }
+        }
+      }
+      // None exists — create it.
+      const { data: convRow, error: cErr } = await supabase
+        .from("dm_conversations")
+        .insert({ type: "direct", created_by: uid })
+        .select()
+        .single();
+      if (cErr) { console.error("[dm] create direct conv error", cErr); return null; }
+      const { error: pErr } = await supabase.from("dm_participants").insert([
+        { conversation_id: convRow.id, user_id: uid },
+        { conversation_id: convRow.id, user_id: otherUserId },
+      ]);
+      if (pErr) { console.error("[dm] add participants error", pErr); return null; }
+      await ensureLocalConvoLoaded(convRow.id);
+      return convRow.id;
+    } catch (e) { console.error("[dm] findOrCreateDirectDm failed", e); return null; }
+  };
+
+  // Create a group conversation with the given other user ids and optional title.
+  const createGroupDm = async (otherUserIds, title) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid || !Array.isArray(otherUserIds) || otherUserIds.length === 0) return null;
+    try {
+      const { data: convRow, error: cErr } = await supabase
+        .from("dm_conversations")
+        .insert({ type: "group", title: (title || "").trim() || null, created_by: uid })
+        .select()
+        .single();
+      if (cErr) { console.error("[dm] create group conv error", cErr); return null; }
+      const partRows = [{ conversation_id: convRow.id, user_id: uid }, ...otherUserIds.map(otherUid => ({ conversation_id: convRow.id, user_id: otherUid }))];
+      const { error: pErr } = await supabase.from("dm_participants").insert(partRows);
+      if (pErr) { console.error("[dm] add group participants error", pErr); return null; }
+      await ensureLocalConvoLoaded(convRow.id);
+      return convRow.id;
+    } catch (e) { console.error("[dm] createGroupDm failed", e); return null; }
+  };
+
+  // Pulls a freshly-created conversation into local state by re-reading it +
+  // its participants. Used after find-or-create so the new convo shows up
+  // in the inbox immediately without waiting for realtime. When called from
+  // the realtime path because a message arrived for a convo we hadn't seen
+  // yet, pass `seedMessage` so the inbox preview + unread badge are correct
+  // from the first frame instead of starting at zero.
+  const ensureLocalConvoLoaded = async (convId, seedMessage) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid || !convId) return;
+    if (dmConvosRef.current.some(c => c.id === convId)) return;
+    try {
+      const [{ data: convRow }, { data: partRows }] = await Promise.all([
+        supabase.from("dm_conversations").select("*").eq("id", convId).single(),
+        supabase.from("dm_participants").select("*").eq("conversation_id", convId),
+      ]);
+      if (!convRow) return;
+      const partUids = (partRows || []).map(p => p.user_id);
+      let profByUid = {};
+      if (partUids.length > 0) {
+        try {
+          const { data: profs } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").in("id", partUids);
+          if (Array.isArray(profs)) profs.forEach(p => { profByUid[p.id] = p; });
+        } catch (e) { /* non-fatal */ }
+      }
+      const participants = (partRows || []).map(p => {
+        const prof = profByUid[p.user_id] || {};
+        const name = prof.full_name || "User";
+        return { userId: p.user_id, fullName: name, handle: prof.handle || "", avatarUrl: prof.avatar_url || null, initial: name.charAt(0).toUpperCase() };
+      });
+      const others = participants.filter(p => p.userId !== uid);
+      let displayName, displayHandle, displayAvatar, displayInitial;
+      if (convRow.type === "direct") {
+        const other = others[0] || { fullName: "User", handle: "", avatarUrl: null, initial: "U" };
+        displayName = other.fullName; displayHandle = other.handle; displayAvatar = other.avatarUrl; displayInitial = other.initial;
+      } else {
+        displayName = convRow.title || others.map(o => o.fullName).join(", ") || "Group";
+        displayHandle = ""; displayAvatar = null;
+        displayInitial = (convRow.title || (others[0] && others[0].fullName) || "G").charAt(0).toUpperCase();
+      }
+      const seededPreview = seedMessage ? (seedMessage.text || (seedMessage.sharedPost && ("Shared: " + (seedMessage.sharedPost.title || ""))) || "") : "";
+      const summary = {
+        id: convRow.id, type: convRow.type, title: convRow.title || null,
+        participants, user: displayHandle, name: displayName, initial: displayInitial,
+        avatarUrl: displayAvatar, online: false,
+        unread: seedMessage ? 1 : 0,
+        lastMessage: seededPreview,
+        lastTime: seedMessage ? "Just now" : "",
+        updatedAt: convRow.updated_at, messages: [], messagesLoaded: false,
+      };
+      setDmConvos(prev => prev.some(c => c.id === convId) ? prev : [summary, ...prev]);
+    } catch (e) { console.error("[dm] ensureLocalConvoLoaded failed", e); }
+  };
+
+  // Lazy-load all messages for a conversation when the user opens it.
+  // Skips if already loaded. Replaces the convo's `messages` array.
+  const loadDmMessages = async (convId) => {
+    if (!convId) return;
+    const existing = dmConvosRef.current.find(c => c.id === convId);
+    if (existing && existing.messagesLoaded) return;
+    try {
+      const { data: rows, error } = await supabase
+        .from("dm_messages").select("*")
+        .eq("conversation_id", convId)
+        .order("created_at", { ascending: true });
+      if (error) { console.error("[dm] loadDmMessages error", error); return; }
+      const msgs = (rows || []).map(dmRowToLocalMessage);
+      setDmConvos(prev => prev.map(c => c.id === convId ? { ...c, messages: msgs, messagesLoaded: true } : c));
+    } catch (e) { console.error("[dm] loadDmMessages failed", e); }
+  };
+
+  // Send a message into a conversation. Optimistic — appends to local list
+  // with any data:/blob: photo URLs visible right away, then uploads photos
+  // to the dm-attachments bucket, then inserts into DB and replaces the
+  // optimistic row with the canonical one on success. Payload jsonb carries
+  // shared posts / convoy invites and the resolved photo URLs.
+  const sendDmMessage = async (convId, body, payload) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid || !convId) return null;
+    const trimmed = (body || "").trim();
+    const localPhotos = (payload && Array.isArray(payload.photos) && payload.photos.length > 0) ? payload.photos : null;
+    if (!trimmed && !localPhotos && !(payload && payload.sharedPost)) return null;
+    const tempId = "tmp_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+    const tempRow = {
+      id: tempId, senderId: uid, from: "me",
+      text: trimmed, time: Date.now(),
+      sharedPost: (payload && payload.sharedPost) || undefined,
+      photos: localPhotos || undefined,
+      rsvpStatus: (payload && payload.rsvpStatus) || null,
+    };
+    const previewText = trimmed
+      || (payload && payload.sharedPost && ("Shared: " + (payload.sharedPost.title || "")))
+      || (localPhotos && localPhotos.length > 0 ? "📷 Photo" : "");
+    setDmConvos(prev => prev.map(c => c.id === convId ? {
+      ...c, messages: [...(c.messages || []), tempRow], lastMessage: previewText, lastTime: "Just now", updatedAt: new Date().toISOString(),
+    } : c));
+    try {
+      // Upload any local photos (data:/blob:) to storage, replace with public
+      // URLs in the persisted payload. Strings or objects-with-.url both
+      // supported by uploadDmAttachmentList.
+      let resolvedPhotos = localPhotos;
+      if (localPhotos && localPhotos.length > 0) {
+        resolvedPhotos = await uploadDmAttachmentList(localPhotos, uid);
+      }
+      const persistedPayload = (payload || resolvedPhotos)
+        ? { ...(payload || {}), ...(resolvedPhotos ? { photos: resolvedPhotos } : {}) }
+        : null;
+      const { data: inserted, error } = await supabase
+        .from("dm_messages")
+        .insert({ conversation_id: convId, sender_id: uid, body: trimmed || null, payload: persistedPayload })
+        .select()
+        .single();
+      if (error) throw error;
+      const real = dmRowToLocalMessage(inserted);
+      setDmConvos(prev => prev.map(c => c.id === convId ? {
+        ...c, messages: (c.messages || []).map(m => m.id === tempId ? real : m),
+      } : c));
+      return real;
+    } catch (e) {
+      console.error("[dm] sendDmMessage failed", e);
+      setDmConvos(prev => prev.map(c => c.id === convId ? { ...c, messages: (c.messages || []).filter(m => m.id !== tempId) } : c));
+      return null;
+    }
+  };
+
+  // ─── Web Push: subscribe / unsubscribe / status ─────────────────────────
+  // Registers /sw.js, asks the browser for notification permission, gets a
+  // PushSubscription, and persists it to public.push_subscriptions keyed by
+  // endpoint (so re-subscribing on the same device updates instead of adding
+  // duplicate rows). Returns true on success, false if the user denied
+  // permission or push isn't supported.
+  const subscribeToPush = async () => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) return false;
+    if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+      console.warn("[push] not supported in this browser");
+      return false;
+    }
+    try {
+      const reg = await navigator.serviceWorker.register("/sw.js");
+      // Wait for the SW to be ready (handles fresh installs).
+      await navigator.serviceWorker.ready;
+      const perm = await Notification.requestPermission();
+      if (perm !== "granted") { console.warn("[push] permission not granted:", perm); return false; }
+      // Reuse existing subscription if present; otherwise create one.
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+        });
+      }
+      const json = sub.toJSON();
+      if (!json || !json.endpoint || !json.keys || !json.keys.p256dh || !json.keys.auth) {
+        console.error("[push] subscription shape unexpected", json);
+        return false;
+      }
+      const { error } = await supabase.from("push_subscriptions").upsert({
+        endpoint: json.endpoint,
+        user_id: uid,
+        p256dh: json.keys.p256dh,
+        auth: json.keys.auth,
+        user_agent: navigator.userAgent,
+        last_seen_at: new Date().toISOString(),
+      }, { onConflict: "endpoint" });
+      if (error) { console.error("[push] subscription upsert error", error); return false; }
+      return true;
+    } catch (e) { console.error("[push] subscribe failed", e); return false; }
+  };
+
+  // Tear down the subscription locally + remove the row in DB so the server
+  // stops sending pushes to this device.
+  const unsubscribeFromPush = async () => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) return false;
+    try {
+      const reg = await navigator.serviceWorker.getRegistration("/sw.js");
+      if (!reg) return true; // nothing to unsubscribe
+      const sub = await reg.pushManager.getSubscription();
+      if (!sub) return true;
+      const endpoint = sub.endpoint;
+      await sub.unsubscribe();
+      if (uid && endpoint) {
+        await supabase.from("push_subscriptions").delete().eq("endpoint", endpoint).eq("user_id", uid);
+      }
+      return true;
+    } catch (e) { console.error("[push] unsubscribe failed", e); return false; }
+  };
+
+  // SW → app messages (from sw.js: { type: 'navigate', url }). Lets a tapped
+  // notification deep-link into the app even if the tab was already open.
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !navigator.serviceWorker) return;
+    const onMsg = (e) => {
+      const data = e && e.data;
+      if (!data || data.type !== "navigate" || !data.url) return;
+      const url = String(data.url);
+      // /post/<id> — open feed scrolled to that post
+      const post = url.match(/^\/post\/([\w-]+)$/);
+      if (post) {
+        setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("feed");
+        setPendingPostNav(post[1]);
+        return;
+      }
+      // /dm/<convId> — open the DM screen and load the specific conversation.
+      // openDM is more general, but we already have the conv id, so set state
+      // directly (matches what openDM does internally for the chat-view path).
+      const dm = url.match(/^\/dm\/([\w-]+)$/);
+      if (dm) {
+        setDmInitialConvId(dm[1]);
+        setDmInitialMessage("");
+        setDmSharedPost(null);
+        setDmKey(k => k + 1);
+        setShowDM(true);
+        return;
+      }
+      // Generic fallback — drop them on the feed.
+      setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("feed");
+    };
+    navigator.serviceWorker.addEventListener("message", onMsg);
+    return () => navigator.serviceWorker.removeEventListener("message", onMsg);
+  }, []);
+
+  // Send a DM payload (typically a convoy_invite shared post) to a recipient
+  // by handle or uuid, WITHOUT touching the DM screen UI state. Used by the
+  // convoy compose flow to send invites to many people without each call
+  // trampling the previous one's DM state. Resolves recipient → finds or
+  // creates the direct conversation → posts the message via sendDmMessage.
+  const sendDmInvite = async (recipientHandleOrId, sharedPost, body) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid || !recipientHandleOrId) return false;
+    let targetUserId = null;
+    const isUuid = typeof recipientHandleOrId === "string" && recipientHandleOrId.length > 20 && recipientHandleOrId.includes("-");
+    if (isUuid) targetUserId = recipientHandleOrId;
+    else {
+      try {
+        const handle = String(recipientHandleOrId).replace(/^@/, "");
+        const { data } = await supabase.from("profiles").select("id").eq("handle", handle).maybeSingle();
+        if (data && data.id) targetUserId = data.id;
+      } catch (e) { console.error("[sendDmInvite] handle lookup failed", e); }
+    }
+    if (!targetUserId || targetUserId === uid) return false;
+    const convId = await findOrCreateDirectDm(targetUserId);
+    if (!convId) return false;
+    const payload = sharedPost ? { sharedPost } : null;
+    await sendDmMessage(convId, body || "", payload);
+    return true;
+  };
+
+  // Remove a conversation from the current user's inbox.
+  //   - Direct convos: SOFT hide. Sets dm_participants.hidden_at = now() so
+  //     the convo is filtered out of the inbox at hydrate, BUT the user
+  //     remains a participant — meaning a new inbound message clears the
+  //     flag and the thread reappears (so this isn't a block).
+  //   - Group convos: HARD leave. Deletes the participant row outright
+  //     (you stop receiving the group's messages entirely).
+  // Both paths optimistically remove the convo locally, with rollback on
+  // DB failure.
+  const leaveDmConversation = async (convId) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid || !convId) return false;
+    const prev = dmConvosRef.current.find(c => c.id === convId) || null;
+    setDmConvos(arr => arr.filter(c => c.id !== convId));
+    if (activeDmConvIdRef.current === convId) setActiveDmConvId(null);
+    const isGroup = prev && prev.type === "group";
+    try {
+      if (isGroup) {
+        const { error } = await supabase
+          .from("dm_participants")
+          .delete()
+          .eq("conversation_id", convId)
+          .eq("user_id", uid);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("dm_participants")
+          .update({ hidden_at: new Date().toISOString() })
+          .eq("conversation_id", convId)
+          .eq("user_id", uid);
+        if (error) throw error;
+      }
+      return true;
+    } catch (e) {
+      console.error("[dm] leaveDmConversation failed", e);
+      if (prev) setDmConvos(arr => arr.some(c => c.id === convId) ? arr : [prev, ...arr]);
+      return false;
+    }
+  };
+
+  // Mark a conversation read for the current user (sets last_read_at = now()).
+  // Also clears the local unread badge.
+  const markDmConvRead = async (convId) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid || !convId) return;
+    setDmConvos(prev => prev.map(c => c.id === convId ? { ...c, unread: 0 } : c));
+    try {
+      const { error } = await supabase
+        .from("dm_participants")
+        .update({ last_read_at: new Date().toISOString() })
+        .eq("conversation_id", convId).eq("user_id", uid);
+      if (error) console.error("[dm] markDmConvRead error", error);
+    } catch (e) { console.error("[dm] markDmConvRead failed", e); }
+  };
+
+  // Ensure the signed-in user is a participant of the convoy's group DM.
+  // Looks up an existing group keyed by convoy_post_id; creates one (with
+  // me + the convoy host as initial members) if it doesn't exist; otherwise
+  // adds me as a participant. Idempotent — safe to call repeatedly.
+  // Called from setConvoyRsvp whenever someone RSVPs 'going'.
+  // Logs every failure path explicitly so we can diagnose missing SQL or
+  // RLS issues from the browser console.
+  const ensureConvoyGroupMembership = async (convoyPostId) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid || !convoyPostId) { console.warn("[convoy group] no uid or convoyPostId", { uid, convoyPostId }); return; }
+    try {
+      // Pull convoy post (need title + host + details for the pinned invite card).
+      const post = feedItemsRef.current.find(p => p.id === convoyPostId);
+      let title = post && post.title;
+      let hostUid = post && post.userId;
+      let location = post && post.location;
+      let month = post && post.month;
+      let day = post && post.day;
+      let departs = post && post.departs;
+      let slots = post && post.slots;
+      if (!title || !hostUid || !month) {
+        const { data: row, error: postErr } = await supabase.from("posts").select("title, user_id, data").eq("id", convoyPostId).maybeSingle();
+        if (postErr) { console.error("[convoy group] post lookup error", postErr); return; }
+        if (row) {
+          const d = row.data || {};
+          title = title || row.title || d.title;
+          hostUid = hostUid || row.user_id;
+          location = location || d.location;
+          month = month || d.month;
+          day = day || d.day;
+          departs = departs || d.departs;
+          slots = slots || d.slots;
+        }
+      }
+      if (!hostUid) { console.warn("[convoy group] could not determine host for", convoyPostId); return; }
+      console.log("[convoy group] resolving membership for convoy", convoyPostId, { title, hostUid, me: uid });
+      // Look up existing group DM for this convoy. RLS now lets going-RSVPers
+      // see this row even before they're a participant (see policy update),
+      // so this query returns the row whether we're already in or about to join.
+      const { data: existing, error: lookupErr } = await supabase
+        .from("dm_conversations")
+        .select("id")
+        .eq("convoy_post_id", convoyPostId)
+        .eq("type", "group")
+        .maybeSingle();
+      if (lookupErr) { console.error("[convoy group] existing lookup error", lookupErr); return; }
+      if (existing && existing.id) {
+        console.log("[convoy group] existing group found", existing.id);
+        const { data: myPart, error: partLookupErr } = await supabase
+          .from("dm_participants")
+          .select("user_id")
+          .eq("conversation_id", existing.id)
+          .eq("user_id", uid)
+          .maybeSingle();
+        if (partLookupErr) { console.error("[convoy group] my-participant lookup error", partLookupErr); return; }
+        if (!myPart) {
+          const { error: addErr } = await supabase.from("dm_participants").insert({ conversation_id: existing.id, user_id: uid });
+          if (addErr) { console.error("[convoy group] self-add error", addErr); return; }
+          console.log("[convoy group] joined existing group", existing.id);
+        }
+        await ensureLocalConvoLoaded(existing.id);
+        return;
+      }
+      // Doesn't exist — create it. I become the creator (RLS allows me to
+      // add other initial participants since I created the conversation).
+      console.log("[convoy group] creating new group");
+      const { data: convRow, error: cErr } = await supabase
+        .from("dm_conversations")
+        .insert({ type: "group", title: title || "Convoy Crew", convoy_post_id: convoyPostId, created_by: uid })
+        .select()
+        .single();
+      if (cErr) {
+        console.error("[convoy group] create error", cErr);
+        // Race / unique-constraint collision: another going-RSVPer beat us
+        // to creating the group. Re-query and try to join.
+        if (cErr.code === "23505") {
+          console.log("[convoy group] race detected — retrying lookup");
+          const { data: raceExisting } = await supabase
+            .from("dm_conversations")
+            .select("id")
+            .eq("convoy_post_id", convoyPostId)
+            .eq("type", "group")
+            .maybeSingle();
+          if (raceExisting && raceExisting.id) {
+            const { error: addErr2 } = await supabase.from("dm_participants").insert({ conversation_id: raceExisting.id, user_id: uid });
+            if (addErr2 && addErr2.code !== "23505") console.error("[convoy group] race self-add error", addErr2);
+            await ensureLocalConvoLoaded(raceExisting.id);
+          }
+        }
+        return;
+      }
+      if (!convRow) { console.error("[convoy group] insert returned no row (RLS hiding it?)"); return; }
+      const partRows = hostUid === uid
+        ? [{ conversation_id: convRow.id, user_id: uid }]
+        : [{ conversation_id: convRow.id, user_id: uid }, { conversation_id: convRow.id, user_id: hostUid }];
+      const { error: pErr } = await supabase.from("dm_participants").insert(partRows);
+      if (pErr) console.error("[convoy group] participants insert error", pErr);
+      else console.log("[convoy group] created", convRow.id, "with", partRows.length, "participants");
+      // Pin the convoy as the first message in the group so anyone joining
+      // later sees what trip this is at a glance. Resolve the host's handle
+      // for the "from:" field (falls back to a placeholder if lookup fails).
+      let hostHandle = "host";
+      try {
+        if (hostUid === uid && currentProfile && currentProfile.handle) {
+          hostHandle = currentProfile.handle;
+        } else {
+          const { data: hp } = await supabase.from("profiles").select("handle").eq("id", hostUid).maybeSingle();
+          if (hp && hp.handle) hostHandle = hp.handle;
+        }
+      } catch (e) { /* non-fatal */ }
+      const dateStr = (month && day) ? `${month} ${day}` : "TBD";
+      const sharedPost = {
+        type: "convoy_invite",
+        convoyId: convoyPostId,
+        title: title || "Convoy",
+        location: location || "TBD",
+        date: dateStr,
+        time: departs || "TBD",
+        slots: slots || 0,
+        from: hostHandle,
+      };
+      await sendDmMessage(convRow.id, "", { sharedPost });
+      await ensureLocalConvoLoaded(convRow.id);
+    } catch (e) { console.error("[convoy group] ensureConvoyGroupMembership failed", e); }
+  };
+
+  // Mutates an RSVP for the current user on a convoy post. status === null
+  // deletes the row (used when toggling the same option off). Optimistically
+  // patches local state, then upserts/deletes in convoy_rsvps. On a fresh
+  // RSVP we also notify the convoy host (skipping self-RSVPs).
+  const setConvoyRsvp = async (postId, status) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid || !postId) return;
+    if (status !== null && !["going", "maybe", "declined"].includes(status)) return;
+    const post = feedItemsRef.current.find(p => p.id === postId);
+    const myProfile = currentProfile || {};
+    const myName = myProfile.full_name || "You";
+    const myShape = {
+      status,
+      name: myName,
+      handle: myProfile.handle || "",
+      avatarUrl: myProfile.avatar_url || profilePic || null,
+      initial: myName.charAt(0).toUpperCase(),
+    };
+    const prev = convoyRsvps[postId] && convoyRsvps[postId][uid] ? { ...convoyRsvps[postId][uid] } : null;
+    setConvoyRsvps(curr => {
+      const next = { ...(curr[postId] || {}) };
+      if (status === null) delete next[uid];
+      else next[uid] = myShape;
+      return { ...curr, [postId]: next };
+    });
+    try {
+      if (status === null) {
+        const { error } = await supabase.from("convoy_rsvps").delete().eq("post_id", postId).eq("user_id", uid);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("convoy_rsvps").upsert(
+          { post_id: postId, user_id: uid, status, updated_at: new Date().toISOString() },
+          { onConflict: "post_id,user_id" }
+        );
+        if (error) throw error;
+        // Notify the host on a fresh RSVP (or status change). Skip if the
+        // host is RSVPing to their own convoy.
+        if (post && post.userId && post.userId !== uid) {
+          const labelMap = { going: "is going to your convoy", maybe: "might be going to your convoy", declined: "can't make your convoy" };
+          supabase.from("notifications").insert({
+            user_id: post.userId,
+            type: "rsvp",
+            actor_id: uid,
+            actor_name: myName,
+            text: labelMap[status],
+            target: post.title || "",
+            post_id: postId,
+          }).then(({ error: ne }) => { if (ne) console.error("[notif] rsvp insert", ne); });
+        }
+        // GOING also auto-joins the convoy's group DM (or creates it if
+        // first going). Fire-and-forget — RSVP itself already succeeded.
+        if (status === "going") ensureConvoyGroupMembership(postId);
+      }
+    } catch (e) {
+      console.error("[convoy_rsvps] setConvoyRsvp failed", e);
+      // Revert.
+      setConvoyRsvps(curr => {
+        const next = { ...(curr[postId] || {}) };
+        if (prev) next[uid] = prev; else delete next[uid];
+        return { ...curr, [postId]: next };
+      });
+    }
+  };
+
+  // ─── Follow graph state ─────────────────────────────────────────────────
+  // followingIds: Set of user uuids the signed-in user follows. Rendered as
+  // the FOLLOW/FOLLOWING button state on every profile and used for any
+  // future "Following" feed filter. Hydrated in hydrateUserData().
+  // myFollowerCount / myFollowingCount: counts for the signed-in user's own
+  // profile header. Other users' counts are fetched on-demand by
+  // OtherProfileScreen via fetchFollowCounts() below.
+  const [followingIds, setFollowingIds] = useState(new Set());
+  const [myFollowerCount, setMyFollowerCount] = useState(0);
+  const [myFollowingCount, setMyFollowingCount] = useState(0);
+
+  // Optimistically toggle follow state, then write to DB. On failure we revert
+  // local state so the UI matches reality. A successful follow also inserts a
+  // bell notification for the followed user (RLS allows this because anyone
+  // can insert into notifications for any user_id — the `actor_id = auth.uid()`
+  // is enforced implicitly by the column default).
+  const followUser = async (targetUserId, targetDisplayName) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid || !targetUserId || targetUserId === uid) return;
+    if (followingIds.has(targetUserId)) return; // already following
+    setFollowingIds(prev => { const next = new Set(prev); next.add(targetUserId); return next; });
+    setMyFollowingCount(c => c + 1);
+    try {
+      const { error } = await supabase.from("follows").insert({ follower_id: uid, following_id: targetUserId });
+      if (error) throw error;
+      const myName = (currentProfile && currentProfile.full_name) || "Someone";
+      supabase.from("notifications").insert({
+        user_id: targetUserId,
+        type: "follow",
+        actor_id: uid,
+        actor_name: myName,
+        text: "started following you",
+        target: null,
+      }).then(({ error: ne }) => { if (ne) console.error("[notif] follow insert", ne); });
+    } catch (e) {
+      console.error("[follows] follow failed", e);
+      setFollowingIds(prev => { const next = new Set(prev); next.delete(targetUserId); return next; });
+      setMyFollowingCount(c => Math.max(c - 1, 0));
+    }
+  };
+
+  const unfollowUser = async (targetUserId) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid || !targetUserId) return;
+    if (!followingIds.has(targetUserId)) return;
+    setFollowingIds(prev => { const next = new Set(prev); next.delete(targetUserId); return next; });
+    setMyFollowingCount(c => Math.max(c - 1, 0));
+    try {
+      const { error } = await supabase.from("follows").delete().eq("follower_id", uid).eq("following_id", targetUserId);
+      if (error) throw error;
+    } catch (e) {
+      console.error("[follows] unfollow failed", e);
+      setFollowingIds(prev => { const next = new Set(prev); next.add(targetUserId); return next; });
+      setMyFollowingCount(c => c + 1);
+    }
+  };
+
+  // Fetch follower/following counts for any user. Used by OtherProfileScreen
+  // to render real numbers in the stats row. Returns { followers, following }
+  // or null on error. Two head-only count queries (no rows transferred).
+  const fetchFollowCounts = async (targetUserId) => {
+    if (!targetUserId) return null;
+    try {
+      const [{ count: followers, error: e1 }, { count: following, error: e2 }] = await Promise.all([
+        supabase.from("follows").select("*", { count: "exact", head: true }).eq("following_id", targetUserId),
+        supabase.from("follows").select("*", { count: "exact", head: true }).eq("follower_id", targetUserId),
+      ]);
+      if (e1 || e2) { console.error("[follows] count fetch error", e1, e2); return null; }
+      return { followers: followers || 0, following: following || 0 };
+    } catch (e) { console.error("[follows] count fetch failed", e); return null; }
   };
 
   // ── Points System ──
@@ -12597,9 +14642,36 @@ export default function Trailhead() {
   };
 
   const [dmKey, setDmKey] = useState(0);
-  const openDM = (user, prefillMsg, sharedPost) => {
+  // Open a DM with another user. Accepts either a handle string or a user
+  // uuid; resolves to a real auth.users id, finds-or-creates a direct
+  // conversation, then mounts DMScreen with that conv id as the initial.
+  // While resolving we still mount the screen (inbox view) so it doesn't feel
+  // delayed; the chat view appears once dmInitialConvId lands.
+  const openDM = async (userOrId, prefillMsg, sharedPost) => {
     if (isGuest) { setShowGuestPrompt(true); return; }
-    setDmInitialUser(user || null); setDmInitialMessage(prefillMsg || ""); setDmSharedPost(sharedPost || null); setDmKey(k => k + 1); setShowDM(true);
+    setDmInitialMessage(prefillMsg || "");
+    setDmSharedPost(sharedPost || null);
+    setDmInitialConvId(null);
+    setDmKey(k => k + 1);
+    setShowDM(true);
+    if (!userOrId) return;
+    // Resolve to a uuid. Heuristic same as OtherProfileScreen.
+    const isUuid = typeof userOrId === "string" && userOrId.length > 20 && userOrId.includes("-");
+    let targetUserId = isUuid ? userOrId : null;
+    if (!targetUserId) {
+      try {
+        const handle = String(userOrId).replace(/^@/, "");
+        const { data, error } = await supabase.from("profiles").select("id").eq("handle", handle).maybeSingle();
+        if (error) console.error("[openDM] profile lookup error", error);
+        if (data && data.id) targetUserId = data.id;
+      } catch (e) { console.error("[openDM] handle lookup failed", e); }
+    }
+    if (!targetUserId) {
+      console.warn("[openDM] could not resolve recipient", userOrId);
+      return;
+    }
+    const convId = await findOrCreateDirectDm(targetUserId);
+    if (convId) setDmInitialConvId(convId);
   };
 
   const addBuild = async (data) => {
@@ -12786,13 +14858,169 @@ export default function Trailhead() {
 
   const deletePost = async (id) => {
     setFeedItems(prev => prev.filter(p => p.id !== id));
+    // Clean up local state for the deleted post.
+    setLikedPostIds(prev => { const next = { ...prev }; delete next[id]; return next; });
+    setPostComments(prev => { const next = { ...prev }; delete next[id]; return next; });
     const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
     if (!uid) return;
     if (typeof id !== "string" || id.length < 20) return;
     try {
+      // post_likes, post_comments, post_comment_likes, and notifications
+      // referencing this post are cascade-deleted by Postgres foreign keys.
       const { error } = await supabase.from("posts").delete().eq("id", id).eq("user_id", uid);
       if (error) console.error("[posts] delete error", error);
     } catch (e) { console.error("[posts] deletePost failed", e); }
+  };
+
+  // ─── Feed likes / comments / comment-likes CRUD ────────────────────────
+  // Toggles a post like. Optimistically updates the local liked set and the
+  // feed item's `likes` count, then writes to public.post_likes — the DB
+  // trigger keeps posts.like_count in sync on subsequent fetches.
+  const togglePostLike = async (postId) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) return;
+    if (typeof postId !== "string" || postId.length < 20) return; // local-only post
+    const wasLiked = !!likedPostIds[postId];
+    // Optimistic update.
+    setLikedPostIds(prev => {
+      const next = { ...prev };
+      if (wasLiked) delete next[postId]; else next[postId] = true;
+      return next;
+    });
+    setFeedItems(prev => prev.map(p => p.id === postId ? { ...p, likes: Math.max((p.likes || 0) + (wasLiked ? -1 : 1), 0) } : p));
+    try {
+      if (wasLiked) {
+        const { error } = await supabase.from("post_likes").delete().eq("post_id", postId).eq("user_id", uid);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("post_likes").insert({ post_id: postId, user_id: uid });
+        if (error) throw error;
+        // Notify the post author (fire-and-forget; skip if you liked your own post).
+        const post = feedItemsRef.current.find(p => p.id === postId);
+        if (post && post.userId && post.userId !== uid) {
+          const myName = (currentProfile && currentProfile.full_name) || "Someone";
+          supabase.from("notifications").insert({
+            user_id: post.userId,
+            type: "like",
+            actor_id: uid,
+            actor_name: myName,
+            text: "liked your post",
+            target: post.title || "",
+            post_id: postId,
+          }).then(({ error: ne }) => { if (ne) console.error("[notif] like insert", ne); });
+        }
+      }
+    } catch (e) {
+      console.error("[post_likes] toggle failed", e);
+      // Revert optimistic change.
+      setLikedPostIds(prev => {
+        const next = { ...prev };
+        if (wasLiked) next[postId] = true; else delete next[postId];
+        return next;
+      });
+      setFeedItems(prev => prev.map(p => p.id === postId ? { ...p, likes: Math.max((p.likes || 0) + (wasLiked ? 1 : -1), 0) } : p));
+    }
+  };
+
+  // Adds a comment to a post. Writes to public.post_comments, prepends the
+  // returned row into the local postComments[postId] list, and bumps the
+  // post's local comment_count. Returns the new comment or null on failure.
+  const addComment = async (postId, text) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) return null;
+    if (typeof postId !== "string" || postId.length < 20) return null;
+    const trimmed = (text || "").trim();
+    if (!trimmed) return null;
+    try {
+      const { data: inserted, error } = await supabase
+        .from("post_comments")
+        .insert({ post_id: postId, user_id: uid, body: trimmed })
+        .select()
+        .single();
+      if (error || !inserted) { console.error("[post_comments] insert error", error); return null; }
+      const clientComment = dbRowToComment(inserted, currentProfile);
+      setPostComments(prev => ({ ...prev, [postId]: [...(prev[postId] || []), clientComment] }));
+      setFeedItems(prev => prev.map(p => p.id === postId ? { ...p, comments: (p.comments || 0) + 1 } : p));
+      // Notify the post author (fire-and-forget; skip if commenting on your own post).
+      const post = feedItemsRef.current.find(p => p.id === postId);
+      if (post && post.userId && post.userId !== uid) {
+        const myName = (currentProfile && currentProfile.full_name) || "Someone";
+        supabase.from("notifications").insert({
+          user_id: post.userId,
+          type: "comment",
+          actor_id: uid,
+          actor_name: myName,
+          text: "commented on your post",
+          target: post.title || "",
+          post_id: postId,
+        }).then(({ error: ne }) => { if (ne) console.error("[notif] comment insert", ne); });
+      }
+      return clientComment;
+    } catch (e) {
+      console.error("[post_comments] addComment failed", e);
+      return null;
+    }
+  };
+
+  const deleteComment = async (postId, commentId) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) return;
+    if (typeof commentId !== "string" || commentId.length < 20) return;
+    // Optimistic local delete.
+    const prevList = postComments[postId] || [];
+    setPostComments(prev => ({ ...prev, [postId]: (prev[postId] || []).filter(c => c.id !== commentId) }));
+    setFeedItems(prev => prev.map(p => p.id === postId ? { ...p, comments: Math.max((p.comments || 0) - 1, 0) } : p));
+    try {
+      const { error } = await supabase.from("post_comments").delete().eq("id", commentId).eq("user_id", uid);
+      if (error) throw error;
+    } catch (e) {
+      console.error("[post_comments] deleteComment failed", e);
+      // Revert on failure.
+      setPostComments(prev => ({ ...prev, [postId]: prevList }));
+      setFeedItems(prev => prev.map(p => p.id === postId ? { ...p, comments: (p.comments || 0) + 1 } : p));
+    }
+  };
+
+  // Toggles a comment like. Optimistically updates the set and the comment's
+  // local like count, then writes to public.post_comment_likes.
+  const toggleCommentLike = async (postId, commentId) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) return;
+    if (typeof commentId !== "string" || commentId.length < 20) return;
+    const wasLiked = !!likedCommentIds[commentId];
+    setLikedCommentIds(prev => {
+      const next = { ...prev };
+      if (wasLiked) delete next[commentId]; else next[commentId] = true;
+      return next;
+    });
+    setPostComments(prev => ({
+      ...prev,
+      [postId]: (prev[postId] || []).map(c => c.id === commentId
+        ? { ...c, likes: Math.max((c.likes || 0) + (wasLiked ? -1 : 1), 0) }
+        : c),
+    }));
+    try {
+      if (wasLiked) {
+        const { error } = await supabase.from("post_comment_likes").delete().eq("comment_id", commentId).eq("user_id", uid);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("post_comment_likes").insert({ comment_id: commentId, user_id: uid });
+        if (error) throw error;
+      }
+    } catch (e) {
+      console.error("[post_comment_likes] toggle failed", e);
+      setLikedCommentIds(prev => {
+        const next = { ...prev };
+        if (wasLiked) next[commentId] = true; else delete next[commentId];
+        return next;
+      });
+      setPostComments(prev => ({
+        ...prev,
+        [postId]: (prev[postId] || []).map(c => c.id === commentId
+          ? { ...c, likes: Math.max((c.likes || 0) + (wasLiked ? 1 : -1), 0) }
+          : c),
+      }));
+    }
   };
 
   const openForumThread = (threadId, catName, subName) => {
@@ -12847,21 +15075,72 @@ export default function Trailhead() {
     />;
   }
 
+  // iOS install hint computations (plain JS, not hooks — safe to live below
+  // the conditional returns above). isIosNotInstalled detects Safari on iOS
+  // when not in standalone (PWA) mode; dismissIosHint persists the dismissal.
+  const isIosNotInstalled = (() => {
+    if (typeof window === "undefined" || typeof navigator === "undefined") return false;
+    const ua = navigator.userAgent || "";
+    const isIos = /iphone|ipad|ipod/i.test(ua) && !/crios|fxios|edgios/i.test(ua); // Safari only
+    const isStandalone = (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || (navigator.standalone === true);
+    return isIos && !isStandalone;
+  })();
+  const dismissIosHint = () => {
+    setIosHintDismissed(true);
+    try { localStorage.setItem("th-ios-install-dismissed", "1"); } catch (e) {}
+  };
+
+  // App splash — shown on cold boot until the first hydrate completes, so the
+  // user can't navigate around an empty shell while data is mid-flight. Skipped
+  // for guests (no hydrate to wait on).
+  if (authState === "app" && !appReady && !isGuest) {
+    return (
+      <div style={{ position: "fixed", inset: 0, height: "100dvh", background: T.darkBg, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999 }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+          <h1 style={{ fontFamily: sans, fontSize: 26, color: T.red, letterSpacing: 5, fontWeight: 700, margin: "0 0 14px" }}>TRAILHEAD</h1>
+          <span style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, letterSpacing: 1.2, fontStyle: "italic", marginBottom: 6 }}>By</span>
+          <img src="/lone-peak-flag.png" alt="Lone Peak Overland" style={{ height: 44, width: "auto", display: "block", marginBottom: 22 }} />
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ width: 14, height: 14, borderRadius: "50%", border: `2px solid ${T.copper}40`, borderTopColor: T.copper, animation: "th-spin 0.7s linear infinite" }} />
+            <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, letterSpacing: 1.5 }}>LOADING</span>
+          </div>
+          <style>{`@keyframes th-spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ background: T.charcoal, height: "100vh", maxWidth: 430, margin: "0 auto", position: "relative", fontFamily: sans, color: T.white, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      {/* iOS install hint — Safari on iOS only delivers web push to installed
+          PWAs. Banner is sticky-dismissed via localStorage. Shown only when
+          we detect Safari on iOS and we're not in standalone mode. */}
+      {isIosNotInstalled && !iosHintDismissed && authState === "app" && !isGuest && (
+        <div style={{ background: `${T.copper}20`, borderBottom: `1px solid ${T.copper}40`, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+          <Bell size={14} color={T.copper} />
+          <span style={{ flex: 1, fontFamily: serif, fontSize: 11, color: T.warmStone, lineHeight: 1.4 }}>
+            For push notifications, tap <Share2 size={11} color={T.copper} style={{ verticalAlign: "middle", margin: "0 2px" }} /> in Safari and "Add to Home Screen".
+          </span>
+          <button onClick={dismissIosHint} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", flexShrink: 0 }}>
+            <X size={12} color={T.tertiary} />
+          </button>
+        </div>
+      )}
       <TopBar
         onProfile={openProfile}
         onBack={goBack}
         showBack={isOverlay}
         title={showCompose ? "New Post" : showRecovery ? "Recovery" : isProfile ? (isOtherProfile ? "" : "Profile") : undefined}
         onViewUser={openUserProfile}
+        onGoToPost={(postId) => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("feed"); setPendingPostNav(postId); }}
         onGoToRecovery={() => { setShowRecovery(true); setProfileStack([]); }}
         onOpenMap={openMap}
         onSearch={() => setShowGlobalSearch(true)}
         onOpenDM={(user, prefill, shared) => openDM(user, prefill, shared)}
         dmUnread={dmUnreadCount}
         bellNotifs={bellNotifs}
-        setBellNotifs={setBellNotifs}
+        onDismissNotif={(id) => { setBellNotifs(prev => prev.filter(n => n.id !== id)); supabase.from("notifications").delete().eq("id", id).then(({ error }) => { if (error) console.error("[notif] dismiss error", error); }); }}
+        onClearNotifs={() => { const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id; setBellNotifs([]); if (uid) supabase.from("notifications").delete().eq("user_id", uid).then(({ error }) => { if (error) console.error("[notif] clear all error", error); }); }}
         profilePic={profilePic}
         notifPrefs={notifPrefs}
         recoveryAlerts={recoveryAlerts}
@@ -12870,30 +15149,29 @@ export default function Trailhead() {
 
       <div className="th-scroll" style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
         {showCompose ? (
-          <ComposeScreen userBuilds={myBuildsForLink} onClose={() => setShowCompose(false)} onSubmit={(newPost) => { addPost(newPost); awardPoints(newPost.type === "RECOVERY" ? 0 : POINTS.feedPost, newPost.type === "RECOVERY" ? "" : "Feed Post"); if (newPost.photoUrls && newPost.photoUrls.length > 0) awardPoints(POINTS.photoUploaded * newPost.photoUrls.length, "Photos Uploaded"); }} onAddRecoveryAlert={addRecoveryAlert} onAddNotification={addNotification} onAddRoute={(r) => { setUserRoutes(prev => [r, ...prev]); awardPoints(POINTS.routeLogged, "Route Logged"); }} onOpenDM={openDM} />
+          <ComposeScreen userBuilds={myBuildsForLink} currentUserName={(currentProfile && currentProfile.full_name) || "You"} currentUserHandle={(currentProfile && currentProfile.handle) || ""} onSearchUsers={searchUsers} onClose={() => setShowCompose(false)} onSubmit={async (newPost) => { const created = await addPost(newPost); awardPoints(newPost.type === "RECOVERY" ? 0 : POINTS.feedPost, newPost.type === "RECOVERY" ? "" : "Feed Post"); if (newPost.photoUrls && newPost.photoUrls.length > 0) awardPoints(POINTS.photoUploaded * newPost.photoUrls.length, "Photos Uploaded"); /* Convoys: auto-RSVP the host as going. This persists their attendance and triggers ensureConvoyGroupMembership, creating the group DM right away with the host as the first member. Subsequent invitee goings join the same group. */ if (created && created.type === "CONVOYS" && created.id && typeof created.id === "string" && created.id.length > 20 && created.id.includes("-")) { setConvoyRsvp(created.id, "going"); } return created; }} onAddRecoveryAlert={addRecoveryAlert} onAddNotification={addNotification} onAddRoute={(r) => { setUserRoutes(prev => [r, ...prev]); awardPoints(POINTS.routeLogged, "Route Logged"); }} onOpenDM={openDM} onSendDmInvite={sendDmInvite} />
         ) : showRecovery ? (
           <RecoveryScreen onOpenMap={openMap} onOpenDM={openDM} />
         ) : isProfile ? (
           isOtherProfile ? (
-            <OtherProfileScreen userId={profileStack[1]} onBack={goBack} onMessage={(user) => openDM(user)} />
+            <OtherProfileScreen userId={profileStack[1]} onBack={goBack} onMessage={(user) => openDM(user)} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} followingIds={followingIds} onFollow={requireAuth(followUser)} onUnfollow={requireAuth(unfollowUser)} fetchFollowCounts={fetchFollowCounts} />
           ) : (
-            <ProfileScreen initialUserName={(currentProfile && currentProfile.full_name) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name) || null} initialUserHandle={(currentProfile && currentProfile.handle) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle) || null} initialUserBio={currentProfile ? currentProfile.bio : null} initialIsPublic={currentProfile ? currentProfile.is_public : null} onSaveProfile={saveProfile} onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={deleteBuild} profilePic={profilePic} onSetProfilePic={handleSetProfilePic} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => deletePost(id)} onEditPost={(id, newText) => updatePost(id, { title: newText })} onUpdateConvoy={(convoyId, updates) => {
+            <ProfileScreen currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} convoyRsvps={convoyRsvps} followerCount={myFollowerCount} followingCount={myFollowingCount} onSubscribePush={subscribeToPush} onUnsubscribePush={unsubscribeFromPush} initialUserName={(currentProfile && currentProfile.full_name) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name) || null} initialUserHandle={(currentProfile && currentProfile.handle) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle) || null} initialUserBio={currentProfile ? currentProfile.bio : null} initialIsPublic={currentProfile ? currentProfile.is_public : null} onSaveProfile={saveProfile} onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={deleteBuild} profilePic={profilePic} onSetProfilePic={handleSetProfilePic} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => deletePost(id)} onEditPost={(id, newText) => updatePost(id, { title: newText })} onUpdateConvoy={(convoyId, updates) => {
               updatePost(convoyId, updates);
-              // Notify going/maybe RSVPs
+              // DM going/maybe responders that the convoy was updated.
               const convoy = feedItemsRef.current.find(p => p.id === convoyId);
-              if (convoy && convoy.rsvps) {
-                const notifyHandles = Object.entries(convoy.rsvps).filter(([_, v]) => v === "going" || v === "maybe").map(([h]) => h.replace(/^@/, ""));
-                notifyHandles.forEach(handle => {
-                  openDM(handle, `The convoy "${updates.title || convoy.title}" has been updated. Check the new details!`, { type: "convoy_invite", convoyId, title: updates.title || convoy.title, location: updates.location || convoy.location || "TBD", date: updates.month && updates.day ? `${updates.month} ${updates.day}` : "TBD", time: updates.departs || convoy.departs || "TBD", slots: updates.slots != null ? updates.slots : convoy.slots, from: "KyleLPO" });
-                });
-                addNotification({ type: "convoy", user: "KyleLPO", text: `updated convoy`, title: updates.title || convoy.title, time: Date.now() });
-              }
+              const responders = (convoyRsvps && convoyRsvps[convoyId]) || {};
+              const meHandle = (currentProfile && currentProfile.handle) || "you";
+              const notifyHandles = Object.values(responders).filter(r => r.status === "going" || r.status === "maybe").map(r => r.handle).filter(Boolean);
+              notifyHandles.forEach(handle => {
+                openDM(handle, `The convoy "${updates.title || (convoy && convoy.title)}" has been updated. Check the new details!`, { type: "convoy_invite", convoyId, title: updates.title || (convoy && convoy.title), location: updates.location || (convoy && convoy.location) || "TBD", date: updates.month && updates.day ? `${updates.month} ${updates.day}` : "TBD", time: updates.departs || (convoy && convoy.departs) || "TBD", slots: updates.slots != null ? updates.slots : (convoy && convoy.slots), from: meHandle });
+              });
             }} onGoToPost={(id) => { setProfileStack([]); setScreen("feed"); }} myPoints={myTotalPoints} />
           )
         ) : (
           <>
             {isGuest && <GuestBanner onSignIn={() => setShowGuestPrompt(true)} />}
-            {screen === "feed" && <FeedScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} pendingPostNav={pendingPostNav} onConsumePendingPostNav={() => setPendingPostNav(null)} onSharedPostMissing={() => { setSharedLinkToast("That post couldn't be loaded. It may have been removed or require sign-in."); setTimeout(() => setSharedLinkToast(""), 4500); }} onViewUser={openUserProfile} onOpenMap={openMap} onOpenThread={(threadId, catName, subName) => openForumThread(threadId, catName, subName)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onViewBuild={handleViewBuild} feedItems={feedItems} onUpdateFeed={requireAuth((items) => setFeedItems(items))} onAddNotification={requireAuth(addNotification)} forumUserReplies={forumUserReplies} forumViewCounts={forumViewCounts} savedRoutes={savedRoutes} onSaveRoute={requireAuth((route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev]))} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} onStartNav={(route) => setActiveNavRoute(route)} onAwardPoints={awardPoints} />}
+            {screen === "feed" && <FeedScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} pendingPostNav={pendingPostNav} onConsumePendingPostNav={() => setPendingPostNav(null)} onSharedPostMissing={() => { setSharedLinkToast("That post couldn't be loaded. It may have been removed or require sign-in."); setTimeout(() => setSharedLinkToast(""), 4500); }} onViewUser={openUserProfile} onOpenMap={openMap} onOpenThread={(threadId, catName, subName) => openForumThread(threadId, catName, subName)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onViewBuild={handleViewBuild} feedItems={feedItems} onUpdateFeed={requireAuth((items) => setFeedItems(items))} onUpdatePost={requireAuth(updatePost)} likedPostIds={likedPostIds} onTogglePostLike={requireAuth(togglePostLike)} postComments={postComments} onAddComment={requireAuth(addComment)} onDeleteComment={requireAuth(deleteComment)} likedCommentIds={likedCommentIds} onToggleCommentLike={requireAuth(toggleCommentLike)} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentUserName={(currentProfile && currentProfile.full_name) || "You"} currentUserHandle={(currentProfile && currentProfile.handle) || ""} currentUserAvatar={profilePic || (currentProfile && currentProfile.avatar_url) || null} convoyRsvps={convoyRsvps} onRsvpConvoy={requireAuth((postId, status) => setConvoyRsvp(postId, status))} onSearchUsers={searchUsers} onDeletePost={requireAuth((id) => deletePost(id))} onEditPost={requireAuth((id, newText) => updatePost(id, { title: newText }))} onAddNotification={requireAuth(addNotification)} forumUserReplies={forumUserReplies} forumViewCounts={forumViewCounts} savedRoutes={savedRoutes} onSaveRoute={requireAuth((route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev]))} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} onStartNav={(route) => setActiveNavRoute(route)} onAwardPoints={awardPoints} />}
             {screen === "forum" && <ForumScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} pendingThread={pendingThread} onPendingHandled={() => setPendingThread(null)} onAddNotification={requireAuth(addNotification)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onAddFeedPost={requireAuth((post) => addPost(post))} userThreads={forumUserThreads} setUserThreads={requireAuth(setForumUserThreads)} userReplies={forumUserReplies} setUserReplies={requireAuth(setForumUserReplies)} likedForumItems={forumLikedItems} setLikedForumItems={requireAuth(setForumLikedItems)} forumLikeCounts={forumLikeCounts} setForumLikeCounts={requireAuth(setForumLikeCounts)} forumViewCounts={forumViewCounts} setForumViewCounts={setForumViewCounts} onAwardPoints={awardPoints} />}
             {screen === "routes" && <RoutesScreen userBuilds={myBuildsForLink} onRecordRoute={requireAuth(() => setShowRecorder(true))} onManualEntry={requireAuth(() => setShowManualRoute(true))} userRoutes={userRoutes} onUpdateRoute={requireAuth((routeId, updates) => setUserRoutes(prev => prev.map(r => r.id === routeId ? { ...r, ...updates } : r)))} savedRoutes={savedRoutes} onSaveRoute={requireAuth((route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev]))} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} onOpenDM={(user, msg, sharedPost) => openDM(user, msg, sharedPost)} onAddFeedPost={requireAuth((post) => addPost(post))} onStartNav={(route) => setActiveNavRoute(route)} />}
             {screen === "builds" && <BuildsScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onViewUser={openUserProfile} userBuilds={userBuilds} pendingBuildNav={pendingBuildNav} onConsumePendingBuildNav={() => setPendingBuildNav(null)} onAddBuild={requireAuth(addBuild)} userRoutes={userRoutes} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onUpdateBuild={requireAuth(updateBuild)} onPostBuildToFeed={requireAuth((b) => { const bd = b.buildData; const heroImg = b.image || (bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url) || null; const meName = (currentProfile && currentProfile.full_name) || "You"; addPost({ id: "feedbuild_" + Date.now(), type: "BUILDS", user: meName, initial: meName.charAt(0).toUpperCase(), time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, vehicle: `${b.year} ${b.make} ${b.model}`, photoUrls: heroImg ? [heroImg] : undefined, image: heroImg, likes: 0, comments: 0, buildData: bd, buildRawId: b.rawId != null ? b.rawId : null }); awardPoints(POINTS.feedPost, "Build Shared"); })} />}
@@ -13089,25 +15367,37 @@ export default function Trailhead() {
       {showDM && (
         <DMScreen
           key={dmKey}
-          onClose={() => { setShowDM(false); setDmInitialUser(null); setDmInitialMessage(""); setDmSharedPost(null); }}
-          onViewUser={(handle) => { setShowDM(false); setDmInitialUser(null); setDmInitialMessage(""); setDmSharedPost(null); openUserProfile(handle); }}
-          initialUser={dmInitialUser}
+          onClose={() => { setShowDM(false); setDmInitialConvId(null); setDmInitialMessage(""); setDmSharedPost(null); setActiveDmConvId(null); }}
+          onViewUser={(idOrHandle) => { setShowDM(false); setDmInitialConvId(null); setDmInitialMessage(""); setDmSharedPost(null); setActiveDmConvId(null); openUserProfile(idOrHandle); }}
+          initialConvId={dmInitialConvId}
           initialMessage={dmInitialMessage}
           initialSharedPost={dmSharedPost}
           conversations={dmConvos}
-          setConversations={setDmConvos}
-          onRsvpConvoy={(convoyId, status) => {
-            const current = feedItemsRef.current.find(fi => fi.id === convoyId);
-            const meHandle = (currentProfile && currentProfile.handle) ? ("@" + currentProfile.handle) : "@me";
-            const newRsvps = { ...((current && current.rsvps) || {}), [meHandle]: status };
-            updatePost(convoyId, { rsvps: newRsvps });
+          currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id}
+          onSendMessage={(convId, body, payload) => { setActiveDmConvId(convId); return sendDmMessage(convId, body, payload); }}
+          onMarkRead={(convId) => { setActiveDmConvId(convId); return markDmConvRead(convId); }}
+          onLoadMessages={loadDmMessages}
+          onSearchUsers={searchUsers}
+          onCreateGroup={async (otherUserIds, title) => {
+            if (!Array.isArray(otherUserIds) || otherUserIds.length === 0) return null;
+            // 1 → direct (find-or-create), 2+ → group.
+            if (otherUserIds.length === 1) return await findOrCreateDirectDm(otherUserIds[0]);
+            return await createGroupDm(otherUserIds, title);
           }}
+          onRsvpConvoy={requireAuth((convoyId, status) => setConvoyRsvp(convoyId, status))}
+          onLeaveConversation={leaveDmConversation}
+          convoyRsvps={convoyRsvps}
           onOpenPost={(sp) => {
-            setShowDM(false); setDmInitialUser(null); setDmInitialMessage(""); setDmSharedPost(null);
+            setShowDM(false); setDmInitialConvId(null); setDmInitialMessage(""); setDmSharedPost(null); setActiveDmConvId(null);
             if (sp.type === "FORUM" && sp.threadId) {
               openForumThread(sp.threadId, sp.forumCat, sp.forumSub);
             } else {
               setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("feed");
+              // Convoy invites carry convoyId; regular shared posts carry id.
+              // Either way, hand the post id to the feed's deep-nav so it
+              // scrolls to + highlights the post.
+              const targetId = sp.convoyId || sp.id;
+              if (targetId) setPendingPostNav(targetId);
             }
           }}
         />
