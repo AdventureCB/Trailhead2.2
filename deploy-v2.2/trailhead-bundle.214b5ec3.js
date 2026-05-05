@@ -47730,7 +47730,8 @@ ${suffix}`;
               };
             });
             const allPosts = postsRes.data || [];
-            const tripMap = new Map2();
+            const MapCtor = globalThis.Map;
+            const tripMap = new MapCtor();
             allPosts.filter((p2) => p2.type === "CONVOYS").forEach((p2) => {
               const d = p2.data || {};
               const date = d.month && d.day ? `${d.month} ${d.day}` : "TBD";
