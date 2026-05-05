@@ -43576,8 +43576,12 @@ ${suffix}`;
     const fmtLikes = (n) => n >= 1e3 ? (n / 1e3).toFixed(1) + "K" : n;
     const sendShareToUser = (recipientHandle, item) => {
       const shareText = "";
-      const firstP = item.photoUrls && item.photoUrls[0];
-      const sharedPost = { id: item.id, title: item.title, user: item.user, initial: item.initial, type: item.type, image: firstP ? typeof firstP === "string" ? firstP : firstP.url : null, threadId: item.threadId, forumCat: item.forumCat, forumSub: item.forumSub };
+      const firstImage = Array.isArray(item.photoUrls) ? item.photoUrls.find((p) => {
+        const isVid = typeof p === "object" && p && p.type === "video";
+        return !isVid;
+      }) : null;
+      const previewImageUrl = firstImage ? typeof firstImage === "string" ? firstImage : firstImage.url : item.image || item.heroImg || null;
+      const sharedPost = { id: item.id, title: item.title, user: item.user, initial: item.initial, type: item.type, image: previewImageUrl, threadId: item.threadId, forumCat: item.forumCat, forumSub: item.forumSub };
       setShareMenuId(null);
       setSharePickerId(null);
       setShareSearch("");
