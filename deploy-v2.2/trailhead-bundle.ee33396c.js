@@ -48395,7 +48395,7 @@ ${suffix}`;
       { key: "convoy", label: "Convoy / Event", desc: "Organize a group trip with dates and slots", icon: Users, color: T.copper },
       { key: "recovery", label: "Recovery Request", desc: "Request help from nearby overlanders", icon: TriangleAlert, color: T.red }
     ];
-    const handleSubmit = () => {
+    const handleSubmit = async () => {
       const id = "user_" + Date.now();
       const meName = currentUserName || "You";
       const meHandle = currentUserHandle || "";
@@ -48462,22 +48462,6 @@ ${suffix}`;
           likes: 0,
           comments: 0
         };
-        if (convoyInvites.length > 0 && onOpenDM) {
-          const dateStr = d ? d.toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" }) : "TBD";
-          convoyInvites.forEach((handle) => {
-            const cleanHandle = handle.replace(/^@/, "");
-            onOpenDM(cleanHandle, null, {
-              type: "convoy_invite",
-              convoyId: id,
-              title: convoy.title,
-              location: convoy.location || "TBD",
-              date: dateStr,
-              time: convoy.departTime || "TBD",
-              slots: parseInt(convoy.slots) || 0,
-              from: meHandle || meName
-            });
-          });
-        }
         if (convoyInvites.length > 0) {
           onAddNotification && onAddNotification({
             type: "convoy",
@@ -48529,7 +48513,9 @@ ${suffix}`;
         });
       }
       if (newPost) {
-        onSubmit && onSubmit(newPost);
+        const submitResult = onSubmit && onSubmit(newPost);
+        const created = submitResult && typeof submitResult.then === "function" ? await submitResult : null;
+        const realPostId = created && typeof created.id === "string" && created.id.length > 20 && created.id.includes("-") ? created.id : null;
         const postText = newPost.title || "";
         const mentions = extractMentions(postText);
         mentions.forEach((handle) => {
@@ -48537,6 +48523,23 @@ ${suffix}`;
             onAddNotification && onAddNotification({ type: "mention", user: "KyleLPO", text: "mentioned you in a post", target: newPost.title, icon: AtSign, iconColor: T.copper });
           }
         });
+        if (postType === "convoy" && convoyInvites.length > 0 && onOpenDM && realPostId) {
+          const dConvoy = convoy.departDate ? new Date(convoy.departDate) : null;
+          const dateStr = dConvoy ? dConvoy.toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" }) : "TBD";
+          convoyInvites.forEach((handle) => {
+            const cleanHandle = handle.replace(/^@/, "");
+            onOpenDM(cleanHandle, null, {
+              type: "convoy_invite",
+              convoyId: realPostId,
+              title: convoy.title,
+              location: convoy.location || "TBD",
+              date: dateStr,
+              time: convoy.departTime || "TBD",
+              slots: parseInt(convoy.slots) || 0,
+              from: meHandle || meName
+            });
+          });
+        }
       }
       onClose();
     };
@@ -50915,10 +50918,11 @@ ${suffix}`;
         recoveryAlerts,
         setRecoveryAlerts
       }
-    ), /* @__PURE__ */ import_react4.default.createElement("div", { className: "th-scroll", style: { flex: 1, overflowY: "auto", minHeight: 0 } }, showCompose ? /* @__PURE__ */ import_react4.default.createElement(ComposeScreen, { userBuilds: myBuildsForLink, currentUserName: currentProfile && currentProfile.full_name || "You", currentUserHandle: currentProfile && currentProfile.handle || "", onSearchUsers: searchUsers, onClose: () => setShowCompose(false), onSubmit: (newPost) => {
-      addPost(newPost);
+    ), /* @__PURE__ */ import_react4.default.createElement("div", { className: "th-scroll", style: { flex: 1, overflowY: "auto", minHeight: 0 } }, showCompose ? /* @__PURE__ */ import_react4.default.createElement(ComposeScreen, { userBuilds: myBuildsForLink, currentUserName: currentProfile && currentProfile.full_name || "You", currentUserHandle: currentProfile && currentProfile.handle || "", onSearchUsers: searchUsers, onClose: () => setShowCompose(false), onSubmit: async (newPost) => {
+      const created = await addPost(newPost);
       awardPoints(newPost.type === "RECOVERY" ? 0 : POINTS.feedPost, newPost.type === "RECOVERY" ? "" : "Feed Post");
       if (newPost.photoUrls && newPost.photoUrls.length > 0) awardPoints(POINTS.photoUploaded * newPost.photoUrls.length, "Photos Uploaded");
+      return created;
     }, onAddRecoveryAlert: addRecoveryAlert, onAddNotification: addNotification, onAddRoute: (r) => {
       setUserRoutes((prev) => [r, ...prev]);
       awardPoints(POINTS.routeLogged, "Route Logged");
