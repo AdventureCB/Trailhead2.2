@@ -49388,6 +49388,13 @@ ${suffix}`;
     const [supabaseSession, setSupabaseSession] = (0, import_react4.useState)(null);
     const [sessionHydrated, setSessionHydrated] = (0, import_react4.useState)(false);
     const [appReady, setAppReady] = (0, import_react4.useState)(false);
+    const [iosHintDismissed, setIosHintDismissed] = (0, import_react4.useState)(() => {
+      try {
+        return localStorage.getItem("th-ios-install-dismissed") === "1";
+      } catch (e) {
+        return false;
+      }
+    });
     const [currentProfile, setCurrentProfile] = (0, import_react4.useState)(null);
     const hydrateUserData = async (session) => {
       if (!session || !session.user || !session.user.id) return;
@@ -51219,13 +51226,6 @@ ${suffix}`;
         }
       );
     }
-    const [iosHintDismissed, setIosHintDismissed] = (0, import_react4.useState)(() => {
-      try {
-        return localStorage.getItem("th-ios-install-dismissed") === "1";
-      } catch (e) {
-        return false;
-      }
-    });
     const isIosNotInstalled = (() => {
       if (typeof window === "undefined" || typeof navigator === "undefined") return false;
       const ua = navigator.userAgent || "";
