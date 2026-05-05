@@ -46376,6 +46376,7 @@ ${suffix}`;
     (0, import_react4.useEffect)(() => {
       if (!pendingBuildNav) return;
       const { rawId, name } = pendingBuildNav;
+      console.log("[builds] pendingBuildNav", { rawId, name, localCount: allBuilds.length });
       let match = null;
       if (rawId != null) match = allBuilds.find((b) => b.rawId === rawId || b.id === rawId);
       if (!match && name) {
@@ -46383,16 +46384,19 @@ ${suffix}`;
         match = allBuilds.find((b) => (b.name || "").toLowerCase() === lc);
       }
       if (match) {
+        console.log("[builds] local match found", match.id);
         setDetailBuildId(match.id);
         onConsumePendingBuildNav && onConsumePendingBuildNav();
         return;
       }
       if (typeof rawId === "string" && rawId.length > 20 && rawId.includes("-")) {
+        console.log("[builds] no local match, fetching by id", rawId);
         let cancelled = false;
         (async () => {
           try {
             const { data: row, error } = await supabase.from("builds").select("*").eq("id", rawId).maybeSingle();
             if (cancelled) return;
+            console.log("[builds] external fetch result", { row, error });
             if (error || !row) {
               console.error("[builds] external fetch failed", error);
               onConsumePendingBuildNav && onConsumePendingBuildNav();
@@ -46438,6 +46442,7 @@ ${suffix}`;
               buildData: bd,
               avatarUrl: prof && prof.avatar_url || null
             };
+            console.log("[builds] adding external build", synthId, synth);
             setExternalBuilds((prev) => prev.some((b) => b.id === synthId) ? prev : [...prev, synth]);
             setDetailBuildId(synthId);
           } catch (e) {
@@ -47788,11 +47793,14 @@ ${suffix}`;
             const builds = (buildsRes.data || []).map((b) => {
               const bd = b.build_data || {};
               const heroImg = b.hero_img || bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url || null;
+              const displayName = (b.name || `${b.year || ""} ${b.make || ""} ${b.model || ""}`.trim() || "UNNAMED BUILD").toUpperCase();
+              const fallbackTag = b.trim ? b.trim.toUpperCase() : (b.make || "").toUpperCase();
+              const tags = Array.isArray(bd.tags) && bd.tags.length > 0 ? bd.tags : [fallbackTag, "BUILD"].filter(Boolean);
               return {
                 id: b.id,
-                name: b.name || `${b.year || ""} ${b.make || ""} ${b.model || ""}`.trim() || "Build",
+                name: displayName,
                 vehicle: `${b.year || ""} ${b.make || ""} ${b.model || ""}`.trim(),
-                tags: Array.isArray(bd.tags) ? bd.tags : [],
+                tags,
                 miles: "0",
                 elevation: "0 ft",
                 routes: 0,
