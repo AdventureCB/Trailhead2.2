@@ -50314,38 +50314,77 @@ ${suffix}`;
     };
     const ensureConvoyGroupMembership = async (convoyPostId) => {
       const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
-      if (!uid || !convoyPostId) return;
+      if (!uid || !convoyPostId) {
+        console.warn("[convoy group] no uid or convoyPostId", { uid, convoyPostId });
+        return;
+      }
       try {
         const post2 = feedItemsRef.current.find((p) => p.id === convoyPostId);
         let title = post2 && post2.title;
         let hostUid = post2 && post2.userId;
         if (!title || !hostUid) {
-          const { data: row } = await supabase.from("posts").select("title, user_id, data").eq("id", convoyPostId).maybeSingle();
+          const { data: row, error: postErr } = await supabase.from("posts").select("title, user_id, data").eq("id", convoyPostId).maybeSingle();
+          if (postErr) {
+            console.error("[convoy group] post lookup error", postErr);
+            return;
+          }
           if (row) {
             title = title || row.title || row.data && row.data.title;
             hostUid = hostUid || row.user_id;
           }
         }
-        if (!hostUid) return;
-        const { data: existing } = await supabase.from("dm_conversations").select("id").eq("convoy_post_id", convoyPostId).eq("type", "group").maybeSingle();
+        if (!hostUid) {
+          console.warn("[convoy group] could not determine host for", convoyPostId);
+          return;
+        }
+        console.log("[convoy group] resolving membership for convoy", convoyPostId, { title, hostUid, me: uid });
+        const { data: existing, error: lookupErr } = await supabase.from("dm_conversations").select("id").eq("convoy_post_id", convoyPostId).eq("type", "group").maybeSingle();
+        if (lookupErr) {
+          console.error("[convoy group] existing lookup error", lookupErr);
+          return;
+        }
         if (existing && existing.id) {
-          const { data: myPart } = await supabase.from("dm_participants").select("user_id").eq("conversation_id", existing.id).eq("user_id", uid).maybeSingle();
-          if (!myPart) {
-            const { error: addErr } = await supabase.from("dm_participants").insert({ conversation_id: existing.id, user_id: uid });
-            if (addErr) console.error("[convoy group] self-add error", addErr);
-            else await ensureLocalConvoLoaded(existing.id);
-          }
-        } else {
-          const { data: convRow, error: cErr } = await supabase.from("dm_conversations").insert({ type: "group", title: title || "Convoy Crew", convoy_post_id: convoyPostId, created_by: uid }).select().single();
-          if (cErr || !convRow) {
-            console.error("[convoy group] create error", cErr);
+          console.log("[convoy group] existing group found", existing.id);
+          const { data: myPart, error: partLookupErr } = await supabase.from("dm_participants").select("user_id").eq("conversation_id", existing.id).eq("user_id", uid).maybeSingle();
+          if (partLookupErr) {
+            console.error("[convoy group] my-participant lookup error", partLookupErr);
             return;
           }
-          const partRows = hostUid === uid ? [{ conversation_id: convRow.id, user_id: uid }] : [{ conversation_id: convRow.id, user_id: uid }, { conversation_id: convRow.id, user_id: hostUid }];
-          const { error: pErr } = await supabase.from("dm_participants").insert(partRows);
-          if (pErr) console.error("[convoy group] participants insert error", pErr);
-          await ensureLocalConvoLoaded(convRow.id);
+          if (!myPart) {
+            const { error: addErr } = await supabase.from("dm_participants").insert({ conversation_id: existing.id, user_id: uid });
+            if (addErr) {
+              console.error("[convoy group] self-add error", addErr);
+              return;
+            }
+            console.log("[convoy group] joined existing group", existing.id);
+          }
+          await ensureLocalConvoLoaded(existing.id);
+          return;
         }
+        console.log("[convoy group] creating new group");
+        const { data: convRow, error: cErr } = await supabase.from("dm_conversations").insert({ type: "group", title: title || "Convoy Crew", convoy_post_id: convoyPostId, created_by: uid }).select().single();
+        if (cErr) {
+          console.error("[convoy group] create error", cErr);
+          if (cErr.code === "23505") {
+            console.log("[convoy group] race detected \u2014 retrying lookup");
+            const { data: raceExisting } = await supabase.from("dm_conversations").select("id").eq("convoy_post_id", convoyPostId).eq("type", "group").maybeSingle();
+            if (raceExisting && raceExisting.id) {
+              const { error: addErr2 } = await supabase.from("dm_participants").insert({ conversation_id: raceExisting.id, user_id: uid });
+              if (addErr2 && addErr2.code !== "23505") console.error("[convoy group] race self-add error", addErr2);
+              await ensureLocalConvoLoaded(raceExisting.id);
+            }
+          }
+          return;
+        }
+        if (!convRow) {
+          console.error("[convoy group] insert returned no row (RLS hiding it?)");
+          return;
+        }
+        const partRows = hostUid === uid ? [{ conversation_id: convRow.id, user_id: uid }] : [{ conversation_id: convRow.id, user_id: uid }, { conversation_id: convRow.id, user_id: hostUid }];
+        const { error: pErr } = await supabase.from("dm_participants").insert(partRows);
+        if (pErr) console.error("[convoy group] participants insert error", pErr);
+        else console.log("[convoy group] created", convRow.id, "with", partRows.length, "participants");
+        await ensureLocalConvoLoaded(convRow.id);
       } catch (e) {
         console.error("[convoy group] ensureConvoyGroupMembership failed", e);
       }
