@@ -50459,19 +50459,29 @@ ${suffix}`;
       const onMsg = (e) => {
         const data = e && e.data;
         if (!data || data.type !== "navigate" || !data.url) return;
-        const m = String(data.url).match(/^\/post\/([\w-]+)$/);
-        if (m) {
+        const url = String(data.url);
+        const post2 = url.match(/^\/post\/([\w-]+)$/);
+        if (post2) {
           setProfileStack([]);
           setShowRecovery(false);
           setShowCompose(false);
           setScreen("feed");
-          setPendingPostNav(m[1]);
-        } else {
-          setProfileStack([]);
-          setShowRecovery(false);
-          setShowCompose(false);
-          setScreen("feed");
+          setPendingPostNav(post2[1]);
+          return;
         }
+        const dm = url.match(/^\/dm\/([\w-]+)$/);
+        if (dm) {
+          setDmInitialConvId(dm[1]);
+          setDmInitialMessage("");
+          setDmSharedPost(null);
+          setDmKey((k) => k + 1);
+          setShowDM(true);
+          return;
+        }
+        setProfileStack([]);
+        setShowRecovery(false);
+        setShowCompose(false);
+        setScreen("feed");
       };
       navigator.serviceWorker.addEventListener("message", onMsg);
       return () => navigator.serviceWorker.removeEventListener("message", onMsg);
