@@ -42711,7 +42711,7 @@ ${suffix}`;
     "MudRunner_CO": 6700
   };
   function getPoints(user) {
-    return USER_POINTS[user] || 1500;
+    return USER_POINTS[user] || 0;
   }
   var BADGE_TIER_COLORS = ["#8B7D6B", "#C49A6C", "#C0A060", "#FFD700", "#BD472A"];
   var BADGE_CATEGORIES = [
@@ -42745,11 +42745,11 @@ ${suffix}`;
     ] }
   ];
   var MY_BADGE_PROGRESS = {
-    "Trail Mastery": 9,
-    "Community": 92,
-    "Builder": 2,
-    "Explorer": 5,
-    "Bounty Hunter": 3
+    "Trail Mastery": 0,
+    "Community": 0,
+    "Builder": 0,
+    "Explorer": 0,
+    "Bounty Hunter": 0
   };
   function getBadgeTierForCategory(catName) {
     const cat = BADGE_CATEGORIES.find((c) => c.name === catName);
@@ -47690,7 +47690,7 @@ ${suffix}`;
       }
       setDbLoading(true);
       const query = isUuid ? supabase.from("profiles").select("*").eq("id", userId).maybeSingle() : supabase.from("profiles").select("*").eq("handle", userId).maybeSingle();
-      query.then(({ data, error }) => {
+      query.then(async ({ data, error }) => {
         if (error) console.error("[OtherProfile] profile lookup error", { userId, isUuid, error });
         if (!data && !error) console.warn("[OtherProfile] no profile row for", { userId, isUuid });
         if (data) {
@@ -47709,6 +47709,52 @@ ${suffix}`;
             trips: [],
             activity: []
           });
+          try {
+            const [buildsRes, postsRes, rsvpsRes] = await Promise.all([
+              supabase.from("builds").select("*").eq("user_id", data.id).order("created_at", { ascending: false }),
+              supabase.from("posts").select("*").eq("user_id", data.id).order("created_at", { ascending: false }).limit(30),
+              supabase.from("convoy_rsvps").select("post_id, status, posts(id, title, data, user_id, created_at)").eq("user_id", data.id).in("status", ["going", "maybe"])
+            ]);
+            if (buildsRes.error) console.error("[OtherProfile] builds error", buildsRes.error);
+            if (postsRes.error) console.error("[OtherProfile] posts error", postsRes.error);
+            if (rsvpsRes.error) console.error("[OtherProfile] rsvps error", rsvpsRes.error);
+            const builds = (buildsRes.data || []).map((b) => {
+              const bd = b.build_data || {};
+              return {
+                name: b.name || `${b.year || ""} ${b.make || ""} ${b.model || ""}`.trim() || "Build",
+                vehicle: `${b.year || ""} ${b.make || ""} ${b.model || ""}`.trim(),
+                tags: Array.isArray(bd.tags) ? bd.tags : [],
+                miles: "0",
+                elevation: "0 ft",
+                routes: 0
+              };
+            });
+            const allPosts = postsRes.data || [];
+            const tripMap = new Map2();
+            allPosts.filter((p2) => p2.type === "CONVOYS").forEach((p2) => {
+              const d = p2.data || {};
+              const date = d.month && d.day ? `${d.month} ${d.day}` : "TBD";
+              tripMap.set(p2.id, { name: p2.title || "Convoy", date, distance: d.location || "\u2014" });
+            });
+            (rsvpsRes.data || []).forEach((r) => {
+              if (!r.posts) return;
+              if (tripMap.has(r.posts.id)) return;
+              const d = r.posts.data || {};
+              const date = d.month && d.day ? `${d.month} ${d.day}` : "TBD";
+              tripMap.set(r.posts.id, { name: r.posts.title || "Convoy", date, distance: d.location || "\u2014" });
+            });
+            const trips = Array.from(tripMap.values());
+            const activity = allPosts.map((p2) => ({
+              category: p2.type || "POST",
+              time: new Date(p2.created_at).getTime(),
+              title: p2.title || (p2.body ? p2.body.slice(0, 80) : ""),
+              likes: p2.like_count || 0,
+              comments: p2.comment_count || 0
+            }));
+            setDbProfile((prev) => prev ? { ...prev, builds, trips, activity } : prev);
+          } catch (e) {
+            console.error("[OtherProfile] sub-data fetch failed", e);
+          }
         }
         setDbLoading(false);
       });
@@ -50932,17 +50978,17 @@ ${suffix}`;
       }
     };
     const POINTS = { dailyLogin: 5, feedPost: 10, forumThread: 25, forumReply: 10, routeLogged: 30, buildAdded: 40, profileComplete: 100, receiveLike: 2, receiveComment: 3, receiveBookmark: 5, convoyJoined: 20, recoveryRespond: 50, photoUploaded: 5 };
-    const [myTotalPoints, setMyTotalPoints] = (0, import_react4.useState)(12450);
+    const [myTotalPoints, setMyTotalPoints] = (0, import_react4.useState)(0);
     const [pointsToasts, setPointsToasts] = (0, import_react4.useState)([]);
     const REASON_TO_BREAKDOWN = { "Forum Thread": "Forum Threads", "Forum Reply": "Forum Threads", "Route Logged": "Routes Logged", "Build Added": "Builds Added", "Feed Post": "Feed Posts", "Daily Login": "Daily Logins", "Photos Uploaded": "Feed Posts", "Comment Posted": "Feed Posts", "Recovery Response": "Recovery" };
     const [pointsBreakdown, setPointsBreakdown] = (0, import_react4.useState)({
-      "Forum Threads": 3750,
-      "Routes Logged": 2700,
-      "Builds Added": 2e3,
-      "Likes Received": 1840,
-      "Feed Posts": 1200,
-      "Daily Logins": 560,
-      "Other": 400
+      "Forum Threads": 0,
+      "Routes Logged": 0,
+      "Builds Added": 0,
+      "Likes Received": 0,
+      "Feed Posts": 0,
+      "Daily Logins": 0,
+      "Other": 0
     });
     const awardPoints = (amount, reason) => {
       if (!amount || !reason) return;
