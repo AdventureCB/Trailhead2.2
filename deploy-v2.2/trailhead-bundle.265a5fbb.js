@@ -43521,11 +43521,19 @@ ${suffix}`;
       let cancelled = false;
       (async () => {
         try {
-          const { data } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").in("handle", Array.from(wanted));
-          if (cancelled || !Array.isArray(data) || data.length === 0) return;
+          const orFilter = Array.from(wanted).map((h) => `handle.ilike.${h}`).join(",");
+          const { data, error } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").or(orFilter);
+          if (error) {
+            console.error("[invite profiles] fetch error", error);
+            return;
+          }
+          if (cancelled) return;
           setInviteProfiles((prev) => {
             const next = { ...prev };
-            data.forEach((p) => {
+            wanted.forEach((h) => {
+              if (!(h in next)) next[h] = null;
+            });
+            if (Array.isArray(data)) data.forEach((p) => {
               if (p.handle) next[p.handle.toLowerCase()] = p;
             });
             return next;
