@@ -48255,7 +48255,7 @@ ${suffix}`;
       if (photos.length < maxPhotos && fileRef.current) fileRef.current.click();
     }, style: { display: "flex", alignItems: "center", justifyContent: "center", gap: 10, background: T.darkCard, border: `1px dashed ${T.charcoal}`, borderRadius: 8, padding: "14px 16px", cursor: photos.length < maxPhotos ? "pointer" : "default", width: "100%", boxSizing: "border-box", opacity: photos.length < maxPhotos ? 1 : 0.5 } }, /* @__PURE__ */ import_react4.default.createElement(Camera, { size: 16, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.tertiary } }, photos.length > 0 ? `${photos.length} media added` : "Add photos / videos"), photos.length < maxPhotos && /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 14, color: T.tertiary, style: { marginLeft: "auto" } })));
   }
-  function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotification, onAddRoute, onOpenDM, userBuilds, currentUserName, currentUserHandle, onSearchUsers }) {
+  function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotification, onAddRoute, onOpenDM, onSendDmInvite, userBuilds, currentUserName, currentUserHandle, onSearchUsers }) {
     const [postType, setPostType] = (0, import_react4.useState)(null);
     const [general, setGeneral] = (0, import_react4.useState)({ text: "", photos: [], location: "" });
     const [showLocationInput, setShowLocationInput] = (0, import_react4.useState)(false);
@@ -48523,22 +48523,20 @@ ${suffix}`;
             onAddNotification && onAddNotification({ type: "mention", user: "KyleLPO", text: "mentioned you in a post", target: newPost.title, icon: AtSign, iconColor: T.copper });
           }
         });
-        if (postType === "convoy" && convoyInvites.length > 0 && onOpenDM && realPostId) {
+        if (postType === "convoy" && convoyInvites.length > 0 && onSendDmInvite && realPostId) {
           const dConvoy = convoy.departDate ? new Date(convoy.departDate) : null;
           const dateStr = dConvoy ? dConvoy.toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" }) : "TBD";
-          convoyInvites.forEach((handle) => {
-            const cleanHandle = handle.replace(/^@/, "");
-            onOpenDM(cleanHandle, null, {
-              type: "convoy_invite",
-              convoyId: realPostId,
-              title: convoy.title,
-              location: convoy.location || "TBD",
-              date: dateStr,
-              time: convoy.departTime || "TBD",
-              slots: parseInt(convoy.slots) || 0,
-              from: meHandle || meName
-            });
-          });
+          const sharedPost = {
+            type: "convoy_invite",
+            convoyId: realPostId,
+            title: convoy.title,
+            location: convoy.location || "TBD",
+            date: dateStr,
+            time: convoy.departTime || "TBD",
+            slots: parseInt(convoy.slots) || 0,
+            from: meHandle || meName
+          };
+          await Promise.all(convoyInvites.map((handle) => onSendDmInvite(handle.replace(/^@/, ""), sharedPost)));
         }
       }
       onClose();
@@ -50281,6 +50279,28 @@ ${suffix}`;
         return null;
       }
     };
+    const sendDmInvite = async (recipientHandleOrId, sharedPost, body) => {
+      const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+      if (!uid || !recipientHandleOrId) return false;
+      let targetUserId = null;
+      const isUuid = typeof recipientHandleOrId === "string" && recipientHandleOrId.length > 20 && recipientHandleOrId.includes("-");
+      if (isUuid) targetUserId = recipientHandleOrId;
+      else {
+        try {
+          const handle = String(recipientHandleOrId).replace(/^@/, "");
+          const { data } = await supabase.from("profiles").select("id").eq("handle", handle).maybeSingle();
+          if (data && data.id) targetUserId = data.id;
+        } catch (e) {
+          console.error("[sendDmInvite] handle lookup failed", e);
+        }
+      }
+      if (!targetUserId || targetUserId === uid) return false;
+      const convId = await findOrCreateDirectDm(targetUserId);
+      if (!convId) return false;
+      const payload = sharedPost ? { sharedPost } : null;
+      await sendDmMessage(convId, body || "", payload);
+      return true;
+    };
     const markDmConvRead = async (convId) => {
       const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
       if (!uid || !convId) return;
@@ -50290,6 +50310,44 @@ ${suffix}`;
         if (error) console.error("[dm] markDmConvRead error", error);
       } catch (e) {
         console.error("[dm] markDmConvRead failed", e);
+      }
+    };
+    const ensureConvoyGroupMembership = async (convoyPostId) => {
+      const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+      if (!uid || !convoyPostId) return;
+      try {
+        const post2 = feedItemsRef.current.find((p) => p.id === convoyPostId);
+        let title = post2 && post2.title;
+        let hostUid = post2 && post2.userId;
+        if (!title || !hostUid) {
+          const { data: row } = await supabase.from("posts").select("title, user_id, data").eq("id", convoyPostId).maybeSingle();
+          if (row) {
+            title = title || row.title || row.data && row.data.title;
+            hostUid = hostUid || row.user_id;
+          }
+        }
+        if (!hostUid) return;
+        const { data: existing } = await supabase.from("dm_conversations").select("id").eq("convoy_post_id", convoyPostId).eq("type", "group").maybeSingle();
+        if (existing && existing.id) {
+          const { data: myPart } = await supabase.from("dm_participants").select("user_id").eq("conversation_id", existing.id).eq("user_id", uid).maybeSingle();
+          if (!myPart) {
+            const { error: addErr } = await supabase.from("dm_participants").insert({ conversation_id: existing.id, user_id: uid });
+            if (addErr) console.error("[convoy group] self-add error", addErr);
+            else await ensureLocalConvoLoaded(existing.id);
+          }
+        } else {
+          const { data: convRow, error: cErr } = await supabase.from("dm_conversations").insert({ type: "group", title: title || "Convoy Crew", convoy_post_id: convoyPostId, created_by: uid }).select().single();
+          if (cErr || !convRow) {
+            console.error("[convoy group] create error", cErr);
+            return;
+          }
+          const partRows = hostUid === uid ? [{ conversation_id: convRow.id, user_id: uid }] : [{ conversation_id: convRow.id, user_id: uid }, { conversation_id: convRow.id, user_id: hostUid }];
+          const { error: pErr } = await supabase.from("dm_participants").insert(partRows);
+          if (pErr) console.error("[convoy group] participants insert error", pErr);
+          await ensureLocalConvoLoaded(convRow.id);
+        }
+      } catch (e) {
+        console.error("[convoy group] ensureConvoyGroupMembership failed", e);
       }
     };
     const setConvoyRsvp = async (postId, status) => {
@@ -50337,6 +50395,7 @@ ${suffix}`;
               if (ne) console.error("[notif] rsvp insert", ne);
             });
           }
+          if (status === "going") ensureConvoyGroupMembership(postId);
         }
       } catch (e) {
         console.error("[convoy_rsvps] setConvoyRsvp failed", e);
@@ -50926,7 +50985,7 @@ ${suffix}`;
     }, onAddRecoveryAlert: addRecoveryAlert, onAddNotification: addNotification, onAddRoute: (r) => {
       setUserRoutes((prev) => [r, ...prev]);
       awardPoints(POINTS.routeLogged, "Route Logged");
-    }, onOpenDM: openDM }) : showRecovery ? /* @__PURE__ */ import_react4.default.createElement(RecoveryScreen, { onOpenMap: openMap, onOpenDM: openDM }) : isProfile ? isOtherProfile ? /* @__PURE__ */ import_react4.default.createElement(OtherProfileScreen, { userId: profileStack[1], onBack: goBack, onMessage: (user) => openDM(user), currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, onFollow: requireAuth(followUser), onUnfollow: requireAuth(unfollowUser), fetchFollowCounts }) : /* @__PURE__ */ import_react4.default.createElement(ProfileScreen, { currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, convoyRsvps, followerCount: myFollowerCount, followingCount: myFollowingCount, initialUserName: currentProfile && currentProfile.full_name || supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name || null, initialUserHandle: currentProfile && currentProfile.handle || supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle || null, initialUserBio: currentProfile ? currentProfile.bio : null, initialIsPublic: currentProfile ? currentProfile.is_public : null, onSaveProfile: saveProfile, onViewUser: openUserProfile, onLogout: async () => {
+    }, onOpenDM: openDM, onSendDmInvite: sendDmInvite }) : showRecovery ? /* @__PURE__ */ import_react4.default.createElement(RecoveryScreen, { onOpenMap: openMap, onOpenDM: openDM }) : isProfile ? isOtherProfile ? /* @__PURE__ */ import_react4.default.createElement(OtherProfileScreen, { userId: profileStack[1], onBack: goBack, onMessage: (user) => openDM(user), currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, onFollow: requireAuth(followUser), onUnfollow: requireAuth(unfollowUser), fetchFollowCounts }) : /* @__PURE__ */ import_react4.default.createElement(ProfileScreen, { currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, convoyRsvps, followerCount: myFollowerCount, followingCount: myFollowingCount, initialUserName: currentProfile && currentProfile.full_name || supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name || null, initialUserHandle: currentProfile && currentProfile.handle || supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle || null, initialUserBio: currentProfile ? currentProfile.bio : null, initialIsPublic: currentProfile ? currentProfile.is_public : null, onSaveProfile: saveProfile, onViewUser: openUserProfile, onLogout: async () => {
       try {
         await supabase.auth.signOut();
       } catch (e) {
