@@ -50322,15 +50322,26 @@ ${suffix}`;
         const post2 = feedItemsRef.current.find((p) => p.id === convoyPostId);
         let title = post2 && post2.title;
         let hostUid = post2 && post2.userId;
-        if (!title || !hostUid) {
+        let location2 = post2 && post2.location;
+        let month = post2 && post2.month;
+        let day = post2 && post2.day;
+        let departs = post2 && post2.departs;
+        let slots = post2 && post2.slots;
+        if (!title || !hostUid || !month) {
           const { data: row, error: postErr } = await supabase.from("posts").select("title, user_id, data").eq("id", convoyPostId).maybeSingle();
           if (postErr) {
             console.error("[convoy group] post lookup error", postErr);
             return;
           }
           if (row) {
-            title = title || row.title || row.data && row.data.title;
+            const d = row.data || {};
+            title = title || row.title || d.title;
             hostUid = hostUid || row.user_id;
+            location2 = location2 || d.location;
+            month = month || d.month;
+            day = day || d.day;
+            departs = departs || d.departs;
+            slots = slots || d.slots;
           }
         }
         if (!hostUid) {
@@ -50384,6 +50395,28 @@ ${suffix}`;
         const { error: pErr } = await supabase.from("dm_participants").insert(partRows);
         if (pErr) console.error("[convoy group] participants insert error", pErr);
         else console.log("[convoy group] created", convRow.id, "with", partRows.length, "participants");
+        let hostHandle = "host";
+        try {
+          if (hostUid === uid && currentProfile && currentProfile.handle) {
+            hostHandle = currentProfile.handle;
+          } else {
+            const { data: hp } = await supabase.from("profiles").select("handle").eq("id", hostUid).maybeSingle();
+            if (hp && hp.handle) hostHandle = hp.handle;
+          }
+        } catch (e) {
+        }
+        const dateStr = month && day ? `${month} ${day}` : "TBD";
+        const sharedPost = {
+          type: "convoy_invite",
+          convoyId: convoyPostId,
+          title: title || "Convoy",
+          location: location2 || "TBD",
+          date: dateStr,
+          time: departs || "TBD",
+          slots: slots || 0,
+          from: hostHandle
+        };
+        await sendDmMessage(convRow.id, "", { sharedPost });
         await ensureLocalConvoLoaded(convRow.id);
       } catch (e) {
         console.error("[convoy group] ensureConvoyGroupMembership failed", e);
@@ -51020,6 +51053,9 @@ ${suffix}`;
       const created = await addPost(newPost);
       awardPoints(newPost.type === "RECOVERY" ? 0 : POINTS.feedPost, newPost.type === "RECOVERY" ? "" : "Feed Post");
       if (newPost.photoUrls && newPost.photoUrls.length > 0) awardPoints(POINTS.photoUploaded * newPost.photoUrls.length, "Photos Uploaded");
+      if (created && created.type === "CONVOYS" && created.id && typeof created.id === "string" && created.id.length > 20 && created.id.includes("-")) {
+        setConvoyRsvp(created.id, "going");
+      }
       return created;
     }, onAddRecoveryAlert: addRecoveryAlert, onAddNotification: addNotification, onAddRoute: (r) => {
       setUserRoutes((prev) => [r, ...prev]);
