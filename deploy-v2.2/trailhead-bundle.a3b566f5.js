@@ -49380,6 +49380,7 @@ ${suffix}`;
     const [authState, setAuthState] = (0, import_react4.useState)(initialSharedLink ? "app" : "login");
     const [supabaseSession, setSupabaseSession] = (0, import_react4.useState)(null);
     const [sessionHydrated, setSessionHydrated] = (0, import_react4.useState)(false);
+    const [appReady, setAppReady] = (0, import_react4.useState)(false);
     const [currentProfile, setCurrentProfile] = (0, import_react4.useState)(null);
     const hydrateUserData = async (session) => {
       if (!session || !session.user || !session.user.id) return;
@@ -49653,6 +49654,8 @@ ${suffix}`;
         }
       } catch (e) {
         console.error("[hydrate] failed", e);
+      } finally {
+        setAppReady(true);
       }
     };
     (0, import_react4.useEffect)(() => {
@@ -49666,6 +49669,9 @@ ${suffix}`;
           const hasHandle = !!(session.user && session.user.user_metadata && session.user.user_metadata.handle);
           setAuthState(hasHandle ? "app" : "onboarding");
           if (hasHandle) hydrateUserData(session);
+          else setAppReady(true);
+        } else {
+          setAppReady(true);
         }
       });
       const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
@@ -51119,6 +51125,9 @@ ${suffix}`;
           onComplete: () => setAuthState("app")
         }
       );
+    }
+    if (authState === "app" && !appReady && !isGuest) {
+      return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "fixed", inset: 0, height: "100dvh", background: T.darkBg, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("h1", { style: { fontFamily: sans, fontSize: 26, color: T.red, letterSpacing: 5, fontWeight: 700, margin: "0 0 14px" } }, "TRAILHEAD"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "inline-flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 14, height: 14, borderRadius: "50%", border: `2px solid ${T.copper}40`, borderTopColor: T.copper, animation: "th-spin 0.7s linear infinite" } }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary, letterSpacing: 1.5 } }, "LOADING")), /* @__PURE__ */ import_react4.default.createElement("style", null, `@keyframes th-spin { to { transform: rotate(360deg); } }`)));
     }
     return /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.charcoal, height: "100vh", maxWidth: 430, margin: "0 auto", position: "relative", fontFamily: sans, color: T.white, display: "flex", flexDirection: "column", overflow: "hidden" } }, /* @__PURE__ */ import_react4.default.createElement(
       TopBar,
