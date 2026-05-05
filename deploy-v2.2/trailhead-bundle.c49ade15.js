@@ -43785,7 +43785,7 @@ ${suffix}`;
             openCarousel(imgs, 0);
           }, style: { width: 40, height: 40, borderRadius: 6, objectFit: "cover", marginLeft: 8, verticalAlign: "middle", cursor: "pointer" } }), mod.link && /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginTop: 3 } }, /* @__PURE__ */ import_react4.default.createElement("a", { href: ensureUrl(mod.link), target: "_blank", rel: "noopener noreferrer", onClick: (e) => e.stopPropagation(), style: { fontFamily: sans, fontSize: 10, color: T.copper, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3 } }, /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 9 }), " View Product"))));
         };
-        return /* @__PURE__ */ import_react4.default.createElement("div", { key: item.id, style: cardStyle }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "12px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 32, height: 32, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" } }, item.avatarUrl ? /* @__PURE__ */ import_react4.default.createElement("img", { src: item.avatarUrl, alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, fontWeight: 700, color: T.white } }, item.initial)), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5 } }, /* @__PURE__ */ import_react4.default.createElement("span", { onClick: () => onViewUser && onViewUser(item.userId || item.handle || item.user.replace(/\s/g, "_")), style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, cursor: "pointer" } }, item.user), /* @__PURE__ */ import_react4.default.createElement(RankBadge, { points: getPoints(item.user), size: 12 })), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.tertiary, display: "block" } }, item.subtitle), item.location && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary, display: "flex", alignItems: "center", gap: 4, marginTop: 2 } }, /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 10, color: T.tertiary }), item.location)), ownPostMenu(item)), feedEditBar(item), feedDeleteConfirm(item), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative" } }, item.photoUrls && item.photoUrls[0] ? (() => {
+        return /* @__PURE__ */ import_react4.default.createElement("div", { key: item.id, style: cardStyle }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "12px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 32, height: 32, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" } }, item.avatarUrl ? /* @__PURE__ */ import_react4.default.createElement("img", { src: item.avatarUrl, alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, fontWeight: 700, color: T.white } }, item.initial)), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5 } }, /* @__PURE__ */ import_react4.default.createElement("span", { onClick: () => onViewUser && onViewUser(item.userId || item.handle || item.user.replace(/\s/g, "_")), style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, cursor: "pointer" } }, item.user), /* @__PURE__ */ import_react4.default.createElement(RankBadge, { points: getPoints(item.user), size: 12 })), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.tertiary, display: "block" } }, item.subtitle), item.sharedFromOwnerHandle && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.copper, display: "flex", alignItems: "center", gap: 4, marginTop: 2, fontWeight: 600 } }, /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 10, color: T.copper }), "Shared from @", item.sharedFromOwnerHandle, "'s build"), item.location && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary, display: "flex", alignItems: "center", gap: 4, marginTop: 2 } }, /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 10, color: T.tertiary }), item.location)), ownPostMenu(item)), feedEditBar(item), feedDeleteConfirm(item), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative" } }, item.photoUrls && item.photoUrls[0] ? (() => {
           const firstP = item.photoUrls[0];
           const firstUrl = typeof firstP === "string" ? firstP : firstP.url;
           const firstIsVid = typeof firstP === "object" && firstP.type === "video";
@@ -46284,7 +46284,7 @@ ${suffix}`;
       }
     ));
   }
-  function BuildsScreen({ onViewUser, userBuilds, allBuilds: allBuildsProp, currentUserId, followingIds, onAddBuild, onUpdateBuild, onPostBuildToFeed, onOpenDM, userRoutes, pendingBuildNav, onConsumePendingBuildNav, isGuest, onGuestTap }) {
+  function BuildsScreen({ onViewUser, userBuilds, allBuilds: allBuildsProp, currentUserId, followingIds, onAddBuild, onUpdateBuild, onPostBuildToFeed, onOpenDM, userRoutes, pendingBuildNav, onConsumePendingBuildNav, isGuest, onGuestTap, likedBuildIds, buildLikeCounts, onToggleBuildLike }) {
     const [filter, setFilter] = (0, import_react4.useState)("all");
     const [search, setSearch] = (0, import_react4.useState)("");
     const [detailBuildId, setDetailBuildId] = (0, import_react4.useState)(null);
@@ -46294,19 +46294,16 @@ ${suffix}`;
     const [shareToast, setShareToast] = (0, import_react4.useState)("");
     const [carouselImages, setCarouselImages] = (0, import_react4.useState)(null);
     const [carouselIndex, setCarouselIndex] = (0, import_react4.useState)(0);
-    const [likedBuilds, setLikedBuilds] = (0, import_react4.useState)({});
-    const [likeBonuses, setLikeBonuses] = (0, import_react4.useState)({});
     const [showAddBuildForm, setShowAddBuildForm] = (0, import_react4.useState)(false);
+    const likedBuilds = likedBuildIds || {};
     const toggleLikeBuild = (id) => {
       if (isGuest) {
         onGuestTap && onGuestTap();
         return;
       }
-      const wasLiked = !!likedBuilds[id];
-      setLikedBuilds((prev) => ({ ...prev, [id]: !wasLiked }));
-      setLikeBonuses((prev) => ({ ...prev, [id]: wasLiked ? (prev[id] || 0) - 1 : (prev[id] || 0) + 1 }));
+      onToggleBuildLike && onToggleBuildLike(id);
     };
-    const getBuildLikes = (b) => b.likes + (likeBonuses[b.id] || 0);
+    const getBuildLikes = (b) => buildLikeCounts && buildLikeCounts[b.id] || 0;
     const collectBuildImagesGallery = (bd) => {
       const imgs = [];
       if (bd.mainPhotos) bd.mainPhotos.forEach((p) => imgs.push(p.url));
@@ -46429,7 +46426,11 @@ ${suffix}`;
         { key: "otherMods", label: "Other Mods", icon: Plus }
       ];
       const modRows = modCategories.map((c) => ({ ...c, mod: bd ? bd[c.key] : null })).filter((r) => r.mod && r.mod.value);
-      return /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 0 16px" } }, carouselImages && /* @__PURE__ */ import_react4.default.createElement(ImageCarousel, { images: carouselImages, startIndex: carouselIndex, onClose: () => setCarouselImages(null) }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", height: 280, background: heroImage ? T.darkBg : gradient, overflow: "hidden" } }, heroImage ? /* @__PURE__ */ import_react4.default.createElement("img", { src: heroImage, alt: "", onClick: () => openGalleryCarousel(detailBuild, 0), style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", cursor: "pointer" } }) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Wrench, { size: 120, color: T.tertiary, strokeWidth: 0.15, style: { opacity: 0.08 } })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, background: "linear-gradient(transparent 35%, rgba(0,0,0,0.85))" } }), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setDetailBuildId(null), style: { position: "absolute", top: 14, left: 14, width: 36, height: 36, borderRadius: 10, background: `${T.darkBg}CC`, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)" } }, /* @__PURE__ */ import_react4.default.createElement(ChevronLeft, { size: 20, color: T.white })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: 14, right: 14, display: "flex", gap: 8 } }, detailBuild.isMine && detailBuild.rawId && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
+      return /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 0 16px" } }, carouselImages && /* @__PURE__ */ import_react4.default.createElement(ImageCarousel, { images: carouselImages, startIndex: carouselIndex, onClose: () => setCarouselImages(null) }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", height: 280, background: heroImage ? T.darkBg : gradient, overflow: "hidden" } }, heroImage ? /* @__PURE__ */ import_react4.default.createElement("img", { src: heroImage, alt: "", onClick: () => openGalleryCarousel(detailBuild, 0), style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", cursor: "pointer" } }) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Wrench, { size: 120, color: T.tertiary, strokeWidth: 0.15, style: { opacity: 0.08 } })), (() => {
+        const galleryCount = bd ? collectBuildImagesGallery(bd).length : heroImage ? 1 : 0;
+        if (galleryCount <= 1) return null;
+        return /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => openGalleryCarousel(detailBuild, 0), style: { position: "absolute", bottom: 14, right: 14, padding: "5px 10px", borderRadius: 14, background: `${T.darkBg}CC`, display: "flex", alignItems: "center", gap: 5, backdropFilter: "blur(6px)", cursor: "pointer", zIndex: 2 } }, /* @__PURE__ */ import_react4.default.createElement(Image, { size: 12, color: T.white }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, galleryCount, " PHOTOS"));
+      })(), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, background: "linear-gradient(transparent 35%, rgba(0,0,0,0.85))" } }), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setDetailBuildId(null), style: { position: "absolute", top: 14, left: 14, width: 36, height: 36, borderRadius: 10, background: `${T.darkBg}CC`, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)" } }, /* @__PURE__ */ import_react4.default.createElement(ChevronLeft, { size: 20, color: T.white })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: 14, right: 14, display: "flex", gap: 8 } }, detailBuild.isMine && detailBuild.rawId && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
         const src = (userBuilds || []).find((ub) => ub.id === detailBuild.rawId);
         if (src) setEditingBuild(src);
       }, style: { width: 36, height: 36, borderRadius: 10, background: `${T.copper}40`, border: `1px solid ${T.copper}60`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)" } }, /* @__PURE__ */ import_react4.default.createElement(PenLine, { size: 15, color: T.white })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { height: 36, padding: "0 12px", borderRadius: 10, background: `${T.darkBg}CC`, display: "flex", alignItems: "center", gap: 5, backdropFilter: "blur(6px)" } }, /* @__PURE__ */ import_react4.default.createElement(Heart, { size: 14, color: T.red, fill: liked ? T.red : "none" }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 } }, getBuildLikes(detailBuild)))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 16, right: 16, bottom: 16 } }, detailBuild.tags && detailBuild.tags.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" } }, detailBuild.tags.map((tag, j) => /* @__PURE__ */ import_react4.default.createElement("span", { key: j, style: { fontFamily: sans, fontSize: 9, color: T.warmBg, background: `${T.darkBg}99`, padding: "4px 10px", borderRadius: 20, letterSpacing: 1, border: `1px solid ${T.charcoal}` } }, tag))), /* @__PURE__ */ import_react4.default.createElement("h1", { style: { fontFamily: sans, fontSize: 32, color: T.white, margin: "0 0 4px", fontWeight: 800, letterSpacing: 1, lineHeight: 1.05 } }, detailBuild.name), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 2 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary } }, detailBuild.year, " ", detailBuild.make, " ", detailBuild.model), /* @__PURE__ */ import_react4.default.createElement("span", { style: { color: T.tertiary } }, "\xB7"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => onViewUser && onViewUser(detailBuild.handle.replace("@", "")), style: { background: "none", border: "none", cursor: "pointer", padding: 0, fontFamily: sans, fontSize: 12, color: T.copper } }, detailBuild.handle)))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "14px 16px 0", position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement(
@@ -46463,7 +46464,10 @@ ${suffix}`;
       }, style: { width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "none", border: "none", cursor: "pointer", borderRadius: 6 } }, /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 } }, "Copy Link")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
         const bd2 = detailBuild.buildData;
         const heroImg = detailBuild.image || bd2 && bd2.mainPhotos && bd2.mainPhotos[0] && bd2.mainPhotos[0].url || null;
-        const sharedPost = { id: "build_" + detailBuild.id, type: "BUILDS", user: detailBuild.handle.replace("@", ""), initial: detailBuild.initial, title: detailBuild.name, body: `${detailBuild.year} ${detailBuild.make} ${detailBuild.model}`, image: heroImg, buildData: bd2, buildRawId: detailBuild.rawId != null ? detailBuild.rawId : null };
+        const isReshare = !!(currentUserId && detailBuild.userId && detailBuild.userId !== currentUserId);
+        const ownerHandle = isReshare ? (detailBuild.handle || "").replace(/^@/, "") : null;
+        const ownerName = isReshare ? detailBuild.owner || null : null;
+        const sharedPost = { id: "build_" + detailBuild.id, type: "BUILDS", user: detailBuild.handle.replace("@", ""), initial: detailBuild.initial, title: detailBuild.name, body: `${detailBuild.year} ${detailBuild.make} ${detailBuild.model}`, image: heroImg, buildData: bd2, buildRawId: detailBuild.rawId != null ? detailBuild.rawId : null, sharedFromOwnerHandle: ownerHandle, sharedFromOwnerName: ownerName };
         onOpenDM && onOpenDM(null, `Check out this build: ${detailBuild.name}`, sharedPost);
         setShareMenuOpen(false);
       }, style: { width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "none", border: "none", cursor: "pointer", borderRadius: 6 } }, /* @__PURE__ */ import_react4.default.createElement(Send, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 } }, "Send via DM")))), shareToast && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "fixed", bottom: 90, left: "50%", transform: "translateX(-50%)", background: T.charcoal, border: `1px solid ${T.copper}`, borderRadius: 8, padding: "10px 16px", zIndex: 100, boxShadow: "0 4px 20px rgba(0,0,0,0.5)" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 } }, shareToast))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "18px 16px 0" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 12 } }, "TECHNICAL SPECIFICATIONS"), modRows.length === 0 ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { ...cardStyle, padding: 20, textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Wrench, { size: 28, color: T.tertiary, strokeWidth: 0.8, style: { opacity: 0.4, marginBottom: 8 } }), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: sans, fontSize: 12, color: T.tertiary, margin: 0 } }, "No specs added yet"), detailBuild.isMine && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
@@ -49070,7 +49074,7 @@ ${suffix}`;
             e.stopPropagation();
             onRsvpConvoy && onRsvpConvoy(convoyId, myStatus === opt.value ? null : opt.value);
           }, style: { flex: 1, fontFamily: sans, fontSize: 10, letterSpacing: 0.8, fontWeight: 600, padding: "10px 0", background: myStatus === opt.value ? `${opt.color}25` : "transparent", color: myStatus === opt.value ? opt.color : T.tertiary, border: "none", borderRight: oi < 2 ? `1px solid ${isMe ? "rgba(255,255,255,0.1)" : T.charcoal}` : "none", cursor: "pointer", transition: "all 0.15s" } }, myStatus === opt.value ? `\u2713 ${opt.label}` : opt.label))));
-        })() : msg.sharedPost ? /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => onOpenPost && onOpenPost(msg.sharedPost), style: { borderRadius: 8, overflow: "hidden", border: `1px solid ${isMe ? "rgba(255,255,255,0.15)" : T.charcoal}`, marginBottom: msg.text ? 8 : 0, background: isMe ? "rgba(0,0,0,0.15)" : `${T.charcoal}80`, cursor: "pointer", transition: "opacity 0.15s" }, onMouseEnter: (e) => e.currentTarget.style.opacity = "0.85", onMouseLeave: (e) => e.currentTarget.style.opacity = "1" }, msg.sharedPost.image && /* @__PURE__ */ import_react4.default.createElement("img", { src: msg.sharedPost.image, alt: "", style: { width: "100%", height: 120, objectFit: "cover", display: "block" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "10px 12px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 6 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 20, height: 20, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 8, fontWeight: 700, color: T.white } }, msg.sharedPost.initial)), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: isMe ? "rgba(255,255,255,0.7)" : T.tertiary } }, "@", msg.sharedPost.user), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: isMe ? "rgba(255,255,255,0.45)" : `${T.tertiary}80`, marginLeft: "auto", textTransform: "uppercase", letterSpacing: 0.5 } }, msg.sharedPost.type)), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.white, margin: 0, lineHeight: 1.4 } }, msg.sharedPost.title), msg.sharedPost.type === "recovery" && msg.sharedPost.location && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, marginTop: 4 } }, /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 10, color: T.red }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, msg.sharedPost.location), msg.sharedPost.urgency && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 8, color: T.white, background: msg.sharedPost.urgency === "HIGH" ? T.red : T.copper, padding: "1px 5px", borderRadius: 3, fontWeight: 600, marginLeft: 4 } }, msg.sharedPost.urgency)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, marginTop: 6 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600 } }, msg.sharedPost.type === "recovery" ? "VIEW ALERT" : "VIEW POST"), /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 12, color: T.copper })))) : null, msg.photos && msg.photos.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 4, marginBottom: msg.text ? 8 : 0, flexWrap: "wrap" } }, msg.photos.map((p, pi) => {
+        })() : msg.sharedPost ? /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => onOpenPost && onOpenPost(msg.sharedPost), style: { borderRadius: 8, overflow: "hidden", border: `1px solid ${isMe ? "rgba(255,255,255,0.15)" : T.charcoal}`, marginBottom: msg.text ? 8 : 0, background: isMe ? "rgba(0,0,0,0.15)" : `${T.charcoal}80`, cursor: "pointer", transition: "opacity 0.15s" }, onMouseEnter: (e) => e.currentTarget.style.opacity = "0.85", onMouseLeave: (e) => e.currentTarget.style.opacity = "1" }, msg.sharedPost.image && /* @__PURE__ */ import_react4.default.createElement("img", { src: msg.sharedPost.image, alt: "", style: { width: "100%", height: 120, objectFit: "cover", display: "block" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "10px 12px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 6 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 20, height: 20, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 8, fontWeight: 700, color: T.white } }, msg.sharedPost.initial)), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: isMe ? "rgba(255,255,255,0.7)" : T.tertiary } }, "@", msg.sharedPost.user), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: isMe ? "rgba(255,255,255,0.45)" : `${T.tertiary}80`, marginLeft: "auto", textTransform: "uppercase", letterSpacing: 0.5 } }, msg.sharedPost.type)), msg.sharedPost.sharedFromOwnerHandle && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, marginBottom: 4 } }, /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 10, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600 } }, "Shared from @", msg.sharedPost.sharedFromOwnerHandle, "'s build")), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.white, margin: 0, lineHeight: 1.4 } }, msg.sharedPost.title), msg.sharedPost.type === "recovery" && msg.sharedPost.location && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, marginTop: 4 } }, /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 10, color: T.red }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, msg.sharedPost.location), msg.sharedPost.urgency && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 8, color: T.white, background: msg.sharedPost.urgency === "HIGH" ? T.red : T.copper, padding: "1px 5px", borderRadius: 3, fontWeight: 600, marginLeft: 4 } }, msg.sharedPost.urgency)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, marginTop: 6 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600 } }, msg.sharedPost.type === "recovery" ? "VIEW ALERT" : "VIEW POST"), /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 12, color: T.copper })))) : null, msg.photos && msg.photos.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 4, marginBottom: msg.text ? 8 : 0, flexWrap: "wrap" } }, msg.photos.map((p, pi) => {
           const url = typeof p === "string" ? p : p && p.url;
           const isVid = typeof p === "object" && p && p.type === "video";
           if (!url) return null;
@@ -49570,6 +49574,25 @@ ${suffix}`;
           const all = buildRows.map((r) => dbRowToLocalBuild(r, profByUid[r.user_id] || null)).filter(Boolean);
           setAllBuilds(all);
           setUserBuilds(all.filter((b) => b.userId === uid));
+          const buildIds = all.map((b) => b.id).filter((id) => typeof id === "string");
+          if (buildIds.length > 0) {
+            try {
+              const { data: blRows, error: blErr } = await supabase.from("build_likes").select("build_id, user_id").in("build_id", buildIds);
+              if (blErr) console.error("[hydrate] build_likes fetch error", blErr);
+              if (Array.isArray(blRows)) {
+                const counts = {};
+                const mine = {};
+                blRows.forEach((r) => {
+                  counts[r.build_id] = (counts[r.build_id] || 0) + 1;
+                  if (r.user_id === uid) mine[r.build_id] = true;
+                });
+                setBuildLikeCounts(counts);
+                setLikedBuildIds(mine);
+              }
+            } catch (e) {
+              console.error("[hydrate] build_likes fetch failed", e);
+            }
+          }
         }
         if (profileRow && profileRow.avatar_url) {
           console.log("[hydrate] setting profilePic from avatar_url", profileRow.avatar_url);
@@ -49866,6 +49889,8 @@ ${suffix}`;
           setCurrentProfile(null);
           setUserBuilds([]);
           setAllBuilds([]);
+          setBuildLikeCounts({});
+          setLikedBuildIds({});
           setFeedItems([]);
           setFollowingIds(/* @__PURE__ */ new Set());
           setMyFollowerCount(0);
@@ -49975,6 +50000,16 @@ ${suffix}`;
         if (!row || !row.id) return;
         if (row.user_id === uid) return;
         setAllBuilds((prev) => prev.filter((b) => b.id !== row.id));
+      }).on("postgres_changes", { event: "INSERT", schema: "public", table: "build_likes" }, (payload) => {
+        const row = payload.new;
+        if (!row || !row.build_id) return;
+        if (row.user_id === uid) return;
+        setBuildLikeCounts((prev) => ({ ...prev, [row.build_id]: (prev[row.build_id] || 0) + 1 }));
+      }).on("postgres_changes", { event: "DELETE", schema: "public", table: "build_likes" }, (payload) => {
+        const row = payload.old;
+        if (!row || !row.build_id) return;
+        if (row.user_id === uid) return;
+        setBuildLikeCounts((prev) => ({ ...prev, [row.build_id]: Math.max((prev[row.build_id] || 0) - 1, 0) }));
       }).on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles" }, (payload) => {
         const row = payload.new;
         if (!row || !row.id) return;
@@ -50210,6 +50245,8 @@ ${suffix}`;
     const [activeNavRoute, setActiveNavRoute] = (0, import_react4.useState)(null);
     const [userBuilds, setUserBuilds] = (0, import_react4.useState)([]);
     const [allBuilds, setAllBuilds] = (0, import_react4.useState)([]);
+    const [buildLikeCounts, setBuildLikeCounts] = (0, import_react4.useState)({});
+    const [likedBuildIds, setLikedBuildIds] = (0, import_react4.useState)({});
     const myBuildsForLink = (userBuilds || []).map((b) => ({ id: b.id, name: b.name || `${b.year} ${b.make} ${b.model}`, year: b.year, make: b.make, model: b.model }));
     const [profilePic, setProfilePic] = (0, import_react4.useState)(null);
     const handleSetProfilePic = async (input) => {
@@ -51297,6 +51334,51 @@ ${suffix}`;
         setFeedItems((prev) => prev.map((p) => p.id === postId ? { ...p, likes: Math.max((p.likes || 0) + (wasLiked ? 1 : -1), 0) } : p));
       }
     };
+    const toggleBuildLike = async (buildId) => {
+      const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+      if (!uid) return;
+      if (typeof buildId !== "string" || buildId.length < 20) return;
+      const wasLiked = !!likedBuildIds[buildId];
+      setLikedBuildIds((prev) => {
+        const next = { ...prev };
+        if (wasLiked) delete next[buildId];
+        else next[buildId] = true;
+        return next;
+      });
+      setBuildLikeCounts((prev) => ({ ...prev, [buildId]: Math.max((prev[buildId] || 0) + (wasLiked ? -1 : 1), 0) }));
+      try {
+        if (wasLiked) {
+          const { error } = await supabase.from("build_likes").delete().eq("build_id", buildId).eq("user_id", uid);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase.from("build_likes").insert({ build_id: buildId, user_id: uid });
+          if (error) throw error;
+          const build = allBuilds.find((b) => b.id === buildId);
+          if (build && build.userId && build.userId !== uid) {
+            const myName = currentProfile && currentProfile.full_name || "Someone";
+            supabase.from("notifications").insert({
+              user_id: build.userId,
+              type: "like",
+              actor_id: uid,
+              actor_name: myName,
+              text: "liked your build",
+              target: build.name || ""
+            }).then(({ error: ne }) => {
+              if (ne) console.error("[notif] build like insert", ne);
+            });
+          }
+        }
+      } catch (e) {
+        console.error("[build_likes] toggle failed", e);
+        setLikedBuildIds((prev) => {
+          const next = { ...prev };
+          if (wasLiked) next[buildId] = true;
+          else delete next[buildId];
+          return next;
+        });
+        setBuildLikeCounts((prev) => ({ ...prev, [buildId]: Math.max((prev[buildId] || 0) + (wasLiked ? 1 : -1), 0) }));
+      }
+    };
     const addComment = async (postId, text) => {
       const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
       if (!uid) return null;
@@ -51587,11 +51669,15 @@ ${suffix}`;
     }, onGoToPost: (id) => {
       setProfileStack([]);
       setScreen("feed");
-    }, myPoints: myTotalPoints }) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, isGuest && /* @__PURE__ */ import_react4.default.createElement(GuestBanner, { onSignIn: () => setShowGuestPrompt(true) }), screen === "feed" && renderFeedScopedTo({ hideFilters: false }), screen === "forum" && /* @__PURE__ */ import_react4.default.createElement(ForumScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), pendingThread, onPendingHandled: () => setPendingThread(null), onAddNotification: requireAuth(addNotification), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onAddFeedPost: requireAuth((post2) => addPost(post2)), userThreads: forumUserThreads, setUserThreads: requireAuth(setForumUserThreads), userReplies: forumUserReplies, setUserReplies: requireAuth(setForumUserReplies), likedForumItems: forumLikedItems, setLikedForumItems: requireAuth(setForumLikedItems), forumLikeCounts, setForumLikeCounts: requireAuth(setForumLikeCounts), forumViewCounts, setForumViewCounts, onAwardPoints: awardPoints }), screen === "routes" && /* @__PURE__ */ import_react4.default.createElement(RoutesScreen, { userBuilds: myBuildsForLink, onRecordRoute: requireAuth(() => setShowRecorder(true)), onManualEntry: requireAuth(() => setShowManualRoute(true)), userRoutes, onUpdateRoute: requireAuth((routeId, updates) => setUserRoutes((prev) => prev.map((r) => r.id === routeId ? { ...r, ...updates } : r))), savedRoutes, onSaveRoute: requireAuth((route) => setSavedRoutes((prev) => prev.some((r) => r.id === route.id || r.name === route.name) ? prev : [route, ...prev])), onUnsaveRoute: requireAuth((routeId) => setSavedRoutes((prev) => prev.filter((r) => r.id !== routeId && r.name !== routeId))), onOpenDM: (user, msg, sharedPost) => openDM(user, msg, sharedPost), onAddFeedPost: requireAuth((post2) => addPost(post2)), onStartNav: (route) => setActiveNavRoute(route) }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onUpdateBuild: requireAuth(updateBuild), onPostBuildToFeed: requireAuth((b) => {
+    }, myPoints: myTotalPoints }) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, isGuest && /* @__PURE__ */ import_react4.default.createElement(GuestBanner, { onSignIn: () => setShowGuestPrompt(true) }), screen === "feed" && renderFeedScopedTo({ hideFilters: false }), screen === "forum" && /* @__PURE__ */ import_react4.default.createElement(ForumScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), pendingThread, onPendingHandled: () => setPendingThread(null), onAddNotification: requireAuth(addNotification), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onAddFeedPost: requireAuth((post2) => addPost(post2)), userThreads: forumUserThreads, setUserThreads: requireAuth(setForumUserThreads), userReplies: forumUserReplies, setUserReplies: requireAuth(setForumUserReplies), likedForumItems: forumLikedItems, setLikedForumItems: requireAuth(setForumLikedItems), forumLikeCounts, setForumLikeCounts: requireAuth(setForumLikeCounts), forumViewCounts, setForumViewCounts, onAwardPoints: awardPoints }), screen === "routes" && /* @__PURE__ */ import_react4.default.createElement(RoutesScreen, { userBuilds: myBuildsForLink, onRecordRoute: requireAuth(() => setShowRecorder(true)), onManualEntry: requireAuth(() => setShowManualRoute(true)), userRoutes, onUpdateRoute: requireAuth((routeId, updates) => setUserRoutes((prev) => prev.map((r) => r.id === routeId ? { ...r, ...updates } : r))), savedRoutes, onSaveRoute: requireAuth((route) => setSavedRoutes((prev) => prev.some((r) => r.id === route.id || r.name === route.name) ? prev : [route, ...prev])), onUnsaveRoute: requireAuth((routeId) => setSavedRoutes((prev) => prev.filter((r) => r.id !== routeId && r.name !== routeId))), onOpenDM: (user, msg, sharedPost) => openDM(user, msg, sharedPost), onAddFeedPost: requireAuth((post2) => addPost(post2)), onStartNav: (route) => setActiveNavRoute(route) }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onPostBuildToFeed: requireAuth((b, opts) => {
       const bd = b.buildData;
       const heroImg = b.image || bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url || null;
       const meName = currentProfile && currentProfile.full_name || "You";
-      addPost({ id: "feedbuild_" + Date.now(), type: "BUILDS", user: meName, initial: meName.charAt(0).toUpperCase(), time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, vehicle: `${b.year} ${b.make} ${b.model}`, photoUrls: heroImg ? [heroImg] : void 0, image: heroImg, likes: 0, comments: 0, buildData: bd, buildRawId: b.rawId != null ? b.rawId : null });
+      const myUid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+      const isReshare = b.userId && myUid && b.userId !== myUid;
+      const ownerHandle = isReshare ? (b.handle || "").replace(/^@/, "") : null;
+      const ownerName = isReshare ? b.owner || null : null;
+      addPost({ id: "feedbuild_" + Date.now(), type: "BUILDS", user: meName, initial: meName.charAt(0).toUpperCase(), time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, subtitle: isReshare ? `Shared @${ownerHandle}'s build` : "Added a new build", vehicle: `${b.year} ${b.make} ${b.model}`, photoUrls: heroImg ? [heroImg] : void 0, image: heroImg, likes: 0, comments: 0, buildData: bd, buildRawId: b.rawId != null ? b.rawId : null, sharedFromOwnerHandle: ownerHandle, sharedFromOwnerName: ownerName });
       awardPoints(POINTS.feedPost, "Build Shared");
     }) }), screen === "ranks" && (isGuest ? /* @__PURE__ */ import_react4.default.createElement(GuestGateScreen, { title: "RANKS REQUIRE AN ACCOUNT", subtitle: "Sign in to see the leaderboard and start earning points from your posts, routes and builds.", onSignIn: goToLoginFromGuest }) : /* @__PURE__ */ import_react4.default.createElement(RanksScreen, { myPoints: myTotalPoints, pointsBreakdown })))), screen === "feed" && !isOverlay && !isGuest && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setShowCompose(true), style: { position: "absolute", bottom: 68, right: 16, width: 52, height: 52, borderRadius: "50%", background: T.red, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 4px 20px ${T.red}60`, zIndex: 90 } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 24, color: T.white, strokeWidth: 2 })), /* @__PURE__ */ import_react4.default.createElement(BottomNav, { active: isOverlay ? "" : screen, onNav: handleNav }), mapData && /* @__PURE__ */ import_react4.default.createElement(
       MapOverlay,
