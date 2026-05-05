@@ -46288,6 +46288,7 @@ ${suffix}`;
     const [filter, setFilter] = (0, import_react4.useState)("all");
     const [search, setSearch] = (0, import_react4.useState)("");
     const [detailBuildId, setDetailBuildId] = (0, import_react4.useState)(null);
+    const [externalBuilds, setExternalBuilds] = (0, import_react4.useState)([]);
     const [editingBuild, setEditingBuild] = (0, import_react4.useState)(null);
     const [expandedModKey, setExpandedModKey] = (0, import_react4.useState)(null);
     const [shareMenuOpen, setShareMenuOpen] = (0, import_react4.useState)(false);
@@ -46371,19 +46372,85 @@ ${suffix}`;
         buildData: b.buildData || null
       };
     });
-    const allBuilds = [...defaultBuilds, ...mappedUserBuilds];
+    const allBuilds = [...defaultBuilds, ...mappedUserBuilds, ...externalBuilds];
     (0, import_react4.useEffect)(() => {
-      if (pendingBuildNav) {
-        const { rawId, name } = pendingBuildNav;
-        let match = null;
-        if (rawId != null) match = allBuilds.find((b) => b.rawId === rawId);
-        if (!match && name) {
-          const lc = String(name).toLowerCase();
-          match = allBuilds.find((b) => (b.name || "").toLowerCase() === lc);
-        }
-        if (match) setDetailBuildId(match.id);
-        onConsumePendingBuildNav && onConsumePendingBuildNav();
+      if (!pendingBuildNav) return;
+      const { rawId, name } = pendingBuildNav;
+      let match = null;
+      if (rawId != null) match = allBuilds.find((b) => b.rawId === rawId || b.id === rawId);
+      if (!match && name) {
+        const lc = String(name).toLowerCase();
+        match = allBuilds.find((b) => (b.name || "").toLowerCase() === lc);
       }
+      if (match) {
+        setDetailBuildId(match.id);
+        onConsumePendingBuildNav && onConsumePendingBuildNav();
+        return;
+      }
+      if (typeof rawId === "string" && rawId.length > 20 && rawId.includes("-")) {
+        let cancelled = false;
+        (async () => {
+          try {
+            const { data: row, error } = await supabase.from("builds").select("*").eq("id", rawId).maybeSingle();
+            if (cancelled) return;
+            if (error || !row) {
+              console.error("[builds] external fetch failed", error);
+              onConsumePendingBuildNav && onConsumePendingBuildNav();
+              return;
+            }
+            let prof = null;
+            if (row.user_id) {
+              try {
+                const { data } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").eq("id", row.user_id).maybeSingle();
+                prof = data;
+              } catch (_) {
+              }
+            }
+            const bd = row.build_data || {};
+            const heroImage = row.hero_img || bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url || null;
+            const synthId = "ext_" + row.id;
+            const ownerName = prof && prof.full_name || prof && prof.handle || "User";
+            const ownerHandle = prof && prof.handle ? "@" + prof.handle : "";
+            const synth = {
+              id: synthId,
+              rawId: row.id,
+              name: (row.name || `${row.year || ""} ${row.make || ""} ${row.model || ""}`.trim() || "UNNAMED BUILD").toUpperCase(),
+              owner: ownerName,
+              handle: ownerHandle,
+              initial: (ownerName || "U").charAt(0).toUpperCase(),
+              year: row.year,
+              make: row.make || "",
+              model: row.model || "",
+              tags: [row.trim ? row.trim.toUpperCase() : (row.make || "").toUpperCase(), "BUILD"].filter(Boolean),
+              suspension: bd.suspension && bd.suspension.value || "",
+              tires: bd.tires && bd.tires.value || "",
+              bumpers: bd.bumpers && bd.bumpers.value || "",
+              miles: "0",
+              elevation: "0 ft",
+              routes: 0,
+              hasCamper: !!bd.hasCamper,
+              camperMake: bd.camperMake || "",
+              camperModel: bd.camperModel || "",
+              isMine: false,
+              isFollowing: false,
+              likes: 0,
+              image: heroImage,
+              buildData: bd,
+              avatarUrl: prof && prof.avatar_url || null
+            };
+            setExternalBuilds((prev) => prev.some((b) => b.id === synthId) ? prev : [...prev, synth]);
+            setDetailBuildId(synthId);
+          } catch (e) {
+            console.error("[builds] external fetch threw", e);
+          } finally {
+            onConsumePendingBuildNav && onConsumePendingBuildNav();
+          }
+        })();
+        return () => {
+          cancelled = true;
+        };
+      }
+      onConsumePendingBuildNav && onConsumePendingBuildNav();
     }, [pendingBuildNav]);
     const filters = [
       { key: "all", label: "ALL BUILDS", icon: Globe },
@@ -47833,7 +47900,7 @@ ${suffix}`;
       color: !canFollow ? T.tertiary : isFollowing ? T.green : T.white,
       opacity: canFollow ? 1 : 0.5,
       ...isFollowing ? { border: `1px solid ${T.green}40` } : {}
-    } }, isFollowing ? /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement(UserCheck, { size: 14 }), " FOLLOWING") : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement(UserPlus, { size: 14 }), " FOLLOW")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => onMessage && onMessage(userId), style: { display: "inline-flex", alignItems: "center", gap: 6, padding: "10px 24px", borderRadius: 8, cursor: "pointer", fontFamily: sans, fontSize: 12, fontWeight: 600, letterSpacing: 1, background: T.darkCard, border: `1px solid ${T.copper}40`, color: T.copper, transition: "all 0.2s" } }, /* @__PURE__ */ import_react4.default.createElement(Mail, { size: 14 }), " MESSAGE")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", justifyContent: "center", gap: 24, marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 18, color: T.white, fontWeight: 700, display: "block" } }, (liveCounts ? liveCounts.followers : p.followers).toLocaleString()), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1 } }, "FOLLOWERS")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 1, background: T.charcoal } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 18, color: T.white, fontWeight: 700, display: "block" } }, (liveCounts ? liveCounts.following : p.following).toLocaleString()), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1 } }, "FOLLOWING")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 1, background: T.charcoal } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 18, color: T.copper, fontWeight: 700, display: "block" } }, p.points.toLocaleString()), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1 } }, "POINTS")))), isPrivateAndNotFollowing ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "40px 16px", textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Lock, { size: 40, color: T.tertiary, strokeWidth: 1, style: { marginBottom: 12, opacity: 0.5 } }), /* @__PURE__ */ import_react4.default.createElement("h3", { style: { fontFamily: sans, fontSize: 16, color: T.white, margin: "0 0 6px" } }, "This Account is Private"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary, margin: 0, lineHeight: 1.6, maxWidth: 280, marginLeft: "auto", marginRight: "auto" } }, "Follow this explorer to see their builds, trips, and activity on Trailhead.")) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", borderBottom: `1px solid ${T.charcoal}`, margin: "0 16px", marginBottom: 16 } }, tabs.map((t) => /* @__PURE__ */ import_react4.default.createElement("button", { key: t, onClick: () => setActiveTab(t), style: { flex: 1, background: "none", border: "none", cursor: "pointer", padding: "12px 0 10px", borderBottom: activeTab === t ? `2px solid ${T.red}` : "2px solid transparent" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: activeTab === t ? T.white : T.tertiary, letterSpacing: 1.5, fontWeight: 600 } }, t.toUpperCase())))), activeTab === "builds" && p.builds.map((b, i) => /* @__PURE__ */ import_react4.default.createElement("div", { key: b.id || i, onClick: () => onViewBuild && onViewBuild({ rawId: b.id || null, name: b.name }), style: { ...cardStyle, margin: "0 16px", overflow: "hidden", cursor: onViewBuild ? "pointer" : "default" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { height: 140, background: b.heroImg ? `#000` : `linear-gradient(135deg, ${T.charcoal} 0%, ${T.tertiary}30 100%)`, position: "relative", display: "flex", flexDirection: "column", justifyContent: "flex-end" } }, b.heroImg ? /* @__PURE__ */ import_react4.default.createElement("img", { src: b.heroImg, alt: "", style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Wrench, { size: 50, color: T.tertiary, strokeWidth: 0.2, style: { opacity: 0.08 } })), b.heroImg && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, background: "linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.7) 100%)" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", padding: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 4 } }, b.tags.map((tag, j) => /* @__PURE__ */ import_react4.default.createElement("span", { key: j, style: { fontFamily: sans, fontSize: 9, color: T.warmBg, background: "#3D3D3A", padding: "3px 8px", borderRadius: 4, letterSpacing: 1 } }, tag))), /* @__PURE__ */ import_react4.default.createElement("h3", { style: { fontFamily: sans, fontSize: 24, color: T.warmBg, margin: 0, fontWeight: 700 } }, b.name), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary } }, b.vehicle))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", borderTop: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: 12, textAlign: "center", borderRight: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block" } }, "MILES"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 } }, b.miles)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: 12, textAlign: "center", borderRight: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block" } }, "ELEVATION"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 } }, b.elevation)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: 12, textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block" } }, "ROUTES"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 } }, b.routes))))), activeTab === "trips" && renderFeedScopedTo && renderFeedScopedTo({
+    } }, isFollowing ? /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement(UserCheck, { size: 14 }), " FOLLOWING") : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement(UserPlus, { size: 14 }), " FOLLOW")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => onMessage && onMessage(userId), style: { display: "inline-flex", alignItems: "center", gap: 6, padding: "10px 24px", borderRadius: 8, cursor: "pointer", fontFamily: sans, fontSize: 12, fontWeight: 600, letterSpacing: 1, background: T.darkCard, border: `1px solid ${T.copper}40`, color: T.copper, transition: "all 0.2s" } }, /* @__PURE__ */ import_react4.default.createElement(Mail, { size: 14 }), " MESSAGE")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", justifyContent: "center", gap: 24, marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 18, color: T.white, fontWeight: 700, display: "block" } }, (liveCounts ? liveCounts.followers : p.followers).toLocaleString()), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1 } }, "FOLLOWERS")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 1, background: T.charcoal } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 18, color: T.white, fontWeight: 700, display: "block" } }, (liveCounts ? liveCounts.following : p.following).toLocaleString()), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1 } }, "FOLLOWING")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 1, background: T.charcoal } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 18, color: T.copper, fontWeight: 700, display: "block" } }, p.points.toLocaleString()), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1 } }, "POINTS")))), isPrivateAndNotFollowing ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "40px 16px", textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Lock, { size: 40, color: T.tertiary, strokeWidth: 1, style: { marginBottom: 12, opacity: 0.5 } }), /* @__PURE__ */ import_react4.default.createElement("h3", { style: { fontFamily: sans, fontSize: 16, color: T.white, margin: "0 0 6px" } }, "This Account is Private"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary, margin: 0, lineHeight: 1.6, maxWidth: 280, marginLeft: "auto", marginRight: "auto" } }, "Follow this explorer to see their builds, trips, and activity on Trailhead.")) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", borderBottom: `1px solid ${T.charcoal}`, margin: "0 16px", marginBottom: 16 } }, tabs.map((t) => /* @__PURE__ */ import_react4.default.createElement("button", { key: t, onClick: () => setActiveTab(t), style: { flex: 1, background: "none", border: "none", cursor: "pointer", padding: "12px 0 10px", borderBottom: activeTab === t ? `2px solid ${T.red}` : "2px solid transparent" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: activeTab === t ? T.white : T.tertiary, letterSpacing: 1.5, fontWeight: 600 } }, t.toUpperCase())))), activeTab === "builds" && p.builds.map((b, i) => /* @__PURE__ */ import_react4.default.createElement("div", { key: b.id || i, onClick: () => onViewBuild && onViewBuild({ rawId: b.id || null, name: b.name }), style: { ...cardStyle, margin: "0 16px 12px", overflow: "hidden", cursor: onViewBuild ? "pointer" : "default" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { height: 160, background: b.heroImg ? `#000` : `linear-gradient(135deg, ${T.charcoal} 0%, ${T.tertiary}30 100%)`, position: "relative", display: "flex", flexDirection: "column", justifyContent: "flex-end", overflow: "hidden" } }, b.heroImg ? /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("img", { src: b.heroImg, alt: "", style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, background: "linear-gradient(transparent 20%, rgba(0,0,0,0.75))", pointerEvents: "none" } })) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Wrench, { size: 60, color: T.tertiary, strokeWidth: 0.2, style: { opacity: 0.08 } })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", padding: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 6 } }, b.tags.map((tag, j) => /* @__PURE__ */ import_react4.default.createElement("span", { key: j, style: { fontFamily: sans, fontSize: 9, color: T.warmBg, background: "#3D3D3A", padding: "3px 8px", borderRadius: 4, letterSpacing: 1 } }, tag))), /* @__PURE__ */ import_react4.default.createElement("h3", { style: { fontFamily: sans, fontSize: 28, color: T.warmBg, margin: 0, fontWeight: 700, letterSpacing: 1 } }, b.name), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary } }, b.vehicle))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", borderTop: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: 12, textAlign: "center", borderRight: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block" } }, "MILES"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 } }, b.miles)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: 12, textAlign: "center", borderRight: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block" } }, "ELEVATION"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 } }, b.elevation)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: 12, textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block" } }, "ROUTES"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 } }, b.routes))))), activeTab === "trips" && renderFeedScopedTo && renderFeedScopedTo({
       items: p.tripItems || []
     }), activeTab === "activity" && renderFeedScopedTo && renderFeedScopedTo({
       items: p.activityItems || []
