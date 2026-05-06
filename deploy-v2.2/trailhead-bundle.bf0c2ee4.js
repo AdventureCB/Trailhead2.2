@@ -43058,7 +43058,11 @@ ${suffix}`;
             type: "geojson",
             data: { type: "FeatureCollection", features: [] },
             cluster: true,
-            clusterMaxZoom: 12,
+            // Higher max zoom so dense areas keep clustering until you're
+            // really zoomed in. Below this we render individuals as circles
+            // (much more reliable than emoji symbols, which fail when the
+            // basemap font lacks emoji glyphs).
+            clusterMaxZoom: 15,
             clusterRadius: 45
           });
           map.addLayer({
@@ -43100,15 +43104,16 @@ ${suffix}`;
           });
           map.addLayer({
             id: "camping-spots-points",
-            type: "symbol",
+            type: "circle",
             source: "camping-spots",
             filter: ["!", ["has", "point_count"]],
-            layout: {
-              "text-field": "\u{1F3D5}\uFE0F",
-              "text-size": 18,
-              "text-allow-overlap": true,
-              "text-anchor": "bottom",
-              "text-offset": [0, 0.2]
+            paint: {
+              "circle-color": "#5B8C5A",
+              // forest green, distinct from clusters (copper)
+              "circle-radius": 7,
+              "circle-stroke-color": T.white,
+              "circle-stroke-width": 2,
+              "circle-opacity": 0.95
             }
           });
           pointClick = (e) => {
