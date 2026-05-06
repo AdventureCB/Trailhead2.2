@@ -43268,6 +43268,7 @@ ${suffix}`;
             type: "vector",
             url: `mapbox://${MAPBOX_PUBLIC_LANDS_TILESET_ID}`
           });
+          const beforeId = ["camping-spots-clusters", "camping-spots-cluster-count", "camping-spots-points"].find((id) => map.getLayer(id));
           const fillColor = buildPublicLandsColorExpression();
           map.addLayer({
             id: "public-lands-fill",
@@ -43275,14 +43276,14 @@ ${suffix}`;
             source: "public-lands",
             "source-layer": MAPBOX_PUBLIC_LANDS_SOURCE_LAYER,
             paint: { "fill-color": fillColor, "fill-opacity": 0.42 }
-          });
+          }, beforeId);
           map.addLayer({
             id: "public-lands-line",
             type: "line",
             source: "public-lands",
             "source-layer": MAPBOX_PUBLIC_LANDS_SOURCE_LAYER,
             paint: { "line-color": "#1a1a1a", "line-width": 0.6, "line-opacity": 0.45 }
-          });
+          }, beforeId);
           fillClick = (e) => {
             const f = e.features && e.features[0];
             if (!f) return;
