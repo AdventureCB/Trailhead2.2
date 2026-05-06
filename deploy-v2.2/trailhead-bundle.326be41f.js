@@ -46870,6 +46870,98 @@ ${suffix}`;
     const canSave = pins.length > 0;
     return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, zIndex: 300, background: T.darkBg, display: "flex", flexDirection: "column" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", background: T.charcoal, borderBottom: `1px solid ${T.darkCard}`, flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: onBack, style: { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" } }, /* @__PURE__ */ import_react4.default.createElement(ChevronLeft, { size: 22, color: T.white, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 14, fontWeight: 700, color: T.white } }, "Add Route")), /* @__PURE__ */ import_react4.default.createElement("div", { className: "th-scroll", style: { flex: 1, overflowY: "auto", padding: "16px" } }, /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 12px", lineHeight: 1.4 } }, 'Search for a location or tap the map to drop pins. Add photos below and tap "Link Pin" to attach them to a spot on the trail.'), /* @__PURE__ */ import_react4.default.createElement(RoutePinMap, { pins, setPins, linkingPhotoIdx, onLinkPin: linkPhotoToPin, onRoutePoints: setRoadPoints }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginTop: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.5, fontWeight: 600, display: "block", marginBottom: 8 } }, "PHOTOS"), /* @__PURE__ */ import_react4.default.createElement("input", { ref: photoRef, type: "file", accept: "image/*,video/*", multiple: true, onChange: handlePhotoUpload, style: { display: "none" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 } }, routePhotos.map((p, i) => /* @__PURE__ */ import_react4.default.createElement("div", { key: i, style: { position: "relative", width: 72, height: 72, borderRadius: 8, overflow: "hidden", outline: linkingPhotoIdx === i ? `2px solid ${T.copper}` : "none", outlineOffset: 2 } }, /* @__PURE__ */ import_react4.default.createElement("img", { src: p.url, alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }), p.lat ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", bottom: 2, left: 2, background: `${T.darkBg}CC`, borderRadius: 4, padding: "1px 4px", display: "flex", alignItems: "center", gap: 2 } }, /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 8, color: T.green }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 7, color: T.green } }, "PINNED")) : pins.length > 0 ? /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setLinkingPhotoIdx(linkingPhotoIdx === i ? null : i), style: { position: "absolute", bottom: 2, left: 2, background: linkingPhotoIdx === i ? T.copper : `${T.copper}DD`, borderRadius: 4, padding: "2px 5px", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 2 } }, /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 8, color: T.white }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 7, color: T.white } }, linkingPhotoIdx === i ? "TAP PIN" : "LINK PIN")) : null, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setRoutePhotos((prev) => prev.filter((_, idx) => idx !== i)), style: { position: "absolute", top: 2, right: 2, width: 18, height: 18, borderRadius: "50%", background: `${T.darkBg}CC`, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 10, color: T.white })))), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => photoRef.current && photoRef.current.click(), style: { width: 72, height: 72, borderRadius: 8, background: T.darkCard, border: `1px dashed ${T.charcoal}`, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4 } }, /* @__PURE__ */ import_react4.default.createElement(Camera, { size: 18, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 0.5 } }, "ADD"))), linkingPhotoIdx !== null && /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: `${T.copper}15`, border: `1px solid ${T.copper}30`, borderRadius: 8, padding: "8px 12px", display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.copper, flex: 1 } }, "Tap a pin on the map to link this photo"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setLinkingPhotoIdx(null), style: { background: "none", border: "none", cursor: "pointer", padding: 0 } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 14, color: T.tertiary }))), routePhotos.length > 0 && pins.length > 0 && linkingPhotoIdx === null && routePhotos.some((p) => !p.lat) && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, display: "block" } }, 'Tap "Link Pin" on a photo, then tap a map pin to associate them'))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "12px 16px", background: T.charcoal, borderTop: `1px solid ${T.darkCard}`, flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: handleSave, disabled: !canSave, style: { width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "14px", borderRadius: 8, background: canSave ? T.green : T.charcoal, border: "none", cursor: canSave ? "pointer" : "default", opacity: canSave ? 1 : 0.5 } }, /* @__PURE__ */ import_react4.default.createElement(CircleCheckBig, { size: 16, color: T.white }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, "SAVE ROUTE"))));
   }
+  function TripReportCreator({ onClose, onCreateDraft, onChooseManual, onChooseLive, onChooseSkip }) {
+    const [step, setStep] = (0, import_react4.useState)("disclaimer");
+    const [agreed, setAgreed] = (0, import_react4.useState)(false);
+    const [name, setName] = (0, import_react4.useState)("");
+    const [description, setDescription] = (0, import_react4.useState)("");
+    const [submitting, setSubmitting] = (0, import_react4.useState)(false);
+    const [draftId, setDraftId] = (0, import_react4.useState)(null);
+    const handleCreate = async () => {
+      if (!name.trim() || submitting) return;
+      setSubmitting(true);
+      const draft = await onCreateDraft({ name: name.trim(), description: description.trim() });
+      setSubmitting(false);
+      if (draft) {
+        setDraftId(draft.id);
+        setStep("route");
+      }
+    };
+    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "fixed", inset: 0, zIndex: 1100, background: T.darkBg, display: "flex", flexDirection: "column", maxWidth: 430, left: "50%", transform: "translateX(-50%)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", background: T.charcoal, borderBottom: `1px solid ${T.darkCard}`, flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: onClose, style: { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center" } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 22, color: T.white, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, fontWeight: 700, color: T.white, letterSpacing: 1 } }, "NEW TRIP REPORT"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { width: 22 } })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, overflowY: "auto", padding: "20px 16px 32px" } }, step === "disclaimer" && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement(Mountain, { size: 48, color: T.copper, strokeWidth: 1.2, style: { display: "block", margin: "12px auto 18px" } }), /* @__PURE__ */ import_react4.default.createElement("h2", { style: { fontFamily: sans, fontSize: 20, color: T.white, margin: "0 0 12px", textAlign: "center", fontWeight: 700, letterSpacing: 0.5 } }, "One quick check"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 14, color: T.warmStone, lineHeight: 1.6, margin: "0 0 16px" } }, "Trip reports are for routes you've ", /* @__PURE__ */ import_react4.default.createElement("em", null, "actually taken"), " or are ", /* @__PURE__ */ import_react4.default.createElement("em", null, "actively taking right now"), ". They become a permanent how-to guide other overlanders use to plan their own trips, so accuracy matters."), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary, lineHeight: 1.6, margin: "0 0 20px" } }, "Planning a future trip? Use ", /* @__PURE__ */ import_react4.default.createElement("span", { style: { color: T.copper, fontWeight: 600 } }, "Adventure Planning \u2192 Route Planner"), " instead."), /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: () => setAgreed((v) => !v),
+        style: { display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "14px", background: T.darkCard, border: `1px solid ${agreed ? T.green : T.charcoal}`, borderRadius: 10, cursor: "pointer", textAlign: "left" }
+      },
+      /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 18, height: 18, borderRadius: 4, background: agreed ? T.green : "transparent", border: `1.5px solid ${agreed ? T.green : T.tertiary}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, agreed && /* @__PURE__ */ import_react4.default.createElement("span", { style: { color: T.white, fontSize: 12, fontWeight: 700, lineHeight: 1 } }, "\u2713")),
+      /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 13, color: T.white, lineHeight: 1.4 } }, "I'm logging a trip I've taken or am currently on.")
+    ), /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: () => agreed && setStep("details"),
+        disabled: !agreed,
+        style: { width: "100%", marginTop: 18, padding: "14px", borderRadius: 10, background: agreed ? T.red : T.charcoal, border: "none", cursor: agreed ? "pointer" : "default", fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 1, opacity: agreed ? 1 : 0.5 }
+      },
+      "CONTINUE"
+    )), step === "details" && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("h2", { style: { fontFamily: sans, fontSize: 20, color: T.white, margin: "0 0 6px", fontWeight: 700, letterSpacing: 0.5 } }, "Name your trip"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 18px", lineHeight: 1.5 } }, "A descriptive name makes your trip easier to find. Try including the route name and region \u2014 e.g. ", /* @__PURE__ */ import_react4.default.createElement("em", null, '"Engineer Pass, Colorado"'), "."), /* @__PURE__ */ import_react4.default.createElement("label", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 600, display: "block", marginBottom: 6 } }, "TRIP NAME"), /* @__PURE__ */ import_react4.default.createElement(
+      "input",
+      {
+        autoFocus: true,
+        value: name,
+        onChange: (e) => setName(e.target.value.slice(0, 90)),
+        placeholder: "e.g. Engineer Pass, Colorado",
+        style: { width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none", marginBottom: 4 },
+        onFocus: (e) => e.target.style.borderColor = T.copper,
+        onBlur: (e) => e.target.style.borderColor = T.charcoal
+      }
+    ), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, display: "block", marginBottom: 16 } }, name.length, "/90 \xB7 aim for 30-70 characters with the route + region"), /* @__PURE__ */ import_react4.default.createElement("label", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 600, display: "block", marginBottom: 6 } }, "BRIEF DESCRIPTION"), /* @__PURE__ */ import_react4.default.createElement(
+      "textarea",
+      {
+        value: description,
+        onChange: (e) => setDescription(e.target.value.slice(0, 280)),
+        placeholder: "What makes this trip worth taking? Highlights, surface type, time of year, vehicle requirements\u2026",
+        rows: 4,
+        style: { width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", resize: "vertical", lineHeight: 1.5 },
+        onFocus: (e) => e.target.style.borderColor = T.copper,
+        onBlur: (e) => e.target.style.borderColor = T.charcoal
+      }
+    ), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, display: "block", marginTop: 4, marginBottom: 24 } }, description.length, "/280 \xB7 use natural language with key terms (region, surface, season)"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setStep("disclaimer"), style: { flex: 1, padding: "14px", borderRadius: 10, background: T.charcoal, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 12, color: T.tertiary, fontWeight: 700, letterSpacing: 1 } }, "BACK"), /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: handleCreate,
+        disabled: !name.trim() || submitting,
+        style: { flex: 2, padding: "14px", borderRadius: 10, background: name.trim() && !submitting ? T.red : T.charcoal, border: "none", cursor: name.trim() && !submitting ? "pointer" : "default", fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 1, opacity: name.trim() && !submitting ? 1 : 0.5 }
+      },
+      submitting ? "CREATING\u2026" : "CREATE DRAFT"
+    ))), step === "route" && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("h2", { style: { fontFamily: sans, fontSize: 20, color: T.white, margin: "0 0 6px", fontWeight: 700, letterSpacing: 0.5 } }, "Add your route"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 18px", lineHeight: 1.5 } }, "Trip reports need a route to publish. Pick how you want to capture it \u2014 you can always come back to this draft later."), /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: () => onChooseLive && onChooseLive(draftId),
+        style: { width: "100%", padding: "16px", borderRadius: 10, background: T.red, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 14, marginBottom: 10, textAlign: "left" }
+      },
+      /* @__PURE__ */ import_react4.default.createElement(Radio, { size: 20, color: T.white }),
+      /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, "LIVE TRACKING"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 11, color: `${T.white}CC`, marginTop: 2 } }, "Recording right now \u2014 capture the route as you drive")),
+      /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 18, color: T.white })
+    ), /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: () => onChooseManual && onChooseManual(draftId),
+        style: { width: "100%", padding: "16px", borderRadius: 10, background: T.copper, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 14, marginBottom: 10, textAlign: "left" }
+      },
+      /* @__PURE__ */ import_react4.default.createElement(Map2, { size: 20, color: T.white }),
+      /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, "MANUAL ENTRY"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 11, color: `${T.white}DD`, marginTop: 2 } }, "Already done \u2014 drop pins on the map for the route you took")),
+      /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 18, color: T.white })
+    ), /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: () => onChooseSkip && onChooseSkip(draftId),
+        style: { width: "100%", padding: "16px", borderRadius: 10, background: T.darkCard, border: `1px solid ${T.charcoal}`, cursor: "pointer", display: "flex", alignItems: "center", gap: 14, textAlign: "left" }
+      },
+      /* @__PURE__ */ import_react4.default.createElement(Clock, { size: 20, color: T.tertiary }),
+      /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 13, color: T.tertiary, fontWeight: 700, letterSpacing: 0.5 } }, "SKIP FOR NOW"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 11, color: T.tertiary, marginTop: 2 } }, "Save the draft and add the route later (can't publish without one)")),
+      /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 18, color: T.tertiary })
+    ))));
+  }
   function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands }) {
     const mapRef = (0, import_react4.useRef)(null);
     const mapInst = (0, import_react4.useRef)(null);
@@ -46936,7 +47028,8 @@ ${suffix}`;
       return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 6, background: `${T.darkCard}F5`, border: `1px solid ${T.charcoal}`, borderRadius: 10, padding: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "flex-start", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 36, height: 36, borderRadius: "50%", background: T.green, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 18 } }, "\u{1F3D5}\uFE0F"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, marginBottom: 2 } }, selectedSpot.name), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 4 } }, selectedSpot.spot_type !== "unknown" ? selectedSpot.spot_type : "", selectedSpot.spot_type !== "unknown" && selectedSpot.fee !== "unknown" ? " \xB7 " : "", selectedSpot.fee !== "unknown" ? selectedSpot.fee : "", (selectedSpot.spot_type !== "unknown" || selectedSpot.fee !== "unknown") && selectedSpot.source ? " \xB7 " : "", selectedSpot.source), selectedSpot.description && /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 12, color: T.warmStone, lineHeight: 1.4 } }, selectedSpot.description), ext && /* @__PURE__ */ import_react4.default.createElement("a", { href: ext.url, target: "_blank", rel: "noopener noreferrer", style: { display: "inline-flex", alignItems: "center", gap: 6, marginTop: 10, padding: "8px 12px", background: T.copper, color: T.white, borderRadius: 6, textDecoration: "none", fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5 } }, /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 12 }), /* @__PURE__ */ import_react4.default.createElement("span", null, ext.label))), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setSelectedSpot(null), style: { background: "none", border: "none", cursor: "pointer", padding: 4, color: T.tertiary } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 16 }))));
     })(), selectedLand && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 6, background: `${T.darkCard}F5`, border: `1px solid ${T.charcoal}`, borderRadius: 10, padding: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "flex-start", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 36, height: 36, borderRadius: 6, background: PUBLIC_LANDS_COLORS[selectedLand.mang_name] || PUBLIC_LANDS_DEFAULT_COLOR, flexShrink: 0, border: `1px solid ${T.charcoal}` } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, marginBottom: 2 } }, selectedLand.unit_nm || selectedLand.loc_nm || "Public land"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600, marginBottom: 4 } }, PUBLIC_LANDS_NAMES[selectedLand.mang_name] || selectedLand.mang_name || "Unknown manager"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.4 } }, selectedLand.des_tp ? selectedLand.des_tp : null, selectedLand.des_tp && selectedLand.state_nm ? " \xB7 " : null, selectedLand.state_nm, selectedLand.pub_access ? ` \xB7 ${PUBLIC_ACCESS_NAMES[selectedLand.pub_access] || selectedLand.pub_access}` : null)), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setSelectedLand(null), style: { background: "none", border: "none", cursor: "pointer", padding: 4, color: T.tertiary } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 16 })))));
   }
-  function RoutesScreen({ onRecordRoute, onManualEntry, userRoutes, onUpdateRoute, savedRoutes, onSaveRoute, onUnsaveRoute, onOpenDM, onAddFeedPost, onStartNav, userBuilds, campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands }) {
+  function RoutesScreen({ onRecordRoute, onManualEntry, userRoutes, onUpdateRoute, savedRoutes, onSaveRoute, onUnsaveRoute, onOpenDM, onAddFeedPost, onStartNav, userBuilds, campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, currentUserId, tripReports, onCreateTripDraft, onChooseManual, onChooseLive, onChooseSkip }) {
+    const [showCreator, setShowCreator] = (0, import_react4.useState)(false);
     const [mainTab, setMainTab] = (0, import_react4.useState)("reports");
     const [planningTab, setPlanningTab] = (0, import_react4.useState)("saved");
     const [expandedRoute, setExpandedRoute] = (0, import_react4.useState)(null);
@@ -47018,7 +47111,47 @@ ${suffix}`;
     }, style: { flex: 1, padding: "12px 0", background: mainTab === "reports" ? T.red : "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 } }, /* @__PURE__ */ import_react4.default.createElement(Mountain, { size: 14, color: T.white }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.6 } }, "TRIP REPORTS")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
       setMainTab("planning");
       setExpandedRoute(null);
-    }, style: { flex: 1, padding: "12px 0", background: mainTab === "planning" ? T.red : "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 } }, /* @__PURE__ */ import_react4.default.createElement(Compass, { size: 14, color: T.white }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.6 } }, "ADVENTURE PLANNING"))), mainTab === "reports" && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 14px", display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, display: "flex", alignItems: "center", background: T.darkCard, borderRadius: 8, padding: "10px 14px" } }, /* @__PURE__ */ import_react4.default.createElement(Search, { size: 16, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary, marginLeft: 8 } }, "Search trip reports\u2026")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: onManualEntry, style: { display: "flex", alignItems: "center", gap: 5, padding: "10px 12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 0.5 } }, "ADD")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: onRecordRoute, style: { display: "flex", alignItems: "center", gap: 6, padding: "10px 14px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(Radio, { size: 14, color: T.white }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, "RECORD"))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px" } }, !userRoutes || userRoutes.length === 0 ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "center", padding: "60px 20px" } }, /* @__PURE__ */ import_react4.default.createElement(Mountain, { size: 36, color: T.tertiary, strokeWidth: 1, style: { opacity: 0.3, marginBottom: 12 } }), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 14, color: T.tertiary, margin: "0 0 6px" } }, "No trip reports yet"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary, opacity: 0.6 } }, "Tap RECORD to log a live GPS trip, or ADD to enter one manually.")) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8 } }, (userRoutes || []).map((r, i) => renderRouteCard(r, i))))), mainTab === "planning" && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", margin: "0 16px 12px", background: T.darkCard, borderRadius: 8, overflow: "hidden" } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
+    }, style: { flex: 1, padding: "12px 0", background: mainTab === "planning" ? T.red : "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 } }, /* @__PURE__ */ import_react4.default.createElement(Compass, { size: 14, color: T.white }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.6 } }, "ADVENTURE PLANNING"))), mainTab === "reports" && (() => {
+      const myDrafts = (tripReports || []).filter((t) => t.status === "draft" && t.user_id === currentUserId);
+      const published = (tripReports || []).filter((t) => t.status === "published");
+      return /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 14px", display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, display: "flex", alignItems: "center", background: T.darkCard, borderRadius: 8, padding: "10px 14px" } }, /* @__PURE__ */ import_react4.default.createElement(Search, { size: 16, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary, marginLeft: 8 } }, "Search trip reports\u2026")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setShowCreator(true), style: { display: "flex", alignItems: "center", gap: 6, padding: "10px 14px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 14, color: T.white }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, "NEW TRIP REPORT"))), myDrafts.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 10 } }, /* @__PURE__ */ import_react4.default.createElement(PenLine, { size: 12, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.5, fontWeight: 600 } }, "YOUR DRAFTS"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, "\xB7 ", myDrafts.length)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8 } }, myDrafts.map((d) => {
+        const hasRoute = d.route_data && (d.route_data.pins && d.route_data.pins.length > 0 || d.route_data.points && d.route_data.points.length > 0);
+        return /* @__PURE__ */ import_react4.default.createElement("div", { key: d.id, style: { ...cardStyle, padding: 14, display: "flex", alignItems: "center", gap: 12, border: `1px solid ${T.copper}40` } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 36, height: 36, borderRadius: 8, background: `${T.copper}25`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(Mountain, { size: 16, color: T.copper })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, marginBottom: 2 } }, d.name), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.4 } }, "DRAFT \xB7 ", hasRoute ? "route added" : "no route yet", " \xB7 ", formatPostTime(new Date(d.created_at).getTime()))), /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 16, color: T.tertiary }));
+      }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px" } }, published.length === 0 && myDrafts.length === 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "center", padding: "60px 20px" } }, /* @__PURE__ */ import_react4.default.createElement(Mountain, { size: 36, color: T.tertiary, strokeWidth: 1, style: { opacity: 0.3, marginBottom: 12 } }), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 14, color: T.tertiary, margin: "0 0 6px" } }, "No trip reports yet"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary, opacity: 0.6 } }, "Tap NEW TRIP REPORT to log a trip you've taken or are on right now.")), published.length > 0 && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 10 } }, /* @__PURE__ */ import_react4.default.createElement(Globe, { size: 12, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.5, fontWeight: 600 } }, "COMMUNITY TRIP REPORTS"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, "\xB7 ", published.length)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8 } }, published.map((p, i) => renderRouteCard({
+        id: p.id,
+        name: p.name,
+        desc: p.description,
+        difficulty: p.difficulty || "Moderate",
+        distance: p.distance_mi ? `${p.distance_mi.toFixed(1)} MI` : "\u2014",
+        time: p.duration_min ? `${Math.floor(p.duration_min / 60)}H ${p.duration_min % 60}M` : "\u2014",
+        elevation: p.elev_gain_ft ? `+${p.elev_gain_ft.toLocaleString()} FT` : "\u2014",
+        location: p.start_label || p.region || "",
+        terrains: p.terrains || [],
+        tags: p.tags || [],
+        pins: p.route_data && p.route_data.pins || [],
+        points: p.route_data && p.route_data.points || [],
+        photos: p.route_data && p.route_data.photos || [],
+        createdAt: new Date(p.published_at || p.created_at).getTime()
+      }, i))))), showCreator && /* @__PURE__ */ import_react4.default.createElement(
+        TripReportCreator,
+        {
+          onClose: () => setShowCreator(false),
+          onCreateDraft: onCreateTripDraft,
+          onChooseManual: (draftId) => {
+            setShowCreator(false);
+            onChooseManual && onChooseManual(draftId);
+          },
+          onChooseLive: (draftId) => {
+            setShowCreator(false);
+            onChooseLive && onChooseLive(draftId);
+          },
+          onChooseSkip: (draftId) => {
+            setShowCreator(false);
+            onChooseSkip && onChooseSkip(draftId);
+          }
+        }
+      ));
+    })(), mainTab === "planning" && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", margin: "0 16px 12px", background: T.darkCard, borderRadius: 8, overflow: "hidden" } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
       setPlanningTab("saved");
       setExpandedRoute(null);
     }, style: { flex: 1, padding: "10px 0", background: planningTab === "saved" ? T.charcoal : "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, borderBottom: planningTab === "saved" ? `2px solid ${T.copper}` : "2px solid transparent" } }, /* @__PURE__ */ import_react4.default.createElement(Bookmark, { size: 13, color: planningTab === "saved" ? T.copper : T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: planningTab === "saved" ? T.white : T.tertiary, fontWeight: 600, letterSpacing: 0.5 } }, "SAVED"), savedRoutes && savedRoutes.length > 0 && /* @__PURE__ */ import_react4.default.createElement("span", { style: { minWidth: 16, height: 16, padding: "0 4px", borderRadius: 8, background: T.red, display: "inline-flex", alignItems: "center", justifyContent: "center", fontFamily: sans, fontSize: 9, color: T.white, fontWeight: 700 } }, savedRoutes.length)), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
@@ -50524,6 +50657,13 @@ ${suffix}`;
           }
           if (Array.isArray(csRows)) setCampingSpots(csRows);
         });
+        supabase.from("trip_reports").select("id, user_id, slug, name, description, status, start_lat, start_lng, start_label, hero_img, distance_mi, duration_min, elev_gain_ft, difficulty, region, state_code, terrains, tags, view_count, like_count, comment_count, published_at, created_at, updated_at").order("created_at", { ascending: false }).limit(500).then(({ data: trRows, error: trErr }) => {
+          if (trErr) {
+            console.error("[hydrate] trip_reports fetch error", trErr);
+            return;
+          }
+          if (Array.isArray(trRows)) setTripReports(trRows);
+        });
         if (profileRow && profileRow.avatar_url) {
           console.log("[hydrate] setting profilePic from avatar_url", profileRow.avatar_url);
           setProfilePic((prev) => prev || profileRow.avatar_url);
@@ -50824,6 +50964,7 @@ ${suffix}`;
           setLikedBuildIds({});
           setDmMessageReactions({});
           setCampingSpots([]);
+          setTripReports([]);
           setFeedItems([]);
           setFollowingIds(/* @__PURE__ */ new Set());
           setMyFollowerCount(0);
@@ -50933,6 +51074,19 @@ ${suffix}`;
         if (!row || !row.id) return;
         if (row.user_id === uid) return;
         setAllBuilds((prev) => prev.filter((b) => b.id !== row.id));
+      }).on("postgres_changes", { event: "INSERT", schema: "public", table: "trip_reports" }, (payload) => {
+        const row = payload.new;
+        if (!row || !row.id) return;
+        if (row.user_id === uid) return;
+        setTripReports((prev) => prev.some((t) => t.id === row.id) ? prev : [row, ...prev]);
+      }).on("postgres_changes", { event: "UPDATE", schema: "public", table: "trip_reports" }, (payload) => {
+        const row = payload.new;
+        if (!row || !row.id) return;
+        setTripReports((prev) => prev.map((t) => t.id === row.id ? { ...t, ...row } : t));
+      }).on("postgres_changes", { event: "DELETE", schema: "public", table: "trip_reports" }, (payload) => {
+        const row = payload.old;
+        if (!row || !row.id) return;
+        setTripReports((prev) => prev.filter((t) => t.id !== row.id));
       }).on("postgres_changes", { event: "INSERT", schema: "public", table: "camping_spots" }, (payload) => {
         const row = payload.new;
         if (!row || !row.id) return;
@@ -51220,6 +51374,7 @@ ${suffix}`;
     const [recoveryConfirm, setRecoveryConfirm] = (0, import_react4.useState)(null);
     const [showRecorder, setShowRecorder] = (0, import_react4.useState)(false);
     const [showManualRoute, setShowManualRoute] = (0, import_react4.useState)(false);
+    const [pendingTripDraftId, setPendingTripDraftId] = (0, import_react4.useState)(null);
     const [pendingThread, setPendingThread] = (0, import_react4.useState)(null);
     const [pendingBuildNav, setPendingBuildNav] = (0, import_react4.useState)(null);
     const [pendingPostNav, setPendingPostNav] = (0, import_react4.useState)(initialSharedLink && initialSharedLink.kind === "post" ? initialSharedLink.id : null);
@@ -51248,6 +51403,7 @@ ${suffix}`;
     const [userBuilds, setUserBuilds] = (0, import_react4.useState)([]);
     const [allBuilds, setAllBuilds] = (0, import_react4.useState)([]);
     const [campingSpots, setCampingSpots] = (0, import_react4.useState)([]);
+    const [tripReports, setTripReports] = (0, import_react4.useState)([]);
     const [showCampingSpots, setShowCampingSpots] = (0, import_react4.useState)(() => {
       try {
         const v = localStorage.getItem("th_show_camping");
@@ -52479,6 +52635,110 @@ ${suffix}`;
         setBuildLikeCounts((prev) => ({ ...prev, [buildId]: Math.max((prev[buildId] || 0) + (wasLiked ? 1 : -1), 0) }));
       }
     };
+    const slugifyTripName = (name) => {
+      if (!name) return "";
+      return String(name).normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
+    };
+    const createTripDraft = async ({ name, description } = {}) => {
+      const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+      if (!uid) {
+        showErrorToast("Sign in to create a trip report.");
+        return null;
+      }
+      const trimmedName = (name || "").trim();
+      if (!trimmedName) {
+        showErrorToast("Trip needs a name.");
+        return null;
+      }
+      const baseSlug = slugifyTripName(trimmedName) || `trip-${Date.now()}`;
+      const tmpId = "tmp_trip_" + Date.now();
+      const optimistic = {
+        id: tmpId,
+        user_id: uid,
+        slug: baseSlug,
+        name: trimmedName,
+        description: (description || "").trim() || null,
+        status: "draft",
+        route_data: null,
+        created_at: (/* @__PURE__ */ new Date()).toISOString(),
+        updated_at: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      setTripReports((prev) => [optimistic, ...prev]);
+      let inserted = null;
+      let lastErr = null;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const slug = attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`;
+        const { data, error } = await supabase.from("trip_reports").insert({
+          user_id: uid,
+          slug,
+          name: trimmedName,
+          description: (description || "").trim() || null,
+          status: "draft"
+        }).select().single();
+        if (!error) {
+          inserted = data;
+          break;
+        }
+        lastErr = error;
+        if (error.code !== "23505") break;
+      }
+      if (!inserted) {
+        console.error("[trip_reports] create draft failed", lastErr);
+        showErrorToast(`Couldn't create draft: ${lastErr && (lastErr.message || lastErr.code) || "unknown error"}`);
+        setTripReports((prev) => prev.filter((t) => t.id !== tmpId));
+        return null;
+      }
+      setTripReports((prev) => prev.map((t) => t.id === tmpId ? inserted : t));
+      return inserted;
+    };
+    const updateTripDraft = async (id, updates) => {
+      const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+      if (!uid || !id || typeof id !== "string" || id.length < 20) return null;
+      setTripReports((prev) => prev.map((t) => t.id === id ? { ...t, ...updates, updated_at: (/* @__PURE__ */ new Date()).toISOString() } : t));
+      try {
+        const { data, error } = await supabase.from("trip_reports").update({ ...updates, updated_at: (/* @__PURE__ */ new Date()).toISOString() }).eq("id", id).eq("user_id", uid).select().single();
+        if (error) {
+          console.error("[trip_reports] update failed", error);
+          showErrorToast(`Couldn't save: ${error.message || error.code || "unknown error"}`);
+          return null;
+        }
+        setTripReports((prev) => prev.map((t) => t.id === id ? data : t));
+        return data;
+      } catch (e) {
+        console.error("[trip_reports] update threw", e);
+        showErrorToast(`Couldn't save: ${e && (e.message || e.code) || String(e)}`);
+        return null;
+      }
+    };
+    const publishTripDraft = async (id) => {
+      const t = tripReports.find((tr) => tr.id === id);
+      if (!t) return null;
+      if (!t.route_data || !(t.route_data.pins && t.route_data.pins.length > 0 || t.route_data.points && t.route_data.points.length > 0)) {
+        showErrorToast("Add a route before publishing.");
+        return null;
+      }
+      const rd = t.route_data;
+      const heroFromPhotos = Array.isArray(rd.photos) && rd.photos[0] ? rd.photos[0].url || rd.photos[0] : null;
+      const updates = {
+        status: "published",
+        published_at: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      if (!t.hero_img && heroFromPhotos) updates.hero_img = heroFromPhotos;
+      if (!t.distance_mi && rd.distanceMi) updates.distance_mi = rd.distanceMi;
+      if (!t.duration_min && rd.duration) updates.duration_min = Math.round((rd.duration || 0) / 60);
+      if (!t.elev_gain_ft && rd.elevGainFt) updates.elev_gain_ft = rd.elevGainFt;
+      return await updateTripDraft(id, updates);
+    };
+    const deleteTripDraft = async (id) => {
+      const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+      if (!uid || !id) return;
+      setTripReports((prev) => prev.filter((t) => t.id !== id));
+      try {
+        await supabase.from("trip_reports").delete().eq("id", id).eq("user_id", uid);
+      } catch (e) {
+        console.error("[trip_reports] delete failed", e);
+      }
+    };
     const addCampingSpot = async (spot) => {
       const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
       if (!uid || !spot || spot.lat == null || spot.lng == null) return null;
@@ -52829,7 +53089,14 @@ ${suffix}`;
     }, onGoToPost: (id) => {
       setProfileStack([]);
       setScreen("feed");
-    }, myPoints: myTotalPoints }) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, isGuest && /* @__PURE__ */ import_react4.default.createElement(GuestBanner, { onSignIn: () => setShowGuestPrompt(true) }), screen === "feed" && renderFeedScopedTo({ hideFilters: false }), screen === "forum" && /* @__PURE__ */ import_react4.default.createElement(ForumScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), pendingThread, onPendingHandled: () => setPendingThread(null), onAddNotification: requireAuth(addNotification), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onAddFeedPost: requireAuth((post2) => addPost(post2)), userThreads: forumUserThreads, setUserThreads: requireAuth(setForumUserThreads), userReplies: forumUserReplies, setUserReplies: requireAuth(setForumUserReplies), likedForumItems: forumLikedItems, setLikedForumItems: requireAuth(setForumLikedItems), forumLikeCounts, setForumLikeCounts: requireAuth(setForumLikeCounts), forumViewCounts, setForumViewCounts, onAwardPoints: awardPoints }), screen === "routes" && /* @__PURE__ */ import_react4.default.createElement(RoutesScreen, { userBuilds: myBuildsForLink, onRecordRoute: requireAuth(() => setShowRecorder(true)), onManualEntry: requireAuth(() => setShowManualRoute(true)), userRoutes, onUpdateRoute: requireAuth((routeId, updates) => setUserRoutes((prev) => prev.map((r) => r.id === routeId ? { ...r, ...updates } : r))), savedRoutes, onSaveRoute: requireAuth((route) => setSavedRoutes((prev) => prev.some((r) => r.id === route.id || r.name === route.name) ? prev : [route, ...prev])), onUnsaveRoute: requireAuth((routeId) => setSavedRoutes((prev) => prev.filter((r) => r.id !== routeId && r.name !== routeId))), onOpenDM: (user, msg, sharedPost) => openDM(user, msg, sharedPost), onAddFeedPost: requireAuth((post2) => addPost(post2)), onStartNav: (route) => setActiveNavRoute(route), campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onPostBuildToFeed: requireAuth((b, opts) => {
+    }, myPoints: myTotalPoints }) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, isGuest && /* @__PURE__ */ import_react4.default.createElement(GuestBanner, { onSignIn: () => setShowGuestPrompt(true) }), screen === "feed" && renderFeedScopedTo({ hideFilters: false }), screen === "forum" && /* @__PURE__ */ import_react4.default.createElement(ForumScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), pendingThread, onPendingHandled: () => setPendingThread(null), onAddNotification: requireAuth(addNotification), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onAddFeedPost: requireAuth((post2) => addPost(post2)), userThreads: forumUserThreads, setUserThreads: requireAuth(setForumUserThreads), userReplies: forumUserReplies, setUserReplies: requireAuth(setForumUserReplies), likedForumItems: forumLikedItems, setLikedForumItems: requireAuth(setForumLikedItems), forumLikeCounts, setForumLikeCounts: requireAuth(setForumLikeCounts), forumViewCounts, setForumViewCounts, onAwardPoints: awardPoints }), screen === "routes" && /* @__PURE__ */ import_react4.default.createElement(RoutesScreen, { userBuilds: myBuildsForLink, onRecordRoute: requireAuth(() => setShowRecorder(true)), onManualEntry: requireAuth(() => setShowManualRoute(true)), userRoutes, onUpdateRoute: requireAuth((routeId, updates) => setUserRoutes((prev) => prev.map((r) => r.id === routeId ? { ...r, ...updates } : r))), savedRoutes, onSaveRoute: requireAuth((route) => setSavedRoutes((prev) => prev.some((r) => r.id === route.id || r.name === route.name) ? prev : [route, ...prev])), onUnsaveRoute: requireAuth((routeId) => setSavedRoutes((prev) => prev.filter((r) => r.id !== routeId && r.name !== routeId))), onOpenDM: (user, msg, sharedPost) => openDM(user, msg, sharedPost), onAddFeedPost: requireAuth((post2) => addPost(post2)), onStartNav: (route) => setActiveNavRoute(route), campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, tripReports, onCreateTripDraft: requireAuth(createTripDraft), onChooseManual: (draftId) => {
+      setPendingTripDraftId(draftId);
+      setShowManualRoute(true);
+    }, onChooseLive: (draftId) => {
+      setPendingTripDraftId(draftId);
+      setShowRecorder(true);
+    }, onChooseSkip: (_draftId) => {
+    } }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onPostBuildToFeed: requireAuth((b, opts) => {
       const rawBd = b.buildData;
       const bd = scrubLocalPhotosFromBuildData(rawBd);
       const isLocalUrl = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:"));
@@ -52883,7 +53150,10 @@ ${suffix}`;
         showPublicLands,
         setShowPublicLands,
         onAddCampingSpot: requireAuth(addCampingSpot),
-        onClose: () => setShowRecorder(false),
+        onClose: () => {
+          setShowRecorder(false);
+          setPendingTripDraftId(null);
+        },
         onSave: (routeData) => {
           const id = "rec_route_" + Date.now();
           const distMi = routeData.distance ? (routeData.distance / 1609.34).toFixed(1) : "\u2014";
@@ -52904,6 +53174,36 @@ ${suffix}`;
             allPins = [...routeData.pins, ...photoPins];
           } else {
             allPins = recPins;
+          }
+          if (pendingTripDraftId) {
+            const startPin = allPins[0] || routeData.points && routeData.points[0] || null;
+            const route_data = {
+              pins: allPins,
+              points: routeData.points || [],
+              photos: routeData.photos || [],
+              distance: routeData.distance || null,
+              distanceMi: typeof routeData.distance === "number" ? routeData.distance / 1609.34 : null,
+              duration: routeData.duration || null,
+              elevGainFt: Number(routeData.elevGain) || 0,
+              terrains: routeData.terrains || [],
+              tags: routeData.tags || []
+            };
+            const updates = { route_data };
+            if (startPin) {
+              updates.start_lat = startPin.lat;
+              updates.start_lng = startPin.lng;
+              updates.start_label = routeData.location || routeData.region || null;
+            }
+            if (route_data.distanceMi) updates.distance_mi = route_data.distanceMi;
+            if (route_data.duration) updates.duration_min = Math.round((route_data.duration || 0) / 60);
+            if (route_data.elevGainFt) updates.elev_gain_ft = route_data.elevGainFt;
+            if (routeData.region) updates.region = routeData.region;
+            if (routeData.terrains) updates.terrains = routeData.terrains;
+            if (routeData.tags) updates.tags = routeData.tags;
+            updateTripDraft(pendingTripDraftId, updates);
+            setPendingTripDraftId(null);
+            setShowRecorder(false);
+            return;
           }
           setUserRoutes((prev) => [{
             id,
@@ -52963,9 +53263,41 @@ ${suffix}`;
       {
         isManual: true,
         userBuilds: myBuildsForLink,
-        onBack: () => setShowManualRoute(false),
+        onBack: () => {
+          setShowManualRoute(false);
+          setPendingTripDraftId(null);
+        },
         onPublish: (routeData) => {
           const id = "user_route_" + Date.now();
+          if (pendingTripDraftId) {
+            const startPin = routeData.pins && routeData.pins[0] || routeData.points && routeData.points[0] || null;
+            const route_data = {
+              pins: routeData.pins || [],
+              points: routeData.points || [],
+              photos: routeData.photos || [],
+              distanceMi: parseFloat(routeData.distance) || null,
+              duration: null,
+              durationStr: routeData.time || null,
+              elevGainFt: Number(routeData.elevGain) || 0,
+              terrains: routeData.terrains || [],
+              tags: routeData.tags || []
+            };
+            const updates = { route_data };
+            if (startPin) {
+              updates.start_lat = startPin.lat;
+              updates.start_lng = startPin.lng;
+              updates.start_label = routeData.location || null;
+            }
+            if (route_data.distanceMi) updates.distance_mi = route_data.distanceMi;
+            if (route_data.elevGainFt) updates.elev_gain_ft = route_data.elevGainFt;
+            if (routeData.terrains) updates.terrains = routeData.terrains;
+            if (routeData.tags) updates.tags = routeData.tags;
+            if (routeData.difficulty) updates.difficulty = routeData.difficulty;
+            updateTripDraft(pendingTripDraftId, updates);
+            setPendingTripDraftId(null);
+            setShowManualRoute(false);
+            return;
+          }
           setUserRoutes((prev) => [{
             id,
             name: routeData.name,
