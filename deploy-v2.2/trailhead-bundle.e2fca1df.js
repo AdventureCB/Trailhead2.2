@@ -43148,10 +43148,10 @@ ${suffix}`;
       { key: "builds", label: "Builds", icon: Wrench },
       { key: "ranks", label: "Ranks", icon: Trophy }
     ];
-    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", position: "sticky", bottom: 0, background: T.darkCard, padding: "6px 0 max(6px, env(safe-area-inset-bottom))", borderTop: `1px solid ${T.charcoal}`, zIndex: 100, flexShrink: 0 } }, items.map((it) => {
+    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", position: "sticky", bottom: 0, background: T.darkCard, padding: "10px 0 max(10px, env(safe-area-inset-bottom))", borderTop: `1px solid ${T.charcoal}`, zIndex: 100, flexShrink: 0 } }, items.map((it) => {
       const Icon2 = it.icon;
       const isActive = active === it.key;
-      return /* @__PURE__ */ import_react4.default.createElement("button", { key: it.key, onClick: () => onNav(it.key), style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, background: "none", border: "none", cursor: "pointer", padding: "4px 0", position: "relative" } }, isActive && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: -8, width: 20, height: 3, borderRadius: 2, background: T.red } }), /* @__PURE__ */ import_react4.default.createElement(Icon2, { size: 20, color: isActive ? T.red : T.tertiary, strokeWidth: 1.5 }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: isActive ? T.red : T.tertiary, letterSpacing: 1, fontWeight: 600 } }, it.label.toUpperCase()));
+      return /* @__PURE__ */ import_react4.default.createElement("button", { key: it.key, onClick: () => onNav(it.key), style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "8px 0", position: "relative" } }, isActive && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: -10, width: 20, height: 3, borderRadius: 2, background: T.red } }), /* @__PURE__ */ import_react4.default.createElement(Icon2, { size: 22, color: isActive ? T.red : T.tertiary, strokeWidth: 1.5 }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: isActive ? T.red : T.tertiary, letterSpacing: 1, fontWeight: 600 } }, it.label.toUpperCase()));
     }));
   }
   function NotifBadge({ count, color }) {
