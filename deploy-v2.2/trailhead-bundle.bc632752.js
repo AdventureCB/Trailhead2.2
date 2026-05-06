@@ -43162,6 +43162,14 @@ ${suffix}`;
         ["camping-spots-clusters", "camping-spots-cluster-count", "camping-spots-points"].forEach((id) => {
           if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", vis);
         });
+        ["camping-spots-clusters", "camping-spots-cluster-count", "camping-spots-points"].forEach((id) => {
+          if (map.getLayer(id)) {
+            try {
+              map.moveLayer(id);
+            } catch (_) {
+            }
+          }
+        });
       };
       if (map.isStyleLoaded()) ensureLayers();
       else map.once("load", ensureLayers);
