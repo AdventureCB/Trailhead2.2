@@ -42892,6 +42892,15 @@ ${suffix}`;
       return null;
     }
   }
+  function computeMaxElevFtFromPoints(points) {
+    if (!Array.isArray(points) || points.length === 0) return null;
+    let maxAlt = -Infinity;
+    for (const p of points) {
+      if (p && typeof p.alt === "number" && isFinite(p.alt) && p.alt > maxAlt) maxAlt = p.alt;
+    }
+    if (!isFinite(maxAlt)) return null;
+    return Math.round(maxAlt * 3.28084);
+  }
   async function fetchElevationsAlongPath(coords) {
     if (!Array.isArray(coords) || coords.length < 2) return null;
     try {
@@ -47065,7 +47074,10 @@ ${suffix}`;
         // round to 1 decimal so the editor's distance field looks tidy.
         distance: routeStats && routeStats.distanceMi != null ? routeStats.distanceMi.toFixed(1) : null,
         time: routeStats ? routeStats.timeStr : null,
-        elevGain: routeStats ? routeStats.elevGainFt : 0
+        elevGain: routeStats ? routeStats.elevGainFt : 0,
+        // Open-Elevation already populated this in routeStats; we forward it
+        // unchanged so the trip-report row gets max_elev_ft on save.
+        maxElev: routeStats ? routeStats.maxElevFt : 0
       });
     };
     const selectedPin = selectedIdx != null ? pins[selectedIdx] : null;
@@ -47102,6 +47114,9 @@ ${suffix}`;
     const [tags, setTags] = (0, import_react4.useState)(safe.tags || []);
     const [pinNotes, setPinNotes] = (0, import_react4.useState)(initialPins.map((p) => p.note || ""));
     const [photos, setPhotos] = (0, import_react4.useState)(Array.isArray(rd.photos) ? rd.photos : []);
+    const [distanceMi, setDistanceMi] = (0, import_react4.useState)(safe.distance_mi != null ? String(safe.distance_mi) : "");
+    const [elevGainFt, setElevGainFt] = (0, import_react4.useState)(safe.elev_gain_ft != null ? String(safe.elev_gain_ft) : "");
+    const [maxElevFt, setMaxElevFt] = (0, import_react4.useState)(safe.max_elev_ft != null ? String(safe.max_elev_ft) : "");
     const [tagInput, setTagInput] = (0, import_react4.useState)("");
     const [confirmingDelete, setConfirmingDelete] = (0, import_react4.useState)(false);
     const [confirmingPublish, setConfirmingPublish] = (0, import_react4.useState)(false);
@@ -47119,6 +47134,9 @@ ${suffix}`;
       setTags(safe.tags || []);
       setPinNotes(initialPins.map((p) => p.note || ""));
       setPhotos(Array.isArray(rd.photos) ? rd.photos : []);
+      setDistanceMi(safe.distance_mi != null ? String(safe.distance_mi) : "");
+      setElevGainFt(safe.elev_gain_ft != null ? String(safe.elev_gain_ft) : "");
+      setMaxElevFt(safe.max_elev_ft != null ? String(safe.max_elev_ft) : "");
     }, [safe.id]);
     (0, import_react4.useEffect)(() => {
       if (!isMine) return;
@@ -47179,6 +47197,9 @@ ${suffix}`;
       if (saving) return;
       setSaving(true);
       const mergedPins = initialPins.map((p, i) => ({ ...p, note: (pinNotes[i] || "").trim() || void 0 }));
+      const distNum = distanceMi.trim() === "" ? null : parseFloat(distanceMi);
+      const elevGainNum = elevGainFt.trim() === "" ? null : parseInt(elevGainFt, 10);
+      const maxElevNum = maxElevFt.trim() === "" ? null : parseInt(maxElevFt, 10);
       const updates = {
         name: name.trim(),
         description: description.trim() || null,
@@ -47188,6 +47209,9 @@ ${suffix}`;
         state_code: stateCode || null,
         terrains: terrains.length > 0 ? terrains : null,
         tags: tags.length > 0 ? tags : null,
+        distance_mi: isNaN(distNum) ? null : distNum,
+        elev_gain_ft: isNaN(elevGainNum) ? null : elevGainNum,
+        max_elev_ft: isNaN(maxElevNum) ? null : maxElevNum,
         route_data: { ...rd, pins: mergedPins, photos }
       };
       await onSave(updates);
@@ -47221,7 +47245,43 @@ ${suffix}`;
         disabled: !isMine,
         style: { width: "100%", boxSizing: "border-box", padding: "11px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none" }
       }
-    ), safe.start_lat != null && safe.start_lng != null && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, display: "block", marginTop: 4 } }, safe.start_lat.toFixed(5), ", ", safe.start_lng.toFixed(5))), hasRoute && initialPins.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 8 } }, "PIN NOTES \u2014 OPTIONAL"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 10 } }, initialPins.map((p, i) => {
+    ), safe.start_lat != null && safe.start_lng != null && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, display: "block", marginTop: 4 } }, safe.start_lat.toFixed(5), ", ", safe.start_lng.toFixed(5))), hasRoute && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600 } }, "STATS"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, fontStyle: "italic" } }, "auto-populated from route")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement("label", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block", marginBottom: 4 } }, "DISTANCE"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement(
+      "input",
+      {
+        type: "number",
+        inputMode: "decimal",
+        step: "0.1",
+        value: distanceMi,
+        onChange: (e) => setDistanceMi(e.target.value),
+        disabled: !isMine,
+        placeholder: "0",
+        style: { width: "100%", boxSizing: "border-box", padding: "9px 30px 9px 12px", borderRadius: 6, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none" }
+      }
+    ), /* @__PURE__ */ import_react4.default.createElement("span", { style: { position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.5 } }, "MI"))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement("label", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block", marginBottom: 4 } }, "ELEV GAIN"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement(
+      "input",
+      {
+        type: "number",
+        inputMode: "numeric",
+        step: "1",
+        value: elevGainFt,
+        onChange: (e) => setElevGainFt(e.target.value),
+        disabled: !isMine,
+        placeholder: "0",
+        style: { width: "100%", boxSizing: "border-box", padding: "9px 30px 9px 12px", borderRadius: 6, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none" }
+      }
+    ), /* @__PURE__ */ import_react4.default.createElement("span", { style: { position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.5 } }, "FT"))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement("label", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block", marginBottom: 4 } }, "MAX ELEV"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement(
+      "input",
+      {
+        type: "number",
+        inputMode: "numeric",
+        step: "1",
+        value: maxElevFt,
+        onChange: (e) => setMaxElevFt(e.target.value),
+        disabled: !isMine,
+        placeholder: "0",
+        style: { width: "100%", boxSizing: "border-box", padding: "9px 30px 9px 12px", borderRadius: 6, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none" }
+      }
+    ), /* @__PURE__ */ import_react4.default.createElement("span", { style: { position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.5 } }, "FT"))))), hasRoute && initialPins.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 8 } }, "PIN NOTES \u2014 OPTIONAL"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 10 } }, initialPins.map((p, i) => {
       const label = i === 0 ? "Start" : i === initialPins.length - 1 ? "End" : `Pin ${i + 1}`;
       const isPhoto = !!p.photo;
       return /* @__PURE__ */ import_react4.default.createElement("div", { key: i, style: { ...cardStyle, padding: 12 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 8 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 22, height: 22, borderRadius: "50%", background: i === 0 ? T.green : i === initialPins.length - 1 ? T.red : T.copper, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 700 } }, isPhoto ? "\u{1F4F7}" : i + 1)), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, letterSpacing: 0.4 } }, label), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, marginLeft: "auto" } }, p.lat != null ? `${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}` : "")), /* @__PURE__ */ import_react4.default.createElement(
@@ -53508,7 +53568,8 @@ ${suffix}`;
                 photos: routeData.photos || [],
                 distanceMi: routeData.distance ? parseFloat(routeData.distance) : null,
                 durationStr: routeData.time || null,
-                elevGainFt: Number(routeData.elevGain) || 0
+                elevGainFt: Number(routeData.elevGain) || 0,
+                maxElevFt: Number(routeData.maxElev) || null
               }
             };
             if (startPin) {
@@ -53517,6 +53578,7 @@ ${suffix}`;
             }
             if (routeData.distance) updates.distance_mi = parseFloat(routeData.distance);
             if (routeData.elevGain) updates.elev_gain_ft = Number(routeData.elevGain);
+            if (routeData.maxElev) updates.max_elev_ft = Number(routeData.maxElev);
             const id = pendingTripDraftId;
             updateTripDraft(id, updates);
             setShowTripPinFullscreen(false);
@@ -53596,6 +53658,7 @@ ${suffix}`;
           }
           if (pendingTripDraftId) {
             const startPin = allPins[0] || routeData.points && routeData.points[0] || null;
+            const maxElevFt = computeMaxElevFtFromPoints(routeData.points);
             const route_data = {
               pins: allPins,
               points: routeData.points || [],
@@ -53604,6 +53667,7 @@ ${suffix}`;
               distanceMi: typeof routeData.distance === "number" ? routeData.distance / 1609.34 : null,
               duration: routeData.duration || null,
               elevGainFt: Number(routeData.elevGain) || 0,
+              maxElevFt: maxElevFt || null,
               terrains: routeData.terrains || [],
               tags: routeData.tags || []
             };
@@ -53616,6 +53680,7 @@ ${suffix}`;
             if (route_data.distanceMi) updates.distance_mi = route_data.distanceMi;
             if (route_data.duration) updates.duration_min = Math.round((route_data.duration || 0) / 60);
             if (route_data.elevGainFt) updates.elev_gain_ft = route_data.elevGainFt;
+            if (maxElevFt) updates.max_elev_ft = maxElevFt;
             if (routeData.region) updates.region = routeData.region;
             if (routeData.terrains) updates.terrains = routeData.terrains;
             if (routeData.tags) updates.tags = routeData.tags;
