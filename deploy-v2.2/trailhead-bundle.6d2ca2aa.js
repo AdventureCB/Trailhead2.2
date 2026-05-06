@@ -47010,12 +47010,13 @@ ${suffix}`;
       /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 18, color: T.tertiary })
     ))));
   }
-  function TripPinFullscreen({ initialPins, initialPhotos, onClose, onSave }) {
+  function TripPinFullscreen({ initialPins, initialPhotos, onClose, onSave, currentUserId }) {
     const [pins, setPinsRaw] = (0, import_react4.useState)(Array.isArray(initialPins) ? initialPins : []);
     const [photos, setPhotos] = (0, import_react4.useState)(Array.isArray(initialPhotos) ? initialPhotos : []);
     const [routePoints, setRoutePoints] = (0, import_react4.useState)([]);
     const [routeStats, setRouteStats] = (0, import_react4.useState)(null);
     const [selectedIdx, setSelectedIdx] = (0, import_react4.useState)(null);
+    const [saving, setSaving] = (0, import_react4.useState)(false);
     const photoFileRef = (0, import_react4.useRef)(null);
     const setPins = (updater) => {
       setPinsRaw((prev) => {
@@ -47065,10 +47066,19 @@ ${suffix}`;
     const removePhotoAt = (photoIdx) => {
       setPhotos((prev) => prev.filter((_, i) => i !== photoIdx));
     };
-    const handleSave = () => {
+    const handleSave = async () => {
+      if (saving) return;
+      setSaving(true);
+      let uploadedPhotos = photos;
+      try {
+        if (currentUserId) uploadedPhotos = await uploadPostPhotoList(photos, currentUserId);
+      } catch (e) {
+        console.error("[trip_pins] photo upload failed", e);
+      }
+      if (uploadedPhotos !== photos) setPhotos(uploadedPhotos);
       onSave({
         pins,
-        photos,
+        photos: uploadedPhotos,
         points: routePoints,
         // Distance returned by RoutePinMap callback is already miles; we
         // round to 1 decimal so the editor's distance field looks tidy.
@@ -47079,11 +47089,12 @@ ${suffix}`;
         // unchanged so the trip-report row gets max_elev_ft on save.
         maxElev: routeStats ? routeStats.maxElevFt : 0
       });
+      setSaving(false);
     };
     const selectedPin = selectedIdx != null ? pins[selectedIdx] : null;
     const selectedPhotos = selectedIdx != null ? photosForPin(selectedIdx) : [];
     const pinLabel = (i) => i === 0 ? "Start" : i === pins.length - 1 ? "End" : `Pin ${i + 1}`;
-    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "fixed", top: 0, bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 430, zIndex: 1100, background: T.darkBg, display: "flex", flexDirection: "column" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", background: T.charcoal, borderBottom: `1px solid ${T.darkCard}`, flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: onClose, style: { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center" } }, /* @__PURE__ */ import_react4.default.createElement(ChevronLeft, { size: 22, color: T.white, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "center", lineHeight: 1.2 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 12, fontWeight: 700, color: T.white, letterSpacing: 0.6 } }, pins.length, " ", pins.length === 1 ? "PIN" : "PINS"), routeStats && routeStats.distanceMi != null && /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 0.4 } }, routeStats.distanceMi.toFixed(1), " MI", routeStats.timeStr ? ` \xB7 ${routeStats.timeStr}` : "")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: handleSave, disabled: pins.length < 1, style: { background: pins.length >= 1 ? T.green : T.charcoal, border: "none", cursor: pins.length >= 1 ? "pointer" : "default", padding: "8px 14px", borderRadius: 8, fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5, opacity: pins.length >= 1 ? 1 : 0.5 } }, "SAVE")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, position: "relative", minHeight: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0 } }, /* @__PURE__ */ import_react4.default.createElement(
+    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "fixed", top: 0, bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 430, zIndex: 1100, background: T.darkBg, display: "flex", flexDirection: "column" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", background: T.charcoal, borderBottom: `1px solid ${T.darkCard}`, flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: onClose, style: { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center" } }, /* @__PURE__ */ import_react4.default.createElement(ChevronLeft, { size: 22, color: T.white, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "center", lineHeight: 1.2 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 12, fontWeight: 700, color: T.white, letterSpacing: 0.6 } }, pins.length, " ", pins.length === 1 ? "PIN" : "PINS"), routeStats && routeStats.distanceMi != null && /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 0.4 } }, routeStats.distanceMi.toFixed(1), " MI", routeStats.timeStr ? ` \xB7 ${routeStats.timeStr}` : "")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: handleSave, disabled: pins.length < 1 || saving, style: { background: pins.length >= 1 && !saving ? T.green : T.charcoal, border: "none", cursor: pins.length >= 1 && !saving ? "pointer" : "default", padding: "8px 14px", borderRadius: 8, fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5, opacity: pins.length >= 1 && !saving ? 1 : 0.5 } }, saving ? "\u2026" : "SAVE")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, position: "relative", minHeight: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0 } }, /* @__PURE__ */ import_react4.default.createElement(
       RoutePinMap,
       {
         fillParent: true,
@@ -47196,10 +47207,19 @@ ${suffix}`;
     const handleSave = async () => {
       if (saving) return;
       setSaving(true);
+      let uploadedPhotos = photos;
+      try {
+        if (currentUserId) uploadedPhotos = await uploadPostPhotoList(photos, currentUserId);
+      } catch (e) {
+        console.error("[trip_reports] photo upload failed", e);
+      }
+      if (uploadedPhotos !== photos) setPhotos(uploadedPhotos);
       const mergedPins = initialPins.map((p, i) => ({ ...p, note: (pinNotes[i] || "").trim() || void 0 }));
       const distNum = distanceMi.trim() === "" ? null : parseFloat(distanceMi);
       const elevGainNum = elevGainFt.trim() === "" ? null : parseInt(elevGainFt, 10);
       const maxElevNum = maxElevFt.trim() === "" ? null : parseInt(maxElevFt, 10);
+      const firstPhotoUrl = uploadedPhotos.length > 0 ? typeof uploadedPhotos[0] === "string" ? uploadedPhotos[0] : uploadedPhotos[0] && uploadedPhotos[0].url || null : null;
+      const heroCandidate = firstPhotoUrl && /^https?:\/\//.test(firstPhotoUrl) ? firstPhotoUrl : null;
       const updates = {
         name: name.trim(),
         description: description.trim() || null,
@@ -47212,8 +47232,9 @@ ${suffix}`;
         distance_mi: isNaN(distNum) ? null : distNum,
         elev_gain_ft: isNaN(elevGainNum) ? null : elevGainNum,
         max_elev_ft: isNaN(maxElevNum) ? null : maxElevNum,
-        route_data: { ...rd, pins: mergedPins, photos }
+        route_data: { ...rd, pins: mergedPins, photos: uploadedPhotos }
       };
+      if (heroCandidate && !safe.hero_img) updates.hero_img = heroCandidate;
       await onSave(updates);
       setSaving(false);
       setSavedTick(Date.now());
@@ -53477,7 +53498,7 @@ ${suffix}`;
         status: "published",
         published_at: (/* @__PURE__ */ new Date()).toISOString()
       };
-      if (!t.hero_img && heroFromPhotos) updates.hero_img = heroFromPhotos;
+      if (!t.hero_img && heroFromPhotos && /^https?:\/\//.test(heroFromPhotos)) updates.hero_img = heroFromPhotos;
       if (!t.distance_mi && rd.distanceMi) updates.distance_mi = rd.distanceMi;
       if (!t.duration_min && rd.duration) updates.duration_min = Math.round((rd.duration || 0) / 60);
       if (!t.elev_gain_ft && rd.elevGainFt) updates.elev_gain_ft = rd.elevGainFt;
@@ -53903,6 +53924,7 @@ ${suffix}`;
         {
           initialPins: Array.isArray(rd.pins) ? rd.pins : [],
           initialPhotos: Array.isArray(rd.photos) ? rd.photos : [],
+          currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id,
           onClose: () => {
             const id = pendingTripDraftId;
             setShowTripPinFullscreen(false);
@@ -53986,7 +54008,7 @@ ${suffix}`;
           setShowRecorder(false);
           setPendingTripDraftId(null);
         },
-        onSave: (routeData) => {
+        onSave: async (routeData) => {
           const id = "rec_route_" + Date.now();
           const distMi = routeData.distance ? (routeData.distance / 1609.34).toFixed(1) : "\u2014";
           const durStr = routeData.duration ? typeof routeData.duration === "number" ? (() => {
@@ -53994,10 +54016,19 @@ ${suffix}`;
             const m = Math.floor(routeData.duration % 3600 / 60);
             return h > 0 ? `${h}H ${m}M` : `${m}M`;
           })() : routeData.duration : "\u2014";
+          const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+          let workingPhotos = routeData.photos || [];
+          if (pendingTripDraftId && uid && workingPhotos.length > 0) {
+            try {
+              workingPhotos = await uploadPostPhotoList(workingPhotos, uid);
+            } catch (e) {
+              console.error("[trip_reports] recorder photo upload failed", e);
+            }
+          }
           const recPins = [];
           if (routeData.points && routeData.points.length > 0) {
             recPins.push({ lat: routeData.points[0].lat, lng: routeData.points[0].lng });
-            if (routeData.photos) routeData.photos.filter((p) => p.lat && p.lng).forEach((p) => recPins.push({ lat: p.lat, lng: p.lng, photo: p.url || true, isPhotoOnly: true }));
+            workingPhotos.filter((p) => p.lat && p.lng).forEach((p) => recPins.push({ lat: p.lat, lng: p.lng, photo: p.url || true, isPhotoOnly: true }));
             if (routeData.points.length > 1) recPins.push({ lat: routeData.points[routeData.points.length - 1].lat, lng: routeData.points[routeData.points.length - 1].lng });
           }
           let allPins;
@@ -54013,7 +54044,7 @@ ${suffix}`;
             const route_data = {
               pins: allPins,
               points: routeData.points || [],
-              photos: routeData.photos || [],
+              photos: workingPhotos,
               distance: routeData.distance || null,
               distanceMi: typeof routeData.distance === "number" ? routeData.distance / 1609.34 : null,
               duration: routeData.duration || null,
@@ -54104,14 +54135,23 @@ ${suffix}`;
           setShowManualRoute(false);
           setPendingTripDraftId(null);
         },
-        onPublish: (routeData) => {
+        onPublish: async (routeData) => {
           const id = "user_route_" + Date.now();
           if (pendingTripDraftId) {
+            const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+            let uploadedManualPhotos = routeData.photos || [];
+            if (uid && uploadedManualPhotos.length > 0) {
+              try {
+                uploadedManualPhotos = await uploadPostPhotoList(uploadedManualPhotos, uid);
+              } catch (e) {
+                console.error("[trip_reports] manual photo upload failed", e);
+              }
+            }
             const startPin = routeData.pins && routeData.pins[0] || routeData.points && routeData.points[0] || null;
             const route_data = {
               pins: routeData.pins || [],
               points: routeData.points || [],
-              photos: routeData.photos || [],
+              photos: uploadedManualPhotos,
               distanceMi: parseFloat(routeData.distance) || null,
               duration: null,
               durationStr: routeData.time || null,
