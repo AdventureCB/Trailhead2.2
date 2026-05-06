@@ -42774,19 +42774,168 @@ ${suffix}`;
   fontLink.href = "https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;1,400&display=swap";
   fontLink.rel = "stylesheet";
   if (!document.querySelector('link[href*="Source+Serif+4"]')) document.head.appendChild(fontLink);
-  var GMAPS_KEY = "AIzaSyBEqra4C4sdGg7ufDyh6xjwo5g79nXJHkc";
-  function loadGmaps() {
-    if (window.google?.maps) return Promise.resolve();
-    if (window._gmapsReadyPromise) return window._gmapsReadyPromise;
-    window._gmapsReadyPromise = new Promise((resolve, reject) => {
-      window._gmapsReady = resolve;
+  var MAPBOX_TOKEN = "pk.eyJ1IjoibG9uZXBlYWtvdmVybGFuZCIsImEiOiJjbW91ODliaDQwNzMzMnBweGNkN3JtMjRwIn0.PAkLOo_i_5FuW9w1VH-mIw";
+  var MAPBOX_STYLE = "mapbox://styles/mapbox/outdoors-v12";
+  function loadMapbox() {
+    if (window.mapboxgl) return Promise.resolve(window.mapboxgl);
+    if (window._mapboxReadyPromise) return window._mapboxReadyPromise;
+    window._mapboxReadyPromise = new Promise((resolve, reject) => {
+      if (!document.querySelector("link[data-mapbox-gl-css]")) {
+        const css = document.createElement("link");
+        css.rel = "stylesheet";
+        css.href = "https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.css";
+        css.setAttribute("data-mapbox-gl-css", "1");
+        document.head.appendChild(css);
+      }
       const s = document.createElement("script");
-      s.src = `https://maps.googleapis.com/maps/api/js?key=${GMAPS_KEY}&libraries=places&callback=_gmapsReady`;
+      s.src = "https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.js";
       s.async = true;
-      s.onerror = () => reject(new Error("Failed to load Google Maps"));
+      s.onload = () => {
+        if (!window.mapboxgl) {
+          reject(new Error("Mapbox loaded but mapboxgl undefined"));
+          return;
+        }
+        window.mapboxgl.accessToken = MAPBOX_TOKEN;
+        resolve(window.mapboxgl);
+      };
+      s.onerror = () => reject(new Error("Failed to load Mapbox GL JS"));
       document.head.appendChild(s);
     });
-    return window._gmapsReadyPromise;
+    return window._mapboxReadyPromise;
+  }
+  async function mapboxGeocode(query) {
+    if (!query) return null;
+    try {
+      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${MAPBOX_TOKEN}&limit=1`;
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const data = await res.json();
+      const first = data.features && data.features[0];
+      if (!first) return null;
+      const [lng, lat] = first.center;
+      return { lat, lng, label: first.place_name };
+    } catch (e) {
+      console.error("[mapbox] geocode failed", e);
+      return null;
+    }
+  }
+  function formatMetersUS(m) {
+    if (m == null || isNaN(m)) return "";
+    const ft = m * 3.28084;
+    if (ft < 1e3) return `${Math.round(ft)} ft`;
+    const mi = m / 1609.34;
+    return `${mi >= 10 ? Math.round(mi) : mi.toFixed(1)} mi`;
+  }
+  async function mapboxGeocodeSearch(query, limit = 6) {
+    const trimmed = (query || "").trim();
+    if (!trimmed) return [];
+    try {
+      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(trimmed)}.json?access_token=${MAPBOX_TOKEN}&limit=${limit}&types=poi,place,address,locality,neighborhood,region`;
+      const res = await fetch(url);
+      if (!res.ok) return [];
+      const data = await res.json();
+      return (data.features || []).map((f) => ({ lat: f.center[1], lng: f.center[0], label: f.place_name }));
+    } catch (e) {
+      console.error("[mapbox] geocode search failed", e);
+      return [];
+    }
+  }
+  async function mapboxReverseGeocode(lng, lat) {
+    try {
+      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${MAPBOX_TOKEN}&limit=1`;
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const data = await res.json();
+      const f = data.features && data.features[0];
+      return f ? f.place_name : null;
+    } catch (e) {
+      return null;
+    }
+  }
+  async function fetchElevationsAlongPath(coords) {
+    if (!Array.isArray(coords) || coords.length < 2) return null;
+    try {
+      const samples = Math.min(256, coords.length);
+      const stride = Math.max(1, Math.floor(coords.length / samples));
+      const sampled = [];
+      for (let i = 0; i < coords.length; i += stride) sampled.push(coords[i]);
+      const body = { locations: sampled.map((c) => ({ latitude: c.lat, longitude: c.lng })) };
+      const res = await fetch("https://api.open-elevation.com/api/v1/lookup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      return Array.isArray(data.results) ? data.results.map((r) => r.elevation) : null;
+    } catch (e) {
+      console.error("[elev] open-elevation failed", e);
+      return null;
+    }
+  }
+  function formatSeconds(s) {
+    if (s == null || isNaN(s)) return "";
+    const minutes = Math.round(s / 60);
+    if (minutes < 60) return `${minutes} min`;
+    const hr = Math.floor(minutes / 60);
+    const rem = minutes % 60;
+    return rem > 0 ? `${hr} hr ${rem} min` : `${hr} hr`;
+  }
+  async function mapboxDirections(from, to, opts = {}) {
+    if (!from || !to) return null;
+    try {
+      const stepsParam = opts.steps ? "&steps=true" : "";
+      const wpStr = Array.isArray(opts.waypoints) && opts.waypoints.length > 0 ? opts.waypoints.map((w) => `${w.lng},${w.lat}`).join(";") + ";" : "";
+      const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${from.lng},${from.lat};${wpStr}${to.lng},${to.lat}?geometries=geojson&overview=full${stepsParam}&access_token=${MAPBOX_TOKEN}`;
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const data = await res.json();
+      const route = data.routes && data.routes[0];
+      if (!route) return null;
+      const result = {
+        geometry: route.geometry,
+        // GeoJSON LineString
+        distance: route.distance,
+        // meters
+        duration: route.duration,
+        // seconds
+        distanceText: formatMetersUS(route.distance),
+        durationText: formatSeconds(route.duration)
+      };
+      if (opts.steps) {
+        const leg = route.legs && route.legs[0];
+        result.steps = (leg && leg.steps ? leg.steps : []).map((s) => {
+          const coords = s.geometry && s.geometry.coordinates || [];
+          const first = coords[0] || [from.lng, from.lat];
+          const last = coords[coords.length - 1] || first;
+          return {
+            instruction: s.maneuver && s.maneuver.instruction || "",
+            distance: formatMetersUS(s.distance),
+            duration: formatSeconds(s.duration),
+            startLng: first[0],
+            startLat: first[1],
+            endLng: last[0],
+            endLat: last[1]
+          };
+        });
+      }
+      return result;
+    } catch (e) {
+      console.error("[mapbox] directions failed", e);
+      return null;
+    }
+  }
+  if (!document.querySelector("style[data-trailhead-mapbox]")) {
+    const mbStyle = document.createElement("style");
+    mbStyle.setAttribute("data-trailhead-mapbox", "1");
+    mbStyle.textContent = `
+    @keyframes th-marker-bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+    .th-marker-bounce { animation: th-marker-bounce 0.6s ease-in-out infinite; }
+  `;
+    document.head.appendChild(mbStyle);
   }
   if (!document.querySelector("style[data-trailhead-scroll]")) {
     const scrollStyle = document.createElement("style");
@@ -42861,17 +43010,22 @@ ${suffix}`;
     const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
-  function stripHtml(html) {
-    const tmp = document.createElement("div");
-    tmp.innerHTML = html;
-    return tmp.textContent || tmp.innerText || "";
+  function buildCircleMarkerEl(color, size) {
+    const el = document.createElement("div");
+    el.style.cssText = `width:${size}px;height:${size}px;border-radius:50%;background:${color};border:2px solid #FFFFFF;box-shadow:0 1px 4px rgba(0,0,0,0.4);box-sizing:border-box;`;
+    return el;
+  }
+  function buildEmojiMarkerEl(color, emoji, size) {
+    const el = document.createElement("div");
+    el.style.cssText = `width:${size}px;height:${size}px;border-radius:50%;background:${color};border:2px solid #FFFFFF;box-shadow:0 1px 4px rgba(0,0,0,0.4);box-sizing:border-box;display:flex;align-items:center;justify-content:center;font-size:${Math.round(size * 0.55)}px;line-height:1;`;
+    el.textContent = emoji;
+    return el;
   }
   function MapOverlay({ coords, location: location2, title, onClose, recoveryCtx, onRecoveryStartTrip, onRecoveryArrived }) {
     const query = getMapQuery(coords, location2);
     const mapRef = (0, import_react4.useRef)(null);
     const mapInstance = (0, import_react4.useRef)(null);
     const markerRef = (0, import_react4.useRef)(null);
-    const directionsRenderer = (0, import_react4.useRef)(null);
     const userMarkerRef = (0, import_react4.useRef)(null);
     const watchIdRef = (0, import_react4.useRef)(null);
     const [mode, setMode] = (0, import_react4.useState)("place");
@@ -42896,92 +43050,114 @@ ${suffix}`;
       if (!query || !mapRef.current) return;
       let cancelled = false;
       const init = async () => {
+        let mapboxgl;
         try {
-          await loadGmaps();
+          mapboxgl = await loadMapbox();
         } catch (e) {
-          console.error("Google Maps load failed:", e);
+          console.error("Mapbox load failed:", e);
           return;
         }
         if (cancelled || !mapRef.current) return;
-        const center = destLatLng || { lat: 39.5, lng: -98.35 };
-        const map = new window.google.maps.Map(mapRef.current, {
+        const center = destLatLng ? [destLatLng.lng, destLatLng.lat] : [-98.35, 39.5];
+        const map = new mapboxgl.Map({
+          container: mapRef.current,
+          style: MAPBOX_STYLE,
           center,
-          zoom: destLatLng ? 13 : 5,
-          mapTypeId: "terrain",
-          disableDefaultUI: false,
-          zoomControl: true,
-          mapTypeControl: true,
-          streetViewControl: false,
-          fullscreenControl: false
+          zoom: destLatLng ? 13 : 4
         });
+        map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), "top-right");
         mapInstance.current = map;
-        if (destLatLng) {
-          markerRef.current = new window.google.maps.Marker({
-            position: destLatLng,
-            map,
-            title: title || "Location",
-            icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 10, fillColor: T.red, fillOpacity: 1, strokeColor: T.white, strokeWeight: 2 }
-          });
-        } else if (location2) {
-          const geocoder = new window.google.maps.Geocoder();
-          geocoder.geocode({ address: location2 }, (results, status) => {
-            if (status === "OK" && results[0]) {
-              map.setCenter(results[0].geometry.location);
-              map.setZoom(13);
-              markerRef.current = new window.google.maps.Marker({
-                position: results[0].geometry.location,
-                map,
-                title: title || location2,
-                icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 10, fillColor: T.red, fillOpacity: 1, strokeColor: T.white, strokeWeight: 2 }
-              });
-            }
-          });
-        }
-        directionsRenderer.current = new window.google.maps.DirectionsRenderer({
-          map,
-          suppressMarkers: false,
-          polylineOptions: { strokeColor: T.red, strokeWeight: 4, strokeOpacity: 0.9 }
-        });
-        setMapReady(true);
+        const onMapLoad = () => {
+          if (cancelled) return;
+          if (!map.getSource("directions-route")) {
+            map.addSource("directions-route", {
+              type: "geojson",
+              data: { type: "FeatureCollection", features: [] }
+            });
+            map.addLayer({
+              id: "directions-route-line",
+              type: "line",
+              source: "directions-route",
+              layout: { "line-join": "round", "line-cap": "round" },
+              paint: { "line-color": T.red, "line-width": 4, "line-opacity": 0.9 }
+            });
+          }
+          if (destLatLng) {
+            markerRef.current = new mapboxgl.Marker({ element: buildCircleMarkerEl(T.red, 20) }).setLngLat([destLatLng.lng, destLatLng.lat]).addTo(map);
+          } else if (location2) {
+            mapboxGeocode(location2).then((g) => {
+              if (cancelled || !g || !mapInstance.current) return;
+              mapInstance.current.flyTo({ center: [g.lng, g.lat], zoom: 13, duration: 600 });
+              if (markerRef.current) markerRef.current.remove();
+              markerRef.current = new mapboxgl.Marker({ element: buildCircleMarkerEl(T.red, 20) }).setLngLat([g.lng, g.lat]).addTo(mapInstance.current);
+            });
+          }
+          setMapReady(true);
+        };
+        if (map.isStyleLoaded()) onMapLoad();
+        else map.on("load", onMapLoad);
       };
       init();
       return () => {
         cancelled = true;
+        if (mapInstance.current) {
+          try {
+            mapInstance.current.remove();
+          } catch (e) {
+          }
+          mapInstance.current = null;
+        }
       };
     }, [query]);
     (0, import_react4.useEffect)(() => {
       if (!mapReady || !origin || mode !== "directions" && mode !== "navigating") return;
       setDirError(null);
-      const directionsService = new window.google.maps.DirectionsService();
-      directionsService.route(
-        {
-          origin,
-          destination: destLatLng ? destLatLng : location2,
-          travelMode: window.google.maps.TravelMode.DRIVING
-        },
-        (result, status) => {
-          if (status === "OK" && directionsRenderer.current) {
-            if (markerRef.current) markerRef.current.setMap(null);
-            directionsRenderer.current.setDirections(result);
-            const leg = result.routes[0]?.legs[0];
-            if (leg) {
-              setRouteSteps(leg.steps.map((s) => ({
-                instruction: stripHtml(s.instructions),
-                distance: s.distance?.text || "",
-                duration: s.duration?.text || "",
-                endLat: s.end_location.lat(),
-                endLng: s.end_location.lng(),
-                startLat: s.start_location.lat(),
-                startLng: s.start_location.lng()
-              })));
-              setTripSummary({ distance: leg.distance?.text || "", duration: leg.duration?.text || "" });
-              setCurrentStepIdx(0);
-            }
-          } else {
-            setDirError("Could not find a route. Try a different starting location.");
-          }
+      let cancelled = false;
+      (async () => {
+        let originPt = null;
+        if (typeof origin === "string" && origin.includes(",")) {
+          const [a, b] = origin.split(",").map((s) => parseFloat(s.trim()));
+          if (!isNaN(a) && !isNaN(b)) originPt = { lat: a, lng: b };
         }
-      );
+        if (!originPt && typeof origin === "string") {
+          const g = await mapboxGeocode(origin);
+          if (g) originPt = { lat: g.lat, lng: g.lng };
+        }
+        let destPt = destLatLng;
+        if (!destPt && location2) {
+          const g = await mapboxGeocode(location2);
+          if (g) destPt = { lat: g.lat, lng: g.lng };
+        }
+        if (cancelled || !originPt || !destPt) {
+          if (!cancelled) setDirError("Could not find a route. Try a different starting location.");
+          return;
+        }
+        const dir = await mapboxDirections(originPt, destPt, { steps: true });
+        if (cancelled) return;
+        if (!dir) {
+          setDirError("Could not find a route. Try a different starting location.");
+          return;
+        }
+        if (markerRef.current) {
+          markerRef.current.remove();
+          markerRef.current = null;
+        }
+        const map = mapInstance.current;
+        if (!map) return;
+        const src = map.getSource("directions-route");
+        if (src) src.setData({ type: "Feature", geometry: dir.geometry, properties: {} });
+        const coordsArr = dir.geometry.coordinates;
+        if (coordsArr.length > 1) {
+          const bounds = coordsArr.reduce((b, c) => b.extend(c), new window.mapboxgl.LngLatBounds(coordsArr[0], coordsArr[0]));
+          map.fitBounds(bounds, { padding: 60, duration: 600 });
+        }
+        setRouteSteps(dir.steps || []);
+        setTripSummary({ distance: dir.distanceText, duration: dir.durationText });
+        setCurrentStepIdx(0);
+      })();
+      return () => {
+        cancelled = true;
+      };
     }, [origin, mode, mapReady]);
     (0, import_react4.useEffect)(() => {
       if (mode !== "navigating") {
@@ -42990,7 +43166,10 @@ ${suffix}`;
           watchIdRef.current = null;
         }
         if (userMarkerRef.current) {
-          userMarkerRef.current.setMap(null);
+          try {
+            userMarkerRef.current.remove();
+          } catch (e) {
+          }
           userMarkerRef.current = null;
         }
         return;
@@ -43000,19 +43179,15 @@ ${suffix}`;
         (pos) => {
           const lat = pos.coords.latitude;
           const lng = pos.coords.longitude;
-          const p = new window.google.maps.LatLng(lat, lng);
           setUserPos({ lat, lng });
+          const map = mapInstance.current;
+          if (!map) return;
           if (!userMarkerRef.current) {
-            userMarkerRef.current = new window.google.maps.Marker({
-              position: p,
-              map: mapInstance.current,
-              icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 9, fillColor: "#4285F4", fillOpacity: 1, strokeColor: T.white, strokeWeight: 3 },
-              zIndex: 999
-            });
+            userMarkerRef.current = new window.mapboxgl.Marker({ element: buildCircleMarkerEl("#4285F4", 18) }).setLngLat([lng, lat]).addTo(map);
           } else {
-            userMarkerRef.current.setPosition(p);
+            userMarkerRef.current.setLngLat([lng, lat]);
           }
-          mapInstance.current.panTo(p);
+          map.panTo([lng, lat]);
           setCurrentStepIdx((prev) => {
             if (prev >= routeSteps.length) return prev;
             const step = routeSteps[prev];
@@ -43079,13 +43254,15 @@ ${suffix}`;
     const endTrip = () => {
       setMode("directions");
       setDistToNext(null);
-      if (mapInstance.current) {
-        const bounds = new window.google.maps.LatLngBounds();
+      const map = mapInstance.current;
+      if (map && routeSteps.length > 0 && window.mapboxgl) {
+        const first = routeSteps[0];
+        const bounds = new window.mapboxgl.LngLatBounds([first.startLng, first.startLat], [first.startLng, first.startLat]);
         routeSteps.forEach((s) => {
-          bounds.extend({ lat: s.startLat, lng: s.startLng });
-          bounds.extend({ lat: s.endLat, lng: s.endLng });
+          bounds.extend([s.startLng, s.startLat]);
+          bounds.extend([s.endLng, s.endLat]);
         });
-        mapInstance.current.fitBounds(bounds);
+        map.fitBounds(bounds, { padding: 60, duration: 600 });
       }
     };
     const clearRoute = () => {
@@ -43097,11 +43274,20 @@ ${suffix}`;
       setRouteSteps([]);
       setTripSummary(null);
       setDistToNext(null);
-      if (directionsRenderer.current) directionsRenderer.current.setDirections({ routes: [] });
-      if (markerRef.current && mapInstance.current) {
-        markerRef.current.setMap(mapInstance.current);
-        if (destLatLng) mapInstance.current.setCenter(destLatLng);
-        mapInstance.current.setZoom(13);
+      const map = mapInstance.current;
+      if (map) {
+        const src = map.getSource("directions-route");
+        if (src) src.setData({ type: "FeatureCollection", features: [] });
+      }
+      if (map && destLatLng && window.mapboxgl) {
+        if (markerRef.current) {
+          try {
+            markerRef.current.remove();
+          } catch (e) {
+          }
+        }
+        markerRef.current = new window.mapboxgl.Marker({ element: buildCircleMarkerEl(T.red, 20) }).setLngLat([destLatLng.lng, destLatLng.lat]).addTo(map);
+        map.flyTo({ center: [destLatLng.lng, destLatLng.lat], zoom: 13, duration: 500 });
       }
     };
     const currentStep = routeSteps[currentStepIdx];
@@ -45005,7 +45191,7 @@ ${suffix}`;
   function RouteRecorder({ onClose, onSave, skipDetailsForm, userBuilds }) {
     const mapRef = (0, import_react4.useRef)(null);
     const mapInst = (0, import_react4.useRef)(null);
-    const polyRef = (0, import_react4.useRef)(null);
+    const trackCoordsRef = (0, import_react4.useRef)([]);
     const userDotRef = (0, import_react4.useRef)(null);
     const watchRef = (0, import_react4.useRef)(null);
     const startTimeRef = (0, import_react4.useRef)(null);
@@ -45028,20 +45214,21 @@ ${suffix}`;
     const recCamRef = (0, import_react4.useRef)(null);
     const photoMarkersRef = (0, import_react4.useRef)([]);
     const waypointMarkersRef = (0, import_react4.useRef)([]);
+    const refreshTrackLine = () => {
+      const map = mapInst.current;
+      if (!map) return;
+      const src = map.getSource("track-line");
+      if (!src) return;
+      src.setData({ type: "Feature", geometry: { type: "LineString", coordinates: trackCoordsRef.current }, properties: {} });
+    };
     const handleRecPhoto = (e) => {
       const fileList = e.target.files;
       if (!fileList || fileList.length === 0) return;
       const files = Array.from(fileList);
       e.target.value = "";
       const addMarkerToMap = (lat, lng) => {
-        if (lat != null && mapInst.current && window.google) {
-          const m = new window.google.maps.Marker({
-            position: { lat, lng },
-            map: mapInst.current,
-            label: { text: "\u{1F4F7}", fontSize: "14px" },
-            icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 16, fillColor: "#4A7C59", fillOpacity: 1, strokeColor: T.white, strokeWeight: 2 },
-            zIndex: 998
-          });
+        if (lat != null && mapInst.current && window.mapboxgl) {
+          const m = new window.mapboxgl.Marker({ element: buildEmojiMarkerEl(T.green, "\u{1F4F7}", 28) }).setLngLat([lng, lat]).addTo(mapInst.current);
           photoMarkersRef.current.push(m);
         }
       };
@@ -45084,14 +45271,8 @@ ${suffix}`;
             setShowWaypointPopup(wp);
             setWpDesc("");
             setWpPhoto(null);
-            if (mapInst.current && window.google) {
-              const m = new window.google.maps.Marker({
-                position: { lat: wp.lat, lng: wp.lng },
-                map: mapInst.current,
-                icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 12, fillColor: T.copper, fillOpacity: 1, strokeColor: T.white, strokeWeight: 2 },
-                label: { text: "\u{1F4CD}", fontSize: "12px" },
-                zIndex: 999
-              });
+            if (mapInst.current && window.mapboxgl) {
+              const m = new window.mapboxgl.Marker({ element: buildEmojiMarkerEl(T.copper, "\u{1F4CD}", 28) }).setLngLat([wp.lng, wp.lat]).addTo(mapInst.current);
               waypointMarkersRef.current.push(m);
             }
           },
@@ -45135,43 +45316,59 @@ ${suffix}`;
     (0, import_react4.useEffect)(() => {
       let cancelled = false;
       const init = async () => {
+        let mapboxgl;
         try {
-          await loadGmaps();
+          mapboxgl = await loadMapbox();
         } catch (e) {
           return;
         }
         if (cancelled || !mapRef.current) return;
-        const map = new window.google.maps.Map(mapRef.current, {
-          center: { lat: 39.5, lng: -98.35 },
-          zoom: 5,
-          mapTypeId: "terrain",
-          disableDefaultUI: true,
-          zoomControl: true
+        const map = new mapboxgl.Map({
+          container: mapRef.current,
+          style: MAPBOX_STYLE,
+          center: [-98.35, 39.5],
+          zoom: 4
         });
+        map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), "top-right");
         mapInst.current = map;
-        polyRef.current = new window.google.maps.Polyline({
-          map,
-          path: [],
-          strokeColor: T.red,
-          strokeWeight: 4,
-          strokeOpacity: 0.9
-        });
-        if (navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition(
-            (p) => {
-              map.setCenter({ lat: p.coords.latitude, lng: p.coords.longitude });
-              map.setZoom(15);
-            },
-            () => {
-            },
-            { enableHighAccuracy: true, timeout: 5e3 }
-          );
-        }
-        setMapReady(true);
+        const onMapLoad = () => {
+          if (cancelled) return;
+          if (!map.getSource("track-line")) {
+            map.addSource("track-line", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+            map.addLayer({
+              id: "track-line-layer",
+              type: "line",
+              source: "track-line",
+              layout: { "line-join": "round", "line-cap": "round" },
+              paint: { "line-color": T.red, "line-width": 4, "line-opacity": 0.9 }
+            });
+          }
+          if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+              (p) => {
+                if (cancelled || !mapInst.current) return;
+                mapInst.current.flyTo({ center: [p.coords.longitude, p.coords.latitude], zoom: 15, duration: 600 });
+              },
+              () => {
+              },
+              { enableHighAccuracy: true, timeout: 5e3 }
+            );
+          }
+          setMapReady(true);
+        };
+        if (map.isStyleLoaded()) onMapLoad();
+        else map.on("load", onMapLoad);
       };
       init();
       return () => {
         cancelled = true;
+        if (mapInst.current) {
+          try {
+            mapInst.current.remove();
+          } catch (e) {
+          }
+          mapInst.current = null;
+        }
       };
     }, []);
     (0, import_react4.useEffect)(() => {
@@ -45199,7 +45396,8 @@ ${suffix}`;
       setTrackPoints([]);
       setStats({ speed: 0, maxSpeed: 0, elevation: 0, elevGain: 0, distance: 0 });
       setElapsed(0);
-      if (polyRef.current) polyRef.current.setPath([]);
+      trackCoordsRef.current = [];
+      refreshTrackLine();
       let prevAlt = null;
       let totalDist = 0;
       let totalGain = 0;
@@ -45214,22 +45412,17 @@ ${suffix}`;
           const speed = pos.coords.speed;
           const pt = { lat, lng, alt, speed, time: Date.now() };
           setTrackPoints((prev) => [...prev, pt]);
-          if (polyRef.current) {
-            const path = polyRef.current.getPath();
-            path.push(new window.google.maps.LatLng(lat, lng));
+          trackCoordsRef.current.push([lng, lat]);
+          refreshTrackLine();
+          const map = mapInst.current;
+          if (map && window.mapboxgl) {
+            if (!userDotRef.current) {
+              userDotRef.current = new window.mapboxgl.Marker({ element: buildCircleMarkerEl("#4285F4", 16) }).setLngLat([lng, lat]).addTo(map);
+            } else {
+              userDotRef.current.setLngLat([lng, lat]);
+            }
+            map.panTo([lng, lat]);
           }
-          const p = new window.google.maps.LatLng(lat, lng);
-          if (!userDotRef.current && mapInst.current) {
-            userDotRef.current = new window.google.maps.Marker({
-              position: p,
-              map: mapInst.current,
-              icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 8, fillColor: "#4285F4", fillOpacity: 1, strokeColor: T.white, strokeWeight: 3 },
-              zIndex: 999
-            });
-          } else if (userDotRef.current) {
-            userDotRef.current.setPosition(p);
-          }
-          if (mapInst.current) mapInst.current.panTo(p);
           if (lastLat !== null) {
             totalDist += haversine(lastLat, lastLng, lat, lng);
           }
@@ -45283,10 +45476,10 @@ ${suffix}`;
           const speed = pos.coords.speed;
           const pt = { lat, lng, alt, speed, time: Date.now() };
           setTrackPoints((prev) => [...prev, pt]);
-          if (polyRef.current) polyRef.current.getPath().push(new window.google.maps.LatLng(lat, lng));
-          const p = new window.google.maps.LatLng(lat, lng);
-          if (userDotRef.current) userDotRef.current.setPosition(p);
-          if (mapInst.current) mapInst.current.panTo(p);
+          trackCoordsRef.current.push([lng, lat]);
+          refreshTrackLine();
+          if (userDotRef.current) userDotRef.current.setLngLat([lng, lat]);
+          if (mapInst.current) mapInst.current.panTo([lng, lat]);
           if (lastLat !== null) totalDist += haversine(lastLat, lastLng, lat, lng);
           lastLat = lat;
           lastLng = lng;
@@ -45314,13 +45507,17 @@ ${suffix}`;
         watchRef.current = null;
       }
       if (userDotRef.current) {
-        userDotRef.current.setMap(null);
+        try {
+          userDotRef.current.remove();
+        } catch (e) {
+        }
         userDotRef.current = null;
       }
-      if (mapInst.current && trackPoints.length > 1) {
-        const bounds = new window.google.maps.LatLngBounds();
-        trackPoints.forEach((p) => bounds.extend({ lat: p.lat, lng: p.lng }));
-        mapInst.current.fitBounds(bounds, 40);
+      if (mapInst.current && trackPoints.length > 1 && window.mapboxgl) {
+        const first = trackPoints[0];
+        const bounds = new window.mapboxgl.LngLatBounds([first.lng, first.lat], [first.lng, first.lat]);
+        trackPoints.forEach((p) => bounds.extend([p.lng, p.lat]));
+        mapInst.current.fitBounds(bounds, { padding: 40, duration: 600 });
       }
       if (skipDetailsForm) {
         const waypointPins = (routeWaypoints || []).map((w) => ({
@@ -45377,159 +45574,154 @@ ${suffix}`;
     const mapRef = (0, import_react4.useRef)(null);
     const mapInst = (0, import_react4.useRef)(null);
     const markersRef = (0, import_react4.useRef)([]);
-    const polyRef = (0, import_react4.useRef)(null);
     const [ready, setReady] = (0, import_react4.useState)(false);
     const [selectedPhoto, setSelectedPhoto] = (0, import_react4.useState)(null);
     const [selectedWaypoint, setSelectedWaypoint] = (0, import_react4.useState)(null);
     const prevHighlightRef = (0, import_react4.useRef)(null);
+    const styleForPin = (pinIdx, isPhoto, isWaypoint, totalPins) => {
+      if (isWaypoint) return { width: 16, height: 16, background: T.copper, border: `2px solid ${T.white}`, transform: "rotate(45deg)", borderRadius: "0px" };
+      if (isPhoto) return { width: 24, height: 24, background: "#4A7C59", border: `2px solid ${T.white}`, borderRadius: "50%" };
+      const fill = pinIdx === 0 ? T.green : pinIdx === totalPins - 1 ? T.red : T.copper;
+      return { width: 14, height: 14, background: fill, border: `1.5px solid ${T.white}`, borderRadius: "50%" };
+    };
+    const applyMarkerStyle = (el, style, emoji) => {
+      el.style.cssText = `width:${style.width}px;height:${style.height}px;background:${style.background};border:${style.border};border-radius:${style.borderRadius};box-shadow:0 1px 4px rgba(0,0,0,0.4);box-sizing:border-box;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#FFF;font-size:12px;line-height:1;${style.transform ? `transform:${style.transform};` : ""}`;
+      el.textContent = emoji || "";
+    };
     (0, import_react4.useEffect)(() => {
       if ((!pins || pins.length === 0) && (!points || points.length === 0)) return;
       if (!mapRef.current) return;
-      const tryInit = () => {
-        if (!window.google || !window.google.maps) {
-          setTimeout(tryInit, 200);
+      let cancelled = false;
+      const init = async () => {
+        let mapboxgl;
+        try {
+          mapboxgl = await loadMapbox();
+        } catch (e) {
           return;
         }
-        if (mapInst.current) return;
-        const bounds = new window.google.maps.LatLngBounds();
+        if (cancelled || !mapRef.current || mapInst.current) return;
         const allPts = points && points.length > 0 ? points : pins;
-        allPts.forEach((p) => bounds.extend({ lat: p.lat, lng: p.lng }));
-        if (pins) pins.forEach((p) => bounds.extend({ lat: p.lat, lng: p.lng }));
-        const map = new window.google.maps.Map(mapRef.current, {
-          center: bounds.getCenter(),
+        const first = allPts[0];
+        const bounds = new mapboxgl.LngLatBounds([first.lng, first.lat], [first.lng, first.lat]);
+        allPts.forEach((p) => bounds.extend([p.lng, p.lat]));
+        if (pins) pins.forEach((p) => bounds.extend([p.lng, p.lat]));
+        const map = new mapboxgl.Map({
+          container: mapRef.current,
+          style: MAPBOX_STYLE,
+          center: bounds.getCenter().toArray(),
           zoom: 12,
-          mapTypeId: "terrain",
-          disableDefaultUI: true,
-          zoomControl: true,
-          gestureHandling: "greedy",
-          mapTypeControl: false,
-          streetViewControl: false,
-          fullscreenControl: false
+          attributionControl: false
         });
-        map.fitBounds(bounds, 30);
+        map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), "top-right");
         mapInst.current = map;
-        const photoList = photos || [];
-        let photoIdx = 0;
-        if (pins && pins.length > 0) {
-          pins.forEach((p, i) => {
-            const isPhoto = !!p.photo && !p.isWaypoint;
-            const isWaypoint = !!p.isWaypoint;
-            const marker = new window.google.maps.Marker({
-              position: { lat: p.lat, lng: p.lng },
-              map,
-              icon: isWaypoint ? {
-                path: "M 0,-8 L 6,0 L 0,8 L -6,0 Z",
-                scale: 1.2,
-                fillColor: T.copper,
-                fillOpacity: 1,
-                strokeColor: T.white,
-                strokeWeight: 2
-              } : {
-                path: window.google.maps.SymbolPath.CIRCLE,
-                scale: isPhoto ? 10 : 6,
-                fillColor: isPhoto ? "#4A7C59" : i === 0 ? T.green : i === pins.length - 1 ? T.red : T.copper,
-                fillOpacity: 1,
-                strokeColor: T.white,
-                strokeWeight: isPhoto ? 2 : 1.5
-              },
-              label: isWaypoint ? { text: "\u25C6", fontSize: "8px", color: T.white } : isPhoto ? { text: "\u{1F4F7}", fontSize: "12px" } : null,
-              zIndex: isWaypoint ? 90 : isPhoto ? 100 : 10,
-              title: isWaypoint && p.desc ? p.desc : void 0
+        const onMapLoad = () => {
+          if (cancelled) return;
+          const polyPath = points && points.length > 1 ? points.map((p) => [p.lng, p.lat]) : pins && pins.length > 1 ? pins.map((p) => [p.lng, p.lat]) : [];
+          if (polyPath.length > 1 && !map.getSource("route-line")) {
+            map.addSource("route-line", { type: "geojson", data: { type: "Feature", geometry: { type: "LineString", coordinates: polyPath }, properties: {} } });
+            map.addLayer({
+              id: "route-line-layer",
+              type: "line",
+              source: "route-line",
+              layout: { "line-join": "round", "line-cap": "round" },
+              paint: { "line-color": T.red, "line-width": 3, "line-opacity": 0.85 }
             });
-            marker._pinIdx = i;
-            marker._isPhoto = isPhoto;
-            if (isWaypoint) {
-              marker.setCursor("pointer");
-              marker.addListener("click", () => {
-                setSelectedWaypoint({ desc: p.desc || "", photo: p.photo || null, lat: p.lat, lng: p.lng });
-              });
-            }
-            if (isPhoto && photoList.length > 0) {
-              let matchedPhoto = null;
-              let matchedPhotoIdx = -1;
-              const pPhoto = photoList.find((ph, phIdx) => {
-                if (ph.lat && ph.lng && Math.abs(ph.lat - p.lat) < 5e-4 && Math.abs(ph.lng - p.lng) < 5e-4) {
-                  matchedPhotoIdx = phIdx;
-                  return true;
-                }
-                return false;
-              });
-              if (pPhoto) {
-                matchedPhoto = pPhoto.url || pPhoto;
-              } else if (photoIdx < photoList.length) {
-                matchedPhoto = photoList[photoIdx].url || photoList[photoIdx];
-                matchedPhotoIdx = photoIdx;
-                photoIdx++;
-              }
-              if (matchedPhoto) {
-                marker._photoUrl = matchedPhoto;
-                marker._photoIdx = matchedPhotoIdx;
-                marker.addListener("click", () => {
-                  if (isFullscreen) {
-                    setSelectedPhoto(matchedPhoto);
-                  }
-                  if (onPhotoSelect) onPhotoSelect(matchedPhotoIdx);
+          }
+          const photoList = photos || [];
+          let photoIdx = 0;
+          if (pins && pins.length > 0) {
+            pins.forEach((p, i) => {
+              const isPhoto = !!p.photo && !p.isWaypoint;
+              const isWaypoint = !!p.isWaypoint;
+              const baseStyle = styleForPin(i, isPhoto, isWaypoint, pins.length);
+              const baseEmoji = isWaypoint ? "\u25C6" : isPhoto ? "\u{1F4F7}" : "";
+              const el = document.createElement("div");
+              applyMarkerStyle(el, baseStyle, baseEmoji);
+              const marker = new mapboxgl.Marker({ element: el }).setLngLat([p.lng, p.lat]).addTo(map);
+              const entry = { marker, el, pinIdx: i, isPhoto, isWaypoint, baseStyle, baseEmoji };
+              if (isWaypoint) {
+                el.addEventListener("click", (ev) => {
+                  ev.stopPropagation();
+                  setSelectedWaypoint({ desc: p.desc || "", photo: p.photo || null, lat: p.lat, lng: p.lng });
                 });
-                marker.setCursor("pointer");
               }
-            }
-            markersRef.current.push(marker);
-          });
-        }
-        const polyPath = points && points.length > 1 ? points.map((p) => ({ lat: p.lat, lng: p.lng })) : pins && pins.length > 1 ? pins.map((p) => ({ lat: p.lat, lng: p.lng })) : [];
-        if (polyPath.length > 1) {
-          polyRef.current = new window.google.maps.Polyline({
-            path: polyPath,
-            map,
-            strokeColor: T.red,
-            strokeWeight: 3,
-            strokeOpacity: 0.85
-          });
-        }
-        setReady(true);
+              if (isPhoto && photoList.length > 0) {
+                let matchedPhoto = null;
+                let matchedPhotoIdx = -1;
+                const pPhoto = photoList.find((ph, phIdx) => {
+                  if (ph.lat && ph.lng && Math.abs(ph.lat - p.lat) < 5e-4 && Math.abs(ph.lng - p.lng) < 5e-4) {
+                    matchedPhotoIdx = phIdx;
+                    return true;
+                  }
+                  return false;
+                });
+                if (pPhoto) {
+                  matchedPhoto = pPhoto.url || pPhoto;
+                } else if (photoIdx < photoList.length) {
+                  matchedPhoto = photoList[photoIdx].url || photoList[photoIdx];
+                  matchedPhotoIdx = photoIdx;
+                  photoIdx++;
+                }
+                if (matchedPhoto) {
+                  entry.photoUrl = matchedPhoto;
+                  entry.photoIdx = matchedPhotoIdx;
+                  el.addEventListener("click", (ev) => {
+                    ev.stopPropagation();
+                    if (isFullscreen) setSelectedPhoto(matchedPhoto);
+                    if (onPhotoSelect) onPhotoSelect(matchedPhotoIdx);
+                  });
+                }
+              }
+              markersRef.current.push(entry);
+            });
+          }
+          map.fitBounds(bounds, { padding: 30, duration: 0 });
+          setReady(true);
+        };
+        if (map.isStyleLoaded()) onMapLoad();
+        else map.on("load", onMapLoad);
       };
-      tryInit();
+      init();
       return () => {
-        markersRef.current.forEach((m) => m.setMap(null));
+        cancelled = true;
+        markersRef.current.forEach((e) => {
+          try {
+            e.marker.remove();
+          } catch (_) {
+          }
+        });
         markersRef.current = [];
-        if (polyRef.current) {
-          polyRef.current.setMap(null);
-          polyRef.current = null;
+        if (mapInst.current) {
+          try {
+            mapInst.current.remove();
+          } catch (_) {
+          }
+          mapInst.current = null;
         }
-        mapInst.current = null;
       };
     }, [pins, isFullscreen]);
     (0, import_react4.useEffect)(() => {
       if (!ready || !mapInst.current) return;
       if (prevHighlightRef.current !== null) {
-        const prevMarker = markersRef.current.find((m) => m._pinIdx === prevHighlightRef.current);
-        if (prevMarker) {
-          prevMarker.setAnimation(null);
-          prevMarker.setIcon({
-            path: window.google.maps.SymbolPath.CIRCLE,
-            scale: prevMarker._isPhoto ? 10 : 6,
-            fillColor: prevMarker._isPhoto ? "#4A7C59" : prevMarker._pinIdx === 0 ? T.green : prevMarker._pinIdx === (pins || []).length - 1 ? T.red : T.copper,
-            fillOpacity: 1,
-            strokeColor: T.white,
-            strokeWeight: prevMarker._isPhoto ? 2 : 1.5
-          });
+        const prev = markersRef.current.find((e) => e.pinIdx === prevHighlightRef.current);
+        if (prev) {
+          prev.el.classList.remove("th-marker-bounce");
+          applyMarkerStyle(prev.el, prev.baseStyle, prev.baseEmoji);
         }
       }
       if (typeof highlightedPinIdx === "number" && highlightedPinIdx >= 0) {
-        const marker = markersRef.current.find((m) => m._pinIdx === highlightedPinIdx);
-        if (marker) {
-          marker.setAnimation(window.google.maps.Animation.BOUNCE);
-          marker.setIcon({
-            path: window.google.maps.SymbolPath.CIRCLE,
-            scale: 14,
-            fillColor: T.red,
-            fillOpacity: 1,
-            strokeColor: T.white,
-            strokeWeight: 3
-          });
-          mapInst.current.panTo(marker.getPosition());
+        const entry = markersRef.current.find((e) => e.pinIdx === highlightedPinIdx);
+        if (entry) {
+          const hi = { width: 28, height: 28, background: T.red, border: `3px solid ${T.white}`, borderRadius: "50%" };
+          applyMarkerStyle(entry.el, hi, entry.baseEmoji);
+          entry.el.classList.add("th-marker-bounce");
+          const ll = entry.marker.getLngLat();
+          mapInst.current.panTo([ll.lng, ll.lat]);
           setTimeout(() => {
-            marker.setAnimation(null);
+            try {
+              entry.el.classList.remove("th-marker-bounce");
+            } catch (_) {
+            }
           }, 2e3);
         }
         prevHighlightRef.current = highlightedPinIdx;
@@ -45559,282 +45751,311 @@ ${suffix}`;
     (0, import_react4.useEffect)(() => {
       let cancelled = false;
       const init = async () => {
+        let mapboxgl;
         try {
-          await loadGmaps();
+          mapboxgl = await loadMapbox();
         } catch (e) {
           return;
         }
         if (cancelled || !mapRef.current) return;
-        const center = startPin ? { lat: startPin.lat, lng: startPin.lng } : { lat: 39.5, lng: -98.35 };
-        const map = new window.google.maps.Map(mapRef.current, {
+        const center = startPin ? [startPin.lng, startPin.lat] : [-98.35, 39.5];
+        const map = new mapboxgl.Map({
+          container: mapRef.current,
+          style: MAPBOX_STYLE,
           center,
-          zoom: 14,
-          disableDefaultUI: true,
-          zoomControl: true,
-          mapTypeId: "terrain"
+          zoom: 14
         });
+        map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), "top-right");
         mapInst.current = map;
-        if (startPin && endPin) {
-          const ds = new window.google.maps.DirectionsService();
-          const dr = new window.google.maps.DirectionsRenderer({
-            map,
-            suppressMarkers: false,
-            polylineOptions: { strokeColor: T.red, strokeWeight: 5, strokeOpacity: 0.9 },
-            markerOptions: { visible: false }
-          });
-          dirRendererRef.current = dr;
-          const waypoints = rPins.slice(1, -1).filter((p) => !p.photo).map((p) => ({ location: { lat: p.lat, lng: p.lng }, stopover: true }));
-          ds.route({
-            origin: { lat: startPin.lat, lng: startPin.lng },
-            destination: { lat: endPin.lat, lng: endPin.lng },
-            waypoints,
-            travelMode: window.google.maps.TravelMode.DRIVING,
-            optimizeWaypoints: false
-          }, (result, status) => {
-            if (status === "OK") {
-              dr.setDirections(result);
-              const allSteps = [];
-              result.routes[0].legs.forEach((leg) => {
-                routeLegsRef.current.push(leg);
-                leg.steps.forEach((step) => allSteps.push(step));
-              });
-              stepsRef.current = allSteps;
-              if (allSteps.length > 0) {
-                setCurrentStep({ instruction: allSteps[0].instructions, distance: allSteps[0].distance.text, duration: allSteps[0].duration.text });
-              }
-              const bounds = new window.google.maps.LatLngBounds();
-              result.routes[0].overview_path.forEach((p) => bounds.extend(p));
-              map.fitBounds(bounds, 60);
-            }
-          });
-          new window.google.maps.Marker({ position: { lat: startPin.lat, lng: startPin.lng }, map, icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 10, fillColor: T.green, fillOpacity: 1, strokeColor: T.white, strokeWeight: 2 }, label: { text: "S", color: T.white, fontWeight: "bold", fontSize: "11px" } });
-          new window.google.maps.Marker({ position: { lat: endPin.lat, lng: endPin.lng }, map, icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 10, fillColor: T.red, fillOpacity: 1, strokeColor: T.white, strokeWeight: 2 }, label: { text: "F", color: T.white, fontWeight: "bold", fontSize: "11px" } });
-        }
-        if (navigator.geolocation) {
-          watchRef.current = navigator.geolocation.watchPosition(
-            (pos) => {
-              const lat = pos.coords.latitude;
-              const lng = pos.coords.longitude;
-              setUserPos({ lat, lng });
-              const p = new window.google.maps.LatLng(lat, lng);
-              if (!userDotRef.current) {
-                userDotRef.current = new window.google.maps.Marker({
-                  position: p,
-                  map,
-                  icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 10, fillColor: "#4285F4", fillOpacity: 1, strokeColor: T.white, strokeWeight: 3 },
-                  zIndex: 999
+        const onMapLoad = async () => {
+          if (cancelled) return;
+          if (!map.getSource("route-nav")) {
+            map.addSource("route-nav", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+            map.addLayer({
+              id: "route-nav-line",
+              type: "line",
+              source: "route-nav",
+              layout: { "line-join": "round", "line-cap": "round" },
+              paint: { "line-color": T.red, "line-width": 5, "line-opacity": 0.9 }
+            });
+          }
+          if (startPin && endPin) {
+            const ordered = [startPin, ...rPins.slice(1, -1).filter((p) => !p.photo), endPin];
+            const coordsStr = ordered.map((p) => `${p.lng},${p.lat}`).join(";");
+            try {
+              const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${coordsStr}?geometries=geojson&overview=full&steps=true&access_token=${MAPBOX_TOKEN}`;
+              const res = await fetch(url);
+              const data = res.ok ? await res.json() : null;
+              const route2 = data && data.routes && data.routes[0];
+              if (!cancelled && route2) {
+                const src = map.getSource("route-nav");
+                if (src) src.setData({ type: "Feature", geometry: route2.geometry, properties: {} });
+                const flatSteps = [];
+                (route2.legs || []).forEach((leg) => {
+                  (leg.steps || []).forEach((step) => {
+                    const c = step.geometry && step.geometry.coordinates || [];
+                    const first = c[0] || [0, 0];
+                    flatSteps.push({
+                      instruction: step.maneuver && step.maneuver.instruction || "",
+                      distance: formatMetersUS(step.distance),
+                      duration: formatSeconds(step.duration),
+                      startLng: first[0],
+                      startLat: first[1]
+                    });
+                  });
                 });
-              } else {
-                userDotRef.current.setPosition(p);
-              }
-              map.panTo(p);
-              if (stepsRef.current.length > 0) {
-                let closest = null;
-                let closestDist = Infinity;
-                stepsRef.current.forEach((step, si) => {
-                  const sLat = step.start_location.lat();
-                  const sLng = step.start_location.lng();
-                  const d = Math.sqrt(Math.pow(lat - sLat, 2) + Math.pow(lng - sLng, 2));
-                  if (d < closestDist) {
-                    closestDist = d;
-                    closest = si;
-                  }
-                });
-                if (closest !== null) {
-                  const step = stepsRef.current[closest];
-                  setCurrentStep({ instruction: step.instructions, distance: step.distance.text, duration: step.duration.text });
+                stepsRef.current = flatSteps;
+                if (flatSteps.length > 0) setCurrentStep(flatSteps[0]);
+                const coords = route2.geometry.coordinates;
+                if (coords.length > 1) {
+                  const bounds = coords.reduce((b, c) => b.extend(c), new mapboxgl.LngLatBounds(coords[0], coords[0]));
+                  map.fitBounds(bounds, { padding: 60, duration: 600 });
                 }
               }
-              if (endPin) {
-                const dEnd = haversine(lat, lng, endPin.lat, endPin.lng);
-                if (dEnd < 50) setArrived(true);
-              }
-            },
-            () => {
-            },
-            { enableHighAccuracy: true, timeout: 1e4, maximumAge: 2e3 }
-          );
-        }
-        setMapReady(true);
+            } catch (e) {
+              console.error("[mapbox] route nav directions failed", e);
+            }
+            const startEl = document.createElement("div");
+            startEl.style.cssText = `width:24px;height:24px;border-radius:50%;background:${T.green};border:2px solid ${T.white};display:flex;align-items:center;justify-content:center;color:${T.white};font-family:sans-serif;font-weight:700;font-size:11px;box-shadow:0 1px 4px rgba(0,0,0,0.4);`;
+            startEl.textContent = "S";
+            new mapboxgl.Marker({ element: startEl }).setLngLat([startPin.lng, startPin.lat]).addTo(map);
+            const endEl = document.createElement("div");
+            endEl.style.cssText = `width:24px;height:24px;border-radius:50%;background:${T.red};border:2px solid ${T.white};display:flex;align-items:center;justify-content:center;color:${T.white};font-family:sans-serif;font-weight:700;font-size:11px;box-shadow:0 1px 4px rgba(0,0,0,0.4);`;
+            endEl.textContent = "F";
+            new mapboxgl.Marker({ element: endEl }).setLngLat([endPin.lng, endPin.lat]).addTo(map);
+          }
+          if (navigator.geolocation) {
+            watchRef.current = navigator.geolocation.watchPosition(
+              (pos) => {
+                const lat = pos.coords.latitude;
+                const lng = pos.coords.longitude;
+                setUserPos({ lat, lng });
+                if (!userDotRef.current) {
+                  userDotRef.current = new mapboxgl.Marker({ element: buildCircleMarkerEl("#4285F4", 18) }).setLngLat([lng, lat]).addTo(map);
+                } else {
+                  userDotRef.current.setLngLat([lng, lat]);
+                }
+                map.panTo([lng, lat]);
+                if (stepsRef.current.length > 0) {
+                  let closest = null, closestDist = Infinity;
+                  stepsRef.current.forEach((step, si) => {
+                    const d = Math.sqrt(Math.pow(lat - step.startLat, 2) + Math.pow(lng - step.startLng, 2));
+                    if (d < closestDist) {
+                      closestDist = d;
+                      closest = si;
+                    }
+                  });
+                  if (closest !== null) setCurrentStep(stepsRef.current[closest]);
+                }
+                if (endPin) {
+                  const dEnd = haversine(lat, lng, endPin.lat, endPin.lng);
+                  if (dEnd < 50) setArrived(true);
+                }
+              },
+              () => {
+              },
+              { enableHighAccuracy: true, timeout: 1e4, maximumAge: 2e3 }
+            );
+          }
+          setMapReady(true);
+        };
+        if (map.isStyleLoaded()) onMapLoad();
+        else map.on("load", onMapLoad);
       };
       init();
       return () => {
         cancelled = true;
         if (watchRef.current !== null) navigator.geolocation.clearWatch(watchRef.current);
         if (userDotRef.current) {
-          userDotRef.current.setMap(null);
+          try {
+            userDotRef.current.remove();
+          } catch (e) {
+          }
           userDotRef.current = null;
+        }
+        if (mapInst.current) {
+          try {
+            mapInst.current.remove();
+          } catch (e) {
+          }
+          mapInst.current = null;
         }
       };
     }, []);
-    const stripHtml2 = (html) => {
+    const stripHtml = (html) => {
       const div = document.createElement("div");
       div.innerHTML = html;
       return div.textContent || div.innerText || "";
     };
-    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, zIndex: 400, background: T.darkBg, display: "flex", flexDirection: "column" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.charcoal, padding: "12px 16px", borderBottom: `1px solid ${T.darkCard}`, flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement(Navigation, { size: 16, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, fontWeight: 700, color: T.white, letterSpacing: 0.5 } }, route.name || route.title || "Route Navigation")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: onClose, style: { background: `${T.red}30`, border: "none", borderRadius: 6, padding: "6px 12px", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.red, letterSpacing: 0.5 } }, "END"))), arrived ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: `${T.green}20`, borderRadius: 8, padding: "10px 14px", display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement(CircleCheckBig, { size: 18, color: T.green }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 14, fontWeight: 700, color: T.green } }, "You have arrived!")) : currentStep ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkCard, borderRadius: 8, padding: "10px 14px" } }, /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 15, color: T.white, margin: "0 0 4px", lineHeight: 1.4 } }, stripHtml2(currentStep.instruction)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 12 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600 } }, currentStep.distance), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, currentStep.duration))) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "6px 0" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 14, height: 14, border: `2px solid ${T.copper}`, borderTopColor: "transparent", borderRadius: "50%", animation: "thspin 0.8s linear infinite" } }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.tertiary } }, "Calculating route..."))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement("div", { ref: mapRef, style: { width: "100%", height: "100%" } }), !mapReady && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: T.darkBg } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 28, height: 28, border: `3px solid ${T.red}`, borderTopColor: "transparent", borderRadius: "50%", animation: "thspin 0.8s linear infinite", margin: "0 auto 12px" } }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, color: T.tertiary } }, "Loading navigation..."))), userPos && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => mapInst.current && mapInst.current.panTo(userPos), style: { position: "absolute", bottom: 16, right: 16, width: 44, height: 44, borderRadius: "50%", background: T.charcoal, border: `1px solid ${T.tertiary}40`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(0,0,0,0.4)" } }, /* @__PURE__ */ import_react4.default.createElement(Target, { size: 18, color: T.copper }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.charcoal, borderTop: `1px solid ${T.darkCard}`, padding: "10px 16px", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", justifyContent: "space-around" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block" } }, "DISTANCE"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 16, fontWeight: 700, color: T.white } }, route.distance || "\u2014")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block" } }, "EST. TIME"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 16, fontWeight: 700, color: T.white } }, route.time || route.duration || "\u2014")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block" } }, "ELEVATION"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 16, fontWeight: 700, color: T.white } }, route.elevation || "\u2014")))));
+    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, zIndex: 400, background: T.darkBg, display: "flex", flexDirection: "column" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.charcoal, padding: "12px 16px", borderBottom: `1px solid ${T.darkCard}`, flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement(Navigation, { size: 16, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, fontWeight: 700, color: T.white, letterSpacing: 0.5 } }, route.name || route.title || "Route Navigation")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: onClose, style: { background: `${T.red}30`, border: "none", borderRadius: 6, padding: "6px 12px", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.red, letterSpacing: 0.5 } }, "END"))), arrived ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: `${T.green}20`, borderRadius: 8, padding: "10px 14px", display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement(CircleCheckBig, { size: 18, color: T.green }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 14, fontWeight: 700, color: T.green } }, "You have arrived!")) : currentStep ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkCard, borderRadius: 8, padding: "10px 14px" } }, /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 15, color: T.white, margin: "0 0 4px", lineHeight: 1.4 } }, stripHtml(currentStep.instruction)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 12 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600 } }, currentStep.distance), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, currentStep.duration))) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "6px 0" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 14, height: 14, border: `2px solid ${T.copper}`, borderTopColor: "transparent", borderRadius: "50%", animation: "thspin 0.8s linear infinite" } }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.tertiary } }, "Calculating route..."))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement("div", { ref: mapRef, style: { width: "100%", height: "100%" } }), !mapReady && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: T.darkBg } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 28, height: 28, border: `3px solid ${T.red}`, borderTopColor: "transparent", borderRadius: "50%", animation: "thspin 0.8s linear infinite", margin: "0 auto 12px" } }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, color: T.tertiary } }, "Loading navigation..."))), userPos && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => mapInst.current && mapInst.current.panTo(userPos), style: { position: "absolute", bottom: 16, right: 16, width: 44, height: 44, borderRadius: "50%", background: T.charcoal, border: `1px solid ${T.tertiary}40`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(0,0,0,0.4)" } }, /* @__PURE__ */ import_react4.default.createElement(Target, { size: 18, color: T.copper }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.charcoal, borderTop: `1px solid ${T.darkCard}`, padding: "10px 16px", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", justifyContent: "space-around" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block" } }, "DISTANCE"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 16, fontWeight: 700, color: T.white } }, route.distance || "\u2014")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block" } }, "EST. TIME"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 16, fontWeight: 700, color: T.white } }, route.time || route.duration || "\u2014")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block" } }, "ELEVATION"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 16, fontWeight: 700, color: T.white } }, route.elevation || "\u2014")))));
   }
   function RoutePinMap({ pins, setPins, linkingPhotoIdx, onLinkPin, onRoutePoints, onRouteStats }) {
     const mapRef = (0, import_react4.useRef)(null);
     const mapInst = (0, import_react4.useRef)(null);
     const markersRef = (0, import_react4.useRef)([]);
-    const polyRef = (0, import_react4.useRef)(null);
-    const dirRendererRef = (0, import_react4.useRef)(null);
-    const dirServiceRef = (0, import_react4.useRef)(null);
-    const elevServiceRef = (0, import_react4.useRef)(null);
     const [ready, setReady] = (0, import_react4.useState)(false);
+    const setPinsRef = (0, import_react4.useRef)(setPins);
+    (0, import_react4.useEffect)(() => {
+      setPinsRef.current = setPins;
+    }, [setPins]);
     (0, import_react4.useEffect)(() => {
       let cancelled = false;
       const init = async () => {
+        let mapboxgl;
         try {
-          await loadGmaps();
+          mapboxgl = await loadMapbox();
         } catch (e) {
           return;
         }
         if (cancelled || !mapRef.current) return;
-        const map = new window.google.maps.Map(mapRef.current, {
-          center: { lat: 39.5, lng: -98.35 },
-          zoom: 5,
-          mapTypeId: "terrain",
-          disableDefaultUI: true,
-          zoomControl: true
+        const map = new mapboxgl.Map({
+          container: mapRef.current,
+          style: MAPBOX_STYLE,
+          center: [-98.35, 39.5],
+          zoom: 4
         });
+        map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), "top-right");
         mapInst.current = map;
-        polyRef.current = new window.google.maps.Polyline({ map, path: [], strokeColor: T.red, strokeWeight: 3, strokeOpacity: 0.8 });
-        dirServiceRef.current = new window.google.maps.DirectionsService();
-        try {
-          elevServiceRef.current = new window.google.maps.ElevationService();
-        } catch (e) {
-          elevServiceRef.current = null;
-        }
-        dirRendererRef.current = new window.google.maps.DirectionsRenderer({
-          map,
-          suppressMarkers: true,
-          polylineOptions: { strokeColor: T.red, strokeWeight: 4, strokeOpacity: 0.9 }
-        });
-        map.addListener("click", (e) => {
-          const lat = e.latLng.lat();
-          const lng = e.latLng.lng();
-          setPins((prev) => [...prev, { lat, lng }]);
-        });
-        if (navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition(
-            (p) => {
-              map.setCenter({ lat: p.coords.latitude, lng: p.coords.longitude });
-              map.setZoom(10);
-            },
-            () => {
-            },
-            { enableHighAccuracy: true, timeout: 5e3 }
-          );
-        }
-        setReady(true);
+        const onMapLoad = () => {
+          if (cancelled) return;
+          if (!map.getSource("pinmap-route")) {
+            map.addSource("pinmap-route", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+            map.addLayer({
+              id: "pinmap-route-line",
+              type: "line",
+              source: "pinmap-route",
+              layout: { "line-join": "round", "line-cap": "round" },
+              paint: { "line-color": T.red, "line-width": 4, "line-opacity": 0.9 }
+            });
+          }
+          if (!map.getSource("pinmap-fallback")) {
+            map.addSource("pinmap-fallback", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+            map.addLayer({
+              id: "pinmap-fallback-line",
+              type: "line",
+              source: "pinmap-fallback",
+              layout: { "line-join": "round", "line-cap": "round" },
+              paint: { "line-color": T.red, "line-width": 3, "line-opacity": 0.8 }
+            });
+          }
+          map.on("click", (e) => {
+            const fn = setPinsRef.current;
+            if (fn) fn((prev) => [...prev, { lat: e.lngLat.lat, lng: e.lngLat.lng }]);
+          });
+          if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+              (p) => {
+                if (cancelled || !mapInst.current) return;
+                mapInst.current.flyTo({ center: [p.coords.longitude, p.coords.latitude], zoom: 10, duration: 600 });
+              },
+              () => {
+              },
+              { enableHighAccuracy: true, timeout: 5e3 }
+            );
+          }
+          setReady(true);
+        };
+        if (map.isStyleLoaded()) onMapLoad();
+        else map.on("load", onMapLoad);
       };
       init();
       return () => {
         cancelled = true;
+        markersRef.current.forEach((e) => {
+          try {
+            e.marker.remove();
+          } catch (_) {
+          }
+        });
+        markersRef.current = [];
+        if (mapInst.current) {
+          try {
+            mapInst.current.remove();
+          } catch (_) {
+          }
+          mapInst.current = null;
+        }
       };
     }, []);
     (0, import_react4.useEffect)(() => {
-      if (!mapInst.current || !ready) return;
-      markersRef.current.forEach((m) => m.setMap(null));
+      if (!mapInst.current || !ready || !window.mapboxgl) return;
+      markersRef.current.forEach((e) => {
+        try {
+          e.marker.remove();
+        } catch (_) {
+        }
+      });
       markersRef.current = [];
       pins.forEach((p, i) => {
         const isPhoto = !!p.photo;
-        const marker = new window.google.maps.Marker({
-          position: { lat: p.lat, lng: p.lng },
-          map: mapInst.current,
-          label: isPhoto ? { text: "\u{1F4F7}", fontSize: "14px" } : { text: `${i + 1}`, color: T.white, fontWeight: "bold", fontSize: "11px" },
-          icon: {
-            path: window.google.maps.SymbolPath.CIRCLE,
-            scale: isPhoto ? 16 : 14,
-            fillColor: isPhoto ? "#4A7C59" : i === 0 ? T.green : i === pins.length - 1 ? T.red : T.copper,
-            fillOpacity: 1,
-            strokeColor: T.white,
-            strokeWeight: 2
-          }
-        });
-        marker.addListener("click", () => {
+        const fill = isPhoto ? "#4A7C59" : i === 0 ? T.green : i === pins.length - 1 ? T.red : T.copper;
+        const size = isPhoto ? 28 : 26;
+        const el = document.createElement("div");
+        el.style.cssText = `width:${size}px;height:${size}px;border-radius:50%;background:${fill};border:2px solid ${T.white};display:flex;align-items:center;justify-content:center;color:${T.white};font-family:sans-serif;font-weight:700;font-size:11px;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,0.4);`;
+        el.textContent = isPhoto ? "\u{1F4F7}" : `${i + 1}`;
+        el.addEventListener("click", (ev) => {
+          ev.stopPropagation();
           if (typeof linkingPhotoIdx === "number" && onLinkPin) {
             onLinkPin(i);
           } else {
-            setPins((prev) => prev.filter((_, idx) => idx !== i));
+            setPinsRef.current && setPinsRef.current((prev) => prev.filter((_, idx) => idx !== i));
           }
         });
-        markersRef.current.push(marker);
+        const marker = new window.mapboxgl.Marker({ element: el }).setLngLat([p.lng, p.lat]).addTo(mapInst.current);
+        markersRef.current.push({ marker, el, idx: i });
       });
+      const map = mapInst.current;
       const routePins = pins.filter((p) => !p.isPhotoOnly);
-      if (routePins.length >= 2 && dirServiceRef.current && dirRendererRef.current) {
-        if (polyRef.current) polyRef.current.setPath([]);
-        const origin = { lat: routePins[0].lat, lng: routePins[0].lng };
-        const destination = { lat: routePins[routePins.length - 1].lat, lng: routePins[routePins.length - 1].lng };
-        const waypoints = routePins.slice(1, -1).map((p) => ({ location: { lat: p.lat, lng: p.lng }, stopover: true }));
-        dirServiceRef.current.route({
-          origin,
-          destination,
-          waypoints,
-          travelMode: window.google.maps.TravelMode.DRIVING,
-          optimizeWaypoints: false
-        }, (result, status) => {
-          if (status === "OK") {
-            dirRendererRef.current.setDirections(result);
-            const routePoints = [];
-            let totalMeters = 0;
-            let totalSeconds = 0;
-            if (result.routes && result.routes[0]) {
-              result.routes[0].legs.forEach((leg) => {
-                if (leg.distance && leg.distance.value) totalMeters += leg.distance.value;
-                if (leg.duration && leg.duration.value) totalSeconds += leg.duration.value;
-                leg.steps.forEach((step) => {
-                  step.path.forEach((pt) => {
-                    routePoints.push({ lat: pt.lat(), lng: pt.lng() });
-                  });
-                });
-              });
-            }
-            if (onRoutePoints) onRoutePoints(routePoints);
-            const miles = totalMeters / 1609.34;
-            const h = Math.floor(totalSeconds / 3600);
-            const m = Math.round(totalSeconds % 3600 / 60);
-            const timeStr = totalSeconds > 0 ? h > 0 ? `${h}H ${m}M` : `${m}M` : "";
-            if (onRouteStats) {
-              const pathForElev = routePoints.length > 0 ? routePoints.map((p) => new window.google.maps.LatLng(p.lat, p.lng)) : routePins.map((p) => new window.google.maps.LatLng(p.lat, p.lng));
-              const samples = Math.min(256, Math.max(8, pathForElev.length));
-              if (elevServiceRef.current && pathForElev.length >= 2) {
-                elevServiceRef.current.getElevationAlongPath({ path: pathForElev, samples }, (elevs, estatus) => {
-                  let gainFt = 0;
-                  let maxFt = 0;
-                  if (estatus === "OK" && Array.isArray(elevs) && elevs.length > 1) {
-                    const toFt = (m2) => m2 * 3.28084;
-                    let prev = elevs[0].elevation;
-                    maxFt = toFt(prev);
-                    for (let i = 1; i < elevs.length; i++) {
-                      const cur = elevs[i].elevation;
-                      if (cur > prev) gainFt += toFt(cur - prev);
-                      if (toFt(cur) > maxFt) maxFt = toFt(cur);
-                      prev = cur;
-                    }
-                  }
-                  onRouteStats({ distanceMi: miles, timeStr, elevGainFt: Math.round(gainFt), maxElevFt: Math.round(maxFt) });
-                });
-              } else {
-                onRouteStats({ distanceMi: miles, timeStr, elevGainFt: 0, maxElevFt: 0 });
-              }
-            }
-          } else {
-            dirRendererRef.current.setDirections({ routes: [] });
-            if (polyRef.current) {
-              polyRef.current.setPath(routePins.map((p) => ({ lat: p.lat, lng: p.lng })));
-            }
+      const routeSrc = map.getSource("pinmap-route");
+      const fbSrc = map.getSource("pinmap-fallback");
+      if (routePins.length >= 2) {
+        const origin = routePins[0];
+        const destination = routePins[routePins.length - 1];
+        const waypoints = routePins.slice(1, -1);
+        mapboxDirections(origin, destination, { waypoints }).then((dir) => {
+          if (!mapInst.current) return;
+          if (!dir) {
+            if (routeSrc) routeSrc.setData({ type: "FeatureCollection", features: [] });
+            if (fbSrc) fbSrc.setData({ type: "Feature", geometry: { type: "LineString", coordinates: routePins.map((p) => [p.lng, p.lat]) }, properties: {} });
             onRoutePoints && onRoutePoints([]);
             onRouteStats && onRouteStats(null);
+            return;
+          }
+          if (routeSrc) routeSrc.setData({ type: "Feature", geometry: dir.geometry, properties: {} });
+          if (fbSrc) fbSrc.setData({ type: "FeatureCollection", features: [] });
+          const routePoints = dir.geometry.coordinates.map((c) => ({ lng: c[0], lat: c[1] }));
+          if (onRoutePoints) onRoutePoints(routePoints);
+          const miles = (dir.distance || 0) / 1609.34;
+          const totalSeconds = dir.duration || 0;
+          const h = Math.floor(totalSeconds / 3600);
+          const m = Math.round(totalSeconds % 3600 / 60);
+          const timeStr = totalSeconds > 0 ? h > 0 ? `${h}H ${m}M` : `${m}M` : "";
+          if (onRouteStats) {
+            fetchElevationsAlongPath(routePoints).then((elevs) => {
+              if (!Array.isArray(elevs) || elevs.length < 2) {
+                onRouteStats({ distanceMi: miles, timeStr, elevGainFt: 0, maxElevFt: 0 });
+                return;
+              }
+              const toFt = (m2) => m2 * 3.28084;
+              let gainFt = 0;
+              let maxFt = toFt(elevs[0]);
+              let prev = elevs[0];
+              for (let i = 1; i < elevs.length; i++) {
+                const cur = elevs[i];
+                if (cur > prev) gainFt += toFt(cur - prev);
+                if (toFt(cur) > maxFt) maxFt = toFt(cur);
+                prev = cur;
+              }
+              onRouteStats({ distanceMi: miles, timeStr, elevGainFt: Math.round(gainFt), maxElevFt: Math.round(maxFt) });
+            });
           }
         });
       } else {
-        if (dirRendererRef.current) dirRendererRef.current.setDirections({ routes: [] });
-        if (polyRef.current) {
-          const linePins = pins.filter((p) => !p.isPhotoOnly);
-          polyRef.current.setPath(linePins.map((p) => ({ lat: p.lat, lng: p.lng })));
+        if (routeSrc) routeSrc.setData({ type: "FeatureCollection", features: [] });
+        const linePins = pins.filter((p) => !p.isPhotoOnly);
+        if (fbSrc) {
+          if (linePins.length >= 2) fbSrc.setData({ type: "Feature", geometry: { type: "LineString", coordinates: linePins.map((p) => [p.lng, p.lat]) }, properties: {} });
+          else fbSrc.setData({ type: "FeatureCollection", features: [] });
         }
         onRoutePoints && onRoutePoints([]);
         onRouteStats && onRouteStats(null);
@@ -48370,84 +48591,78 @@ ${suffix}`;
     const convoyPhotoRef = (0, import_react4.useRef)(null);
     const [recovery, setRecovery] = (0, import_react4.useState)({ title: "", vehicle: "", description: "", urgency: "HIGH", location: "", coords: "" });
     const convoyPinMapInst = (0, import_react4.useRef)(null);
+    const [convoyPinQuery, setConvoyPinQuery] = (0, import_react4.useState)("");
+    const [convoyPinSuggestions, setConvoyPinSuggestions] = (0, import_react4.useState)([]);
     (0, import_react4.useEffect)(() => {
-      if (postType !== "convoy") return;
-      if (convoyPin && !showPinMap) return;
-      if (convoyPinAutocompleteRef.current) return;
+      const q = convoyPinQuery.trim();
+      if (!q) {
+        setConvoyPinSuggestions([]);
+        return;
+      }
       let cancelled = false;
-      const tryAttach = () => {
-        if (cancelled) return;
-        if (!window.google || !window.google.maps || !window.google.maps.places || !convoyPinInputRef.current) {
-          setTimeout(tryAttach, 300);
-          return;
-        }
-        const ac = new window.google.maps.places.Autocomplete(convoyPinInputRef.current, { fields: ["geometry", "formatted_address", "name"] });
-        convoyPinAutocompleteRef.current = ac;
-        ac.addListener("place_changed", () => {
-          const place = ac.getPlace();
-          if (place && place.geometry && place.geometry.location) {
-            const lat = place.geometry.location.lat();
-            const lng = place.geometry.location.lng();
-            const label = place.name ? `${place.name} \u2014 ${place.formatted_address}` : place.formatted_address;
-            setConvoyPin({ lat, lng, label });
-            setShowPinMap(false);
-            if (convoyPinInputRef.current) convoyPinInputRef.current.value = "";
-          }
-        });
-      };
-      setTimeout(tryAttach, 100);
+      const t = setTimeout(async () => {
+        const results = await mapboxGeocodeSearch(q, 6);
+        if (!cancelled) setConvoyPinSuggestions(results);
+      }, 250);
       return () => {
         cancelled = true;
+        clearTimeout(t);
       };
-    }, [postType, convoyPin, showPinMap]);
+    }, [convoyPinQuery]);
     (0, import_react4.useEffect)(() => {
       if (!showPinMap || !convoyPinMapRef.current) return;
       if (convoyPinMapInst.current) return;
-      const tryInit = () => {
-        if (!window.google || !window.google.maps) {
-          setTimeout(tryInit, 300);
+      let cancelled = false;
+      const init = async () => {
+        let mapboxgl;
+        try {
+          mapboxgl = await loadMapbox();
+        } catch (e) {
           return;
         }
-        const center = convoyPin ? { lat: convoyPin.lat, lng: convoyPin.lng } : { lat: 39.5, lng: -111 };
-        const zoom = convoyPin ? 14 : 5;
-        const map = new window.google.maps.Map(convoyPinMapRef.current, {
+        if (cancelled || !convoyPinMapRef.current || convoyPinMapInst.current) return;
+        const center = convoyPin ? [convoyPin.lng, convoyPin.lat] : [-111, 39.5];
+        const zoom = convoyPin ? 14 : 4;
+        const map = new mapboxgl.Map({
+          container: convoyPinMapRef.current,
+          style: MAPBOX_STYLE,
           center,
-          zoom,
-          mapTypeId: "terrain",
-          disableDefaultUI: true,
-          zoomControl: true,
-          gestureHandling: "greedy"
+          zoom
         });
+        map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), "top-right");
         convoyPinMapInst.current = map;
-        if (convoyPin) {
-          convoyPinMarkerRef.current = new window.google.maps.Marker({
-            position: { lat: convoyPin.lat, lng: convoyPin.lng },
-            map,
-            icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 12, fillColor: T.green, fillOpacity: 1, strokeColor: T.white, strokeWeight: 2 }
-          });
-        }
-        map.addListener("click", (e) => {
-          const lat = e.latLng.lat();
-          const lng = e.latLng.lng();
-          const geocoder = new window.google.maps.Geocoder();
-          geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-            const label = status === "OK" && results[0] ? results[0].formatted_address : `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+        const onMapLoad = () => {
+          if (cancelled) return;
+          if (convoyPin) {
+            convoyPinMarkerRef.current = new mapboxgl.Marker({ element: buildCircleMarkerEl(T.green, 22) }).setLngLat([convoyPin.lng, convoyPin.lat]).addTo(map);
+          }
+          map.on("click", async (e) => {
+            const lat = e.lngLat.lat;
+            const lng = e.lngLat.lng;
+            const placeName = await mapboxReverseGeocode(lng, lat);
+            const label = placeName || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
             setConvoyPin({ lat, lng, label });
             if (convoyPinMarkerRef.current) {
-              convoyPinMarkerRef.current.setPosition({ lat, lng });
-            } else {
-              convoyPinMarkerRef.current = new window.google.maps.Marker({
-                position: { lat, lng },
-                map,
-                icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 12, fillColor: T.green, fillOpacity: 1, strokeColor: T.white, strokeWeight: 2 }
-              });
+              convoyPinMarkerRef.current.setLngLat([lng, lat]);
+            } else if (convoyPinMapInst.current) {
+              convoyPinMarkerRef.current = new window.mapboxgl.Marker({ element: buildCircleMarkerEl(T.green, 22) }).setLngLat([lng, lat]).addTo(convoyPinMapInst.current);
             }
           });
-        });
+        };
+        if (map.isStyleLoaded()) onMapLoad();
+        else map.on("load", onMapLoad);
       };
-      tryInit();
+      init();
       return () => {
-        convoyPinMapInst.current = null;
+        cancelled = true;
+        if (convoyPinMapInst.current) {
+          try {
+            convoyPinMapInst.current.remove();
+          } catch (e) {
+          }
+          convoyPinMapInst.current = null;
+        }
+        convoyPinMarkerRef.current = null;
       };
     }, [showPinMap]);
     const inputStyle = {
@@ -48795,17 +49010,25 @@ ${suffix}`;
       setShowPinMap(true);
     }, style: { background: "none", border: "none", cursor: "pointer", padding: 4 }, title: "Edit pin" }, /* @__PURE__ */ import_react4.default.createElement(PenLine, { size: 14, color: T.copper })), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
       setConvoyPin(null);
-      convoyPinAutocompleteRef.current = null;
-    }, style: { background: "none", border: "none", cursor: "pointer", padding: 4 } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 14, color: T.tertiary })))) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 6 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement(Search, { size: 14, color: T.tertiary, style: { position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", zIndex: 2 } }), /* @__PURE__ */ import_react4.default.createElement(
+      setConvoyPinQuery("");
+      setConvoyPinSuggestions([]);
+    }, style: { background: "none", border: "none", cursor: "pointer", padding: 4 } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 14, color: T.tertiary })))) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 6 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement(Search, { size: 14, color: T.tertiary, style: { position: "absolute", left: 12, top: 13, zIndex: 2 } }), /* @__PURE__ */ import_react4.default.createElement(
       "input",
       {
         ref: convoyPinInputRef,
-        placeholder: "Search Google Maps for a place...",
+        value: convoyPinQuery,
+        onChange: (e) => setConvoyPinQuery(e.target.value),
+        placeholder: "Search for a place...",
         style: { ...inputStyle, paddingLeft: 34 },
         onFocus: (e) => e.target.style.borderColor = T.copper,
         onBlur: (e) => e.target.style.borderColor = T.charcoal
       }
-    )), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
+    ), convoyPinSuggestions.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 10, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8, overflow: "hidden", boxShadow: "0 6px 18px rgba(0,0,0,0.4)" } }, convoyPinSuggestions.map((s, i) => /* @__PURE__ */ import_react4.default.createElement("div", { key: i, onClick: () => {
+      setConvoyPin({ lat: s.lat, lng: s.lng, label: s.label });
+      setConvoyPinQuery("");
+      setConvoyPinSuggestions([]);
+      setShowPinMap(false);
+    }, style: { padding: "10px 12px", cursor: "pointer", borderBottom: i < convoyPinSuggestions.length - 1 ? `1px solid ${T.charcoal}` : "none", fontFamily: serif, fontSize: 13, color: T.white } }, s.label)))), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
       convoyPinMapInst.current = null;
       setShowPinMap(!showPinMap);
     }, style: { width: "100%", padding: "10px", borderRadius: 8, background: T.darkCard, border: `1px dashed ${showPinMap ? T.copper : T.charcoal}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement(Map2, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600 } }, showPinMap ? "HIDE MAP" : "DROP PIN ON MAP")), showPinMap && /* @__PURE__ */ import_react4.default.createElement("div", { style: { borderRadius: 10, overflow: "hidden", border: `1px solid ${T.charcoal}`, position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement("div", { ref: convoyPinMapRef, style: { width: "100%", height: 250 } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", bottom: 8, left: 8, right: 8, display: "flex", justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.white, background: `${T.darkBg}CC`, padding: "4px 10px", borderRadius: 6 } }, "Tap map to drop pin"), convoyPin && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setShowPinMap(false), style: { fontFamily: sans, fontSize: 10, fontWeight: 600, color: T.white, background: T.green, padding: "6px 14px", borderRadius: 6, border: "none", cursor: "pointer" } }, "CONFIRM PIN"))), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, "Search for a place or tap the map to set your meeting point"))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "DEPARTURE DATE"), /* @__PURE__ */ import_react4.default.createElement("input", { type: "date", value: convoy.departDate, onChange: (e) => setConvoy({ ...convoy, departDate: e.target.value }), style: { ...inputStyle, colorScheme: "dark" } })), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "DEPARTURE TIME"), /* @__PURE__ */ import_react4.default.createElement("input", { type: "time", value: convoy.departTime, onChange: (e) => setConvoy({ ...convoy, departTime: e.target.value }), style: { ...inputStyle, colorScheme: "dark" } }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "RETURN DATE"), /* @__PURE__ */ import_react4.default.createElement("input", { type: "date", value: convoy.returnDate, onChange: (e) => setConvoy({ ...convoy, returnDate: e.target.value }), style: { ...inputStyle, colorScheme: "dark" } })), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "RETURN TIME"), /* @__PURE__ */ import_react4.default.createElement("input", { type: "time", value: convoy.returnTime, onChange: (e) => setConvoy({ ...convoy, returnTime: e.target.value }), style: { ...inputStyle, colorScheme: "dark" } }))), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "MAX RIGS"), /* @__PURE__ */ import_react4.default.createElement("input", { value: convoy.slots, onChange: (e) => setConvoy({ ...convoy, slots: e.target.value }), placeholder: "e.g. 12", style: inputStyle, onFocus: (e) => e.target.style.borderColor = T.copper, onBlur: (e) => e.target.style.borderColor = T.charcoal })), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "DETAILS"), /* @__PURE__ */ import_react4.default.createElement("textarea", { value: convoy.description, onChange: (e) => setConvoy({ ...convoy, description: e.target.value }), placeholder: "Describe the trip \u2014 terrain difficulty, what to bring, stock-friendly or not...", style: textareaStyle, onFocus: (e) => e.target.style.borderColor = T.copper, onBlur: (e) => e.target.style.borderColor = T.charcoal })), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "INVITE USERS"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement(AtSign, { size: 14, color: T.tertiary, style: { position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" } }), /* @__PURE__ */ import_react4.default.createElement("input", { value: convoyInviteInput, onChange: (e) => setConvoyInviteInput(e.target.value), onKeyDown: (e) => {
