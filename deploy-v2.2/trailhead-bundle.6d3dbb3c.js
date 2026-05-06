@@ -53182,7 +53182,11 @@ ${suffix}`;
     };
     const updateTripDraft = async (id, updates) => {
       const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
-      if (!uid || !id || typeof id !== "string" || id.length < 20) return null;
+      console.log("[updateTripDraft] called", { id, idLen: typeof id === "string" ? id.length : null, hasRouteData: !!updates.route_data, routePinsCount: updates.route_data?.pins?.length, hasUid: !!uid });
+      if (!uid || !id || typeof id !== "string" || id.length < 20) {
+        console.warn("[updateTripDraft] guard rejected", { uid: !!uid, id, idLen: typeof id === "string" ? id.length : null });
+        return null;
+      }
       setTripReports((prev) => prev.map((t) => t.id === id ? { ...t, ...updates, updated_at: (/* @__PURE__ */ new Date()).toISOString() } : t));
       try {
         const { data, error } = await supabase.from("trip_reports").update({ ...updates, updated_at: (/* @__PURE__ */ new Date()).toISOString() }).eq("id", id).eq("user_id", uid).select().single();
@@ -53191,6 +53195,7 @@ ${suffix}`;
           showErrorToast(`Couldn't save: ${error.message || error.code || "unknown error"}`);
           return null;
         }
+        console.log("[updateTripDraft] DB returned", { id: data.id, hasRouteData: !!data.route_data, routePinsCount: data.route_data?.pins?.length });
         setTripReports((prev) => prev.map((t) => t.id === id ? data : t));
         return data;
       } catch (e) {
@@ -53645,6 +53650,7 @@ ${suffix}`;
             if (id) setEditingTripId(id);
           },
           onSave: (routeData) => {
+            console.log("[trip-pin] save received", { pins: routeData.pins?.length, points: routeData.points?.length, photos: routeData.photos?.length, distance: routeData.distance, elevGain: routeData.elevGain, maxElev: routeData.maxElev });
             const startPin = routeData.pins && routeData.pins[0] || routeData.points && routeData.points[0] || null;
             const updates = {
               route_data: {
@@ -53665,6 +53671,7 @@ ${suffix}`;
             if (routeData.distance) updates.distance_mi = parseFloat(routeData.distance);
             if (routeData.elevGain) updates.elev_gain_ft = Number(routeData.elevGain);
             if (routeData.maxElev) updates.max_elev_ft = Number(routeData.maxElev);
+            console.log("[trip-pin] updates being sent to updateTripDraft", { id: pendingTripDraftId, route_data_pins: updates.route_data.pins.length, has_start: !!startPin });
             const id = pendingTripDraftId;
             updateTripDraft(id, updates);
             setShowTripPinFullscreen(false);
