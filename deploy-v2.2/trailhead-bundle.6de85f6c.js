@@ -46962,6 +46962,194 @@ ${suffix}`;
       /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 18, color: T.tertiary })
     ))));
   }
+  function TripReportEditor({ trip, onClose, onSave, onPublish, onDelete, onAddRouteManual, onAddRouteLive, currentUserId }) {
+    const safe = trip || {};
+    const isMine = currentUserId && safe.user_id === currentUserId;
+    const rd = safe.route_data || {};
+    const initialPins = Array.isArray(rd.pins) ? rd.pins : [];
+    const hasRoute = initialPins.length > 0 || Array.isArray(rd.points) && rd.points.length > 0;
+    const [name, setName] = (0, import_react4.useState)(safe.name || "");
+    const [description, setDescription] = (0, import_react4.useState)(safe.description || "");
+    const [trailheadLabel, setTrailheadLabel] = (0, import_react4.useState)(safe.start_label || "");
+    const [difficulty, setDifficulty] = (0, import_react4.useState)(safe.difficulty || "");
+    const [region, setRegion] = (0, import_react4.useState)(safe.region || "");
+    const [stateCode, setStateCode] = (0, import_react4.useState)(safe.state_code || "");
+    const [terrains, setTerrains] = (0, import_react4.useState)(safe.terrains || []);
+    const [tags, setTags] = (0, import_react4.useState)(safe.tags || []);
+    const [pinNotes, setPinNotes] = (0, import_react4.useState)(initialPins.map((p) => p.note || ""));
+    const [photos, setPhotos] = (0, import_react4.useState)(Array.isArray(rd.photos) ? rd.photos : []);
+    const [tagInput, setTagInput] = (0, import_react4.useState)("");
+    const [confirmingDelete, setConfirmingDelete] = (0, import_react4.useState)(false);
+    const [confirmingPublish, setConfirmingPublish] = (0, import_react4.useState)(false);
+    const [saving, setSaving] = (0, import_react4.useState)(false);
+    const [savedTick, setSavedTick] = (0, import_react4.useState)(0);
+    const photoFileRef = (0, import_react4.useRef)(null);
+    (0, import_react4.useEffect)(() => {
+      setName(safe.name || "");
+      setDescription(safe.description || "");
+      setTrailheadLabel(safe.start_label || "");
+      setDifficulty(safe.difficulty || "");
+      setRegion(safe.region || "");
+      setStateCode(safe.state_code || "");
+      setTerrains(safe.terrains || []);
+      setTags(safe.tags || []);
+      setPinNotes(initialPins.map((p) => p.note || ""));
+      setPhotos(Array.isArray(rd.photos) ? rd.photos : []);
+    }, [safe.id]);
+    const TERRAIN_OPTIONS = ["Dirt/Gravel", "Rock/Slickrock", "Sand", "Mud", "Snow", "Mixed", "Pavement"];
+    const DIFFICULTY_OPTIONS = ["Easy", "Moderate", "Hard", "Expert"];
+    const STATES = ["AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY"];
+    const toggleTerrain = (t) => setTerrains((prev) => prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]);
+    const addTag = () => {
+      const v = tagInput.trim().toLowerCase().replace(/^#/, "");
+      if (!v) return;
+      if (tags.includes(v)) {
+        setTagInput("");
+        return;
+      }
+      setTags((prev) => [...prev, v]);
+      setTagInput("");
+    };
+    const removeTag = (t) => setTags((prev) => prev.filter((x) => x !== t));
+    const handlePhotoFiles = (e) => {
+      const files = Array.from(e.target.files || []);
+      e.target.value = "";
+      files.forEach((file) => {
+        if (file.size > MAX_UPLOAD_BYTES) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => setPhotos((prev) => [...prev, { url: ev.target.result, name: file.name, type: file.type.startsWith("video/") ? "video" : "image" }]);
+        reader.readAsDataURL(file);
+      });
+    };
+    const removePhoto = (idx) => setPhotos((prev) => prev.filter((_, i) => i !== idx));
+    const handleSave = async () => {
+      if (saving) return;
+      setSaving(true);
+      const mergedPins = initialPins.map((p, i) => ({ ...p, note: (pinNotes[i] || "").trim() || void 0 }));
+      const updates = {
+        name: name.trim(),
+        description: description.trim() || null,
+        start_label: trailheadLabel.trim() || null,
+        difficulty: difficulty || null,
+        region: region.trim() || null,
+        state_code: stateCode || null,
+        terrains: terrains.length > 0 ? terrains : null,
+        tags: tags.length > 0 ? tags : null,
+        route_data: { ...rd, pins: mergedPins, photos }
+      };
+      await onSave(updates);
+      setSaving(false);
+      setSavedTick(Date.now());
+    };
+    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "fixed", top: 0, bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 430, zIndex: 1100, background: T.darkBg, display: "flex", flexDirection: "column" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", background: T.charcoal, borderBottom: `1px solid ${T.darkCard}`, flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: onClose, style: { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center" } }, /* @__PURE__ */ import_react4.default.createElement(ChevronLeft, { size: 22, color: T.white, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", alignItems: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: safe.status === "published" ? T.green : T.copper, letterSpacing: 1.5, fontWeight: 700 } }, (safe.status || "draft").toUpperCase()), savedTick > 0 && Date.now() - savedTick < 3e3 && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.green, letterSpacing: 0.5 } }, "SAVED \u2713")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: handleSave, disabled: saving || !name.trim(), style: { background: name.trim() && !saving ? T.copper : T.charcoal, border: "none", cursor: name.trim() && !saving ? "pointer" : "default", padding: "8px 14px", borderRadius: 8, fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5, opacity: name.trim() && !saving ? 1 : 0.5 } }, saving ? "\u2026" : "SAVE")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, overflowY: "auto", padding: "0 0 32px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "16px" } }, /* @__PURE__ */ import_react4.default.createElement("label", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 600, display: "block", marginBottom: 6 } }, "TRIP NAME"), /* @__PURE__ */ import_react4.default.createElement(
+      "input",
+      {
+        value: name,
+        onChange: (e) => setName(e.target.value.slice(0, 90)),
+        disabled: !isMine,
+        style: { width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 16, outline: "none", fontWeight: 600, marginBottom: 4 }
+      }
+    ), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, display: "block", marginBottom: 14 } }, name.length, "/90 \u2014 include route + region for search"), /* @__PURE__ */ import_react4.default.createElement("label", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 600, display: "block", marginBottom: 6 } }, "DESCRIPTION"), /* @__PURE__ */ import_react4.default.createElement(
+      "textarea",
+      {
+        value: description,
+        onChange: (e) => setDescription(e.target.value.slice(0, 280)),
+        disabled: !isMine,
+        rows: 4,
+        placeholder: "What makes this trip worth taking? Highlights, surface type, time of year, vehicle requirements\u2026",
+        style: { width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", resize: "vertical", lineHeight: 1.5 }
+      }
+    ), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, display: "block", marginTop: 4 } }, description.length, "/280")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 8 } }, "ROUTE"), hasRoute ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { borderRadius: 12, overflow: "hidden", border: `1px solid ${T.charcoal}`, height: 240, position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement(RouteMapPreview, { pins: initialPins, points: rd.points || [], photos })) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { ...cardStyle, padding: 20, textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Map2, { size: 28, color: T.tertiary, strokeWidth: 1, style: { opacity: 0.5, marginBottom: 10 } }), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "0 0 14px" } }, "No route attached yet \u2014 required to publish."), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: onAddRouteLive, style: { flex: 1, padding: "10px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 } }, /* @__PURE__ */ import_react4.default.createElement(Radio, { size: 14, color: T.white }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, "LIVE")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: onAddRouteManual, style: { flex: 1, padding: "10px", borderRadius: 8, background: T.copper, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 } }, /* @__PURE__ */ import_react4.default.createElement(Map2, { size: 14, color: T.white }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, "MANUAL"))))), hasRoute && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 8 } }, "TRAILHEAD / START LOCATION"), /* @__PURE__ */ import_react4.default.createElement(
+      "input",
+      {
+        value: trailheadLabel,
+        onChange: (e) => setTrailheadLabel(e.target.value.slice(0, 120)),
+        placeholder: "e.g. Engineer Pass TH, near Lake City CO",
+        disabled: !isMine,
+        style: { width: "100%", boxSizing: "border-box", padding: "11px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none" }
+      }
+    ), safe.start_lat != null && safe.start_lng != null && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, display: "block", marginTop: 4 } }, safe.start_lat.toFixed(5), ", ", safe.start_lng.toFixed(5))), hasRoute && initialPins.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 8 } }, "PIN NOTES \u2014 OPTIONAL"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 10 } }, initialPins.map((p, i) => {
+      const label = i === 0 ? "Start" : i === initialPins.length - 1 ? "End" : `Pin ${i + 1}`;
+      const isPhoto = !!p.photo;
+      return /* @__PURE__ */ import_react4.default.createElement("div", { key: i, style: { ...cardStyle, padding: 12 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 8 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 22, height: 22, borderRadius: "50%", background: i === 0 ? T.green : i === initialPins.length - 1 ? T.red : T.copper, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 700 } }, isPhoto ? "\u{1F4F7}" : i + 1)), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, letterSpacing: 0.4 } }, label), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, marginLeft: "auto" } }, p.lat != null ? `${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}` : "")), /* @__PURE__ */ import_react4.default.createElement(
+        "textarea",
+        {
+          value: pinNotes[i] || "",
+          onChange: (e) => setPinNotes((prev) => {
+            const next = [...prev];
+            next[i] = e.target.value.slice(0, 400);
+            return next;
+          }),
+          disabled: !isMine,
+          rows: 2,
+          placeholder: "What's at this pin? Obstacles, views, water source, camp option\u2026",
+          style: { width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 12, outline: "none", resize: "vertical", lineHeight: 1.4 }
+        }
+      ));
+    }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 8 } }, "TRIP DETAILS"), /* @__PURE__ */ import_react4.default.createElement("label", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, display: "block", marginBottom: 6 } }, "DIFFICULTY"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" } }, DIFFICULTY_OPTIONS.map((d) => /* @__PURE__ */ import_react4.default.createElement("button", { key: d, onClick: () => isMine && setDifficulty(d), disabled: !isMine, style: { padding: "8px 12px", borderRadius: 6, background: difficulty === d ? T.copper : T.darkCard, border: `1px solid ${difficulty === d ? T.copper : T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 600, cursor: isMine ? "pointer" : "default", letterSpacing: 0.4 } }, d))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 14 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 2 } }, /* @__PURE__ */ import_react4.default.createElement("label", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, display: "block", marginBottom: 6 } }, "REGION / AREA"), /* @__PURE__ */ import_react4.default.createElement(
+      "input",
+      {
+        value: region,
+        onChange: (e) => setRegion(e.target.value.slice(0, 80)),
+        placeholder: "e.g. San Juan Mountains",
+        disabled: !isMine,
+        style: { width: "100%", boxSizing: "border-box", padding: "9px 12px", borderRadius: 6, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 12, outline: "none" }
+      }
+    )), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 90 } }, /* @__PURE__ */ import_react4.default.createElement("label", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, display: "block", marginBottom: 6 } }, "STATE"), /* @__PURE__ */ import_react4.default.createElement(
+      "select",
+      {
+        value: stateCode,
+        onChange: (e) => setStateCode(e.target.value),
+        disabled: !isMine,
+        style: { width: "100%", boxSizing: "border-box", padding: "9px 8px", borderRadius: 6, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 12, outline: "none" }
+      },
+      /* @__PURE__ */ import_react4.default.createElement("option", { value: "" }, "\u2014"),
+      STATES.map((s) => /* @__PURE__ */ import_react4.default.createElement("option", { key: s, value: s }, s))
+    ))), /* @__PURE__ */ import_react4.default.createElement("label", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, display: "block", marginBottom: 6 } }, "TERRAIN"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 } }, TERRAIN_OPTIONS.map((t) => {
+      const on = terrains.includes(t);
+      return /* @__PURE__ */ import_react4.default.createElement("button", { key: t, onClick: () => isMine && toggleTerrain(t), disabled: !isMine, style: { padding: "6px 12px", borderRadius: 16, background: on ? `${T.copper}30` : T.darkCard, border: `1px solid ${on ? T.copper : T.charcoal}`, color: on ? T.copper : T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 600, cursor: isMine ? "pointer" : "default", letterSpacing: 0.4 } }, t);
+    })), /* @__PURE__ */ import_react4.default.createElement("label", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, display: "block", marginBottom: 6 } }, "TAGS"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 } }, tags.map((t) => /* @__PURE__ */ import_react4.default.createElement("span", { key: t, style: { display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 8px 5px 10px", borderRadius: 14, background: T.darkCard, border: `1px solid ${T.charcoal}`, fontFamily: sans, fontSize: 11, color: T.white } }, "#", t, isMine && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => removeTag(t), style: { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", color: T.tertiary } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 11 }))))), isMine && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6 } }, /* @__PURE__ */ import_react4.default.createElement(
+      "input",
+      {
+        value: tagInput,
+        onChange: (e) => setTagInput(e.target.value),
+        onKeyDown: (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            addTag();
+          }
+        },
+        placeholder: "Add a tag (e.g. fall-colors, beginner)",
+        style: { flex: 1, boxSizing: "border-box", padding: "8px 12px", borderRadius: 6, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 12, outline: "none" }
+      }
+    ), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: addTag, style: { padding: "8px 14px", borderRadius: 6, background: T.charcoal, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600 } }, "ADD"))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600 } }, "PHOTOS"), isMine && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => photoFileRef.current && photoFileRef.current.click(), style: { background: T.charcoal, border: "none", padding: "6px 12px", borderRadius: 6, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 } }, /* @__PURE__ */ import_react4.default.createElement(Camera, { size: 12, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600, letterSpacing: 0.5 } }, "ADD PHOTOS"))), /* @__PURE__ */ import_react4.default.createElement("input", { ref: photoFileRef, type: "file", accept: "image/*,video/*", multiple: true, onChange: handlePhotoFiles, style: { display: "none" } }), photos.length === 0 ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { ...cardStyle, padding: 20, textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Camera, { size: 24, color: T.tertiary, strokeWidth: 1, style: { opacity: 0.4, marginBottom: 8 } }), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, margin: 0 } }, "No photos yet")) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 6 } }, photos.map((p, i) => {
+      const url = typeof p === "string" ? p : p.url || p;
+      return /* @__PURE__ */ import_react4.default.createElement("div", { key: i, style: { position: "relative", width: 90, height: 90, borderRadius: 8, overflow: "hidden", border: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("img", { src: url, alt: "", style: { width: "100%", height: "100%", objectFit: "cover", display: "block" } }), isMine && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => removePhoto(i), style: { position: "absolute", top: 4, right: 4, width: 20, height: 20, borderRadius: "50%", background: `${T.darkBg}D0`, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 12, color: T.white })));
+    }))), isMine && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "12px 16px 16px", borderTop: `1px solid ${T.charcoal}` } }, safe.status === "draft" ? /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: () => setConfirmingPublish(true),
+        disabled: !hasRoute,
+        style: { width: "100%", padding: "14px", borderRadius: 10, background: hasRoute ? T.green : T.charcoal, border: "none", cursor: hasRoute ? "pointer" : "default", fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 1, opacity: hasRoute ? 1 : 0.5, marginBottom: 10 }
+      },
+      hasRoute ? "PUBLISH TRIP REPORT" : "ADD A ROUTE TO PUBLISH"
+    ) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "12px", borderRadius: 8, background: `${T.green}15`, border: `1px solid ${T.green}40`, marginBottom: 10, display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement(CircleCheckBig, { size: 14, color: T.green }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.green, fontWeight: 600 } }, "Published \u2014 visible to the community")), /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: () => setConfirmingDelete(true),
+        style: { width: "100%", padding: "11px", borderRadius: 8, background: "transparent", border: `1px solid ${T.red}50`, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.red, fontWeight: 600, letterSpacing: 0.5 }
+      },
+      "DELETE ",
+      safe.status === "published" ? "REPORT" : "DRAFT"
+    ))), confirmingPublish && /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => setConfirmingPublish(false), style: { position: "absolute", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 10 } }, /* @__PURE__ */ import_react4.default.createElement("div", { onClick: (e) => e.stopPropagation(), style: { background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 12, padding: 20, width: "100%" } }, /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, margin: "0 0 8px" } }, "Publish this trip report?"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 16px", lineHeight: 1.5 } }, "Anyone in the community will be able to read it. You can still edit after publishing."), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setConfirmingPublish(false), style: { flex: 1, padding: "11px", borderRadius: 8, background: T.charcoal, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 600 } }, "CANCEL"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: async () => {
+      setConfirmingPublish(false);
+      await handleSave();
+      await onPublish();
+    }, style: { flex: 1, padding: "11px", borderRadius: 8, background: T.green, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, "PUBLISH")))), confirmingDelete && /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => setConfirmingDelete(false), style: { position: "absolute", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 10 } }, /* @__PURE__ */ import_react4.default.createElement("div", { onClick: (e) => e.stopPropagation(), style: { background: T.darkCard, border: `1px solid ${T.red}40`, borderRadius: 12, padding: 20, width: "100%" } }, /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, margin: "0 0 8px" } }, "Delete this ", safe.status === "published" ? "report" : "draft", "?"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 16px", lineHeight: 1.5 } }, "This can't be undone."), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setConfirmingDelete(false), style: { flex: 1, padding: "11px", borderRadius: 8, background: T.charcoal, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 600 } }, "CANCEL"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: async () => {
+      setConfirmingDelete(false);
+      await onDelete();
+    }, style: { flex: 1, padding: "11px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, "DELETE")))));
+  }
   function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands }) {
     const mapRef = (0, import_react4.useRef)(null);
     const mapInst = (0, import_react4.useRef)(null);
@@ -47028,7 +47216,7 @@ ${suffix}`;
       return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 6, background: `${T.darkCard}F5`, border: `1px solid ${T.charcoal}`, borderRadius: 10, padding: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "flex-start", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 36, height: 36, borderRadius: "50%", background: T.green, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 18 } }, "\u{1F3D5}\uFE0F"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, marginBottom: 2 } }, selectedSpot.name), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 4 } }, selectedSpot.spot_type !== "unknown" ? selectedSpot.spot_type : "", selectedSpot.spot_type !== "unknown" && selectedSpot.fee !== "unknown" ? " \xB7 " : "", selectedSpot.fee !== "unknown" ? selectedSpot.fee : "", (selectedSpot.spot_type !== "unknown" || selectedSpot.fee !== "unknown") && selectedSpot.source ? " \xB7 " : "", selectedSpot.source), selectedSpot.description && /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 12, color: T.warmStone, lineHeight: 1.4 } }, selectedSpot.description), ext && /* @__PURE__ */ import_react4.default.createElement("a", { href: ext.url, target: "_blank", rel: "noopener noreferrer", style: { display: "inline-flex", alignItems: "center", gap: 6, marginTop: 10, padding: "8px 12px", background: T.copper, color: T.white, borderRadius: 6, textDecoration: "none", fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5 } }, /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 12 }), /* @__PURE__ */ import_react4.default.createElement("span", null, ext.label))), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setSelectedSpot(null), style: { background: "none", border: "none", cursor: "pointer", padding: 4, color: T.tertiary } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 16 }))));
     })(), selectedLand && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 6, background: `${T.darkCard}F5`, border: `1px solid ${T.charcoal}`, borderRadius: 10, padding: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "flex-start", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 36, height: 36, borderRadius: 6, background: PUBLIC_LANDS_COLORS[selectedLand.mang_name] || PUBLIC_LANDS_DEFAULT_COLOR, flexShrink: 0, border: `1px solid ${T.charcoal}` } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, marginBottom: 2 } }, selectedLand.unit_nm || selectedLand.loc_nm || "Public land"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600, marginBottom: 4 } }, PUBLIC_LANDS_NAMES[selectedLand.mang_name] || selectedLand.mang_name || "Unknown manager"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.4 } }, selectedLand.des_tp ? selectedLand.des_tp : null, selectedLand.des_tp && selectedLand.state_nm ? " \xB7 " : null, selectedLand.state_nm, selectedLand.pub_access ? ` \xB7 ${PUBLIC_ACCESS_NAMES[selectedLand.pub_access] || selectedLand.pub_access}` : null)), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setSelectedLand(null), style: { background: "none", border: "none", cursor: "pointer", padding: 4, color: T.tertiary } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 16 })))));
   }
-  function RoutesScreen({ onRecordRoute, onManualEntry, userRoutes, onUpdateRoute, savedRoutes, onSaveRoute, onUnsaveRoute, onOpenDM, onAddFeedPost, onStartNav, userBuilds, campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, currentUserId, tripReports, onCreateTripDraft, onChooseManual, onChooseLive, onChooseSkip }) {
+  function RoutesScreen({ onRecordRoute, onManualEntry, userRoutes, onUpdateRoute, savedRoutes, onSaveRoute, onUnsaveRoute, onOpenDM, onAddFeedPost, onStartNav, userBuilds, campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, currentUserId, tripReports, onCreateTripDraft, onChooseManual, onChooseLive, onChooseSkip, onOpenTripDraft }) {
     const [showCreator, setShowCreator] = (0, import_react4.useState)(false);
     const [mainTab, setMainTab] = (0, import_react4.useState)("reports");
     const [planningTab, setPlanningTab] = (0, import_react4.useState)("saved");
@@ -47116,7 +47304,7 @@ ${suffix}`;
       const published = (tripReports || []).filter((t) => t.status === "published");
       return /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 14px", display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, display: "flex", alignItems: "center", background: T.darkCard, borderRadius: 8, padding: "10px 14px" } }, /* @__PURE__ */ import_react4.default.createElement(Search, { size: 16, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary, marginLeft: 8 } }, "Search trip reports\u2026")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setShowCreator(true), style: { display: "flex", alignItems: "center", gap: 6, padding: "10px 14px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 14, color: T.white }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, "NEW TRIP REPORT"))), myDrafts.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 10 } }, /* @__PURE__ */ import_react4.default.createElement(PenLine, { size: 12, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.5, fontWeight: 600 } }, "YOUR DRAFTS"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, "\xB7 ", myDrafts.length)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8 } }, myDrafts.map((d) => {
         const hasRoute = d.route_data && (d.route_data.pins && d.route_data.pins.length > 0 || d.route_data.points && d.route_data.points.length > 0);
-        return /* @__PURE__ */ import_react4.default.createElement("div", { key: d.id, style: { ...cardStyle, padding: 14, display: "flex", alignItems: "center", gap: 12, border: `1px solid ${T.copper}40` } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 36, height: 36, borderRadius: 8, background: `${T.copper}25`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(Mountain, { size: 16, color: T.copper })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, marginBottom: 2 } }, d.name), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.4 } }, "DRAFT \xB7 ", hasRoute ? "route added" : "no route yet", " \xB7 ", formatPostTime(new Date(d.created_at).getTime()))), /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 16, color: T.tertiary }));
+        return /* @__PURE__ */ import_react4.default.createElement("div", { key: d.id, onClick: () => onOpenTripDraft && onOpenTripDraft(d.id), style: { ...cardStyle, padding: 14, display: "flex", alignItems: "center", gap: 12, border: `1px solid ${T.copper}40`, cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 36, height: 36, borderRadius: 8, background: `${T.copper}25`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(Mountain, { size: 16, color: T.copper })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, marginBottom: 2 } }, d.name), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.4 } }, "DRAFT \xB7 ", hasRoute ? "route added" : "no route yet", " \xB7 ", formatPostTime(new Date(d.created_at).getTime()))), /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 16, color: T.tertiary }));
       }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px" } }, published.length === 0 && myDrafts.length === 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "center", padding: "60px 20px" } }, /* @__PURE__ */ import_react4.default.createElement(Mountain, { size: 36, color: T.tertiary, strokeWidth: 1, style: { opacity: 0.3, marginBottom: 12 } }), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 14, color: T.tertiary, margin: "0 0 6px" } }, "No trip reports yet"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary, opacity: 0.6 } }, "Tap NEW TRIP REPORT to log a trip you've taken or are on right now.")), published.length > 0 && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 10 } }, /* @__PURE__ */ import_react4.default.createElement(Globe, { size: 12, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.5, fontWeight: 600 } }, "COMMUNITY TRIP REPORTS"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, "\xB7 ", published.length)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8 } }, published.map((p, i) => renderRouteCard({
         id: p.id,
         name: p.name,
@@ -51375,6 +51563,7 @@ ${suffix}`;
     const [showRecorder, setShowRecorder] = (0, import_react4.useState)(false);
     const [showManualRoute, setShowManualRoute] = (0, import_react4.useState)(false);
     const [pendingTripDraftId, setPendingTripDraftId] = (0, import_react4.useState)(null);
+    const [editingTripId, setEditingTripId] = (0, import_react4.useState)(null);
     const [pendingThread, setPendingThread] = (0, import_react4.useState)(null);
     const [pendingBuildNav, setPendingBuildNav] = (0, import_react4.useState)(null);
     const [pendingPostNav, setPendingPostNav] = (0, import_react4.useState)(initialSharedLink && initialSharedLink.kind === "post" ? initialSharedLink.id : null);
@@ -53095,8 +53284,9 @@ ${suffix}`;
     }, onChooseLive: (draftId) => {
       setPendingTripDraftId(draftId);
       setShowRecorder(true);
-    }, onChooseSkip: (_draftId) => {
-    } }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onPostBuildToFeed: requireAuth((b, opts) => {
+    }, onChooseSkip: (draftId) => {
+      if (draftId) setEditingTripId(draftId);
+    }, onOpenTripDraft: (id) => setEditingTripId(id) }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onPostBuildToFeed: requireAuth((b, opts) => {
       const rawBd = b.buildData;
       const bd = scrubLocalPhotosFromBuildData(rawBd);
       const isLocalUrl = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:"));
@@ -53140,7 +53330,38 @@ ${suffix}`;
         showPublicLands,
         setShowPublicLands
       }
-    ), showRecorder && /* @__PURE__ */ import_react4.default.createElement(
+    ), editingTripId && (() => {
+      const trip = tripReports.find((t) => t.id === editingTripId);
+      if (!trip) {
+        setTimeout(() => setEditingTripId(null), 0);
+        return null;
+      }
+      return /* @__PURE__ */ import_react4.default.createElement(
+        TripReportEditor,
+        {
+          trip,
+          currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id,
+          onClose: () => setEditingTripId(null),
+          onSave: (updates) => updateTripDraft(trip.id, updates),
+          onPublish: async () => {
+            const updated = await publishTripDraft(trip.id);
+            return updated;
+          },
+          onDelete: async () => {
+            await deleteTripDraft(trip.id);
+            setEditingTripId(null);
+          },
+          onAddRouteManual: () => {
+            setPendingTripDraftId(trip.id);
+            setShowManualRoute(true);
+          },
+          onAddRouteLive: () => {
+            setPendingTripDraftId(trip.id);
+            setShowRecorder(true);
+          }
+        }
+      );
+    })(), showRecorder && /* @__PURE__ */ import_react4.default.createElement(
       RouteRecorder,
       {
         userBuilds: myBuildsForLink,
@@ -53201,8 +53422,10 @@ ${suffix}`;
             if (routeData.terrains) updates.terrains = routeData.terrains;
             if (routeData.tags) updates.tags = routeData.tags;
             updateTripDraft(pendingTripDraftId, updates);
+            const draftIdForEditor = pendingTripDraftId;
             setPendingTripDraftId(null);
             setShowRecorder(false);
+            setEditingTripId(draftIdForEditor);
             return;
           }
           setUserRoutes((prev) => [{
@@ -53294,8 +53517,10 @@ ${suffix}`;
             if (routeData.tags) updates.tags = routeData.tags;
             if (routeData.difficulty) updates.difficulty = routeData.difficulty;
             updateTripDraft(pendingTripDraftId, updates);
+            const draftIdForEditor = pendingTripDraftId;
             setPendingTripDraftId(null);
             setShowManualRoute(false);
+            setEditingTripId(draftIdForEditor);
             return;
           }
           setUserRoutes((prev) => [{
