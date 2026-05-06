@@ -42776,7 +42776,7 @@ ${suffix}`;
   if (!document.querySelector('link[href*="Source+Serif+4"]')) document.head.appendChild(fontLink);
   var MAPBOX_TOKEN = "pk.eyJ1IjoibG9uZXBlYWtvdmVybGFuZCIsImEiOiJjbW91ODliaDQwNzMzMnBweGNkN3JtMjRwIn0.PAkLOo_i_5FuW9w1VH-mIw";
   var MAPBOX_STYLE = "mapbox://styles/mapbox/outdoors-v12";
-  var MAPBOX_PUBLIC_LANDS_TILESET_ID = "";
+  var MAPBOX_PUBLIC_LANDS_TILESET_ID = "lonepeakoverland.padus";
   var MAPBOX_PUBLIC_LANDS_SOURCE_LAYER = "padus";
   function loadMapbox() {
     if (window.mapboxgl) return Promise.resolve(window.mapboxgl);
