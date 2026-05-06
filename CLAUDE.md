@@ -37,6 +37,9 @@ Live at: Deployed on Vercel via GitHub (https://github.com/AdventureCB/Trailhead
 | `dm_participants` | Membership join. `last_read_at` for unread counts; `hidden_at` for soft-delete (direct convos reappear on next inbound message) | composite PK on conv_id+user_id |
 | `dm_messages` | DM messages. `body` text + `payload` jsonb (photos, sharedPost, convoy_invite) | `conversation_id` CASCADE, `sender_id` CASCADE |
 | `push_subscriptions` | Web Push endpoints, one row per device. PK is the endpoint URL | `user_id` → `auth.users(id)` CASCADE |
+| `build_likes` | Likes on builds (heart in builds gallery / detail) | `build_id` → `builds(id)` CASCADE, `user_id` → `auth.users(id)` CASCADE; composite PK |
+| `dm_message_likes` | iMessage-style emoji reactions on DM messages. `emoji` column holds the picked emoji | `message_id` → `dm_messages(id)` CASCADE, `user_id` → `auth.users(id)` CASCADE; composite PK |
+| `camping_spots` | Public dataset of camping locations rendered on routes maps. Seeded with OSM + Recreation.gov via `supabase/seed/seed-camping-spots.js`; users can also add their own (`source = 'user'`). `unique(source, source_id)` makes seed re-runs idempotent | `user_id` → `auth.users(id)` SET NULL |
 
 **Row Level Security (RLS):** Enabled on all tables. Public posts readable by anyone, mutations restricted to authenticated owner.
 
@@ -79,8 +82,11 @@ Trailhead/
 │   ├── sw.js                    # Service worker for web push + click routing
 │   ├── lone-peak-flag.png       # Logo / PWA icon / push icon
 │   └── trailhead-bundle.*.js    # Single hashed esbuild bundle (one at a time after cleanup)
-├── supabase/functions/send-push/  # Edge Function (Deno) for sending web push
-│   └── index.ts                 # Reads from notifications + dm_messages triggers
+├── supabase/
+│   ├── functions/send-push/     # Edge Function (Deno) for sending web push
+│   │   └── index.ts             # Reads from notifications + dm_messages triggers
+│   └── seed/
+│       └── seed-camping-spots.js  # One-time camping_spots seed (OSM + Recreation.gov)
 └── Trailhead Concept.pen        # Pencil design file with brand system
 ```
 
@@ -109,6 +115,33 @@ cd /Users/cainen/Documents/Claude/Projects/Trailhead && git add -A deploy-v2.2/ 
 - Include the `cd` path prefix
 
 Vercel auto-deploys from main branch. The `vercel.json` serves `deploy-v2.2/` as the output directory with SPA rewrites.
+
+## Maps (Mapbox GL JS)
+
+Trailhead's map surface migrated from Google Maps → Mapbox GL JS in May 2026. The lazy CDN loader lives in `loadMapbox()` and runs on first map use. Style: `mapbox://styles/mapbox/outdoors-v12`.
+
+- **Token:** public `pk.*` token defined inline as `MAPBOX_TOKEN`. URL-restricted in the Mapbox dashboard to `trailhead2-2.vercel.app` + `localhost`. Tokens are designed to ship in the bundle; URL restrictions handle the security model.
+- **API helpers:** `mapboxGeocode`, `mapboxGeocodeSearch` (multi-result), `mapboxReverseGeocode`, `mapboxDirections(from, to, { steps, waypoints })`.
+- **Marker DOM:** Mapbox markers are HTML elements (no Symbol icons). Use `buildCircleMarkerEl(color, size)` and `buildEmojiMarkerEl(color, emoji, size)`.
+- **Polylines:** GeoJSON line layers, not a `Polyline` class. Pattern: `map.addSource(id, { type: 'geojson', data: ... })` + `map.addLayer({ type: 'line', source: id, paint: {...} })`. Update with `source.setData(geom)`.
+- **Elevation:** No native ElevationService. We use the free Open-Elevation API via `fetchElevationsAlongPath(coords)` for manual route entry. Falls back to `elevGain=0` if Open-Elevation times out.
+- **External deep links** still use `https://www.google.com/maps/dir/?...` — the user's installed maps app handles them; that's not an API call.
+
+### Map overlays
+
+Two togglable overlay layers wired into RouteRecorder + RouteNavigation. Toggle UI is a top-left floating panel (`<MapLayerToggle>`); choices persist to `localStorage` (`th_show_camping`, `th_show_publands`).
+
+- **Camping spots layer** — `useCampingSpotsLayer(mapInst, mapReady, rows, visible, onSelect)`. Adds a clustered GeoJSON source plus three layers (cluster bubble, cluster count, individual 🏕️ glyph). Backed by `public.camping_spots`. Tap a marker → fires `onSelect` with the row props.
+- **Public lands layer** — `usePublicLandsLayer(mapInst, mapReady, visible)`. Backed by a Mapbox vector tileset (PAD-US uploaded to Mapbox Studio). No-op until `MAPBOX_PUBLIC_LANDS_TILESET_ID` is set in `trailhead-v1.jsx`. Renders as a 22% green fill + thin outline.
+- **User-contributed spots:** `addCampingSpot({ name, lat, lng, description, ... })` at the root inserts with `source: 'user'`. The "+ ADD SPOT" button on RouteRecorder enters add-mode → next map tap stages a name/notes form.
+
+### Camping-spots seed
+
+One-time data import script at `supabase/seed/seed-camping-spots.js`. Usage:
+```bash
+SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... RIDB_API_KEY=... node supabase/seed/seed-camping-spots.js
+```
+Fetches `tourism=camp_site` + `tourism=caravan_site` from OpenStreetMap (Overpass API; tries main + two mirrors) and federal campgrounds from Recreation.gov RIDB API. Upserts to `public.camping_spots` using `unique (source, source_id)` so re-runs are idempotent. RIDB key is free from https://ridb.recreation.gov/. Default bbox = continental US + southern Canada.
 
 ## Edge Function Deploy
 
@@ -158,7 +191,7 @@ Defined in code as the `T` object (line ~6):
 | `ComposeScreen` | ~10857 | Create new post (text, photos, routes, builds, convoys) |
 | `RecoveryScreen` | ~11593 | Recovery assist feature |
 | `DMScreen` | ~11715 | Direct messaging |
-| `MapOverlay` | ~243 | Google Maps integration for routes/recovery |
+| `MapOverlay` | ~243 | Mapbox GL JS integration for routes/recovery |
 | `GlobalSearch` | ~1116 | Cross-feature search |
 | `TopBar` | ~1011 | App header with notifications |
 | `BottomNav` | ~730 | Tab bar navigation |
@@ -191,9 +224,12 @@ Seven tiers from Scout (0pts) to Legend (100k+ pts). Points awarded for posting,
 ## SQL Already Applied
 
 The following have been run in the Supabase SQL Editor across prior sessions:
-- Tables: profiles, posts, post_likes, post_comments, post_comment_likes, notifications, builds
+- Tables: profiles, posts, post_likes, post_comments, post_comment_likes, notifications, builds, follows, convoy_rsvps, dm_conversations, dm_participants, dm_messages, push_subscriptions, build_likes, dm_message_likes, camping_spots
 - RLS policies on all tables
-- Realtime publication on posts, post_likes, post_comments, notifications
-- REPLICA IDENTITY FULL on post_likes
-- ON DELETE CASCADE on all user_id FKs, SET NULL on notifications.actor_id
+- Realtime publication on posts, post_likes, post_comments, post_comment_likes, notifications, profiles, follows, convoy_rsvps, dm_conversations, dm_participants, dm_messages, build_likes, dm_message_likes, camping_spots
+- REPLICA IDENTITY FULL on post_likes, post_comments, post_comment_likes, follows, convoy_rsvps, dm_*, build_likes, dm_message_likes, camping_spots
+- ON DELETE CASCADE on all user_id FKs, SET NULL on notifications.actor_id and camping_spots.user_id
 - CHECK constraint on posts.type including POST, PHOTOS, ROUTES, BUILDS, CONVOYS
+- `is_dm_participant(conv_id, uid)` SECURITY DEFINER helper used by all dm_* policies
+- `dm_message_likes.emoji text not null default '❤️'` column for iMessage-style reactions
+- `camping_spots.unique(source, source_id)` for idempotent seed re-runs
