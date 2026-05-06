@@ -46381,7 +46381,7 @@ ${suffix}`;
       return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 16, zIndex: 6, background: `${T.darkCard}F5`, border: `1px solid ${T.charcoal}`, borderRadius: 10, padding: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "flex-start", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 36, height: 36, borderRadius: "50%", background: T.green, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 18 } }, "\u{1F3D5}\uFE0F"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, marginBottom: 2 } }, selectedSpot.name), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 4 } }, selectedSpot.spot_type !== "unknown" ? selectedSpot.spot_type : "", selectedSpot.spot_type !== "unknown" && selectedSpot.fee !== "unknown" ? " \xB7 " : "", selectedSpot.fee !== "unknown" ? selectedSpot.fee : "", (selectedSpot.spot_type !== "unknown" || selectedSpot.fee !== "unknown") && selectedSpot.source ? " \xB7 " : "", selectedSpot.source), selectedSpot.description && /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 12, color: T.warmStone, lineHeight: 1.4 } }, selectedSpot.description), ext && /* @__PURE__ */ import_react4.default.createElement("a", { href: ext.url, target: "_blank", rel: "noopener noreferrer", style: { display: "inline-flex", alignItems: "center", gap: 6, marginTop: 10, padding: "8px 12px", background: T.copper, color: T.white, borderRadius: 6, textDecoration: "none", fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5 } }, /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 12 }), /* @__PURE__ */ import_react4.default.createElement("span", null, ext.label))), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setSelectedSpot(null), style: { background: "none", border: "none", cursor: "pointer", padding: 4, color: T.tertiary } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 16 }))));
     })(), selectedLand && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 16, zIndex: 6, background: `${T.darkCard}F5`, border: `1px solid ${T.charcoal}`, borderRadius: 10, padding: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "flex-start", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 36, height: 36, borderRadius: 6, background: PUBLIC_LANDS_COLORS[selectedLand.mang_name] || PUBLIC_LANDS_DEFAULT_COLOR, flexShrink: 0, border: `1px solid ${T.charcoal}` } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, marginBottom: 2 } }, selectedLand.unit_nm || selectedLand.loc_nm || "Public land"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600, marginBottom: 4 } }, PUBLIC_LANDS_NAMES[selectedLand.mang_name] || selectedLand.mang_name || "Unknown manager"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.4 } }, selectedLand.des_tp ? selectedLand.des_tp : null, selectedLand.des_tp && selectedLand.state_nm ? " \xB7 " : null, selectedLand.state_nm, selectedLand.pub_access ? ` \xB7 ${PUBLIC_ACCESS_NAMES[selectedLand.pub_access] || selectedLand.pub_access}` : null)), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setSelectedLand(null), style: { background: "none", border: "none", cursor: "pointer", padding: 4, color: T.tertiary } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 16 }))))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.charcoal, borderTop: `1px solid ${T.darkCard}`, padding: "10px 16px", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", justifyContent: "space-around" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block" } }, "DISTANCE"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 16, fontWeight: 700, color: T.white } }, route.distance || "\u2014")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block" } }, "EST. TIME"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 16, fontWeight: 700, color: T.white } }, route.time || route.duration || "\u2014")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block" } }, "ELEVATION"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 16, fontWeight: 700, color: T.white } }, route.elevation || "\u2014")))));
   }
-  function RoutePinMap({ pins, setPins, linkingPhotoIdx, onLinkPin, onRoutePoints, onRouteStats }) {
+  function RoutePinMap({ pins, setPins, linkingPhotoIdx, onLinkPin, onRoutePoints, onRouteStats, onPinSelect }) {
     const mapRef = (0, import_react4.useRef)(null);
     const mapInst = (0, import_react4.useRef)(null);
     const markersRef = (0, import_react4.useRef)([]);
@@ -46390,6 +46390,10 @@ ${suffix}`;
     (0, import_react4.useEffect)(() => {
       setPinsRef.current = setPins;
     }, [setPins]);
+    const onPinSelectRef = (0, import_react4.useRef)(onPinSelect);
+    (0, import_react4.useEffect)(() => {
+      onPinSelectRef.current = onPinSelect;
+    }, [onPinSelect]);
     (0, import_react4.useEffect)(() => {
       let cancelled = false;
       const init = async () => {
@@ -46489,6 +46493,8 @@ ${suffix}`;
           ev.stopPropagation();
           if (typeof linkingPhotoIdx === "number" && onLinkPin) {
             onLinkPin(i);
+          } else if (onPinSelectRef.current) {
+            onPinSelectRef.current(i);
           } else {
             setPinsRef.current && setPinsRef.current((prev) => prev.filter((_, idx) => idx !== i));
           }
@@ -46961,6 +46967,90 @@ ${suffix}`;
       /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 13, color: T.tertiary, fontWeight: 700, letterSpacing: 0.5 } }, "SKIP FOR NOW"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 11, color: T.tertiary, marginTop: 2 } }, "Save the draft and add the route later (can't publish without one)")),
       /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 18, color: T.tertiary })
     ))));
+  }
+  function TripPinFullscreen({ initialPins, initialPhotos, onClose, onSave }) {
+    const [pins, setPinsRaw] = (0, import_react4.useState)(Array.isArray(initialPins) ? initialPins : []);
+    const [photos, setPhotos] = (0, import_react4.useState)(Array.isArray(initialPhotos) ? initialPhotos : []);
+    const [routePoints, setRoutePoints] = (0, import_react4.useState)([]);
+    const [routeStats, setRouteStats] = (0, import_react4.useState)(null);
+    const [selectedIdx, setSelectedIdx] = (0, import_react4.useState)(null);
+    const photoFileRef = (0, import_react4.useRef)(null);
+    const setPins = (updater) => {
+      setPinsRaw((prev) => {
+        const next = typeof updater === "function" ? updater(prev) : updater;
+        if (Array.isArray(next) && next.length > prev.length) {
+          const newIdx = next.length - 1;
+          setTimeout(() => setSelectedIdx(newIdx), 0);
+        }
+        return next;
+      });
+    };
+    const photosForPin = (i) => {
+      const pin = pins[i];
+      if (!pin) return [];
+      return photos.filter((p) => p && p.lat != null && p.lng != null && Math.abs(p.lat - pin.lat) < 1e-4 && Math.abs(p.lng - pin.lng) < 1e-4);
+    };
+    const handleAddPhotoFiles = (e) => {
+      const files = Array.from(e.target.files || []);
+      e.target.value = "";
+      const i = selectedIdx;
+      if (i == null || !pins[i]) return;
+      const pin = pins[i];
+      files.forEach((file) => {
+        if (file.size > MAX_UPLOAD_BYTES) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          setPhotos((prev) => [...prev, {
+            url: ev.target.result,
+            name: file.name,
+            type: file.type.startsWith("video/") ? "video" : "image",
+            lat: pin.lat,
+            lng: pin.lng
+          }]);
+          setPinsRaw((prev) => prev.map((p, idx) => idx === i ? { ...p, photo: true } : p));
+        };
+        reader.readAsDataURL(file);
+      });
+    };
+    const removePinAt = (i) => {
+      const pin = pins[i];
+      setPinsRaw((prev) => prev.filter((_, idx) => idx !== i));
+      if (pin) {
+        setPhotos((prev) => prev.filter((p) => !(p && p.lat != null && p.lng != null && Math.abs(p.lat - pin.lat) < 1e-4 && Math.abs(p.lng - pin.lng) < 1e-4)));
+      }
+      setSelectedIdx(null);
+    };
+    const removePhotoAt = (photoIdx) => {
+      setPhotos((prev) => prev.filter((_, i) => i !== photoIdx));
+    };
+    const handleSave = () => {
+      onSave({
+        pins,
+        photos,
+        points: routePoints,
+        // Distance returned by RoutePinMap callback is already miles; we
+        // round to 1 decimal so the editor's distance field looks tidy.
+        distance: routeStats && routeStats.distanceMi != null ? routeStats.distanceMi.toFixed(1) : null,
+        time: routeStats ? routeStats.timeStr : null,
+        elevGain: routeStats ? routeStats.elevGainFt : 0
+      });
+    };
+    const selectedPin = selectedIdx != null ? pins[selectedIdx] : null;
+    const selectedPhotos = selectedIdx != null ? photosForPin(selectedIdx) : [];
+    const pinLabel = (i) => i === 0 ? "Start" : i === pins.length - 1 ? "End" : `Pin ${i + 1}`;
+    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "fixed", top: 0, bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 430, zIndex: 1100, background: T.darkBg, display: "flex", flexDirection: "column" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", background: T.charcoal, borderBottom: `1px solid ${T.darkCard}`, flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: onClose, style: { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center" } }, /* @__PURE__ */ import_react4.default.createElement(ChevronLeft, { size: 22, color: T.white, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "center", lineHeight: 1.2 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 12, fontWeight: 700, color: T.white, letterSpacing: 0.6 } }, pins.length, " ", pins.length === 1 ? "PIN" : "PINS"), routeStats && routeStats.distanceMi != null && /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 0.4 } }, routeStats.distanceMi.toFixed(1), " MI", routeStats.timeStr ? ` \xB7 ${routeStats.timeStr}` : "")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: handleSave, disabled: pins.length < 1, style: { background: pins.length >= 1 ? T.green : T.charcoal, border: "none", cursor: pins.length >= 1 ? "pointer" : "default", padding: "8px 14px", borderRadius: 8, fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5, opacity: pins.length >= 1 ? 1 : 0.5 } }, "SAVE")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, position: "relative", minHeight: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: "100%", height: "100%", position: "relative", overflow: "hidden" } }, /* @__PURE__ */ import_react4.default.createElement(
+      RoutePinMap,
+      {
+        pins,
+        setPins,
+        onRoutePoints: setRoutePoints,
+        onRouteStats: setRouteStats,
+        onPinSelect: (i) => setSelectedIdx(i)
+      }
+    ))), pins.length === 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: 12, left: 12, right: 12, padding: "10px 14px", background: `${T.darkCard}EE`, border: `1px solid ${T.copper}40`, borderRadius: 8, backdropFilter: "blur(8px)", boxShadow: "0 4px 12px rgba(0,0,0,0.35)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5, marginBottom: 2 } }, "TAP THE MAP TO DROP PINS"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.4 } }, "The first pin is your start. Tap any pin afterward to add photos or remove it.")), selectedPin && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 6, background: `${T.darkCard}F5`, border: `1px solid ${T.charcoal}`, borderRadius: 10, padding: 14, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 10 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 30, height: 30, borderRadius: "50%", background: selectedIdx === 0 ? T.green : selectedIdx === pins.length - 1 ? T.red : T.copper, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700 } }, selectedIdx + 1)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700 } }, pinLabel(selectedIdx)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 2 } }, selectedPin.lat.toFixed(5), ", ", selectedPin.lng.toFixed(5))), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setSelectedIdx(null), style: { background: "none", border: "none", cursor: "pointer", padding: 4, color: T.tertiary } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 16 }))), selectedPhotos.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, overflowX: "auto", marginBottom: 10, paddingBottom: 4 } }, selectedPhotos.map((p, i) => {
+      const photoIdx = photos.findIndex((x) => x === p);
+      return /* @__PURE__ */ import_react4.default.createElement("div", { key: i, style: { position: "relative", flexShrink: 0, width: 70, height: 70, borderRadius: 8, overflow: "hidden", border: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("img", { src: p.url, alt: "", style: { width: "100%", height: "100%", objectFit: "cover", display: "block" } }), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => removePhotoAt(photoIdx), style: { position: "absolute", top: 4, right: 4, width: 18, height: 18, borderRadius: "50%", background: `${T.darkBg}D0`, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 10, color: T.white })));
+    })), /* @__PURE__ */ import_react4.default.createElement("input", { ref: photoFileRef, type: "file", accept: "image/*,video/*", multiple: true, onChange: handleAddPhotoFiles, style: { display: "none" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => photoFileRef.current && photoFileRef.current.click(), style: { flex: 1, padding: "10px", borderRadius: 8, background: T.copper, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 } }, /* @__PURE__ */ import_react4.default.createElement(Camera, { size: 14, color: T.white }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, selectedPhotos.length > 0 ? "ADD MORE PHOTOS" : "ADD PHOTOS")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => removePinAt(selectedIdx), style: { padding: "10px 14px", borderRadius: 8, background: "transparent", border: `1px solid ${T.red}50`, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.red, fontWeight: 600, letterSpacing: 0.5 } }, "REMOVE PIN")))));
   }
   function TripReportEditor({ trip, onClose, onSave, onPublish, onDelete, onAddRouteManual, onAddRouteLive, currentUserId }) {
     const safe = trip || {};
@@ -51564,6 +51654,7 @@ ${suffix}`;
     const [showManualRoute, setShowManualRoute] = (0, import_react4.useState)(false);
     const [pendingTripDraftId, setPendingTripDraftId] = (0, import_react4.useState)(null);
     const [editingTripId, setEditingTripId] = (0, import_react4.useState)(null);
+    const [showTripPinFullscreen, setShowTripPinFullscreen] = (0, import_react4.useState)(false);
     const [pendingThread, setPendingThread] = (0, import_react4.useState)(null);
     const [pendingBuildNav, setPendingBuildNav] = (0, import_react4.useState)(null);
     const [pendingPostNav, setPendingPostNav] = (0, import_react4.useState)(initialSharedLink && initialSharedLink.kind === "post" ? initialSharedLink.id : null);
@@ -53280,7 +53371,7 @@ ${suffix}`;
       setScreen("feed");
     }, myPoints: myTotalPoints }) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, isGuest && /* @__PURE__ */ import_react4.default.createElement(GuestBanner, { onSignIn: () => setShowGuestPrompt(true) }), screen === "feed" && renderFeedScopedTo({ hideFilters: false }), screen === "forum" && /* @__PURE__ */ import_react4.default.createElement(ForumScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), pendingThread, onPendingHandled: () => setPendingThread(null), onAddNotification: requireAuth(addNotification), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onAddFeedPost: requireAuth((post2) => addPost(post2)), userThreads: forumUserThreads, setUserThreads: requireAuth(setForumUserThreads), userReplies: forumUserReplies, setUserReplies: requireAuth(setForumUserReplies), likedForumItems: forumLikedItems, setLikedForumItems: requireAuth(setForumLikedItems), forumLikeCounts, setForumLikeCounts: requireAuth(setForumLikeCounts), forumViewCounts, setForumViewCounts, onAwardPoints: awardPoints }), screen === "routes" && /* @__PURE__ */ import_react4.default.createElement(RoutesScreen, { userBuilds: myBuildsForLink, onRecordRoute: requireAuth(() => setShowRecorder(true)), onManualEntry: requireAuth(() => setShowManualRoute(true)), userRoutes, onUpdateRoute: requireAuth((routeId, updates) => setUserRoutes((prev) => prev.map((r) => r.id === routeId ? { ...r, ...updates } : r))), savedRoutes, onSaveRoute: requireAuth((route) => setSavedRoutes((prev) => prev.some((r) => r.id === route.id || r.name === route.name) ? prev : [route, ...prev])), onUnsaveRoute: requireAuth((routeId) => setSavedRoutes((prev) => prev.filter((r) => r.id !== routeId && r.name !== routeId))), onOpenDM: (user, msg, sharedPost) => openDM(user, msg, sharedPost), onAddFeedPost: requireAuth((post2) => addPost(post2)), onStartNav: (route) => setActiveNavRoute(route), campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, tripReports, onCreateTripDraft: requireAuth(createTripDraft), onChooseManual: (draftId) => {
       setPendingTripDraftId(draftId);
-      setShowManualRoute(true);
+      setShowTripPinFullscreen(true);
     }, onChooseLive: (draftId) => {
       setPendingTripDraftId(draftId);
       setShowRecorder(true);
@@ -53330,7 +53421,48 @@ ${suffix}`;
         showPublicLands,
         setShowPublicLands
       }
-    ), editingTripId && (() => {
+    ), showTripPinFullscreen && pendingTripDraftId && (() => {
+      const trip = tripReports.find((t) => t.id === pendingTripDraftId);
+      const rd = trip && trip.route_data || {};
+      return /* @__PURE__ */ import_react4.default.createElement(
+        TripPinFullscreen,
+        {
+          initialPins: Array.isArray(rd.pins) ? rd.pins : [],
+          initialPhotos: Array.isArray(rd.photos) ? rd.photos : [],
+          onClose: () => {
+            const id = pendingTripDraftId;
+            setShowTripPinFullscreen(false);
+            setPendingTripDraftId(null);
+            if (id) setEditingTripId(id);
+          },
+          onSave: (routeData) => {
+            const startPin = routeData.pins && routeData.pins[0] || routeData.points && routeData.points[0] || null;
+            const updates = {
+              route_data: {
+                ...rd,
+                pins: routeData.pins || [],
+                points: routeData.points || [],
+                photos: routeData.photos || [],
+                distanceMi: routeData.distance ? parseFloat(routeData.distance) : null,
+                durationStr: routeData.time || null,
+                elevGainFt: Number(routeData.elevGain) || 0
+              }
+            };
+            if (startPin) {
+              updates.start_lat = startPin.lat;
+              updates.start_lng = startPin.lng;
+            }
+            if (routeData.distance) updates.distance_mi = parseFloat(routeData.distance);
+            if (routeData.elevGain) updates.elev_gain_ft = Number(routeData.elevGain);
+            const id = pendingTripDraftId;
+            updateTripDraft(id, updates);
+            setShowTripPinFullscreen(false);
+            setPendingTripDraftId(null);
+            setEditingTripId(id);
+          }
+        }
+      );
+    })(), editingTripId && !showTripPinFullscreen && !showRecorder && (() => {
       const trip = tripReports.find((t) => t.id === editingTripId);
       if (!trip) {
         setTimeout(() => setEditingTripId(null), 0);
@@ -53353,10 +53485,12 @@ ${suffix}`;
           },
           onAddRouteManual: () => {
             setPendingTripDraftId(trip.id);
-            setShowManualRoute(true);
+            setEditingTripId(null);
+            setShowTripPinFullscreen(true);
           },
           onAddRouteLive: () => {
             setPendingTripDraftId(trip.id);
+            setEditingTripId(null);
             setShowRecorder(true);
           }
         }
@@ -53371,6 +53505,7 @@ ${suffix}`;
         showPublicLands,
         setShowPublicLands,
         onAddCampingSpot: requireAuth(addCampingSpot),
+        skipDetailsForm: !!pendingTripDraftId,
         onClose: () => {
           setShowRecorder(false);
           setPendingTripDraftId(null);
