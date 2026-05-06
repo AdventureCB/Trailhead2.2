@@ -48890,7 +48890,7 @@ ${suffix}`;
     const urgencyColor = (u) => u === "HIGH" ? T.red : u === "RESOLVED" ? T.green : T.copper;
     return /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 0 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "16px", display: "flex", alignItems: "center", justifyContent: "space-between" } }, /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("h2", { style: { fontFamily: sans, fontSize: 20, color: T.white, margin: "0 0 4px", fontWeight: 700 } }, "Recovery Board"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary } }, allAlerts.filter((a) => a.urgency !== "RESOLVED").length, " active requests nearby")), /* @__PURE__ */ import_react4.default.createElement("button", { style: { background: T.red, padding: "10px 16px", borderRadius: 8, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ import_react4.default.createElement(TriangleAlert, { size: 14, color: T.white }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, letterSpacing: 0.5 } }, "REQUEST HELP"))), /* @__PURE__ */ import_react4.default.createElement("div", { className: "th-hscroll", style: { display: "flex", gap: 8, padding: "0 16px 14px", overflowX: "auto" } }, filters.map((f) => /* @__PURE__ */ import_react4.default.createElement("button", { key: f, onClick: () => setFilter(f), style: pill(filter === f) }, f))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px", display: "flex", flexDirection: "column", gap: 8 } }, filtered.map((a, i) => /* @__PURE__ */ import_react4.default.createElement("div", { key: i, style: { ...cardStyle, overflow: "hidden" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: `${urgencyColor(a.urgency)}12`, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.white, background: urgencyColor(a.urgency), padding: "2px 7px", borderRadius: 3, letterSpacing: 1, fontWeight: 600 } }, a.urgency), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, formatPostTime(a.time))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, /* @__PURE__ */ import_react4.default.createElement(Users, { size: 12, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, a.responses, " responding"))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: 16 } }, /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: sans, fontSize: 15, color: T.white, margin: "0 0 4px", fontWeight: 600 } }, a.title), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "0 0 10px", lineHeight: 1.5 } }, a.detail), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 12 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 12, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, a.location)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, /* @__PURE__ */ import_react4.default.createElement(Navigation, { size: 12, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 11, color: T.tertiary } }, a.coords)), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, a.vehicle)), a.urgency !== "RESOLVED" ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => onOpenDM && onOpenDM(a.author, "I'm responding to your recovery request \u2014 on my way to help!", { title: `\u{1F6A8} Recovery: ${a.title}`, user: a.author, initial: a.author.charAt(0).toUpperCase(), type: "recovery", location: a.location, urgency: a.urgency }), style: { background: T.red, color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 600, padding: "9px 18px", borderRadius: 6, border: "none", cursor: "pointer", letterSpacing: 0.5 } }, "RESPOND"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => onOpenMap && onOpenMap(a.coords, a.location, a.title, { author: a.author, alertId: "ra_" + i, title: a.title }), style: { background: "none", color: T.tertiary, fontFamily: sans, fontSize: 11, padding: "9px 18px", borderRadius: 6, border: `1px solid ${T.charcoal}`, cursor: "pointer", letterSpacing: 0.5 } }, "VIEW ON MAP")) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ import_react4.default.createElement(CircleCheckBig, { size: 14, color: T.green }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.green, fontWeight: 600, letterSpacing: 0.5 } }, "RESOLVED")))))));
   }
-  function DMScreen({ onClose, onViewUser, initialConvId, initialMessage, initialSharedPost, conversations, currentUserId, onSendMessage, onMarkRead, onLoadMessages, onSearchUsers, onCreateGroup, onOpenPost, onRsvpConvoy, convoyRsvps, onLeaveConversation, onUploadError, onlineUserIds, dmMessageReactions, onSetDmMessageReaction }) {
+  function DMScreen({ onClose, onViewUser, initialConvId, initialMessage, initialSharedPost, conversations, currentUserId, onSendMessage, onMarkRead, onLoadMessages, onSearchUsers, onCreateGroup, onOpenPost, onRsvpConvoy, convoyRsvps, onLeaveConversation, onUploadError, onlineUserIds, dmMessageReactions, onSetDmMessageReaction, onActiveConvChange }) {
     const [view, setView] = (0, import_react4.useState)(initialConvId ? "chat" : "inbox");
     const [activeConvId, setActiveConvId] = (0, import_react4.useState)(initialConvId || null);
     const activeConvo = activeConvId ? conversations.find((c) => c.id === activeConvId) || null : null;
@@ -48942,6 +48942,9 @@ ${suffix}`;
     (0, import_react4.useEffect)(() => {
       if (activeConvId && onLoadMessages) onLoadMessages(activeConvId);
     }, [activeConvId]);
+    (0, import_react4.useEffect)(() => {
+      if (onActiveConvChange) onActiveConvChange(view === "chat" ? activeConvId : null);
+    }, [view, activeConvId]);
     (0, import_react4.useEffect)(() => {
       const q = newRecipient.trim();
       if (!q) {
@@ -49091,26 +49094,19 @@ ${suffix}`;
       }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, overflowY: "auto", overscrollBehavior: "contain", WebkitOverflowScrolling: "touch", padding: "16px", display: "flex", flexDirection: "column", gap: 8 } }, (activeConvo.messages || []).length === 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "center", padding: "40px 16px" } }, /* @__PURE__ */ import_react4.default.createElement(Mail, { size: 32, color: T.tertiary, style: { opacity: 0.3, marginBottom: 12 } }), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 14, color: T.tertiary, margin: "0 0 4px" } }, "Start a conversation"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, margin: 0 } }, activeConvo.type === "direct" ? `Send a message to @${activeConvo.user || activeConvo.name}` : `Send a message to ${activeConvo.name}`)), (() => {
         const others = (activeConvo.participants || []).filter((p) => p.userId !== currentUserId);
         const myMsgs = (activeConvo.messages || []).filter((m) => m.from === "me");
+        const lastMine = myMsgs.length > 0 ? myMsgs[myMsgs.length - 1] : null;
+        const persisted = !!(lastMine && typeof lastMine.id === "string" && lastMine.id.length > 20);
         let lastSeenMyMsgId = null;
         let seenLabel = null;
-        if (activeConvo.type === "direct") {
-          const other = others[0];
-          const otherReadMs = other && other.lastReadAt ? new Date(other.lastReadAt).getTime() : 0;
-          if (otherReadMs > 0) {
-            for (let i = myMsgs.length - 1; i >= 0; i--) {
-              if (myMsgs[i].time && myMsgs[i].time <= otherReadMs) {
-                lastSeenMyMsgId = myMsgs[i].id;
-                seenLabel = "Seen";
-                break;
-              }
-            }
-          }
-        } else if (myMsgs.length > 0) {
-          const lastMine = myMsgs[myMsgs.length - 1];
-          const seenCount = others.filter((p) => p.lastReadAt && lastMine.time && new Date(p.lastReadAt).getTime() >= lastMine.time).length;
-          if (seenCount > 0) {
-            lastSeenMyMsgId = lastMine.id;
-            seenLabel = `Seen by ${seenCount}`;
+        if (persisted) {
+          lastSeenMyMsgId = lastMine.id;
+          if (activeConvo.type === "direct") {
+            const other = others[0];
+            const otherReadMs = other && other.lastReadAt ? new Date(other.lastReadAt).getTime() : 0;
+            seenLabel = otherReadMs > 0 && lastMine.time && lastMine.time <= otherReadMs ? "Seen" : "Delivered";
+          } else {
+            const seenCount = others.filter((p) => p.lastReadAt && lastMine.time && new Date(p.lastReadAt).getTime() >= lastMine.time).length;
+            seenLabel = seenCount > 0 ? `Seen by ${seenCount}` : "Delivered";
           }
         }
         return (activeConvo.messages || []).map((msg) => {
@@ -49125,25 +49121,25 @@ ${suffix}`;
             return Object.entries(m).map(([emoji, count]) => ({ emoji, count }));
           })();
           const myReactionEmoji = (reactionList.find((r) => r.userId === currentUserId) || {}).emoji || null;
-          const persisted = typeof msg.id === "string" && msg.id.length > 20;
+          const persisted2 = typeof msg.id === "string" && msg.id.length > 20;
           const showPicker = reactionPickerMsgId === msg.id;
           const bubble = /* @__PURE__ */ import_react4.default.createElement("div", { key: msg.id, style: { display: "flex", justifyContent: isMe ? "flex-end" : "flex-start" } }, /* @__PURE__ */ import_react4.default.createElement(
             "div",
             {
               onContextMenu: (e) => {
-                if (persisted) {
+                if (persisted2) {
                   e.preventDefault();
                   setReactionPickerMsgId(msg.id);
                 }
               },
               onTouchStart: (e) => {
-                if (persisted) startLongPress(msg.id);
+                if (persisted2) startLongPress(msg.id);
               },
               onTouchEnd: cancelLongPress,
               onTouchMove: cancelLongPress,
               onTouchCancel: cancelLongPress,
               onMouseDown: (e) => {
-                if (persisted && e.button === 0) startLongPress(msg.id);
+                if (persisted2 && e.button === 0) startLongPress(msg.id);
               },
               onMouseUp: cancelLongPress,
               onMouseLeave: cancelLongPress,
@@ -52198,6 +52194,7 @@ ${suffix}`;
         onlineUserIds,
         dmMessageReactions,
         onSetDmMessageReaction: requireAuth(setDmMessageReaction),
+        onActiveConvChange: (convId) => setActiveDmConvId(convId),
         convoyRsvps,
         onOpenPost: (sp) => {
           setShowDM(false);
