@@ -43162,11 +43162,6 @@ ${suffix}`;
       else map.once("load", ensureLayers);
       return () => {
         cancelled = true;
-        try {
-          if (pointClick) map.off("click", "camping-spots-points", pointClick);
-          if (clusterClick) map.off("click", "camping-spots-clusters", clusterClick);
-        } catch (_) {
-        }
       };
     }, [mapRef, ready, rows, visible]);
   }
@@ -43294,12 +43289,6 @@ ${suffix}`;
       };
       if (map.isStyleLoaded()) ensureLayers();
       else map.once("load", ensureLayers);
-      return () => {
-        try {
-          if (fillClick) map.off("click", "public-lands-fill", fillClick);
-        } catch (_) {
-        }
-      };
     }, [mapRef, ready, visible]);
   }
   function MapLayerToggle({ showCamping, setShowCamping, showPublicLands, setShowPublicLands }) {
