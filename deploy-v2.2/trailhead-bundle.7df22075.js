@@ -43205,6 +43205,8 @@ ${suffix}`;
     }, [mapRef, ready, visible]);
   }
   function MapLayerToggle({ showCamping, setShowCamping, showPublicLands, setShowPublicLands }) {
+    const [open, setOpen] = (0, import_react4.useState)(false);
+    const activeCount = (showCamping ? 1 : 0) + (showPublicLands ? 1 : 0);
     const row = (label, on, onToggle) => /* @__PURE__ */ import_react4.default.createElement(
       "button",
       {
@@ -43214,7 +43216,7 @@ ${suffix}`;
           alignItems: "center",
           gap: 8,
           width: "100%",
-          padding: "8px 12px",
+          padding: "9px 12px",
           background: "none",
           border: "none",
           cursor: "pointer",
@@ -43238,7 +43240,7 @@ ${suffix}`;
       } }, on && /* @__PURE__ */ import_react4.default.createElement("span", { style: { color: T.white, fontSize: 10, fontWeight: 700, lineHeight: 1 } }, "\u2713")),
       /* @__PURE__ */ import_react4.default.createElement("span", null, label)
     );
-    return /* @__PURE__ */ import_react4.default.createElement("div", { style: {
+    return /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, open && /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => setOpen(false), style: { position: "absolute", inset: 0, zIndex: 4 } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: {
       position: "absolute",
       top: 10,
       left: 10,
@@ -43248,9 +43250,33 @@ ${suffix}`;
       border: `1px solid ${T.charcoal}`,
       borderRadius: 8,
       boxShadow: "0 4px 12px rgba(0,0,0,0.35)",
-      minWidth: 150,
       overflow: "hidden"
-    } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "6px 12px 4px", fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.5, fontWeight: 600 } }, "LAYERS"), row("Camping spots", showCamping, () => setShowCamping((v) => !v)), row("Public lands", showPublicLands, () => setShowPublicLands((v) => !v)));
+    } }, /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: () => setOpen((o) => !o),
+        style: {
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          padding: "8px 12px",
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          fontFamily: sans,
+          fontSize: 10,
+          color: T.white,
+          fontWeight: 600,
+          letterSpacing: 1.5,
+          width: "100%"
+        },
+        "aria-label": "Toggle map layers menu",
+        "aria-expanded": open
+      },
+      /* @__PURE__ */ import_react4.default.createElement("span", null, "LAYERS"),
+      activeCount > 0 && /* @__PURE__ */ import_react4.default.createElement("span", { style: { background: T.green, color: T.white, padding: "1px 6px", borderRadius: 8, fontSize: 9, fontWeight: 700, lineHeight: 1.4 } }, activeCount),
+      /* @__PURE__ */ import_react4.default.createElement(ChevronDown, { size: 12, color: T.tertiary, style: { marginLeft: "auto", transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" } })
+    ), open && /* @__PURE__ */ import_react4.default.createElement("div", { style: { borderTop: `1px solid ${T.charcoal}`, minWidth: 160 } }, row("Camping spots", showCamping, () => setShowCamping((v) => !v)), row("Public lands", showPublicLands, () => setShowPublicLands((v) => !v)))));
   }
   function MapOverlay({ coords, location: location2, title, onClose, recoveryCtx, onRecoveryStartTrip, onRecoveryArrived }) {
     const query = getMapQuery(coords, location2);
@@ -51008,17 +51034,17 @@ ${suffix}`;
     const [showCampingSpots, setShowCampingSpots] = (0, import_react4.useState)(() => {
       try {
         const v = localStorage.getItem("th_show_camping");
-        return v == null ? true : v === "1";
+        return v === "1";
       } catch (_) {
-        return true;
+        return false;
       }
     });
     const [showPublicLands, setShowPublicLands] = (0, import_react4.useState)(() => {
       try {
         const v = localStorage.getItem("th_show_publands");
-        return v == null ? true : v === "1";
+        return v === "1";
       } catch (_) {
-        return true;
+        return false;
       }
     });
     (0, import_react4.useEffect)(() => {
