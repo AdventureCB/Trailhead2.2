@@ -42862,6 +42862,36 @@ ${suffix}`;
       return null;
     }
   }
+  async function mapboxReverseGeocodeRich(lng, lat) {
+    try {
+      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${MAPBOX_TOKEN}&limit=1`;
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const data = await res.json();
+      const f = data.features && data.features[0];
+      if (!f) return null;
+      const parts = (f.place_name || "").split(",").map((s) => s.trim()).filter(Boolean);
+      const trimmed = parts.length > 1 && /\b(united states|usa|us|canada|mexico)\b/i.test(parts[parts.length - 1]) ? parts.slice(0, -1) : parts;
+      const label = trimmed.slice(0, 3).join(", ") || (f.text || null);
+      let region = null;
+      let stateCode = null;
+      (f.context || []).forEach((c) => {
+        if (!c.id) return;
+        if (c.id.startsWith("place.") && !region) region = c.text;
+        if (c.id.startsWith("region.")) {
+          if (!region) region = c.text;
+          if (c.short_code) {
+            const m = c.short_code.match(/^[a-z]{2}-([a-z0-9]+)$/i);
+            if (m) stateCode = m[1].toUpperCase();
+          }
+        }
+      });
+      return { label, region, stateCode };
+    } catch (e) {
+      console.error("[mapbox] reverse geocode rich failed", e);
+      return null;
+    }
+  }
   async function fetchElevationsAlongPath(coords) {
     if (!Array.isArray(coords) || coords.length < 2) return null;
     try {
@@ -47090,6 +47120,35 @@ ${suffix}`;
       setPinNotes(initialPins.map((p) => p.note || ""));
       setPhotos(Array.isArray(rd.photos) ? rd.photos : []);
     }, [safe.id]);
+    (0, import_react4.useEffect)(() => {
+      if (!isMine) return;
+      if (!safe.start_lat || !safe.start_lng) return;
+      const needsLabel = !(safe.start_label || "").trim();
+      const needsRegion = !(safe.region || "").trim();
+      const needsState = !safe.state_code;
+      if (!needsLabel && !needsRegion && !needsState) return;
+      let cancelled = false;
+      mapboxReverseGeocodeRich(safe.start_lng, safe.start_lat).then((info) => {
+        if (cancelled || !info) return;
+        const updates = {};
+        if (needsLabel && info.label) {
+          setTrailheadLabel(info.label);
+          updates.start_label = info.label;
+        }
+        if (needsRegion && info.region) {
+          setRegion(info.region);
+          updates.region = info.region;
+        }
+        if (needsState && info.stateCode) {
+          setStateCode(info.stateCode);
+          updates.state_code = info.stateCode;
+        }
+        if (Object.keys(updates).length > 0) onSave(updates);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }, [safe.start_lat, safe.start_lng, safe.start_label, safe.region, safe.state_code, isMine]);
     const TERRAIN_OPTIONS = ["Dirt/Gravel", "Rock/Slickrock", "Sand", "Mud", "Snow", "Mixed", "Pavement"];
     const DIFFICULTY_OPTIONS = ["Easy", "Moderate", "Hard", "Expert"];
     const STATES = ["AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY"];
