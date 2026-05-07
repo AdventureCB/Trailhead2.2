@@ -43128,6 +43128,59 @@ ${suffix}`;
     }
     return null;
   }
+  async function fetchCampingSpotsInBbox(bbox) {
+    if (!bbox) return [];
+    const { south, west, north, east } = bbox;
+    if ([south, west, north, east].some((v) => v == null || !isFinite(v))) return [];
+    try {
+      let q = supabase.from("camping_spots").select("id, name, lat, lng, spot_type, fee, source, source_id, description, photo_url, visibility, user_id").gte("lat", south).lte("lat", north);
+      if (west <= east) {
+        q = q.gte("lng", west).lte("lng", east);
+      } else {
+        q = q.or(`lng.gte.${west},lng.lte.${east}`);
+      }
+      const { data, error } = await q.order("created_at", { ascending: false }).limit(5e3);
+      if (error) {
+        console.error("[camping_spots] bbox fetch error", error);
+        return [];
+      }
+      return Array.isArray(data) ? data : [];
+    } catch (e) {
+      console.error("[camping_spots] bbox fetch threw", e);
+      return [];
+    }
+  }
+  function useMapViewport(mapRef, ready, onChange, { debounceMs = 350 } = {}) {
+    const handlerRef = (0, import_react4.useRef)(onChange);
+    (0, import_react4.useEffect)(() => {
+      handlerRef.current = onChange;
+    }, [onChange]);
+    (0, import_react4.useEffect)(() => {
+      const map = mapRef && mapRef.current;
+      if (!ready || !map) return;
+      let timer = null;
+      const fire = () => {
+        const fn = handlerRef.current;
+        if (!fn) return;
+        const b = map.getBounds && map.getBounds();
+        if (!b) return;
+        fn({ south: b.getSouth(), west: b.getWest(), north: b.getNorth(), east: b.getEast() });
+      };
+      const onMoveEnd = () => {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(fire, debounceMs);
+      };
+      fire();
+      map.on("moveend", onMoveEnd);
+      return () => {
+        if (timer) clearTimeout(timer);
+        try {
+          map.off("moveend", onMoveEnd);
+        } catch (_) {
+        }
+      };
+    }, [mapRef, ready, debounceMs]);
+  }
   function campingSpotsToGeoJSON(rows) {
     return {
       type: "FeatureCollection",
@@ -45684,7 +45737,7 @@ ${suffix}`;
       }
     }, style: { background: T.darkCard, padding: "14px 16px", cursor: "pointer", borderRadius: i === 0 ? "8px 8px 0 0" : i === recentThreads.length - 1 ? "0 0 8px 8px" : 0, borderBottom: i < recentThreads.length - 1 ? `1px solid ${T.charcoal}` : "none" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 6 } }, t.pinned && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.copper, background: `${T.copper}20`, padding: "2px 6px", borderRadius: 3, letterSpacing: 1 } }, "PINNED")), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 14, color: T.white, margin: "0 0 8px", lineHeight: 1.4 } }, t.title), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 12 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, "@", t.author), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, formatPostTime(t.time))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 10, alignItems: "center" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 3 } }, /* @__PURE__ */ import_react4.default.createElement(MessageCircle, { size: 12, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, getReplyCount(t))), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, getViewCount(t))))))))));
   }
-  function RouteRecorder({ onClose, onSave, skipDetailsForm, userBuilds, campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, onAddCampingSpot }) {
+  function RouteRecorder({ onClose, onSave, skipDetailsForm, userBuilds, campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, onAddCampingSpot, onCampingViewportChange }) {
     const mapRef = (0, import_react4.useRef)(null);
     const mapInst = (0, import_react4.useRef)(null);
     const trackCoordsRef = (0, import_react4.useRef)([]);
@@ -45724,6 +45777,7 @@ ${suffix}`;
       setSelectedLand(land);
       setSelectedSpot(null);
     });
+    useMapViewport(mapInst, mapReady, onCampingViewportChange);
     (0, import_react4.useEffect)(() => {
       if (!addingMode || !mapInst.current || !mapReady) return;
       const map = mapInst.current;
@@ -46329,7 +46383,7 @@ ${suffix}`;
     if (!pins || pins.length === 0) return null;
     return /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { ref: mapRef, style: { width: "100%", height: "100%" } }), selectedPhoto && isFullscreen && /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => setSelectedPhoto(null), style: { position: "absolute", inset: 0, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, cursor: "pointer", borderRadius: 0 } }, /* @__PURE__ */ import_react4.default.createElement("img", { src: selectedPhoto, alt: "", style: { maxWidth: "90%", maxHeight: "90%", borderRadius: 10, objectFit: "contain" } }), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setSelectedPhoto(null), style: { position: "absolute", top: 16, right: 16, background: "rgba(0,0,0,0.6)", border: "none", borderRadius: "50%", width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 18, color: "#fff" }))), selectedWaypoint && /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => setSelectedWaypoint(null), style: { position: "absolute", inset: 0, background: "rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 55, cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement("div", { onClick: (e) => e.stopPropagation(), style: { background: T.darkCard, borderRadius: 14, border: `1px solid ${T.copper}40`, maxWidth: 320, width: "85%", overflow: "hidden", cursor: "default" } }, selectedWaypoint.photo && /* @__PURE__ */ import_react4.default.createElement("img", { src: selectedWaypoint.photo, alt: "", style: { width: "100%", height: 200, objectFit: "cover" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "14px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: selectedWaypoint.desc ? 8 : 0 } }, /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.copper, fontWeight: 700, letterSpacing: 0.5 } }, "WAYPOINT")), selectedWaypoint.desc ? /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 14, color: T.white, margin: 0, lineHeight: 1.5 } }, selectedWaypoint.desc) : !selectedWaypoint.photo ? /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary, margin: 0, fontStyle: "italic" } }, "No description added") : null, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, marginTop: 8, display: "block" } }, selectedWaypoint.lat.toFixed(5), ", ", selectedWaypoint.lng.toFixed(5))), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setSelectedWaypoint(null), style: { position: "absolute", top: 10, right: 10, background: "rgba(0,0,0,0.6)", border: "none", borderRadius: "50%", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 16, color: "#fff" })))));
   }
-  function RouteNavigation({ route, onClose, campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands }) {
+  function RouteNavigation({ route, onClose, campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, onCampingViewportChange }) {
     const mapRef = (0, import_react4.useRef)(null);
     const mapInst = (0, import_react4.useRef)(null);
     const userDotRef = (0, import_react4.useRef)(null);
@@ -46355,6 +46409,7 @@ ${suffix}`;
       setSelectedLand(land);
       setSelectedSpot(null);
     });
+    useMapViewport(mapInst, mapReady, onCampingViewportChange);
     (0, import_react4.useEffect)(() => {
       let cancelled = false;
       const init = async () => {
@@ -47546,7 +47601,7 @@ ${suffix}`;
       /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 16, color: T.tertiary })
     )));
   }
-  function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onNewTripReport, currentUserId }) {
+  function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onNewTripReport, currentUserId, onCampingViewportChange }) {
     const mapRef = (0, import_react4.useRef)(null);
     const mapInst = (0, import_react4.useRef)(null);
     const [mapReady, setMapReady] = (0, import_react4.useState)(false);
@@ -47582,6 +47637,7 @@ ${suffix}`;
       setSelectedLand(land);
       setSelectedSpot(null);
     });
+    useMapViewport(mapInst, mapReady, onCampingViewportChange);
     (0, import_react4.useEffect)(() => {
       let cancelled = false;
       const init = async () => {
@@ -47887,7 +47943,7 @@ ${suffix}`;
       "SAVE"
     )))));
   }
-  function RoutesScreen({ onRecordRoute, onManualEntry, userRoutes, onUpdateRoute, savedRoutes, onSaveRoute, onUnsaveRoute, onOpenDM, onAddFeedPost, onStartNav, userBuilds, campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, currentUserId, tripReports, tripAuthors, onCreateTripDraft, onChooseManual, onChooseLive, onChooseSkip, onOpenTripDraft, onViewUser, onLoadTripRouteData, onBumpTripView, likedTripIds, tripLikeCounts, onToggleTripLike, onShareTripToFeed, pendingTripNav, onConsumePendingTripNav, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot }) {
+  function RoutesScreen({ onRecordRoute, onManualEntry, userRoutes, onUpdateRoute, savedRoutes, onSaveRoute, onUnsaveRoute, onOpenDM, onAddFeedPost, onStartNav, userBuilds, campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, currentUserId, tripReports, tripAuthors, onCreateTripDraft, onChooseManual, onChooseLive, onChooseSkip, onOpenTripDraft, onViewUser, onLoadTripRouteData, onBumpTripView, likedTripIds, tripLikeCounts, onToggleTripLike, onShareTripToFeed, pendingTripNav, onConsumePendingTripNav, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onCampingViewportChange }) {
     const [showCreator, setShowCreator] = (0, import_react4.useState)(false);
     const [detailTripId, setDetailTripId] = (0, import_react4.useState)(null);
     (0, import_react4.useEffect)(() => {
@@ -48118,7 +48174,8 @@ ${suffix}`;
         onUpdateCampingSpot,
         onDeleteCampingSpot,
         onNewTripReport: () => setShowCreator(true),
-        currentUserId
+        currentUserId,
+        onCampingViewportChange
       }
     ))), fullscreenMapRoute && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "fixed", top: 0, bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 430, zIndex: 1e3, background: T.darkBg, display: "flex", flexDirection: "column" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: T.darkCard, borderBottom: `1px solid ${T.charcoal}`, flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement("h3", { style: { fontFamily: serif, fontSize: 16, color: T.white, margin: 0 } }, fullscreenMapRoute.name || fullscreenMapRoute.title), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 10, marginTop: 4 } }, fullscreenMapRoute.distance && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600 } }, fullscreenMapRoute.distance), (fullscreenMapRoute.time || fullscreenMapRoute.duration) && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600 } }, fullscreenMapRoute.time || fullscreenMapRoute.duration), fullscreenMapRoute.difficulty && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, fullscreenMapRoute.difficulty))), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
       setFullscreenMapRoute(null);
@@ -51605,12 +51662,12 @@ ${suffix}`;
             });
           }
         }
-        supabase.from("camping_spots").select("id, name, lat, lng, spot_type, fee, source, source_id, description, photo_url, visibility, user_id").order("created_at", { ascending: false }).limit(5e4).then(({ data: csRows, error: csErr }) => {
+        supabase.from("camping_spots").select("id, name, lat, lng, spot_type, fee, source, source_id, description, photo_url, visibility, user_id").eq("user_id", uid).order("created_at", { ascending: false }).limit(500).then(({ data: csRows, error: csErr }) => {
           if (csErr) {
             console.error("[hydrate] camping_spots fetch error", csErr);
             return;
           }
-          if (Array.isArray(csRows)) setCampingSpots(csRows);
+          if (Array.isArray(csRows)) setUserCampingSpots(csRows);
         });
         supabase.from("trip_reports").select("id, user_id, slug, name, description, status, start_lat, start_lng, start_label, hero_img, distance_mi, duration_min, elev_gain_ft, difficulty, region, state_code, terrains, tags, view_count, like_count, comment_count, published_at, created_at, updated_at").order("created_at", { ascending: false }).limit(500).then(({ data: trRows, error: trErr }) => {
           if (trErr) {
@@ -51938,7 +51995,8 @@ ${suffix}`;
           setBuildLikeCounts({});
           setLikedBuildIds({});
           setDmMessageReactions({});
-          setCampingSpots([]);
+          setUserCampingSpots([]);
+          setViewportCampingSpots([]);
           setTripReports([]);
           setTripAuthors({});
           setFeedItems([]);
@@ -52067,15 +52125,23 @@ ${suffix}`;
         const row = payload.new;
         if (!row || !row.id) return;
         if (row.user_id === uid) return;
-        setCampingSpots((prev) => prev.some((s) => s.id === row.id) ? prev : [row, ...prev]);
+        const b = currentBboxRef.current;
+        if (b && row.lat != null && row.lng != null) {
+          const lngOk = b.west <= b.east ? row.lng >= b.west && row.lng <= b.east : row.lng >= b.west || row.lng <= b.east;
+          const inBbox = row.lat >= b.south && row.lat <= b.north && lngOk;
+          if (!inBbox) return;
+        }
+        setViewportCampingSpots((prev) => prev.some((s) => s.id === row.id) ? prev : [row, ...prev]);
       }).on("postgres_changes", { event: "UPDATE", schema: "public", table: "camping_spots" }, (payload) => {
         const row = payload.new;
         if (!row || !row.id) return;
-        setCampingSpots((prev) => prev.map((s) => s.id === row.id ? { ...s, ...row } : s));
+        setUserCampingSpots((prev) => prev.map((s) => s.id === row.id ? { ...s, ...row } : s));
+        setViewportCampingSpots((prev) => prev.map((s) => s.id === row.id ? { ...s, ...row } : s));
       }).on("postgres_changes", { event: "DELETE", schema: "public", table: "camping_spots" }, (payload) => {
         const row = payload.old;
         if (!row || !row.id) return;
-        setCampingSpots((prev) => prev.filter((s) => s.id !== row.id));
+        setUserCampingSpots((prev) => prev.filter((s) => s.id !== row.id));
+        setViewportCampingSpots((prev) => prev.filter((s) => s.id !== row.id));
       }).on("postgres_changes", { event: "INSERT", schema: "public", table: "dm_message_likes" }, (payload) => {
         const row = payload.new;
         if (!row || !row.message_id) return;
@@ -52391,7 +52457,34 @@ ${suffix}`;
     const [activeNavRoute, setActiveNavRoute] = (0, import_react4.useState)(null);
     const [userBuilds, setUserBuilds] = (0, import_react4.useState)([]);
     const [allBuilds, setAllBuilds] = (0, import_react4.useState)([]);
-    const [campingSpots, setCampingSpots] = (0, import_react4.useState)([]);
+    const [userCampingSpots, setUserCampingSpots] = (0, import_react4.useState)([]);
+    const [viewportCampingSpots, setViewportCampingSpots] = (0, import_react4.useState)([]);
+    const currentBboxRef = (0, import_react4.useRef)(null);
+    const campingSpots = (0, import_react4.useMemo)(() => {
+      const seen = /* @__PURE__ */ new Set();
+      const out = [];
+      for (const s of userCampingSpots) {
+        if (s && s.id != null && !seen.has(s.id)) {
+          seen.add(s.id);
+          out.push(s);
+        }
+      }
+      for (const s of viewportCampingSpots) {
+        if (s && s.id != null && !seen.has(s.id)) {
+          seen.add(s.id);
+          out.push(s);
+        }
+      }
+      return out;
+    }, [userCampingSpots, viewportCampingSpots]);
+    const setCampingSpots = (0, import_react4.useCallback)((updater) => {
+      setUserCampingSpots((prev) => typeof updater === "function" ? updater(prev) : updater);
+    }, []);
+    const onCampingViewportChange = (0, import_react4.useCallback)(async (bbox) => {
+      currentBboxRef.current = bbox;
+      const rows = await fetchCampingSpotsInBbox(bbox);
+      setViewportCampingSpots(rows);
+    }, []);
     const [tripReports, setTripReports] = (0, import_react4.useState)([]);
     const [tripAuthors, setTripAuthors] = (0, import_react4.useState)({});
     (0, import_react4.useEffect)(() => {
@@ -53941,19 +54034,20 @@ ${suffix}`;
       if (!uid || !id) return false;
       const before = campingSpots.find((s) => s.id === id);
       if (!before || before.user_id !== uid) return false;
-      setCampingSpots((prev) => prev.filter((s) => s.id !== id));
+      setUserCampingSpots((prev) => prev.filter((s) => s.id !== id));
+      setViewportCampingSpots((prev) => prev.filter((s) => s.id !== id));
       try {
         const { error } = await supabase.from("camping_spots").delete().eq("id", id).eq("user_id", uid);
         if (error) {
           console.error("[camping_spots] delete failed", error);
           showErrorToast(`Couldn't delete spot: ${error.message || error.code}`);
-          setCampingSpots((prev) => [before, ...prev]);
+          setUserCampingSpots((prev) => [before, ...prev]);
           return false;
         }
         return true;
       } catch (e) {
         console.error("[camping_spots] delete threw", e);
-        setCampingSpots((prev) => [before, ...prev]);
+        setUserCampingSpots((prev) => [before, ...prev]);
         return false;
       }
     };
@@ -54286,7 +54380,7 @@ ${suffix}`;
       setShowRecorder(true);
     }, onChooseSkip: (draftId) => {
       if (draftId) setEditingTripId(draftId);
-    }, onOpenTripDraft: (id) => setEditingTripId(id), onViewUser: openUserProfile, onLoadTripRouteData: loadTripRouteData, onBumpTripView: bumpTripView, likedTripIds, tripLikeCounts, onToggleTripLike: requireAuth(toggleTripLike), onShareTripToFeed: requireAuth(shareTripToFeed), pendingTripNav, onConsumePendingTripNav: () => setPendingTripNav(null), onAddCampingSpot: requireAuth(addCampingSpot), onUpdateCampingSpot: requireAuth(updateCampingSpot), onDeleteCampingSpot: requireAuth(deleteCampingSpot) }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onPostBuildToFeed: requireAuth((b, opts) => {
+    }, onOpenTripDraft: (id) => setEditingTripId(id), onViewUser: openUserProfile, onLoadTripRouteData: loadTripRouteData, onBumpTripView: bumpTripView, likedTripIds, tripLikeCounts, onToggleTripLike: requireAuth(toggleTripLike), onShareTripToFeed: requireAuth(shareTripToFeed), pendingTripNav, onConsumePendingTripNav: () => setPendingTripNav(null), onAddCampingSpot: requireAuth(addCampingSpot), onUpdateCampingSpot: requireAuth(updateCampingSpot), onDeleteCampingSpot: requireAuth(deleteCampingSpot), onCampingViewportChange }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onPostBuildToFeed: requireAuth((b, opts) => {
       const rawBd = b.buildData;
       const bd = scrubLocalPhotosFromBuildData(rawBd);
       const isLocalUrl = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:"));
@@ -54328,7 +54422,8 @@ ${suffix}`;
         showCampingSpots,
         setShowCampingSpots,
         showPublicLands,
-        setShowPublicLands
+        setShowPublicLands,
+        onCampingViewportChange
       }
     ), showTripPinFullscreen && pendingTripDraftId && (() => {
       const trip = tripReports.find((t) => t.id === pendingTripDraftId);
@@ -54416,6 +54511,7 @@ ${suffix}`;
         setShowCampingSpots,
         showPublicLands,
         setShowPublicLands,
+        onCampingViewportChange,
         onAddCampingSpot: requireAuth(addCampingSpot),
         skipDetailsForm: !!pendingTripDraftId,
         onClose: () => {
