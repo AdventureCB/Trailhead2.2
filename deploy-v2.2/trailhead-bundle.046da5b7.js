@@ -43773,7 +43773,7 @@ ${suffix}`;
     );
     return /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, open && /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => setOpen(false), style: { position: "absolute", inset: 0, zIndex: 4 } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: {
       position: "absolute",
-      top: 10,
+      bottom: 10,
       left: 10,
       zIndex: 5,
       background: `${T.darkCard}F0`,
@@ -43783,7 +43783,7 @@ ${suffix}`;
       boxShadow: "0 6px 18px rgba(0,0,0,0.45)",
       overflow: "hidden",
       minWidth: open ? 240 : "auto"
-    } }, /* @__PURE__ */ import_react4.default.createElement(
+    } }, open && /* @__PURE__ */ import_react4.default.createElement("div", null, row(CampingSwatch, "Camping spots", "Public + community", showCamping, () => setShowCamping((v) => !v)), row(PublicLandsSwatch, "Public lands", "BLM \xB7 USFS \xB7 NPS \xB7 State", showPublicLands, () => setShowPublicLands((v) => !v)), setShowTripReports && row(TripReportsSwatch, "Trip reports", "Community trip writeups", showTripReports, () => setShowTripReports((v) => !v))), /* @__PURE__ */ import_react4.default.createElement(
       "button",
       {
         onClick: () => setOpen((o) => !o),
@@ -43800,7 +43800,8 @@ ${suffix}`;
           color: T.white,
           fontWeight: 700,
           letterSpacing: 1.4,
-          width: "100%"
+          width: "100%",
+          borderTop: open ? `1px solid ${T.charcoal}` : "none"
         },
         "aria-label": "Toggle map layers menu",
         "aria-expanded": open
@@ -43808,8 +43809,8 @@ ${suffix}`;
       /* @__PURE__ */ import_react4.default.createElement(Layers, { size: 13, color: T.copper, strokeWidth: 2 }),
       /* @__PURE__ */ import_react4.default.createElement("span", null, "LAYERS"),
       activeCount > 0 && /* @__PURE__ */ import_react4.default.createElement("span", { style: { background: T.green, color: T.white, padding: "1px 7px", borderRadius: 8, fontSize: 9, fontWeight: 700, lineHeight: 1.4 } }, activeCount),
-      /* @__PURE__ */ import_react4.default.createElement(ChevronDown, { size: 13, color: T.tertiary, style: { marginLeft: "auto", transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" } })
-    ), open && /* @__PURE__ */ import_react4.default.createElement("div", { style: { borderTop: `1px solid ${T.charcoal}` } }, row(CampingSwatch, "Camping spots", "Public + community", showCamping, () => setShowCamping((v) => !v)), row(PublicLandsSwatch, "Public lands", "BLM \xB7 USFS \xB7 NPS \xB7 State", showPublicLands, () => setShowPublicLands((v) => !v)), setShowTripReports && row(TripReportsSwatch, "Trip reports", "Community trip writeups", showTripReports, () => setShowTripReports((v) => !v)))));
+      /* @__PURE__ */ import_react4.default.createElement(ChevronUp, { size: 13, color: T.tertiary, style: { marginLeft: "auto", transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" } })
+    )));
   }
   function MapOverlay({ coords, location: location2, title, onClose, recoveryCtx, onRecoveryStartTrip, onRecoveryArrived }) {
     const query = getMapQuery(coords, location2);
@@ -48090,7 +48091,7 @@ ${suffix}`;
       if (!mapInst.current) return;
       mapInst.current.flyTo({ center: [lng, lat], zoom, duration: 700 });
     };
-    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", marginBottom: 8, zIndex: 7 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", background: T.darkCard, borderRadius: 10, padding: "10px 14px", border: `1px solid ${searchOpen ? T.copper : T.charcoal}`, transition: "border-color 0.15s" } }, /* @__PURE__ */ import_react4.default.createElement(Search, { size: 16, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement(
+    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", borderRadius: 12, overflow: "hidden", border: `1px solid ${T.charcoal}`, height: "70vh", minHeight: 420 } }, /* @__PURE__ */ import_react4.default.createElement("div", { ref: mapRef, style: { width: "100%", height: "100%" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: 10, left: 10, right: 10, zIndex: 7 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", background: `${T.darkCard}F0`, backdropFilter: "blur(10px)", borderRadius: 10, padding: "10px 14px", border: `1px solid ${searchOpen ? T.copper : T.charcoal}`, boxShadow: "0 4px 12px rgba(0,0,0,0.4)", transition: "border-color 0.15s" } }, /* @__PURE__ */ import_react4.default.createElement(Search, { size: 16, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement(
       "input",
       {
         value: query,
@@ -48100,7 +48101,7 @@ ${suffix}`;
         },
         onFocus: () => setSearchOpen(true),
         placeholder: "Search places, camping spots, points of interest\u2026",
-        style: { flex: 1, marginLeft: 10, background: "transparent", border: "none", outline: "none", color: T.white, fontFamily: serif, fontSize: 13 }
+        style: { flex: 1, marginLeft: 10, background: "transparent", border: "none", outline: "none", color: T.white, fontFamily: serif, fontSize: 13, minWidth: 0 }
       }
     ), query && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
       setQuery("");
@@ -48130,7 +48131,7 @@ ${suffix}`;
       },
       /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 16, color: T.copper, style: { flexShrink: 0 } }),
       /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 12, color: T.white, lineHeight: 1.4, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" } }, p.label)
-    )))), searchOpen && query.trim().length >= 2 && !hasResults && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, background: `${T.darkCard}F8`, border: `1px solid ${T.charcoal}`, borderRadius: 10, padding: "12px 14px", zIndex: 8 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, "No matches yet\u2026"))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", borderRadius: 12, overflow: "hidden", border: `1px solid ${T.charcoal}`, height: "70vh", minHeight: 420 } }, /* @__PURE__ */ import_react4.default.createElement("div", { ref: mapRef, style: { width: "100%", height: "100%" } }), /* @__PURE__ */ import_react4.default.createElement(MapLayerToggle, { showCamping: showCampingSpots, setShowCamping: setShowCampingSpots, showPublicLands, setShowPublicLands, showTripReports, setShowTripReports }), addingMode && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 6, background: `${T.copper}E0`, padding: "8px 14px", borderRadius: 20, boxShadow: "0 4px 12px rgba(0,0,0,0.4)", display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ import_react4.default.createElement(Tent, { size: 13, color: T.white }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.6 } }, "TAP MAP TO PLACE PIN"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setAddingMode(false), style: { background: "none", border: "none", cursor: "pointer", padding: 2, color: T.white, marginLeft: 4 } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 13 }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", right: 14, bottom: 14, zIndex: 6, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 } }, plusOpen && /* @__PURE__ */ import_react4.default.createElement("div", { onClick: (e) => e.stopPropagation(), style: { background: `${T.darkCard}F5`, border: `1px solid ${T.charcoal}`, borderRadius: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", overflow: "hidden", minWidth: 220 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
+    )))), searchOpen && query.trim().length >= 2 && !hasResults && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, background: `${T.darkCard}F8`, border: `1px solid ${T.charcoal}`, borderRadius: 10, padding: "12px 14px", zIndex: 8 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, "No matches yet\u2026"))), /* @__PURE__ */ import_react4.default.createElement(MapLayerToggle, { showCamping: showCampingSpots, setShowCamping: setShowCampingSpots, showPublicLands, setShowPublicLands, showTripReports, setShowTripReports }), addingMode && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 6, background: `${T.copper}E0`, padding: "8px 14px", borderRadius: 20, boxShadow: "0 4px 12px rgba(0,0,0,0.4)", display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ import_react4.default.createElement(Tent, { size: 13, color: T.white }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.6 } }, "TAP MAP TO PLACE PIN"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setAddingMode(false), style: { background: "none", border: "none", cursor: "pointer", padding: 2, color: T.white, marginLeft: 4 } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 13 }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", right: 14, bottom: 14, zIndex: 6, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 } }, plusOpen && /* @__PURE__ */ import_react4.default.createElement("div", { onClick: (e) => e.stopPropagation(), style: { background: `${T.darkCard}F5`, border: `1px solid ${T.charcoal}`, borderRadius: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", overflow: "hidden", minWidth: 220 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
       setPlusOpen(false);
       setAddingMode(true);
       if (!showCampingSpots && setShowCampingSpots) setShowCampingSpots(true);
