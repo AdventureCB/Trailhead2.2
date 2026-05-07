@@ -52735,24 +52735,29 @@ ${suffix}`;
     }, []);
     const [tripReports, setTripReports] = (0, import_react4.useState)([]);
     const allTripReports = (0, import_react4.useMemo)(() => {
-      const byId = new Map2();
+      const byId = {};
+      const order = [];
       for (const t of tripReports) {
-        if (t && t.id != null) byId.set(t.id, t);
+        if (t && t.id != null && !(t.id in byId)) {
+          byId[t.id] = t;
+          order.push(t.id);
+        }
       }
       for (const t of viewportTripReports) {
         if (!t || t.id == null) continue;
-        const existing = byId.get(t.id);
+        const existing = byId[t.id];
         if (!existing) {
-          byId.set(t.id, t);
+          byId[t.id] = t;
+          order.push(t.id);
           continue;
         }
         const merged = { ...existing };
         if (merged.end_lat == null && t.end_lat != null) merged.end_lat = t.end_lat;
         if (merged.end_lng == null && t.end_lng != null) merged.end_lng = t.end_lng;
         if (!Array.isArray(merged.route_geom) && Array.isArray(t.route_geom)) merged.route_geom = t.route_geom;
-        byId.set(t.id, merged);
+        byId[t.id] = merged;
       }
-      return Array.from(byId.values());
+      return order.map((id) => byId[id]);
     }, [tripReports, viewportTripReports]);
     const [tripAuthors, setTripAuthors] = (0, import_react4.useState)({});
     (0, import_react4.useEffect)(() => {
