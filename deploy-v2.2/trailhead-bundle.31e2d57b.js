@@ -43150,12 +43150,35 @@ ${suffix}`;
       return [];
     }
   }
+  function deriveTripGeom(rd) {
+    if (!rd || typeof rd !== "object") return { end: null, geom: null };
+    const pts = Array.isArray(rd.points) && rd.points.length > 0 ? rd.points : Array.isArray(rd.pins) ? rd.pins : [];
+    if (pts.length === 0) return { end: null, geom: null };
+    const target = 80;
+    const step = Math.max(1, Math.floor(pts.length / target));
+    const simplified = [];
+    for (let i = 0; i < pts.length; i += step) {
+      const p = pts[i];
+      if (p && p.lat != null && p.lng != null) simplified.push([p.lng, p.lat]);
+    }
+    const last = pts[pts.length - 1];
+    if (last && last.lat != null && last.lng != null) {
+      const tail = simplified[simplified.length - 1];
+      if (!tail || tail[0] !== last.lng || tail[1] !== last.lat) {
+        simplified.push([last.lng, last.lat]);
+      }
+    }
+    return {
+      end: last && last.lat != null && last.lng != null ? { lat: last.lat, lng: last.lng } : null,
+      geom: simplified.length >= 2 ? simplified : null
+    };
+  }
   async function fetchTripReportsInBbox(bbox) {
     if (!bbox) return [];
     const { south, west, north, east } = bbox;
     if ([south, west, north, east].some((v) => v == null || !isFinite(v))) return [];
     try {
-      let q = supabase.from("trip_reports").select("id, user_id, slug, name, description, status, start_lat, start_lng, start_label, hero_img, distance_mi, duration_min, elev_gain_ft, max_elev_ft, difficulty, region, state_code, terrains, tags, view_count, like_count, comment_count, published_at, created_at, updated_at").eq("status", "published").gte("start_lat", south).lte("start_lat", north);
+      let q = supabase.from("trip_reports").select("id, user_id, slug, name, description, status, start_lat, start_lng, start_label, end_lat, end_lng, route_geom, hero_img, distance_mi, duration_min, elev_gain_ft, max_elev_ft, difficulty, region, state_code, terrains, tags, view_count, like_count, comment_count, published_at, created_at, updated_at").eq("status", "published").gte("start_lat", south).lte("start_lat", north);
       if (west <= east) {
         q = q.gte("start_lng", west).lte("start_lng", east);
       } else {
@@ -43204,26 +43227,51 @@ ${suffix}`;
     }, [mapRef, ready, debounceMs]);
   }
   function tripReportsToGeoJSON(rows) {
-    return {
-      type: "FeatureCollection",
-      features: (rows || []).filter((r) => r && r.start_lat != null && r.start_lng != null && r.status === "published").map((r) => ({
+    const starts = [], ends = [], lines = [];
+    (rows || []).forEach((r) => {
+      if (!r || r.status !== "published" || r.start_lat == null || r.start_lng == null) return;
+      const props = {
+        id: r.id,
+        slug: r.slug || "",
+        name: r.name || "Untitled trip",
+        description: r.description || "",
+        difficulty: r.difficulty || "",
+        region: r.region || "",
+        state_code: r.state_code || "",
+        hero_img: r.hero_img || "",
+        distance_mi: r.distance_mi != null ? r.distance_mi : "",
+        elev_gain_ft: r.elev_gain_ft != null ? r.elev_gain_ft : "",
+        view_count: r.view_count || 0,
+        like_count: r.like_count || 0,
+        start_lat: r.start_lat,
+        start_lng: r.start_lng,
+        end_lat: r.end_lat != null ? r.end_lat : "",
+        end_lng: r.end_lng != null ? r.end_lng : ""
+      };
+      starts.push({
         type: "Feature",
         geometry: { type: "Point", coordinates: [r.start_lng, r.start_lat] },
-        properties: {
-          id: r.id,
-          slug: r.slug || "",
-          name: r.name || "Untitled trip",
-          description: r.description || "",
-          difficulty: r.difficulty || "",
-          region: r.region || "",
-          state_code: r.state_code || "",
-          hero_img: r.hero_img || "",
-          distance_mi: r.distance_mi != null ? r.distance_mi : "",
-          elev_gain_ft: r.elev_gain_ft != null ? r.elev_gain_ft : "",
-          view_count: r.view_count || 0,
-          like_count: r.like_count || 0
-        }
-      }))
+        properties: props
+      });
+      if (r.end_lat != null && r.end_lng != null) {
+        ends.push({
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [r.end_lng, r.end_lat] },
+          properties: props
+        });
+      }
+      if (Array.isArray(r.route_geom) && r.route_geom.length >= 2) {
+        lines.push({
+          type: "Feature",
+          geometry: { type: "LineString", coordinates: r.route_geom },
+          properties: props
+        });
+      }
+    });
+    return {
+      starts: { type: "FeatureCollection", features: starts },
+      ends: { type: "FeatureCollection", features: ends },
+      lines: { type: "FeatureCollection", features: lines }
     };
   }
   function useTripReportsLayer(mapRef, ready, rows, visible, onSelect) {
@@ -43235,15 +43283,37 @@ ${suffix}`;
       const map = mapRef && mapRef.current;
       if (!ready || !map || !window.mapboxgl) return;
       const ensureLayers = () => {
-        if (!map.getSource("trip-reports")) {
-          map.addSource("trip-reports", {
-            type: "geojson",
-            data: { type: "FeatureCollection", features: [] }
+        if (!map.getSource("trip-reports-starts")) {
+          map.addSource("trip-reports-starts", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+          map.addSource("trip-reports-ends", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+          map.addSource("trip-reports-lines", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+          map.addLayer({
+            id: "trip-reports-line",
+            type: "line",
+            source: "trip-reports-lines",
+            layout: { "line-cap": "round", "line-join": "round" },
+            paint: {
+              "line-color": "#8B6FAF",
+              "line-width": 3,
+              "line-opacity": 0.85
+            }
+          });
+          map.addLayer({
+            id: "trip-reports-end-points",
+            type: "circle",
+            source: "trip-reports-ends",
+            paint: {
+              "circle-color": "#8B6FAF",
+              "circle-radius": 6,
+              "circle-stroke-color": T.white,
+              "circle-stroke-width": 2,
+              "circle-opacity": 0.95
+            }
           });
           map.addLayer({
             id: "trip-reports-points",
             type: "circle",
-            source: "trip-reports",
+            source: "trip-reports-starts",
             paint: {
               "circle-color": "#8B6FAF",
               // NPS purple, distinct from camping palette
@@ -43253,7 +43323,7 @@ ${suffix}`;
               "circle-opacity": 0.95
             }
           });
-          const pointClick = (e) => {
+          const surfaceTrip = (e) => {
             const f = e.features && e.features[0];
             if (!f) return;
             const fn = handlerRef.current;
@@ -43272,28 +43342,39 @@ ${suffix}`;
               elev_gain_ft: p.elev_gain_ft !== "" ? Number(p.elev_gain_ft) : null,
               view_count: Number(p.view_count) || 0,
               like_count: Number(p.like_count) || 0,
-              lat: f.geometry.coordinates[1],
-              lng: f.geometry.coordinates[0]
+              lat: Number(p.start_lat),
+              lng: Number(p.start_lng)
             });
           };
-          map.on("click", "trip-reports-points", pointClick);
-          map.on("mouseenter", "trip-reports-points", () => {
-            map.getCanvas().style.cursor = "pointer";
-          });
-          map.on("mouseleave", "trip-reports-points", () => {
-            map.getCanvas().style.cursor = "";
+          ["trip-reports-points", "trip-reports-end-points", "trip-reports-line"].forEach((id) => {
+            map.on("click", id, surfaceTrip);
+            map.on("mouseenter", id, () => {
+              map.getCanvas().style.cursor = "pointer";
+            });
+            map.on("mouseleave", id, () => {
+              map.getCanvas().style.cursor = "";
+            });
           });
         }
-        const src = map.getSource("trip-reports");
-        if (src) src.setData(tripReportsToGeoJSON(rows));
+        const collections = tripReportsToGeoJSON(rows);
+        const sStart = map.getSource("trip-reports-starts");
+        if (sStart) sStart.setData(collections.starts);
+        const sEnd = map.getSource("trip-reports-ends");
+        if (sEnd) sEnd.setData(collections.ends);
+        const sLine = map.getSource("trip-reports-lines");
+        if (sLine) sLine.setData(collections.lines);
         const vis = visible ? "visible" : "none";
-        if (map.getLayer("trip-reports-points")) map.setLayoutProperty("trip-reports-points", "visibility", vis);
-        if (map.getLayer("trip-reports-points")) {
-          try {
-            map.moveLayer("trip-reports-points");
-          } catch (_) {
+        ["trip-reports-points", "trip-reports-end-points", "trip-reports-line"].forEach((id) => {
+          if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", vis);
+        });
+        ["trip-reports-line", "trip-reports-end-points", "trip-reports-points"].forEach((id) => {
+          if (map.getLayer(id)) {
+            try {
+              map.moveLayer(id);
+            } catch (_) {
+            }
           }
-        }
+        });
       };
       if (map.isStyleLoaded()) ensureLayers();
       else map.once("load", ensureLayers);
@@ -54118,6 +54199,15 @@ ${suffix}`;
     const updateTripDraft = async (id, updates) => {
       const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
       if (!uid || !id || typeof id !== "string" || id.length < 20) return null;
+      if (updates && updates.route_data && updates.end_lat == null && updates.route_geom == null) {
+        const derived = deriveTripGeom(updates.route_data);
+        if (derived.end) {
+          updates = { ...updates, end_lat: derived.end.lat, end_lng: derived.end.lng };
+        }
+        if (derived.geom) {
+          updates = { ...updates, route_geom: derived.geom };
+        }
+      }
       setTripReports((prev) => prev.map((t) => t.id === id ? { ...t, ...updates, updated_at: (/* @__PURE__ */ new Date()).toISOString() } : t));
       try {
         const { data, error } = await supabase.from("trip_reports").update({ ...updates, updated_at: (/* @__PURE__ */ new Date()).toISOString() }).eq("id", id).eq("user_id", uid).select().single();
@@ -54151,6 +54241,12 @@ ${suffix}`;
       if (!t.distance_mi && rd.distanceMi) updates.distance_mi = rd.distanceMi;
       if (!t.duration_min && rd.duration) updates.duration_min = Math.round((rd.duration || 0) / 60);
       if (!t.elev_gain_ft && rd.elevGainFt) updates.elev_gain_ft = rd.elevGainFt;
+      const derived = deriveTripGeom(rd);
+      if (derived.end) {
+        updates.end_lat = derived.end.lat;
+        updates.end_lng = derived.end.lng;
+      }
+      if (derived.geom) updates.route_geom = derived.geom;
       return await updateTripDraft(id, updates);
     };
     const deleteTripDraft = async (id) => {
