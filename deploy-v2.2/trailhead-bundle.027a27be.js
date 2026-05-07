@@ -43747,7 +43747,7 @@ ${suffix}`;
     const items = [
       { key: "feed", label: "Feed", icon: House },
       { key: "forum", label: "Forum", icon: Compass },
-      { key: "routes", label: "Routes", icon: Map2 },
+      { key: "routes", label: "Maps", icon: Map2 },
       { key: "builds", label: "Builds", icon: Wrench },
       { key: "ranks", label: "Ranks", icon: Trophy }
     ];
@@ -47608,8 +47608,8 @@ ${suffix}`;
       window.addEventListener("popstate", onPop);
       return () => window.removeEventListener("popstate", onPop);
     }, [tripReports]);
-    const [mainTab, setMainTab] = (0, import_react4.useState)("reports");
-    const [planningTab, setPlanningTab] = (0, import_react4.useState)("saved");
+    const [mainTab, setMainTab] = (0, import_react4.useState)("planning");
+    const [planningTab, setPlanningTab] = (0, import_react4.useState)("explore");
     const [expandedRoute, setExpandedRoute] = (0, import_react4.useState)(null);
     const [routeShareMenu, setRouteShareMenu] = (0, import_react4.useState)(null);
     const [editingRoute, setEditingRoute] = (0, import_react4.useState)(null);
