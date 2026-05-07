@@ -51911,7 +51911,7 @@ ${suffix}`;
           }
           if (Array.isArray(csRows)) setUserCampingSpots(csRows);
         });
-        supabase.from("trip_reports").select("id, user_id, slug, name, description, status, start_lat, start_lng, start_label, hero_img, distance_mi, duration_min, elev_gain_ft, difficulty, region, state_code, terrains, tags, view_count, like_count, comment_count, published_at, created_at, updated_at").order("created_at", { ascending: false }).limit(500).then(({ data: trRows, error: trErr }) => {
+        supabase.from("trip_reports").select("id, user_id, slug, name, description, status, start_lat, start_lng, start_label, end_lat, end_lng, route_geom, hero_img, distance_mi, duration_min, elev_gain_ft, max_elev_ft, difficulty, region, state_code, terrains, tags, view_count, like_count, comment_count, published_at, created_at, updated_at").order("created_at", { ascending: false }).limit(500).then(({ data: trRows, error: trErr }) => {
           if (trErr) {
             console.error("[hydrate] trip_reports fetch error", trErr);
             return;
@@ -52735,21 +52735,24 @@ ${suffix}`;
     }, []);
     const [tripReports, setTripReports] = (0, import_react4.useState)([]);
     const allTripReports = (0, import_react4.useMemo)(() => {
-      const seen = /* @__PURE__ */ new Set();
-      const out = [];
+      const byId = new Map2();
       for (const t of tripReports) {
-        if (t && t.id != null && !seen.has(t.id)) {
-          seen.add(t.id);
-          out.push(t);
-        }
+        if (t && t.id != null) byId.set(t.id, t);
       }
       for (const t of viewportTripReports) {
-        if (t && t.id != null && !seen.has(t.id)) {
-          seen.add(t.id);
-          out.push(t);
+        if (!t || t.id == null) continue;
+        const existing = byId.get(t.id);
+        if (!existing) {
+          byId.set(t.id, t);
+          continue;
         }
+        const merged = { ...existing };
+        if (merged.end_lat == null && t.end_lat != null) merged.end_lat = t.end_lat;
+        if (merged.end_lng == null && t.end_lng != null) merged.end_lng = t.end_lng;
+        if (!Array.isArray(merged.route_geom) && Array.isArray(t.route_geom)) merged.route_geom = t.route_geom;
+        byId.set(t.id, merged);
       }
-      return out;
+      return Array.from(byId.values());
     }, [tripReports, viewportTripReports]);
     const [tripAuthors, setTripAuthors] = (0, import_react4.useState)({});
     (0, import_react4.useEffect)(() => {
