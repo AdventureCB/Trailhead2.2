@@ -47947,6 +47947,7 @@ ${suffix}`;
     const [editPhotos, setEditPhotos] = (0, import_react4.useState)([]);
     const editFileRef = (0, import_react4.useRef)(null);
     const [confirmingDelete, setConfirmingDelete] = (0, import_react4.useState)(false);
+    const [lightbox, setLightbox] = (0, import_react4.useState)(null);
     (0, import_react4.useEffect)(() => {
       if (editingSpot) {
         setEditName(editingSpot.name || "");
@@ -48151,11 +48152,18 @@ ${suffix}`;
       const isPrivate = spot.visibility === "private";
       const dotColor = isPrivate ? T.copper : spot.source === "user" ? T.red : T.green;
       const photos = Array.isArray(spot.photos) ? spot.photos : null;
-      return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 6, background: `${T.darkCard}F5`, border: `1px solid ${T.charcoal}`, borderRadius: 10, padding: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "flex-start", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 36, height: 36, borderRadius: "50%", background: dotColor, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 18 } }, "\u{1F3D5}\uFE0F"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 2 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700 } }, spot.name), isMine && isPrivate && /* @__PURE__ */ import_react4.default.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: 3, fontFamily: sans, fontSize: 9, color: T.copper, background: `${T.copper}20`, padding: "2px 7px", borderRadius: 4, fontWeight: 700, letterSpacing: 0.6 } }, /* @__PURE__ */ import_react4.default.createElement(Lock, { size: 9 }), "PRIVATE")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 4 } }, spot.spot_type !== "unknown" ? spot.spot_type : "", spot.spot_type !== "unknown" && spot.fee !== "unknown" ? " \xB7 " : "", spot.fee !== "unknown" ? spot.fee : "", (spot.spot_type !== "unknown" || spot.fee !== "unknown") && spot.source ? " \xB7 " : "", spot.source), spot.description && /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 12, color: T.warmStone, lineHeight: 1.4 } }, spot.description), photos && photos.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, overflowX: "auto", marginTop: 10, paddingBottom: 4 } }, photos.map((p, i) => {
-        const url = typeof p === "string" ? p : p && p.url || "";
-        if (!url) return null;
-        return /* @__PURE__ */ import_react4.default.createElement("div", { key: i, style: { flexShrink: 0, width: 84, height: 84, borderRadius: 6, overflow: "hidden", border: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("img", { src: url, alt: "", loading: "lazy", style: { width: "100%", height: "100%", objectFit: "cover", display: "block" } }));
-      })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginTop: 10, flexWrap: "wrap" } }, ext && /* @__PURE__ */ import_react4.default.createElement("a", { href: ext.url, target: "_blank", rel: "noopener noreferrer", style: { display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", background: T.copper, color: T.white, borderRadius: 6, textDecoration: "none", fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5 } }, /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 12 }), /* @__PURE__ */ import_react4.default.createElement("span", null, ext.label)), isMine && /* @__PURE__ */ import_react4.default.createElement(
+      return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 6, background: `${T.darkCard}F5`, border: `1px solid ${T.charcoal}`, borderRadius: 10, padding: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "flex-start", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 36, height: 36, borderRadius: "50%", background: dotColor, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 18 } }, "\u{1F3D5}\uFE0F"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 2 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700 } }, spot.name), isMine && isPrivate && /* @__PURE__ */ import_react4.default.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: 3, fontFamily: sans, fontSize: 9, color: T.copper, background: `${T.copper}20`, padding: "2px 7px", borderRadius: 4, fontWeight: 700, letterSpacing: 0.6 } }, /* @__PURE__ */ import_react4.default.createElement(Lock, { size: 9 }), "PRIVATE")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 4 } }, spot.spot_type !== "unknown" ? spot.spot_type : "", spot.spot_type !== "unknown" && spot.fee !== "unknown" ? " \xB7 " : "", spot.fee !== "unknown" ? spot.fee : "", (spot.spot_type !== "unknown" || spot.fee !== "unknown") && spot.source ? " \xB7 " : "", spot.source), spot.description && /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 12, color: T.warmStone, lineHeight: 1.4 } }, spot.description), photos && photos.length > 0 && (() => {
+        const urls = photos.map((p) => typeof p === "string" ? p : p && p.url || "").filter(Boolean);
+        return /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, overflowX: "auto", marginTop: 10, paddingBottom: 4 } }, urls.map((url, i) => /* @__PURE__ */ import_react4.default.createElement(
+          "button",
+          {
+            key: i,
+            onClick: () => setLightbox({ urls, index: i }),
+            style: { flexShrink: 0, width: 84, height: 84, borderRadius: 6, overflow: "hidden", border: `1px solid ${T.charcoal}`, background: "none", padding: 0, cursor: "pointer" }
+          },
+          /* @__PURE__ */ import_react4.default.createElement("img", { src: url, alt: "", loading: "lazy", style: { width: "100%", height: "100%", objectFit: "cover", display: "block" } })
+        )));
+      })(), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginTop: 10, flexWrap: "wrap" } }, ext && /* @__PURE__ */ import_react4.default.createElement("a", { href: ext.url, target: "_blank", rel: "noopener noreferrer", style: { display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", background: T.copper, color: T.white, borderRadius: 6, textDecoration: "none", fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5 } }, /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 12 }), /* @__PURE__ */ import_react4.default.createElement("span", null, ext.label)), isMine && /* @__PURE__ */ import_react4.default.createElement(
         "button",
         {
           onClick: () => {
@@ -48402,7 +48410,56 @@ ${suffix}`;
         style: { flex: 1, padding: "10px", borderRadius: 8, background: editName.trim() ? T.green : T.charcoal, border: "none", cursor: editName.trim() ? "pointer" : "default", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5, opacity: editName.trim() ? 1 : 0.5 }
       },
       "SAVE"
-    )))));
+    )))), lightbox && /* @__PURE__ */ import_react4.default.createElement(
+      "div",
+      {
+        onClick: () => setLightbox(null),
+        style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }
+      },
+      /* @__PURE__ */ import_react4.default.createElement(
+        "button",
+        {
+          onClick: (e) => {
+            e.stopPropagation();
+            setLightbox(null);
+          },
+          style: { position: "absolute", top: 16, right: 16, background: "rgba(0,0,0,0.5)", border: "none", borderRadius: "50%", width: 36, height: 36, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: T.white }
+        },
+        /* @__PURE__ */ import_react4.default.createElement(X, { size: 20 })
+      ),
+      lightbox.urls.length > 1 && /* @__PURE__ */ import_react4.default.createElement(
+        "button",
+        {
+          onClick: (e) => {
+            e.stopPropagation();
+            setLightbox((prev) => prev ? { ...prev, index: (prev.index - 1 + prev.urls.length) % prev.urls.length } : prev);
+          },
+          style: { position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", background: "rgba(0,0,0,0.5)", border: "none", borderRadius: "50%", width: 40, height: 40, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: T.white, zIndex: 2 }
+        },
+        /* @__PURE__ */ import_react4.default.createElement(ChevronLeft, { size: 22 })
+      ),
+      lightbox.urls.length > 1 && /* @__PURE__ */ import_react4.default.createElement(
+        "button",
+        {
+          onClick: (e) => {
+            e.stopPropagation();
+            setLightbox((prev) => prev ? { ...prev, index: (prev.index + 1) % prev.urls.length } : prev);
+          },
+          style: { position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "rgba(0,0,0,0.5)", border: "none", borderRadius: "50%", width: 40, height: 40, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: T.white, zIndex: 2 }
+        },
+        /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 22 })
+      ),
+      /* @__PURE__ */ import_react4.default.createElement(
+        "img",
+        {
+          src: lightbox.urls[lightbox.index],
+          alt: "",
+          onClick: (e) => e.stopPropagation(),
+          style: { maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 8 }
+        }
+      ),
+      lightbox.urls.length > 1 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", bottom: 18, left: 0, right: 0, textAlign: "center", fontFamily: sans, fontSize: 11, color: T.white, letterSpacing: 0.5 } }, lightbox.index + 1, " / ", lightbox.urls.length)
+    ));
   }
   function RoutesScreen({ onRecordRoute, onManualEntry, userRoutes, onUpdateRoute, savedRoutes, onSaveRoute, onUnsaveRoute, onOpenDM, onAddFeedPost, onStartNav, userBuilds, campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, currentUserId, tripReports, tripAuthors, onCreateTripDraft, onChooseManual, onChooseLive, onChooseSkip, onOpenTripDraft, onViewUser, onLoadTripRouteData, onBumpTripView, likedTripIds, tripLikeCounts, onToggleTripLike, onShareTripToFeed, pendingTripNav, onConsumePendingTripNav, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onLoadCampingSpotPhotos, onMapViewportChange, showTripReports, setShowTripReports, onOpenTripDetail }) {
     const [showCreator, setShowCreator] = (0, import_react4.useState)(false);
