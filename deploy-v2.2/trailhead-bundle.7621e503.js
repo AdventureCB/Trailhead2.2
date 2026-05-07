@@ -48652,25 +48652,7 @@ ${suffix}`;
           author: tripAuthors && tripAuthors[p.user_id] || null,
           onOpen: (id) => setDetailTripId(id)
         }
-      ))))), showCreator && /* @__PURE__ */ import_react4.default.createElement(
-        TripReportCreator,
-        {
-          onClose: () => setShowCreator(false),
-          onCreateDraft: onCreateTripDraft,
-          onChooseManual: (draftId) => {
-            setShowCreator(false);
-            onChooseManual && onChooseManual(draftId);
-          },
-          onChooseLive: (draftId) => {
-            setShowCreator(false);
-            onChooseLive && onChooseLive(draftId);
-          },
-          onChooseSkip: (draftId) => {
-            setShowCreator(false);
-            onChooseSkip && onChooseSkip(draftId);
-          }
-        }
-      ));
+      ))))));
     })(), mainTab === "planning" && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", margin: "0 16px 12px", background: T.darkCard, borderRadius: 8, overflow: "hidden" } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
       setPlanningTab("saved");
       setExpandedRoute(null);
@@ -48703,7 +48685,25 @@ ${suffix}`;
     ))), fullscreenMapRoute && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "fixed", top: 0, bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 430, zIndex: 1e3, background: T.darkBg, display: "flex", flexDirection: "column" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: T.darkCard, borderBottom: `1px solid ${T.charcoal}`, flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement("h3", { style: { fontFamily: serif, fontSize: 16, color: T.white, margin: 0 } }, fullscreenMapRoute.name || fullscreenMapRoute.title), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 10, marginTop: 4 } }, fullscreenMapRoute.distance && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600 } }, fullscreenMapRoute.distance), (fullscreenMapRoute.time || fullscreenMapRoute.duration) && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600 } }, fullscreenMapRoute.time || fullscreenMapRoute.duration), fullscreenMapRoute.difficulty && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, fullscreenMapRoute.difficulty))), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
       setFullscreenMapRoute(null);
       setHighlightedPinIdx(null);
-    }, style: { background: T.charcoal, border: `1px solid ${T.tertiary}30`, borderRadius: 8, padding: "8px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(Minimize2, { size: 14, color: T.white }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 600, letterSpacing: 0.5 } }, "CLOSE"))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement(RouteMapPreview, { pins: fullscreenMapRoute.pins, points: fullscreenMapRoute.points, photos: fullscreenMapRoute.photos, isFullscreen: true }), fullscreenMapRoute.pins && fullscreenMapRoute.pins.some((p) => p.photo) && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", bottom: 16, left: "50%", transform: "translateX(-50%)", background: `${T.darkBg}DD`, borderRadius: 20, padding: "8px 16px", backdropFilter: "blur(8px)", border: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600, letterSpacing: 0.5 } }, "TAP PHOTO PINS TO VIEW PHOTOS")))), editingRoute && /* @__PURE__ */ import_react4.default.createElement(
+    }, style: { background: T.charcoal, border: `1px solid ${T.tertiary}30`, borderRadius: 8, padding: "8px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(Minimize2, { size: 14, color: T.white }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 600, letterSpacing: 0.5 } }, "CLOSE"))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement(RouteMapPreview, { pins: fullscreenMapRoute.pins, points: fullscreenMapRoute.points, photos: fullscreenMapRoute.photos, isFullscreen: true }), fullscreenMapRoute.pins && fullscreenMapRoute.pins.some((p) => p.photo) && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", bottom: 16, left: "50%", transform: "translateX(-50%)", background: `${T.darkBg}DD`, borderRadius: 20, padding: "8px 16px", backdropFilter: "blur(8px)", border: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600, letterSpacing: 0.5 } }, "TAP PHOTO PINS TO VIEW PHOTOS")))), showCreator && /* @__PURE__ */ import_react4.default.createElement(
+      TripReportCreator,
+      {
+        onClose: () => setShowCreator(false),
+        onCreateDraft: onCreateTripDraft,
+        onChooseManual: (draftId) => {
+          setShowCreator(false);
+          onChooseManual && onChooseManual(draftId);
+        },
+        onChooseLive: (draftId) => {
+          setShowCreator(false);
+          onChooseLive && onChooseLive(draftId);
+        },
+        onChooseSkip: (draftId) => {
+          setShowCreator(false);
+          onChooseSkip && onChooseSkip(draftId);
+        }
+      }
+    ), editingRoute && /* @__PURE__ */ import_react4.default.createElement(
       RouteDetailsForm,
       {
         isManual: true,
