@@ -52730,67 +52730,6 @@ ${suffix}`;
     const [pendingThread, setPendingThread] = (0, import_react4.useState)(null);
     const [pendingBuildNav, setPendingBuildNav] = (0, import_react4.useState)(null);
     const [pendingTripNav, setPendingTripNav] = (0, import_react4.useState)(initialSharedLink && initialSharedLink.kind === "trip" ? initialSharedLink.slug : null);
-    (0, import_react4.useEffect)(() => {
-      if (!pendingTripNav) return;
-      const trip = (allTripReports || []).find((t) => t.slug === pendingTripNav);
-      if (!trip) return;
-      setDetailTripId(trip.id);
-      setPendingTripNav(null);
-    }, [pendingTripNav, allTripReports]);
-    const tripDetailUrlBootstrapped = (0, import_react4.useRef)(false);
-    (0, import_react4.useEffect)(() => {
-      if (typeof window === "undefined") return;
-      if (!tripDetailUrlBootstrapped.current) {
-        tripDetailUrlBootstrapped.current = true;
-        const path = window.location.pathname || "";
-        if (detailTripId) {
-          const trip = (allTripReports || []).find((t) => t.id === detailTripId);
-          const expected = trip && trip.slug ? `/trips/${trip.slug}` : null;
-          if (expected && path !== expected) {
-            try {
-              window.history.replaceState({ tripId: detailTripId }, "", expected);
-            } catch (e) {
-            }
-          }
-        }
-        return;
-      }
-      if (detailTripId) {
-        const trip = (allTripReports || []).find((t) => t.id === detailTripId);
-        if (trip && trip.slug) {
-          try {
-            window.history.pushState({ tripId: detailTripId }, "", `/trips/${trip.slug}`);
-          } catch (e) {
-          }
-        }
-      } else {
-        const path = window.location.pathname || "";
-        if (path.startsWith("/trips/")) {
-          try {
-            window.history.pushState({}, "", "/");
-          } catch (e) {
-          }
-        }
-      }
-    }, [detailTripId]);
-    (0, import_react4.useEffect)(() => {
-      if (typeof window === "undefined") return;
-      const onPop = () => {
-        const path = window.location.pathname || "";
-        const m = path.match(/^\/trips\/(.+?)\/?$/);
-        if (m) {
-          const slug = decodeURIComponent(m[1]);
-          const trip = (allTripReports || []).find((t) => t.slug === slug);
-          if (trip) {
-            setDetailTripId(trip.id);
-            return;
-          }
-        }
-        setDetailTripId(null);
-      };
-      window.addEventListener("popstate", onPop);
-      return () => window.removeEventListener("popstate", onPop);
-    }, [allTripReports]);
     const [pendingPostNav, setPendingPostNav] = (0, import_react4.useState)(initialSharedLink && initialSharedLink.kind === "post" ? initialSharedLink.id : null);
     const [sharedLinkToast, setSharedLinkToast] = (0, import_react4.useState)("");
     const [appErrorToast, setAppErrorToast] = (0, import_react4.useState)("");
@@ -52875,6 +52814,67 @@ ${suffix}`;
       }
       return order.map((id) => byId[id]);
     }, [tripReports, viewportTripReports]);
+    (0, import_react4.useEffect)(() => {
+      if (!pendingTripNav) return;
+      const trip = (allTripReports || []).find((t) => t.slug === pendingTripNav);
+      if (!trip) return;
+      setDetailTripId(trip.id);
+      setPendingTripNav(null);
+    }, [pendingTripNav, allTripReports]);
+    const tripDetailUrlBootstrapped = (0, import_react4.useRef)(false);
+    (0, import_react4.useEffect)(() => {
+      if (typeof window === "undefined") return;
+      if (!tripDetailUrlBootstrapped.current) {
+        tripDetailUrlBootstrapped.current = true;
+        const path = window.location.pathname || "";
+        if (detailTripId) {
+          const trip = (allTripReports || []).find((t) => t.id === detailTripId);
+          const expected = trip && trip.slug ? `/trips/${trip.slug}` : null;
+          if (expected && path !== expected) {
+            try {
+              window.history.replaceState({ tripId: detailTripId }, "", expected);
+            } catch (e) {
+            }
+          }
+        }
+        return;
+      }
+      if (detailTripId) {
+        const trip = (allTripReports || []).find((t) => t.id === detailTripId);
+        if (trip && trip.slug) {
+          try {
+            window.history.pushState({ tripId: detailTripId }, "", `/trips/${trip.slug}`);
+          } catch (e) {
+          }
+        }
+      } else {
+        const path = window.location.pathname || "";
+        if (path.startsWith("/trips/")) {
+          try {
+            window.history.pushState({}, "", "/");
+          } catch (e) {
+          }
+        }
+      }
+    }, [detailTripId]);
+    (0, import_react4.useEffect)(() => {
+      if (typeof window === "undefined") return;
+      const onPop = () => {
+        const path = window.location.pathname || "";
+        const m = path.match(/^\/trips\/(.+?)\/?$/);
+        if (m) {
+          const slug = decodeURIComponent(m[1]);
+          const trip = (allTripReports || []).find((t) => t.slug === slug);
+          if (trip) {
+            setDetailTripId(trip.id);
+            return;
+          }
+        }
+        setDetailTripId(null);
+      };
+      window.addEventListener("popstate", onPop);
+      return () => window.removeEventListener("popstate", onPop);
+    }, [allTripReports]);
     const [tripAuthors, setTripAuthors] = (0, import_react4.useState)({});
     (0, import_react4.useEffect)(() => {
       if (!Array.isArray(tripReports) || tripReports.length === 0) return;
