@@ -47849,6 +47849,7 @@ ${suffix}`;
         setConfirmingDelete(false);
       }
     }, [editingSpot && editingSpot.id]);
+    const [selectedTrip, setSelectedTrip] = (0, import_react4.useState)(null);
     useCampingSpotsLayer(mapInst, mapReady, campingSpots, showCampingSpots, (spot) => {
       setSelectedSpot(spot);
       setSelectedLand(null);
@@ -47865,7 +47866,6 @@ ${suffix}`;
       setSelectedLand(null);
     }, selectedTrip && selectedTrip.id);
     useMapViewport(mapInst, mapReady, onMapViewportChange);
-    const [selectedTrip, setSelectedTrip] = (0, import_react4.useState)(null);
     (0, import_react4.useEffect)(() => {
       let cancelled = false;
       const init = async () => {
