@@ -43142,7 +43142,9 @@ ${suffix}`;
           source: r.source || "unknown",
           source_id: r.source_id || "",
           description: r.description || "",
-          photo_url: r.photo_url || ""
+          photo_url: r.photo_url || "",
+          visibility: r.visibility || "public",
+          user_id: r.user_id || ""
         }
       }))
     };
@@ -43214,7 +43216,14 @@ ${suffix}`;
             source: "camping-spots",
             filter: ["!", ["has", "point_count"]],
             paint: {
-              "circle-color": ["match", ["get", "source"], "user", T.red, "#5B8C5A"],
+              "circle-color": [
+                "case",
+                ["==", ["get", "visibility"], "private"],
+                T.copper,
+                ["==", ["get", "source"], "user"],
+                T.red,
+                "#5B8C5A"
+              ],
               "circle-radius": 7,
               "circle-stroke-color": T.white,
               "circle-stroke-width": 2,
@@ -43234,6 +43243,8 @@ ${suffix}`;
               source_id: f.properties.source_id,
               description: f.properties.description,
               photo_url: f.properties.photo_url,
+              visibility: f.properties.visibility,
+              user_id: f.properties.user_id,
               lat: f.geometry.coordinates[1],
               lng: f.geometry.coordinates[0]
             });
@@ -47535,7 +47546,7 @@ ${suffix}`;
       /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 16, color: T.tertiary })
     )));
   }
-  function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, onAddCampingSpot, onNewTripReport }) {
+  function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onNewTripReport, currentUserId }) {
     const mapRef = (0, import_react4.useRef)(null);
     const mapInst = (0, import_react4.useRef)(null);
     const [mapReady, setMapReady] = (0, import_react4.useState)(false);
@@ -47549,6 +47560,20 @@ ${suffix}`;
     const [addSpotPos, setAddSpotPos] = (0, import_react4.useState)(null);
     const [addSpotName, setAddSpotName] = (0, import_react4.useState)("");
     const [addSpotDesc, setAddSpotDesc] = (0, import_react4.useState)("");
+    const [addSpotVisibility, setAddSpotVisibility] = (0, import_react4.useState)("public");
+    const [editingSpot, setEditingSpot] = (0, import_react4.useState)(null);
+    const [editName, setEditName] = (0, import_react4.useState)("");
+    const [editDesc, setEditDesc] = (0, import_react4.useState)("");
+    const [editVisibility, setEditVisibility] = (0, import_react4.useState)("public");
+    const [confirmingDelete, setConfirmingDelete] = (0, import_react4.useState)(false);
+    (0, import_react4.useEffect)(() => {
+      if (editingSpot) {
+        setEditName(editingSpot.name || "");
+        setEditDesc(editingSpot.description || "");
+        setEditVisibility(editingSpot.visibility === "private" ? "private" : "public");
+        setConfirmingDelete(false);
+      }
+    }, [editingSpot && editingSpot.id]);
     useCampingSpotsLayer(mapInst, mapReady, campingSpots, showCampingSpots, (spot) => {
       setSelectedSpot(spot);
       setSelectedLand(null);
@@ -47708,9 +47733,23 @@ ${suffix}`;
         style: { width: 52, height: 52, borderRadius: "50%", background: T.red, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 6px 16px rgba(0,0,0,0.5)", transition: "transform 0.15s" }
       },
       /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 24, color: T.white, strokeWidth: 2.5, style: { transform: plusOpen ? "rotate(45deg)" : "none", transition: "transform 0.15s" } })
-    )), plusOpen && /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => setPlusOpen(false), style: { position: "absolute", inset: 0, zIndex: 5 } }), selectedSpot && (() => {
+    )), plusOpen && /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => setPlusOpen(false), style: { position: "absolute", inset: 0, zIndex: 5 } }), selectedSpot && !editingSpot && (() => {
       const ext = campingSpotExternalLink(selectedSpot);
-      return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 6, background: `${T.darkCard}F5`, border: `1px solid ${T.charcoal}`, borderRadius: 10, padding: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "flex-start", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 36, height: 36, borderRadius: "50%", background: T.green, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 18 } }, "\u{1F3D5}\uFE0F"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, marginBottom: 2 } }, selectedSpot.name), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 4 } }, selectedSpot.spot_type !== "unknown" ? selectedSpot.spot_type : "", selectedSpot.spot_type !== "unknown" && selectedSpot.fee !== "unknown" ? " \xB7 " : "", selectedSpot.fee !== "unknown" ? selectedSpot.fee : "", (selectedSpot.spot_type !== "unknown" || selectedSpot.fee !== "unknown") && selectedSpot.source ? " \xB7 " : "", selectedSpot.source), selectedSpot.description && /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 12, color: T.warmStone, lineHeight: 1.4 } }, selectedSpot.description), ext && /* @__PURE__ */ import_react4.default.createElement("a", { href: ext.url, target: "_blank", rel: "noopener noreferrer", style: { display: "inline-flex", alignItems: "center", gap: 6, marginTop: 10, padding: "8px 12px", background: T.copper, color: T.white, borderRadius: 6, textDecoration: "none", fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5 } }, /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 12 }), /* @__PURE__ */ import_react4.default.createElement("span", null, ext.label))), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setSelectedSpot(null), style: { background: "none", border: "none", cursor: "pointer", padding: 4, color: T.tertiary } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 16 }))));
+      const isMine = currentUserId && selectedSpot.user_id === currentUserId;
+      const isPrivate = selectedSpot.visibility === "private";
+      const dotColor = isPrivate ? T.copper : selectedSpot.source === "user" ? T.red : T.green;
+      return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 6, background: `${T.darkCard}F5`, border: `1px solid ${T.charcoal}`, borderRadius: 10, padding: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "flex-start", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 36, height: 36, borderRadius: "50%", background: dotColor, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 18 } }, "\u{1F3D5}\uFE0F"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 2 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700 } }, selectedSpot.name), isMine && isPrivate && /* @__PURE__ */ import_react4.default.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: 3, fontFamily: sans, fontSize: 9, color: T.copper, background: `${T.copper}20`, padding: "2px 7px", borderRadius: 4, fontWeight: 700, letterSpacing: 0.6 } }, /* @__PURE__ */ import_react4.default.createElement(Lock, { size: 9 }), "PRIVATE")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 4 } }, selectedSpot.spot_type !== "unknown" ? selectedSpot.spot_type : "", selectedSpot.spot_type !== "unknown" && selectedSpot.fee !== "unknown" ? " \xB7 " : "", selectedSpot.fee !== "unknown" ? selectedSpot.fee : "", (selectedSpot.spot_type !== "unknown" || selectedSpot.fee !== "unknown") && selectedSpot.source ? " \xB7 " : "", selectedSpot.source), selectedSpot.description && /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 12, color: T.warmStone, lineHeight: 1.4 } }, selectedSpot.description), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginTop: 10, flexWrap: "wrap" } }, ext && /* @__PURE__ */ import_react4.default.createElement("a", { href: ext.url, target: "_blank", rel: "noopener noreferrer", style: { display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", background: T.copper, color: T.white, borderRadius: 6, textDecoration: "none", fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5 } }, /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 12 }), /* @__PURE__ */ import_react4.default.createElement("span", null, ext.label)), isMine && /* @__PURE__ */ import_react4.default.createElement(
+        "button",
+        {
+          onClick: () => {
+            setEditingSpot(selectedSpot);
+            setSelectedSpot(null);
+          },
+          style: { display: "inline-flex", alignItems: "center", gap: 5, padding: "8px 12px", background: T.charcoal, border: `1px solid ${T.copper}50`, borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 0.5 }
+        },
+        /* @__PURE__ */ import_react4.default.createElement(PenLine, { size: 12 }),
+        "EDIT"
+      ))), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setSelectedSpot(null), style: { background: "none", border: "none", cursor: "pointer", padding: 4, color: T.tertiary } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 16 }))));
     })(), selectedLand && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 6, background: `${T.darkCard}F5`, border: `1px solid ${T.charcoal}`, borderRadius: 10, padding: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "flex-start", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 36, height: 36, borderRadius: 6, background: PUBLIC_LANDS_COLORS[selectedLand.mang_name] || PUBLIC_LANDS_DEFAULT_COLOR, flexShrink: 0, border: `1px solid ${T.charcoal}` } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, marginBottom: 2 } }, selectedLand.unit_nm || selectedLand.loc_nm || "Public land"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600, marginBottom: 4 } }, PUBLIC_LANDS_NAMES[selectedLand.mang_name] || selectedLand.mang_name || "Unknown manager"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.4 } }, selectedLand.des_tp ? selectedLand.des_tp : null, selectedLand.des_tp && selectedLand.state_nm ? " \xB7 " : null, selectedLand.state_nm, selectedLand.pub_access ? ` \xB7 ${PUBLIC_ACCESS_NAMES[selectedLand.pub_access] || selectedLand.pub_access}` : null)), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setSelectedLand(null), style: { background: "none", border: "none", cursor: "pointer", padding: 4, color: T.tertiary } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 16 })))), addSpotPos && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 7, background: `${T.darkCard}F5`, border: `1px solid ${T.copper}`, borderRadius: 10, padding: 14, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 } }, /* @__PURE__ */ import_react4.default.createElement(Tent, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 1.5 } }, "NEW SPOT"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, marginLeft: "auto" } }, addSpotPos.lat.toFixed(4), ", ", addSpotPos.lng.toFixed(4))), /* @__PURE__ */ import_react4.default.createElement(
       "input",
       {
@@ -47729,13 +47768,30 @@ ${suffix}`;
         rows: 3,
         style: { width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", resize: "vertical", marginBottom: 10 }
       }
-    ), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement(
+    ), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 8, padding: 3, marginBottom: 10 } }, /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: () => setAddSpotVisibility("public"),
+        style: { flex: 1, padding: "8px 10px", borderRadius: 6, background: addSpotVisibility === "public" ? T.green : "transparent", border: "none", cursor: "pointer", fontFamily: sans, fontSize: 10, color: addSpotVisibility === "public" ? T.white : T.tertiary, fontWeight: 700, letterSpacing: 0.6, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }
+      },
+      /* @__PURE__ */ import_react4.default.createElement(Globe, { size: 12 }),
+      "PUBLIC"
+    ), /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: () => setAddSpotVisibility("private"),
+        style: { flex: 1, padding: "8px 10px", borderRadius: 6, background: addSpotVisibility === "private" ? T.copper : "transparent", border: "none", cursor: "pointer", fontFamily: sans, fontSize: 10, color: addSpotVisibility === "private" ? T.white : T.tertiary, fontWeight: 700, letterSpacing: 0.6, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }
+      },
+      /* @__PURE__ */ import_react4.default.createElement(Lock, { size: 12 }),
+      "PRIVATE"
+    )), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, marginBottom: 10, lineHeight: 1.4 } }, addSpotVisibility === "public" ? "Visible to everyone in the community." : "Only you'll see this spot. You can switch it to public later."), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement(
       "button",
       {
         onClick: () => {
           setAddSpotPos(null);
           setAddSpotName("");
           setAddSpotDesc("");
+          setAddSpotVisibility("public");
         },
         style: { flex: 1, padding: "10px", borderRadius: 8, background: T.charcoal, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 600, letterSpacing: 0.5 }
       },
@@ -47745,18 +47801,92 @@ ${suffix}`;
       {
         onClick: async () => {
           if (!addSpotName.trim() || !onAddCampingSpot) return;
-          await onAddCampingSpot({ name: addSpotName.trim(), description: addSpotDesc.trim() || null, lat: addSpotPos.lat, lng: addSpotPos.lng, spot_type: "unknown", fee: "unknown" });
+          await onAddCampingSpot({ name: addSpotName.trim(), description: addSpotDesc.trim() || null, lat: addSpotPos.lat, lng: addSpotPos.lng, spot_type: "unknown", fee: "unknown", visibility: addSpotVisibility });
           setAddSpotPos(null);
           setAddSpotName("");
           setAddSpotDesc("");
+          setAddSpotVisibility("public");
         },
         disabled: !addSpotName.trim(),
         style: { flex: 1, padding: "10px", borderRadius: 8, background: addSpotName.trim() ? T.green : T.charcoal, border: "none", cursor: addSpotName.trim() ? "pointer" : "default", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, letterSpacing: 0.5, opacity: addSpotName.trim() ? 1 : 0.5 }
       },
       "SAVE SPOT"
+    ))), editingSpot && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 8, background: `${T.darkCard}F5`, border: `1px solid ${T.copper}`, borderRadius: 10, padding: 14, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 } }, /* @__PURE__ */ import_react4.default.createElement(PenLine, { size: 13, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 1.5 } }, "EDIT SPOT"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setEditingSpot(null), style: { background: "none", border: "none", cursor: "pointer", padding: 2, color: T.tertiary, marginLeft: "auto" } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 14 }))), /* @__PURE__ */ import_react4.default.createElement(
+      "input",
+      {
+        autoFocus: true,
+        value: editName,
+        onChange: (e) => setEditName(e.target.value),
+        placeholder: "Name",
+        style: { width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", marginBottom: 8 }
+      }
+    ), /* @__PURE__ */ import_react4.default.createElement(
+      "textarea",
+      {
+        value: editDesc,
+        onChange: (e) => setEditDesc(e.target.value),
+        placeholder: "Notes",
+        rows: 3,
+        style: { width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", resize: "vertical", marginBottom: 10 }
+      }
+    ), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 8, padding: 3, marginBottom: 10 } }, /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: () => setEditVisibility("public"),
+        style: { flex: 1, padding: "8px 10px", borderRadius: 6, background: editVisibility === "public" ? T.green : "transparent", border: "none", cursor: "pointer", fontFamily: sans, fontSize: 10, color: editVisibility === "public" ? T.white : T.tertiary, fontWeight: 700, letterSpacing: 0.6, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }
+      },
+      /* @__PURE__ */ import_react4.default.createElement(Globe, { size: 12 }),
+      "PUBLIC"
+    ), /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: () => setEditVisibility("private"),
+        style: { flex: 1, padding: "8px 10px", borderRadius: 6, background: editVisibility === "private" ? T.copper : "transparent", border: "none", cursor: "pointer", fontFamily: sans, fontSize: 10, color: editVisibility === "private" ? T.white : T.tertiary, fontWeight: 700, letterSpacing: 0.6, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }
+      },
+      /* @__PURE__ */ import_react4.default.createElement(Lock, { size: 12 }),
+      "PRIVATE"
+    )), confirmingDelete ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: () => setConfirmingDelete(false),
+        style: { flex: 1, padding: "10px", borderRadius: 8, background: T.charcoal, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 600, letterSpacing: 0.5 }
+      },
+      "CANCEL"
+    ), /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: async () => {
+          const id = editingSpot.id;
+          setEditingSpot(null);
+          if (onDeleteCampingSpot) await onDeleteCampingSpot(id);
+        },
+        style: { flex: 1, padding: "10px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }
+      },
+      "CONFIRM DELETE"
+    )) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: () => setConfirmingDelete(true),
+        style: { padding: "10px 14px", borderRadius: 8, background: "transparent", border: `1px solid ${T.red}50`, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.red, fontWeight: 600, letterSpacing: 0.5, display: "flex", alignItems: "center", gap: 5 }
+      },
+      /* @__PURE__ */ import_react4.default.createElement(Trash2, { size: 12 }),
+      "DELETE"
+    ), /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: async () => {
+          if (!editName.trim() || !onUpdateCampingSpot) return;
+          const id = editingSpot.id;
+          await onUpdateCampingSpot(id, { name: editName.trim(), description: editDesc.trim() || null, visibility: editVisibility });
+          setEditingSpot(null);
+        },
+        disabled: !editName.trim(),
+        style: { flex: 1, padding: "10px", borderRadius: 8, background: editName.trim() ? T.green : T.charcoal, border: "none", cursor: editName.trim() ? "pointer" : "default", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5, opacity: editName.trim() ? 1 : 0.5 }
+      },
+      "SAVE"
     )))));
   }
-  function RoutesScreen({ onRecordRoute, onManualEntry, userRoutes, onUpdateRoute, savedRoutes, onSaveRoute, onUnsaveRoute, onOpenDM, onAddFeedPost, onStartNav, userBuilds, campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, currentUserId, tripReports, tripAuthors, onCreateTripDraft, onChooseManual, onChooseLive, onChooseSkip, onOpenTripDraft, onViewUser, onLoadTripRouteData, onBumpTripView, likedTripIds, tripLikeCounts, onToggleTripLike, onShareTripToFeed, pendingTripNav, onConsumePendingTripNav, onAddCampingSpot }) {
+  function RoutesScreen({ onRecordRoute, onManualEntry, userRoutes, onUpdateRoute, savedRoutes, onSaveRoute, onUnsaveRoute, onOpenDM, onAddFeedPost, onStartNav, userBuilds, campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, currentUserId, tripReports, tripAuthors, onCreateTripDraft, onChooseManual, onChooseLive, onChooseSkip, onOpenTripDraft, onViewUser, onLoadTripRouteData, onBumpTripView, likedTripIds, tripLikeCounts, onToggleTripLike, onShareTripToFeed, pendingTripNav, onConsumePendingTripNav, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot }) {
     const [showCreator, setShowCreator] = (0, import_react4.useState)(false);
     const [detailTripId, setDetailTripId] = (0, import_react4.useState)(null);
     (0, import_react4.useEffect)(() => {
@@ -47984,7 +48114,10 @@ ${suffix}`;
         showPublicLands,
         setShowPublicLands,
         onAddCampingSpot,
-        onNewTripReport: () => setShowCreator(true)
+        onUpdateCampingSpot,
+        onDeleteCampingSpot,
+        onNewTripReport: () => setShowCreator(true),
+        currentUserId
       }
     ))), fullscreenMapRoute && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "fixed", top: 0, bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 430, zIndex: 1e3, background: T.darkBg, display: "flex", flexDirection: "column" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: T.darkCard, borderBottom: `1px solid ${T.charcoal}`, flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement("h3", { style: { fontFamily: serif, fontSize: 16, color: T.white, margin: 0 } }, fullscreenMapRoute.name || fullscreenMapRoute.title), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 10, marginTop: 4 } }, fullscreenMapRoute.distance && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600 } }, fullscreenMapRoute.distance), (fullscreenMapRoute.time || fullscreenMapRoute.duration) && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600 } }, fullscreenMapRoute.time || fullscreenMapRoute.duration), fullscreenMapRoute.difficulty && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, fullscreenMapRoute.difficulty))), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
       setFullscreenMapRoute(null);
@@ -53742,8 +53875,9 @@ ${suffix}`;
     const addCampingSpot = async (spot) => {
       const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
       if (!uid || !spot || spot.lat == null || spot.lng == null) return null;
+      const visibility = spot.visibility === "private" ? "private" : "public";
       const tmpId = "tmp_camp_" + Date.now() + "_" + Math.floor(Math.random() * 1e3);
-      const optimistic = { id: tmpId, ...spot, source: "user", user_id: uid };
+      const optimistic = { id: tmpId, ...spot, visibility, source: "user", user_id: uid };
       setCampingSpots((prev) => [optimistic, ...prev]);
       try {
         const { data: inserted, error } = await supabase.from("camping_spots").insert({
@@ -53755,6 +53889,7 @@ ${suffix}`;
           fee: spot.fee || "unknown",
           source: "user",
           user_id: uid,
+          visibility,
           photo_url: spot.photo_url || null,
           amenities: spot.amenities || null
         }).select().single();
@@ -53771,6 +53906,54 @@ ${suffix}`;
         showErrorToast(`Couldn't save camping spot: ${e && (e.message || e.code) || String(e)}`);
         setCampingSpots((prev) => prev.filter((s) => s.id !== tmpId));
         return null;
+      }
+    };
+    const updateCampingSpot = async (id, updates) => {
+      const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+      if (!uid || !id) return null;
+      const before = campingSpots.find((s) => s.id === id);
+      if (!before || before.user_id !== uid) return null;
+      const patch = {};
+      if (updates.name != null) patch.name = updates.name;
+      if (updates.description !== void 0) patch.description = updates.description;
+      if (updates.visibility != null) patch.visibility = updates.visibility === "private" ? "private" : "public";
+      if (Object.keys(patch).length === 0) return before;
+      setCampingSpots((prev) => prev.map((s) => s.id === id ? { ...s, ...patch } : s));
+      try {
+        const { data, error } = await supabase.from("camping_spots").update(patch).eq("id", id).eq("user_id", uid).select().single();
+        if (error) {
+          console.error("[camping_spots] update failed", error);
+          showErrorToast(`Couldn't update spot: ${error.message || error.code}`);
+          setCampingSpots((prev) => prev.map((s) => s.id === id ? before : s));
+          return null;
+        }
+        setCampingSpots((prev) => prev.map((s) => s.id === id ? data : s));
+        return data;
+      } catch (e) {
+        console.error("[camping_spots] update threw", e);
+        setCampingSpots((prev) => prev.map((s) => s.id === id ? before : s));
+        return null;
+      }
+    };
+    const deleteCampingSpot = async (id) => {
+      const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+      if (!uid || !id) return false;
+      const before = campingSpots.find((s) => s.id === id);
+      if (!before || before.user_id !== uid) return false;
+      setCampingSpots((prev) => prev.filter((s) => s.id !== id));
+      try {
+        const { error } = await supabase.from("camping_spots").delete().eq("id", id).eq("user_id", uid);
+        if (error) {
+          console.error("[camping_spots] delete failed", error);
+          showErrorToast(`Couldn't delete spot: ${error.message || error.code}`);
+          setCampingSpots((prev) => [before, ...prev]);
+          return false;
+        }
+        return true;
+      } catch (e) {
+        console.error("[camping_spots] delete threw", e);
+        setCampingSpots((prev) => [before, ...prev]);
+        return false;
       }
     };
     const setDmMessageReaction = async (messageId, emoji) => {
@@ -54102,7 +54285,7 @@ ${suffix}`;
       setShowRecorder(true);
     }, onChooseSkip: (draftId) => {
       if (draftId) setEditingTripId(draftId);
-    }, onOpenTripDraft: (id) => setEditingTripId(id), onViewUser: openUserProfile, onLoadTripRouteData: loadTripRouteData, onBumpTripView: bumpTripView, likedTripIds, tripLikeCounts, onToggleTripLike: requireAuth(toggleTripLike), onShareTripToFeed: requireAuth(shareTripToFeed), pendingTripNav, onConsumePendingTripNav: () => setPendingTripNav(null), onAddCampingSpot: requireAuth(addCampingSpot) }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onPostBuildToFeed: requireAuth((b, opts) => {
+    }, onOpenTripDraft: (id) => setEditingTripId(id), onViewUser: openUserProfile, onLoadTripRouteData: loadTripRouteData, onBumpTripView: bumpTripView, likedTripIds, tripLikeCounts, onToggleTripLike: requireAuth(toggleTripLike), onShareTripToFeed: requireAuth(shareTripToFeed), pendingTripNav, onConsumePendingTripNav: () => setPendingTripNav(null), onAddCampingSpot: requireAuth(addCampingSpot), onUpdateCampingSpot: requireAuth(updateCampingSpot), onDeleteCampingSpot: requireAuth(deleteCampingSpot) }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onPostBuildToFeed: requireAuth((b, opts) => {
       const rawBd = b.buildData;
       const bd = scrubLocalPhotosFromBuildData(rawBd);
       const isLocalUrl = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:"));
