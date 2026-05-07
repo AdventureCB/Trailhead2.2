@@ -43303,10 +43303,10 @@ ${suffix}`;
             type: "circle",
             source: "trip-reports-ends",
             paint: {
-              "circle-color": "#8B6FAF",
-              "circle-radius": 6,
-              "circle-stroke-color": T.white,
-              "circle-stroke-width": 2,
+              "circle-color": T.white,
+              "circle-radius": 7,
+              "circle-stroke-color": "#8B6FAF",
+              "circle-stroke-width": 3,
               "circle-opacity": 0.95
             }
           });
