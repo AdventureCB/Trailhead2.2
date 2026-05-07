@@ -21620,8 +21620,21 @@
   ];
   var Binoculars = createLucideIcon("binoculars", __iconNode5);
 
-  // node_modules/lucide-react/dist/esm/icons/bookmark.mjs
+  // node_modules/lucide-react/dist/esm/icons/book-open.mjs
   var __iconNode6 = [
+    ["path", { d: "M12 7v14", key: "1akyts" }],
+    [
+      "path",
+      {
+        d: "M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z",
+        key: "ruj8y"
+      }
+    ]
+  ];
+  var BookOpen = createLucideIcon("book-open", __iconNode6);
+
+  // node_modules/lucide-react/dist/esm/icons/bookmark.mjs
+  var __iconNode7 = [
     [
       "path",
       {
@@ -21630,10 +21643,10 @@
       }
     ]
   ];
-  var Bookmark = createLucideIcon("bookmark", __iconNode6);
+  var Bookmark = createLucideIcon("bookmark", __iconNode7);
 
   // node_modules/lucide-react/dist/esm/icons/camera.mjs
-  var __iconNode7 = [
+  var __iconNode8 = [
     [
       "path",
       {
@@ -21643,40 +21656,40 @@
     ],
     ["circle", { cx: "12", cy: "13", r: "3", key: "1vg3eu" }]
   ];
-  var Camera = createLucideIcon("camera", __iconNode7);
+  var Camera = createLucideIcon("camera", __iconNode8);
 
   // node_modules/lucide-react/dist/esm/icons/chevron-down.mjs
-  var __iconNode8 = [["path", { d: "m6 9 6 6 6-6", key: "qrunsl" }]];
-  var ChevronDown = createLucideIcon("chevron-down", __iconNode8);
+  var __iconNode9 = [["path", { d: "m6 9 6 6 6-6", key: "qrunsl" }]];
+  var ChevronDown = createLucideIcon("chevron-down", __iconNode9);
 
   // node_modules/lucide-react/dist/esm/icons/chevron-left.mjs
-  var __iconNode9 = [["path", { d: "m15 18-6-6 6-6", key: "1wnfg3" }]];
-  var ChevronLeft = createLucideIcon("chevron-left", __iconNode9);
+  var __iconNode10 = [["path", { d: "m15 18-6-6 6-6", key: "1wnfg3" }]];
+  var ChevronLeft = createLucideIcon("chevron-left", __iconNode10);
 
   // node_modules/lucide-react/dist/esm/icons/chevron-right.mjs
-  var __iconNode10 = [["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]];
-  var ChevronRight = createLucideIcon("chevron-right", __iconNode10);
+  var __iconNode11 = [["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]];
+  var ChevronRight = createLucideIcon("chevron-right", __iconNode11);
 
   // node_modules/lucide-react/dist/esm/icons/chevron-up.mjs
-  var __iconNode11 = [["path", { d: "m18 15-6-6-6 6", key: "153udz" }]];
-  var ChevronUp = createLucideIcon("chevron-up", __iconNode11);
+  var __iconNode12 = [["path", { d: "m18 15-6-6-6 6", key: "153udz" }]];
+  var ChevronUp = createLucideIcon("chevron-up", __iconNode12);
 
   // node_modules/lucide-react/dist/esm/icons/circle-check-big.mjs
-  var __iconNode12 = [
+  var __iconNode13 = [
     ["path", { d: "M21.801 10A10 10 0 1 1 17 3.335", key: "yps3ct" }],
     ["path", { d: "m9 11 3 3L22 4", key: "1pflzl" }]
   ];
-  var CircleCheckBig = createLucideIcon("circle-check-big", __iconNode12);
+  var CircleCheckBig = createLucideIcon("circle-check-big", __iconNode13);
 
   // node_modules/lucide-react/dist/esm/icons/clock.mjs
-  var __iconNode13 = [
+  var __iconNode14 = [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["path", { d: "M12 6v6l4 2", key: "mmk7yg" }]
   ];
-  var Clock = createLucideIcon("clock", __iconNode13);
+  var Clock = createLucideIcon("clock", __iconNode14);
 
   // node_modules/lucide-react/dist/esm/icons/compass.mjs
-  var __iconNode14 = [
+  var __iconNode15 = [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     [
       "path",
@@ -21686,33 +21699,33 @@
       }
     ]
   ];
-  var Compass = createLucideIcon("compass", __iconNode14);
+  var Compass = createLucideIcon("compass", __iconNode15);
 
   // node_modules/lucide-react/dist/esm/icons/dollar-sign.mjs
-  var __iconNode15 = [
+  var __iconNode16 = [
     ["line", { x1: "12", x2: "12", y1: "2", y2: "22", key: "7eqyqh" }],
     ["path", { d: "M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6", key: "1b0p4s" }]
   ];
-  var DollarSign = createLucideIcon("dollar-sign", __iconNode15);
+  var DollarSign = createLucideIcon("dollar-sign", __iconNode16);
 
   // node_modules/lucide-react/dist/esm/icons/ellipsis.mjs
-  var __iconNode16 = [
+  var __iconNode17 = [
     ["circle", { cx: "12", cy: "12", r: "1", key: "41hilf" }],
     ["circle", { cx: "19", cy: "12", r: "1", key: "1wjl8i" }],
     ["circle", { cx: "5", cy: "12", r: "1", key: "1pcz8c" }]
   ];
-  var Ellipsis = createLucideIcon("ellipsis", __iconNode16);
+  var Ellipsis = createLucideIcon("ellipsis", __iconNode17);
 
   // node_modules/lucide-react/dist/esm/icons/external-link.mjs
-  var __iconNode17 = [
+  var __iconNode18 = [
     ["path", { d: "M15 3h6v6", key: "1q9fwt" }],
     ["path", { d: "M10 14 21 3", key: "gplh6r" }],
     ["path", { d: "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6", key: "a6xqqp" }]
   ];
-  var ExternalLink = createLucideIcon("external-link", __iconNode17);
+  var ExternalLink = createLucideIcon("external-link", __iconNode18);
 
   // node_modules/lucide-react/dist/esm/icons/eye-off.mjs
-  var __iconNode18 = [
+  var __iconNode19 = [
     [
       "path",
       {
@@ -21730,10 +21743,10 @@
     ],
     ["path", { d: "m2 2 20 20", key: "1ooewy" }]
   ];
-  var EyeOff = createLucideIcon("eye-off", __iconNode18);
+  var EyeOff = createLucideIcon("eye-off", __iconNode19);
 
   // node_modules/lucide-react/dist/esm/icons/eye.mjs
-  var __iconNode19 = [
+  var __iconNode20 = [
     [
       "path",
       {
@@ -21743,10 +21756,10 @@
     ],
     ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
   ];
-  var Eye = createLucideIcon("eye", __iconNode19);
+  var Eye = createLucideIcon("eye", __iconNode20);
 
   // node_modules/lucide-react/dist/esm/icons/flame.mjs
-  var __iconNode20 = [
+  var __iconNode21 = [
     [
       "path",
       {
@@ -21755,18 +21768,18 @@
       }
     ]
   ];
-  var Flame = createLucideIcon("flame", __iconNode20);
+  var Flame = createLucideIcon("flame", __iconNode21);
 
   // node_modules/lucide-react/dist/esm/icons/globe.mjs
-  var __iconNode21 = [
+  var __iconNode22 = [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["path", { d: "M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20", key: "13o1zl" }],
     ["path", { d: "M2 12h20", key: "9i4pu4" }]
   ];
-  var Globe = createLucideIcon("globe", __iconNode21);
+  var Globe = createLucideIcon("globe", __iconNode22);
 
   // node_modules/lucide-react/dist/esm/icons/heart.mjs
-  var __iconNode22 = [
+  var __iconNode23 = [
     [
       "path",
       {
@@ -21775,10 +21788,10 @@
       }
     ]
   ];
-  var Heart = createLucideIcon("heart", __iconNode22);
+  var Heart = createLucideIcon("heart", __iconNode23);
 
   // node_modules/lucide-react/dist/esm/icons/house.mjs
-  var __iconNode23 = [
+  var __iconNode24 = [
     ["path", { d: "M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8", key: "5wwlr5" }],
     [
       "path",
@@ -21788,32 +21801,58 @@
       }
     ]
   ];
-  var House = createLucideIcon("house", __iconNode23);
+  var House = createLucideIcon("house", __iconNode24);
 
   // node_modules/lucide-react/dist/esm/icons/image.mjs
-  var __iconNode24 = [
+  var __iconNode25 = [
     ["rect", { width: "18", height: "18", x: "3", y: "3", rx: "2", ry: "2", key: "1m3agn" }],
     ["circle", { cx: "9", cy: "9", r: "2", key: "af1f0g" }],
     ["path", { d: "m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21", key: "1xmnt7" }]
   ];
-  var Image = createLucideIcon("image", __iconNode24);
+  var Image = createLucideIcon("image", __iconNode25);
+
+  // node_modules/lucide-react/dist/esm/icons/layers.mjs
+  var __iconNode26 = [
+    [
+      "path",
+      {
+        d: "M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z",
+        key: "zw3jo"
+      }
+    ],
+    [
+      "path",
+      {
+        d: "M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12",
+        key: "1wduqc"
+      }
+    ],
+    [
+      "path",
+      {
+        d: "M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17",
+        key: "kqbvx6"
+      }
+    ]
+  ];
+  var Layers = createLucideIcon("layers", __iconNode26);
 
   // node_modules/lucide-react/dist/esm/icons/lock.mjs
-  var __iconNode25 = [
+  var __iconNode27 = [
     ["rect", { width: "18", height: "11", x: "3", y: "11", rx: "2", ry: "2", key: "1w4ew1" }],
     ["path", { d: "M7 11V7a5 5 0 0 1 10 0v4", key: "fwvmzm" }]
   ];
-  var Lock = createLucideIcon("lock", __iconNode25);
+  var Lock = createLucideIcon("lock", __iconNode27);
 
   // node_modules/lucide-react/dist/esm/icons/mail.mjs
-  var __iconNode26 = [
+  var __iconNode28 = [
     ["path", { d: "m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7", key: "132q7q" }],
     ["rect", { x: "2", y: "4", width: "20", height: "16", rx: "2", key: "izxlao" }]
   ];
-  var Mail = createLucideIcon("mail", __iconNode26);
+  var Mail = createLucideIcon("mail", __iconNode28);
 
   // node_modules/lucide-react/dist/esm/icons/map-pin.mjs
-  var __iconNode27 = [
+  var __iconNode29 = [
     [
       "path",
       {
@@ -21823,10 +21862,10 @@
     ],
     ["circle", { cx: "12", cy: "10", r: "3", key: "ilqhr7" }]
   ];
-  var MapPin = createLucideIcon("map-pin", __iconNode27);
+  var MapPin = createLucideIcon("map-pin", __iconNode29);
 
   // node_modules/lucide-react/dist/esm/icons/map.mjs
-  var __iconNode28 = [
+  var __iconNode30 = [
     [
       "path",
       {
@@ -21837,19 +21876,19 @@
     ["path", { d: "M15 5.764v15", key: "1pn4in" }],
     ["path", { d: "M9 3.236v15", key: "1uimfh" }]
   ];
-  var Map2 = createLucideIcon("map", __iconNode28);
+  var Map2 = createLucideIcon("map", __iconNode30);
 
   // node_modules/lucide-react/dist/esm/icons/maximize-2.mjs
-  var __iconNode29 = [
+  var __iconNode31 = [
     ["path", { d: "M15 3h6v6", key: "1q9fwt" }],
     ["path", { d: "m21 3-7 7", key: "1l2asr" }],
     ["path", { d: "m3 21 7-7", key: "tjx5ai" }],
     ["path", { d: "M9 21H3v-6", key: "wtvkvv" }]
   ];
-  var Maximize2 = createLucideIcon("maximize-2", __iconNode29);
+  var Maximize2 = createLucideIcon("maximize-2", __iconNode31);
 
   // node_modules/lucide-react/dist/esm/icons/message-circle.mjs
-  var __iconNode30 = [
+  var __iconNode32 = [
     [
       "path",
       {
@@ -21858,29 +21897,29 @@
       }
     ]
   ];
-  var MessageCircle = createLucideIcon("message-circle", __iconNode30);
+  var MessageCircle = createLucideIcon("message-circle", __iconNode32);
 
   // node_modules/lucide-react/dist/esm/icons/minimize-2.mjs
-  var __iconNode31 = [
+  var __iconNode33 = [
     ["path", { d: "m14 10 7-7", key: "oa77jy" }],
     ["path", { d: "M20 10h-6V4", key: "mjg0md" }],
     ["path", { d: "m3 21 7-7", key: "tjx5ai" }],
     ["path", { d: "M4 14h6v6", key: "rmj7iw" }]
   ];
-  var Minimize2 = createLucideIcon("minimize-2", __iconNode31);
+  var Minimize2 = createLucideIcon("minimize-2", __iconNode33);
 
   // node_modules/lucide-react/dist/esm/icons/mountain.mjs
-  var __iconNode32 = [["path", { d: "m8 3 4 8 5-5 5 15H2L8 3z", key: "otkl63" }]];
-  var Mountain = createLucideIcon("mountain", __iconNode32);
+  var __iconNode34 = [["path", { d: "m8 3 4 8 5-5 5 15H2L8 3z", key: "otkl63" }]];
+  var Mountain = createLucideIcon("mountain", __iconNode34);
 
   // node_modules/lucide-react/dist/esm/icons/navigation.mjs
-  var __iconNode33 = [
+  var __iconNode35 = [
     ["polygon", { points: "3 11 22 2 13 21 11 13 3 11", key: "1ltx0t" }]
   ];
-  var Navigation = createLucideIcon("navigation", __iconNode33);
+  var Navigation = createLucideIcon("navigation", __iconNode35);
 
   // node_modules/lucide-react/dist/esm/icons/pen-line.mjs
-  var __iconNode34 = [
+  var __iconNode36 = [
     ["path", { d: "M13 21h8", key: "1jsn5i" }],
     [
       "path",
@@ -21890,42 +21929,42 @@
       }
     ]
   ];
-  var PenLine = createLucideIcon("pen-line", __iconNode34);
+  var PenLine = createLucideIcon("pen-line", __iconNode36);
 
   // node_modules/lucide-react/dist/esm/icons/plus.mjs
-  var __iconNode35 = [
+  var __iconNode37 = [
     ["path", { d: "M5 12h14", key: "1ays0h" }],
     ["path", { d: "M12 5v14", key: "s699le" }]
   ];
-  var Plus = createLucideIcon("plus", __iconNode35);
+  var Plus = createLucideIcon("plus", __iconNode37);
 
   // node_modules/lucide-react/dist/esm/icons/radio.mjs
-  var __iconNode36 = [
+  var __iconNode38 = [
     ["path", { d: "M16.247 7.761a6 6 0 0 1 0 8.478", key: "1fwjs5" }],
     ["path", { d: "M19.075 4.933a10 10 0 0 1 0 14.134", key: "ehdyv1" }],
     ["path", { d: "M4.925 19.067a10 10 0 0 1 0-14.134", key: "1q22gi" }],
     ["path", { d: "M7.753 16.239a6 6 0 0 1 0-8.478", key: "r2q7qm" }],
     ["circle", { cx: "12", cy: "12", r: "2", key: "1c9p78" }]
   ];
-  var Radio = createLucideIcon("radio", __iconNode36);
+  var Radio = createLucideIcon("radio", __iconNode38);
 
   // node_modules/lucide-react/dist/esm/icons/route.mjs
-  var __iconNode37 = [
+  var __iconNode39 = [
     ["circle", { cx: "6", cy: "19", r: "3", key: "1kj8tv" }],
     ["path", { d: "M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15", key: "1d8sl" }],
     ["circle", { cx: "18", cy: "5", r: "3", key: "gq8acd" }]
   ];
-  var Route = createLucideIcon("route", __iconNode37);
+  var Route = createLucideIcon("route", __iconNode39);
 
   // node_modules/lucide-react/dist/esm/icons/search.mjs
-  var __iconNode38 = [
+  var __iconNode40 = [
     ["path", { d: "m21 21-4.34-4.34", key: "14j7rj" }],
     ["circle", { cx: "11", cy: "11", r: "8", key: "4ej97u" }]
   ];
-  var Search = createLucideIcon("search", __iconNode38);
+  var Search = createLucideIcon("search", __iconNode40);
 
   // node_modules/lucide-react/dist/esm/icons/send.mjs
-  var __iconNode39 = [
+  var __iconNode41 = [
     [
       "path",
       {
@@ -21935,10 +21974,10 @@
     ],
     ["path", { d: "m21.854 2.147-10.94 10.939", key: "12cjpa" }]
   ];
-  var Send = createLucideIcon("send", __iconNode39);
+  var Send = createLucideIcon("send", __iconNode41);
 
   // node_modules/lucide-react/dist/esm/icons/settings.mjs
-  var __iconNode40 = [
+  var __iconNode42 = [
     [
       "path",
       {
@@ -21948,20 +21987,20 @@
     ],
     ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
   ];
-  var Settings = createLucideIcon("settings", __iconNode40);
+  var Settings = createLucideIcon("settings", __iconNode42);
 
   // node_modules/lucide-react/dist/esm/icons/share-2.mjs
-  var __iconNode41 = [
+  var __iconNode43 = [
     ["circle", { cx: "18", cy: "5", r: "3", key: "gq8acd" }],
     ["circle", { cx: "6", cy: "12", r: "3", key: "w7nqdw" }],
     ["circle", { cx: "18", cy: "19", r: "3", key: "1xt0gg" }],
     ["line", { x1: "8.59", x2: "15.42", y1: "13.51", y2: "17.49", key: "47mynk" }],
     ["line", { x1: "15.41", x2: "8.59", y1: "6.51", y2: "10.49", key: "1n3mei" }]
   ];
-  var Share2 = createLucideIcon("share-2", __iconNode41);
+  var Share2 = createLucideIcon("share-2", __iconNode43);
 
   // node_modules/lucide-react/dist/esm/icons/shield.mjs
-  var __iconNode42 = [
+  var __iconNode44 = [
     [
       "path",
       {
@@ -21970,17 +22009,17 @@
       }
     ]
   ];
-  var Shield = createLucideIcon("shield", __iconNode42);
+  var Shield = createLucideIcon("shield", __iconNode44);
 
   // node_modules/lucide-react/dist/esm/icons/smartphone.mjs
-  var __iconNode43 = [
+  var __iconNode45 = [
     ["rect", { width: "14", height: "20", x: "5", y: "2", rx: "2", ry: "2", key: "1yt0o3" }],
     ["path", { d: "M12 18h.01", key: "mhygvu" }]
   ];
-  var Smartphone = createLucideIcon("smartphone", __iconNode43);
+  var Smartphone = createLucideIcon("smartphone", __iconNode45);
 
   // node_modules/lucide-react/dist/esm/icons/star.mjs
-  var __iconNode44 = [
+  var __iconNode46 = [
     [
       "path",
       {
@@ -21989,35 +22028,44 @@
       }
     ]
   ];
-  var Star = createLucideIcon("star", __iconNode44);
+  var Star = createLucideIcon("star", __iconNode46);
 
   // node_modules/lucide-react/dist/esm/icons/target.mjs
-  var __iconNode45 = [
+  var __iconNode47 = [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["circle", { cx: "12", cy: "12", r: "6", key: "1vlfrh" }],
     ["circle", { cx: "12", cy: "12", r: "2", key: "1c9p78" }]
   ];
-  var Target = createLucideIcon("target", __iconNode45);
+  var Target = createLucideIcon("target", __iconNode47);
+
+  // node_modules/lucide-react/dist/esm/icons/tent.mjs
+  var __iconNode48 = [
+    ["path", { d: "M3.5 21 14 3", key: "1szst5" }],
+    ["path", { d: "M20.5 21 10 3", key: "1310c3" }],
+    ["path", { d: "M15.5 21 12 15l-3.5 6", key: "1ddtfw" }],
+    ["path", { d: "M2 21h20", key: "1nyx9w" }]
+  ];
+  var Tent = createLucideIcon("tent", __iconNode48);
 
   // node_modules/lucide-react/dist/esm/icons/trash-2.mjs
-  var __iconNode46 = [
+  var __iconNode49 = [
     ["path", { d: "M10 11v6", key: "nco0om" }],
     ["path", { d: "M14 11v6", key: "outv1u" }],
     ["path", { d: "M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6", key: "miytrc" }],
     ["path", { d: "M3 6h18", key: "d0wm0j" }],
     ["path", { d: "M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2", key: "e791ji" }]
   ];
-  var Trash2 = createLucideIcon("trash-2", __iconNode46);
+  var Trash2 = createLucideIcon("trash-2", __iconNode49);
 
   // node_modules/lucide-react/dist/esm/icons/trending-up.mjs
-  var __iconNode47 = [
+  var __iconNode50 = [
     ["path", { d: "M16 7h6v6", key: "box55l" }],
     ["path", { d: "m22 7-8.5 8.5-5-5L2 17", key: "1t1m79" }]
   ];
-  var TrendingUp = createLucideIcon("trending-up", __iconNode47);
+  var TrendingUp = createLucideIcon("trending-up", __iconNode50);
 
   // node_modules/lucide-react/dist/esm/icons/triangle-alert.mjs
-  var __iconNode48 = [
+  var __iconNode51 = [
     [
       "path",
       {
@@ -22028,10 +22076,10 @@
     ["path", { d: "M12 9v4", key: "juzpu7" }],
     ["path", { d: "M12 17h.01", key: "p32p05" }]
   ];
-  var TriangleAlert = createLucideIcon("triangle-alert", __iconNode48);
+  var TriangleAlert = createLucideIcon("triangle-alert", __iconNode51);
 
   // node_modules/lucide-react/dist/esm/icons/trophy.mjs
-  var __iconNode49 = [
+  var __iconNode52 = [
     ["path", { d: "M10 14.66v1.626a2 2 0 0 1-.976 1.696A5 5 0 0 0 7 21.978", key: "1n3hpd" }],
     ["path", { d: "M14 14.66v1.626a2 2 0 0 0 .976 1.696A5 5 0 0 1 17 21.978", key: "rfe1zi" }],
     ["path", { d: "M18 9h1.5a1 1 0 0 0 0-5H18", key: "7xy6bh" }],
@@ -22039,36 +22087,36 @@
     ["path", { d: "M6 9a6 6 0 0 0 12 0V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1z", key: "1mhfuq" }],
     ["path", { d: "M6 9H4.5a1 1 0 0 1 0-5H6", key: "tex48p" }]
   ];
-  var Trophy = createLucideIcon("trophy", __iconNode49);
+  var Trophy = createLucideIcon("trophy", __iconNode52);
 
   // node_modules/lucide-react/dist/esm/icons/user-check.mjs
-  var __iconNode50 = [
+  var __iconNode53 = [
     ["path", { d: "m16 11 2 2 4-4", key: "9rsbq5" }],
     ["path", { d: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2", key: "1yyitq" }],
     ["circle", { cx: "9", cy: "7", r: "4", key: "nufk8" }]
   ];
-  var UserCheck = createLucideIcon("user-check", __iconNode50);
+  var UserCheck = createLucideIcon("user-check", __iconNode53);
 
   // node_modules/lucide-react/dist/esm/icons/user-plus.mjs
-  var __iconNode51 = [
+  var __iconNode54 = [
     ["path", { d: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2", key: "1yyitq" }],
     ["circle", { cx: "9", cy: "7", r: "4", key: "nufk8" }],
     ["line", { x1: "19", x2: "19", y1: "8", y2: "14", key: "1bvyxn" }],
     ["line", { x1: "22", x2: "16", y1: "11", y2: "11", key: "1shjgl" }]
   ];
-  var UserPlus = createLucideIcon("user-plus", __iconNode51);
+  var UserPlus = createLucideIcon("user-plus", __iconNode54);
 
   // node_modules/lucide-react/dist/esm/icons/users.mjs
-  var __iconNode52 = [
+  var __iconNode55 = [
     ["path", { d: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2", key: "1yyitq" }],
     ["path", { d: "M16 3.128a4 4 0 0 1 0 7.744", key: "16gr8j" }],
     ["path", { d: "M22 21v-2a4 4 0 0 0-3-3.87", key: "kshegd" }],
     ["circle", { cx: "9", cy: "7", r: "4", key: "nufk8" }]
   ];
-  var Users = createLucideIcon("users", __iconNode52);
+  var Users = createLucideIcon("users", __iconNode55);
 
   // node_modules/lucide-react/dist/esm/icons/video.mjs
-  var __iconNode53 = [
+  var __iconNode56 = [
     [
       "path",
       {
@@ -22078,10 +22126,10 @@
     ],
     ["rect", { x: "2", y: "6", width: "14", height: "12", rx: "2", key: "158x01" }]
   ];
-  var Video = createLucideIcon("video", __iconNode53);
+  var Video = createLucideIcon("video", __iconNode56);
 
   // node_modules/lucide-react/dist/esm/icons/wrench.mjs
-  var __iconNode54 = [
+  var __iconNode57 = [
     [
       "path",
       {
@@ -22090,17 +22138,17 @@
       }
     ]
   ];
-  var Wrench = createLucideIcon("wrench", __iconNode54);
+  var Wrench = createLucideIcon("wrench", __iconNode57);
 
   // node_modules/lucide-react/dist/esm/icons/x.mjs
-  var __iconNode55 = [
+  var __iconNode58 = [
     ["path", { d: "M18 6 6 18", key: "1bl5f8" }],
     ["path", { d: "m6 6 12 12", key: "d8bk6v" }]
   ];
-  var X = createLucideIcon("x", __iconNode55);
+  var X = createLucideIcon("x", __iconNode58);
 
   // node_modules/lucide-react/dist/esm/icons/zap.mjs
-  var __iconNode56 = [
+  var __iconNode59 = [
     [
       "path",
       {
@@ -22109,7 +22157,7 @@
       }
     ]
   ];
-  var Zap = createLucideIcon("zap", __iconNode56);
+  var Zap = createLucideIcon("zap", __iconNode59);
 
   // node_modules/tslib/tslib.es6.mjs
   function __rest(s, e) {
@@ -43166,8 +43214,7 @@ ${suffix}`;
             source: "camping-spots",
             filter: ["!", ["has", "point_count"]],
             paint: {
-              "circle-color": "#5B8C5A",
-              // forest green, distinct from clusters (copper)
+              "circle-color": ["match", ["get", "source"], "user", T.red, "#5B8C5A"],
               "circle-radius": 7,
               "circle-stroke-color": T.white,
               "circle-stroke-width": 2,
@@ -43367,50 +43414,61 @@ ${suffix}`;
   function MapLayerToggle({ showCamping, setShowCamping, showPublicLands, setShowPublicLands }) {
     const [open, setOpen] = (0, import_react4.useState)(false);
     const activeCount = (showCamping ? 1 : 0) + (showPublicLands ? 1 : 0);
-    const row = (label, on, onToggle) => /* @__PURE__ */ import_react4.default.createElement(
+    const PublicLandsSwatch = () => /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", width: 26, height: 26, borderRadius: 6, overflow: "hidden", border: `1px solid ${T.charcoal}`, flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "1fr 1fr" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: PUBLIC_LANDS_COLORS.BLM } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: PUBLIC_LANDS_COLORS.USFS } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: PUBLIC_LANDS_COLORS.NPS } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: PUBLIC_LANDS_COLORS.SLB } })));
+    const CampingSwatch = () => /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", width: 26, height: 26, borderRadius: 6, background: T.charcoal, border: `1px solid ${T.charcoal}`, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 10, height: 10, borderRadius: "50%", background: "#5B8C5A", border: `1.5px solid ${T.white}`, position: "absolute", left: 4, top: 4 } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 9, height: 9, borderRadius: "50%", background: T.red, border: `1.5px solid ${T.white}`, position: "absolute", right: 4, bottom: 4 } }));
+    const row = (Swatch, label, sub, on, onToggle) => /* @__PURE__ */ import_react4.default.createElement(
       "button",
       {
         onClick: onToggle,
         style: {
           display: "flex",
           alignItems: "center",
-          gap: 8,
+          gap: 10,
           width: "100%",
-          padding: "9px 12px",
-          background: "none",
+          padding: "11px 14px",
+          background: on ? `${T.copper}10` : "none",
           border: "none",
           cursor: "pointer",
           fontFamily: sans,
-          fontSize: 11,
           color: T.white,
-          letterSpacing: 0.4,
-          textAlign: "left"
+          textAlign: "left",
+          transition: "background 0.15s"
         }
       },
+      /* @__PURE__ */ import_react4.default.createElement(Swatch, null),
+      /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontSize: 12, fontWeight: 600, letterSpacing: 0.3 } }, label), sub && /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontSize: 10, color: T.tertiary, marginTop: 2 } }, sub)),
       /* @__PURE__ */ import_react4.default.createElement("div", { style: {
+        width: 32,
+        height: 18,
+        borderRadius: 9,
+        position: "relative",
+        background: on ? T.green : T.charcoal,
+        transition: "background 0.15s",
+        flexShrink: 0
+      } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: {
+        position: "absolute",
+        top: 2,
+        left: on ? 16 : 2,
         width: 14,
         height: 14,
-        borderRadius: 3,
-        background: on ? T.green : "transparent",
-        border: `1.5px solid ${on ? T.green : T.tertiary}`,
-        flexShrink: 0,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center"
-      } }, on && /* @__PURE__ */ import_react4.default.createElement("span", { style: { color: T.white, fontSize: 10, fontWeight: 700, lineHeight: 1 } }, "\u2713")),
-      /* @__PURE__ */ import_react4.default.createElement("span", null, label)
+        borderRadius: "50%",
+        background: T.white,
+        transition: "left 0.15s",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.3)"
+      } }))
     );
     return /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, open && /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => setOpen(false), style: { position: "absolute", inset: 0, zIndex: 4 } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: {
       position: "absolute",
       top: 10,
       left: 10,
       zIndex: 5,
-      background: `${T.darkCard}E6`,
-      backdropFilter: "blur(8px)",
+      background: `${T.darkCard}F0`,
+      backdropFilter: "blur(10px)",
       border: `1px solid ${T.charcoal}`,
-      borderRadius: 8,
-      boxShadow: "0 4px 12px rgba(0,0,0,0.35)",
-      overflow: "hidden"
+      borderRadius: 10,
+      boxShadow: "0 6px 18px rgba(0,0,0,0.45)",
+      overflow: "hidden",
+      minWidth: open ? 240 : "auto"
     } }, /* @__PURE__ */ import_react4.default.createElement(
       "button",
       {
@@ -43418,25 +43476,26 @@ ${suffix}`;
         style: {
           display: "flex",
           alignItems: "center",
-          gap: 6,
-          padding: "8px 12px",
+          gap: 8,
+          padding: "10px 14px",
           background: "none",
           border: "none",
           cursor: "pointer",
           fontFamily: sans,
-          fontSize: 10,
+          fontSize: 11,
           color: T.white,
-          fontWeight: 600,
-          letterSpacing: 1.5,
+          fontWeight: 700,
+          letterSpacing: 1.4,
           width: "100%"
         },
         "aria-label": "Toggle map layers menu",
         "aria-expanded": open
       },
+      /* @__PURE__ */ import_react4.default.createElement(Layers, { size: 13, color: T.copper, strokeWidth: 2 }),
       /* @__PURE__ */ import_react4.default.createElement("span", null, "LAYERS"),
-      activeCount > 0 && /* @__PURE__ */ import_react4.default.createElement("span", { style: { background: T.green, color: T.white, padding: "1px 6px", borderRadius: 8, fontSize: 9, fontWeight: 700, lineHeight: 1.4 } }, activeCount),
-      /* @__PURE__ */ import_react4.default.createElement(ChevronDown, { size: 12, color: T.tertiary, style: { marginLeft: "auto", transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" } })
-    ), open && /* @__PURE__ */ import_react4.default.createElement("div", { style: { borderTop: `1px solid ${T.charcoal}`, minWidth: 160 } }, row("Camping spots", showCamping, () => setShowCamping((v) => !v)), row("Public lands", showPublicLands, () => setShowPublicLands((v) => !v)))));
+      activeCount > 0 && /* @__PURE__ */ import_react4.default.createElement("span", { style: { background: T.green, color: T.white, padding: "1px 7px", borderRadius: 8, fontSize: 9, fontWeight: 700, lineHeight: 1.4 } }, activeCount),
+      /* @__PURE__ */ import_react4.default.createElement(ChevronDown, { size: 13, color: T.tertiary, style: { marginLeft: "auto", transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" } })
+    ), open && /* @__PURE__ */ import_react4.default.createElement("div", { style: { borderTop: `1px solid ${T.charcoal}` } }, row(CampingSwatch, "Camping spots", "Public + community", showCamping, () => setShowCamping((v) => !v)), row(PublicLandsSwatch, "Public lands", "BLM \xB7 USFS \xB7 NPS \xB7 State", showPublicLands, () => setShowPublicLands((v) => !v)))));
   }
   function MapOverlay({ coords, location: location2, title, onClose, recoveryCtx, onRecoveryStartTrip, onRecoveryArrived }) {
     const query = getMapQuery(coords, location2);
@@ -47476,12 +47535,20 @@ ${suffix}`;
       /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 16, color: T.tertiary })
     )));
   }
-  function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands }) {
+  function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, onAddCampingSpot, onNewTripReport }) {
     const mapRef = (0, import_react4.useRef)(null);
     const mapInst = (0, import_react4.useRef)(null);
     const [mapReady, setMapReady] = (0, import_react4.useState)(false);
     const [selectedSpot, setSelectedSpot] = (0, import_react4.useState)(null);
     const [selectedLand, setSelectedLand] = (0, import_react4.useState)(null);
+    const [query, setQuery] = (0, import_react4.useState)("");
+    const [places, setPlaces] = (0, import_react4.useState)([]);
+    const [searchOpen, setSearchOpen] = (0, import_react4.useState)(false);
+    const [plusOpen, setPlusOpen] = (0, import_react4.useState)(false);
+    const [addingMode, setAddingMode] = (0, import_react4.useState)(false);
+    const [addSpotPos, setAddSpotPos] = (0, import_react4.useState)(null);
+    const [addSpotName, setAddSpotName] = (0, import_react4.useState)("");
+    const [addSpotDesc, setAddSpotDesc] = (0, import_react4.useState)("");
     useCampingSpotsLayer(mapInst, mapReady, campingSpots, showCampingSpots, (spot) => {
       setSelectedSpot(spot);
       setSelectedLand(null);
@@ -47537,12 +47604,159 @@ ${suffix}`;
         }
       };
     }, []);
-    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", borderRadius: 12, overflow: "hidden", border: `1px solid ${T.charcoal}`, height: "70vh", minHeight: 420 } }, /* @__PURE__ */ import_react4.default.createElement("div", { ref: mapRef, style: { width: "100%", height: "100%" } }), /* @__PURE__ */ import_react4.default.createElement(MapLayerToggle, { showCamping: showCampingSpots, setShowCamping: setShowCampingSpots, showPublicLands, setShowPublicLands }), selectedSpot && (() => {
+    (0, import_react4.useEffect)(() => {
+      if (!addingMode || !mapInst.current || !mapReady) return;
+      const map = mapInst.current;
+      const onClick = (e) => {
+        setAddSpotPos({ lat: e.lngLat.lat, lng: e.lngLat.lng });
+        setAddingMode(false);
+        setSelectedSpot(null);
+        setSelectedLand(null);
+      };
+      map.once("click", onClick);
+      map.getCanvas().style.cursor = "crosshair";
+      return () => {
+        map.off("click", onClick);
+        try {
+          map.getCanvas().style.cursor = "";
+        } catch (_) {
+        }
+      };
+    }, [addingMode, mapReady]);
+    (0, import_react4.useEffect)(() => {
+      const q = query.trim();
+      if (q.length < 2) {
+        setPlaces([]);
+        return;
+      }
+      let cancelled = false;
+      const t = setTimeout(async () => {
+        const rows = await mapboxGeocodeSearch(q, 5);
+        if (!cancelled) setPlaces(rows);
+      }, 250);
+      return () => {
+        cancelled = true;
+        clearTimeout(t);
+      };
+    }, [query]);
+    const spotMatches = (() => {
+      const q = query.trim().toLowerCase();
+      if (q.length < 2) return [];
+      const out = [];
+      for (let i = 0; i < (campingSpots || []).length && out.length < 5; i++) {
+        const s = campingSpots[i];
+        if (s && s.name && s.name.toLowerCase().includes(q)) out.push(s);
+      }
+      return out;
+    })();
+    const hasResults = places.length + spotMatches.length > 0;
+    const flyTo = (lng, lat, zoom = 12) => {
+      if (!mapInst.current) return;
+      mapInst.current.flyTo({ center: [lng, lat], zoom, duration: 700 });
+    };
+    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", marginBottom: 8, zIndex: 7 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", background: T.darkCard, borderRadius: 10, padding: "10px 14px", border: `1px solid ${searchOpen ? T.copper : T.charcoal}`, transition: "border-color 0.15s" } }, /* @__PURE__ */ import_react4.default.createElement(Search, { size: 16, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement(
+      "input",
+      {
+        value: query,
+        onChange: (e) => {
+          setQuery(e.target.value);
+          setSearchOpen(true);
+        },
+        onFocus: () => setSearchOpen(true),
+        placeholder: "Search places, camping spots, points of interest\u2026",
+        style: { flex: 1, marginLeft: 10, background: "transparent", border: "none", outline: "none", color: T.white, fontFamily: serif, fontSize: 13 }
+      }
+    ), query && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
+      setQuery("");
+      setPlaces([]);
+    }, style: { background: "none", border: "none", cursor: "pointer", padding: 2, color: T.tertiary } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 14 }))), searchOpen && query.trim().length >= 2 && hasResults && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, background: `${T.darkCard}F8`, border: `1px solid ${T.charcoal}`, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", overflow: "hidden", zIndex: 8, maxHeight: 320, overflowY: "auto" } }, spotMatches.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 1.5, fontWeight: 700, padding: "10px 14px 4px" } }, "CAMPING SPOTS"), spotMatches.map((s, i) => /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        key: `s_${s.id || i}`,
+        onClick: () => {
+          flyTo(s.lng, s.lat, 13);
+          setSelectedSpot(s);
+          setSearchOpen(false);
+        },
+        style: { display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left", borderTop: i === 0 ? "none" : `1px solid ${T.charcoal}40` }
+      },
+      /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 24, height: 24, borderRadius: "50%", background: s.source === "user" ? T.red : "#5B8C5A", border: `2px solid ${T.white}`, flexShrink: 0 } }),
+      /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 } }, s.name), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, textTransform: "uppercase", letterSpacing: 0.4 } }, s.source === "user" ? "Community" : s.source || "spot", s.spot_type && s.spot_type !== "unknown" ? ` \xB7 ${s.spot_type}` : ""))
+    ))), places.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 1.5, fontWeight: 700, padding: spotMatches.length > 0 ? "10px 14px 4px" : "10px 14px 4px", borderTop: spotMatches.length > 0 ? `1px solid ${T.charcoal}` : "none" } }, "PLACES"), places.map((p, i) => /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        key: `p_${i}`,
+        onClick: () => {
+          flyTo(p.lng, p.lat, 11);
+          setSearchOpen(false);
+        },
+        style: { display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left", borderTop: i === 0 ? "none" : `1px solid ${T.charcoal}40` }
+      },
+      /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 16, color: T.copper, style: { flexShrink: 0 } }),
+      /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 12, color: T.white, lineHeight: 1.4, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" } }, p.label)
+    )))), searchOpen && query.trim().length >= 2 && !hasResults && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, background: `${T.darkCard}F8`, border: `1px solid ${T.charcoal}`, borderRadius: 10, padding: "12px 14px", zIndex: 8 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, "No matches yet\u2026"))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", borderRadius: 12, overflow: "hidden", border: `1px solid ${T.charcoal}`, height: "70vh", minHeight: 420 } }, /* @__PURE__ */ import_react4.default.createElement("div", { ref: mapRef, style: { width: "100%", height: "100%" } }), /* @__PURE__ */ import_react4.default.createElement(MapLayerToggle, { showCamping: showCampingSpots, setShowCamping: setShowCampingSpots, showPublicLands, setShowPublicLands }), addingMode && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 6, background: `${T.copper}E0`, padding: "8px 14px", borderRadius: 20, boxShadow: "0 4px 12px rgba(0,0,0,0.4)", display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ import_react4.default.createElement(Tent, { size: 13, color: T.white }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.6 } }, "TAP MAP TO PLACE PIN"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setAddingMode(false), style: { background: "none", border: "none", cursor: "pointer", padding: 2, color: T.white, marginLeft: 4 } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 13 }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", right: 14, bottom: 14, zIndex: 6, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 } }, plusOpen && /* @__PURE__ */ import_react4.default.createElement("div", { onClick: (e) => e.stopPropagation(), style: { background: `${T.darkCard}F5`, border: `1px solid ${T.charcoal}`, borderRadius: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", overflow: "hidden", minWidth: 220 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
+      setPlusOpen(false);
+      setAddingMode(true);
+    }, style: { display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "12px 16px", background: "none", border: "none", cursor: "pointer", textAlign: "left", borderBottom: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 32, height: 32, borderRadius: "50%", background: `${T.red}25`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(Tent, { size: 16, color: T.red })), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 } }, "Add Spot"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 1 } }, "Drop a community POI pin"))), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
+      setPlusOpen(false);
+      onNewTripReport && onNewTripReport();
+    }, style: { display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "12px 16px", background: "none", border: "none", cursor: "pointer", textAlign: "left", borderBottom: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 32, height: 32, borderRadius: "50%", background: `${T.copper}25`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(BookOpen, { size: 16, color: T.copper })), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 } }, "New Trip Report"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 1 } }, "Document a trip you completed"))), /* @__PURE__ */ import_react4.default.createElement("button", { disabled: true, style: { display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "12px 16px", background: "none", border: "none", cursor: "default", textAlign: "left", opacity: 0.5 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 32, height: 32, borderRadius: "50%", background: `${T.tertiary}20`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(Route, { size: 16, color: T.tertiary })), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 } }, "Plan a Trip"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 1 } }, "Coming soon")))), /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: () => setPlusOpen((o) => !o),
+        "aria-label": plusOpen ? "Close menu" : "Open add menu",
+        style: { width: 52, height: 52, borderRadius: "50%", background: T.red, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 6px 16px rgba(0,0,0,0.5)", transition: "transform 0.15s" }
+      },
+      /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 24, color: T.white, strokeWidth: 2.5, style: { transform: plusOpen ? "rotate(45deg)" : "none", transition: "transform 0.15s" } })
+    )), plusOpen && /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => setPlusOpen(false), style: { position: "absolute", inset: 0, zIndex: 5 } }), selectedSpot && (() => {
       const ext = campingSpotExternalLink(selectedSpot);
       return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 6, background: `${T.darkCard}F5`, border: `1px solid ${T.charcoal}`, borderRadius: 10, padding: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "flex-start", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 36, height: 36, borderRadius: "50%", background: T.green, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 18 } }, "\u{1F3D5}\uFE0F"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, marginBottom: 2 } }, selectedSpot.name), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 4 } }, selectedSpot.spot_type !== "unknown" ? selectedSpot.spot_type : "", selectedSpot.spot_type !== "unknown" && selectedSpot.fee !== "unknown" ? " \xB7 " : "", selectedSpot.fee !== "unknown" ? selectedSpot.fee : "", (selectedSpot.spot_type !== "unknown" || selectedSpot.fee !== "unknown") && selectedSpot.source ? " \xB7 " : "", selectedSpot.source), selectedSpot.description && /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 12, color: T.warmStone, lineHeight: 1.4 } }, selectedSpot.description), ext && /* @__PURE__ */ import_react4.default.createElement("a", { href: ext.url, target: "_blank", rel: "noopener noreferrer", style: { display: "inline-flex", alignItems: "center", gap: 6, marginTop: 10, padding: "8px 12px", background: T.copper, color: T.white, borderRadius: 6, textDecoration: "none", fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5 } }, /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 12 }), /* @__PURE__ */ import_react4.default.createElement("span", null, ext.label))), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setSelectedSpot(null), style: { background: "none", border: "none", cursor: "pointer", padding: 4, color: T.tertiary } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 16 }))));
-    })(), selectedLand && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 6, background: `${T.darkCard}F5`, border: `1px solid ${T.charcoal}`, borderRadius: 10, padding: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "flex-start", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 36, height: 36, borderRadius: 6, background: PUBLIC_LANDS_COLORS[selectedLand.mang_name] || PUBLIC_LANDS_DEFAULT_COLOR, flexShrink: 0, border: `1px solid ${T.charcoal}` } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, marginBottom: 2 } }, selectedLand.unit_nm || selectedLand.loc_nm || "Public land"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600, marginBottom: 4 } }, PUBLIC_LANDS_NAMES[selectedLand.mang_name] || selectedLand.mang_name || "Unknown manager"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.4 } }, selectedLand.des_tp ? selectedLand.des_tp : null, selectedLand.des_tp && selectedLand.state_nm ? " \xB7 " : null, selectedLand.state_nm, selectedLand.pub_access ? ` \xB7 ${PUBLIC_ACCESS_NAMES[selectedLand.pub_access] || selectedLand.pub_access}` : null)), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setSelectedLand(null), style: { background: "none", border: "none", cursor: "pointer", padding: 4, color: T.tertiary } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 16 })))));
+    })(), selectedLand && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 6, background: `${T.darkCard}F5`, border: `1px solid ${T.charcoal}`, borderRadius: 10, padding: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "flex-start", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 36, height: 36, borderRadius: 6, background: PUBLIC_LANDS_COLORS[selectedLand.mang_name] || PUBLIC_LANDS_DEFAULT_COLOR, flexShrink: 0, border: `1px solid ${T.charcoal}` } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, marginBottom: 2 } }, selectedLand.unit_nm || selectedLand.loc_nm || "Public land"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600, marginBottom: 4 } }, PUBLIC_LANDS_NAMES[selectedLand.mang_name] || selectedLand.mang_name || "Unknown manager"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.4 } }, selectedLand.des_tp ? selectedLand.des_tp : null, selectedLand.des_tp && selectedLand.state_nm ? " \xB7 " : null, selectedLand.state_nm, selectedLand.pub_access ? ` \xB7 ${PUBLIC_ACCESS_NAMES[selectedLand.pub_access] || selectedLand.pub_access}` : null)), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setSelectedLand(null), style: { background: "none", border: "none", cursor: "pointer", padding: 4, color: T.tertiary } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 16 })))), addSpotPos && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 7, background: `${T.darkCard}F5`, border: `1px solid ${T.copper}`, borderRadius: 10, padding: 14, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 } }, /* @__PURE__ */ import_react4.default.createElement(Tent, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 1.5 } }, "NEW SPOT"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, marginLeft: "auto" } }, addSpotPos.lat.toFixed(4), ", ", addSpotPos.lng.toFixed(4))), /* @__PURE__ */ import_react4.default.createElement(
+      "input",
+      {
+        autoFocus: true,
+        value: addSpotName,
+        onChange: (e) => setAddSpotName(e.target.value),
+        placeholder: "Name (required)",
+        style: { width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", marginBottom: 8 }
+      }
+    ), /* @__PURE__ */ import_react4.default.createElement(
+      "textarea",
+      {
+        value: addSpotDesc,
+        onChange: (e) => setAddSpotDesc(e.target.value),
+        placeholder: "Notes (optional) \u2014 water, fire ring, vehicle access\u2026",
+        rows: 3,
+        style: { width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", resize: "vertical", marginBottom: 10 }
+      }
+    ), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: () => {
+          setAddSpotPos(null);
+          setAddSpotName("");
+          setAddSpotDesc("");
+        },
+        style: { flex: 1, padding: "10px", borderRadius: 8, background: T.charcoal, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 600, letterSpacing: 0.5 }
+      },
+      "CANCEL"
+    ), /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: async () => {
+          if (!addSpotName.trim() || !onAddCampingSpot) return;
+          await onAddCampingSpot({ name: addSpotName.trim(), description: addSpotDesc.trim() || null, lat: addSpotPos.lat, lng: addSpotPos.lng, spot_type: "unknown", fee: "unknown" });
+          setAddSpotPos(null);
+          setAddSpotName("");
+          setAddSpotDesc("");
+        },
+        disabled: !addSpotName.trim(),
+        style: { flex: 1, padding: "10px", borderRadius: 8, background: addSpotName.trim() ? T.green : T.charcoal, border: "none", cursor: addSpotName.trim() ? "pointer" : "default", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, letterSpacing: 0.5, opacity: addSpotName.trim() ? 1 : 0.5 }
+      },
+      "SAVE SPOT"
+    )))));
   }
-  function RoutesScreen({ onRecordRoute, onManualEntry, userRoutes, onUpdateRoute, savedRoutes, onSaveRoute, onUnsaveRoute, onOpenDM, onAddFeedPost, onStartNav, userBuilds, campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, currentUserId, tripReports, tripAuthors, onCreateTripDraft, onChooseManual, onChooseLive, onChooseSkip, onOpenTripDraft, onViewUser, onLoadTripRouteData, onBumpTripView, likedTripIds, tripLikeCounts, onToggleTripLike, onShareTripToFeed, pendingTripNav, onConsumePendingTripNav }) {
+  function RoutesScreen({ onRecordRoute, onManualEntry, userRoutes, onUpdateRoute, savedRoutes, onSaveRoute, onUnsaveRoute, onOpenDM, onAddFeedPost, onStartNav, userBuilds, campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, currentUserId, tripReports, tripAuthors, onCreateTripDraft, onChooseManual, onChooseLive, onChooseSkip, onOpenTripDraft, onViewUser, onLoadTripRouteData, onBumpTripView, likedTripIds, tripLikeCounts, onToggleTripLike, onShareTripToFeed, pendingTripNav, onConsumePendingTripNav, onAddCampingSpot }) {
     const [showCreator, setShowCreator] = (0, import_react4.useState)(false);
     const [detailTripId, setDetailTripId] = (0, import_react4.useState)(null);
     (0, import_react4.useEffect)(() => {
@@ -47768,7 +47982,9 @@ ${suffix}`;
         showCampingSpots,
         setShowCampingSpots,
         showPublicLands,
-        setShowPublicLands
+        setShowPublicLands,
+        onAddCampingSpot,
+        onNewTripReport: () => setShowCreator(true)
       }
     ))), fullscreenMapRoute && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "fixed", top: 0, bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 430, zIndex: 1e3, background: T.darkBg, display: "flex", flexDirection: "column" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: T.darkCard, borderBottom: `1px solid ${T.charcoal}`, flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement("h3", { style: { fontFamily: serif, fontSize: 16, color: T.white, margin: 0 } }, fullscreenMapRoute.name || fullscreenMapRoute.title), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 10, marginTop: 4 } }, fullscreenMapRoute.distance && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600 } }, fullscreenMapRoute.distance), (fullscreenMapRoute.time || fullscreenMapRoute.duration) && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600 } }, fullscreenMapRoute.time || fullscreenMapRoute.duration), fullscreenMapRoute.difficulty && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, fullscreenMapRoute.difficulty))), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
       setFullscreenMapRoute(null);
@@ -53886,7 +54102,7 @@ ${suffix}`;
       setShowRecorder(true);
     }, onChooseSkip: (draftId) => {
       if (draftId) setEditingTripId(draftId);
-    }, onOpenTripDraft: (id) => setEditingTripId(id), onViewUser: openUserProfile, onLoadTripRouteData: loadTripRouteData, onBumpTripView: bumpTripView, likedTripIds, tripLikeCounts, onToggleTripLike: requireAuth(toggleTripLike), onShareTripToFeed: requireAuth(shareTripToFeed), pendingTripNav, onConsumePendingTripNav: () => setPendingTripNav(null) }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onPostBuildToFeed: requireAuth((b, opts) => {
+    }, onOpenTripDraft: (id) => setEditingTripId(id), onViewUser: openUserProfile, onLoadTripRouteData: loadTripRouteData, onBumpTripView: bumpTripView, likedTripIds, tripLikeCounts, onToggleTripLike: requireAuth(toggleTripLike), onShareTripToFeed: requireAuth(shareTripToFeed), pendingTripNav, onConsumePendingTripNav: () => setPendingTripNav(null), onAddCampingSpot: requireAuth(addCampingSpot) }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onPostBuildToFeed: requireAuth((b, opts) => {
       const rawBd = b.buildData;
       const bd = scrubLocalPhotosFromBuildData(rawBd);
       const isLocalUrl = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:"));
@@ -54397,6 +54613,7 @@ lucide-react/dist/esm/icons/at-sign.mjs:
 lucide-react/dist/esm/icons/award.mjs:
 lucide-react/dist/esm/icons/bell.mjs:
 lucide-react/dist/esm/icons/binoculars.mjs:
+lucide-react/dist/esm/icons/book-open.mjs:
 lucide-react/dist/esm/icons/bookmark.mjs:
 lucide-react/dist/esm/icons/camera.mjs:
 lucide-react/dist/esm/icons/chevron-down.mjs:
@@ -54416,6 +54633,7 @@ lucide-react/dist/esm/icons/globe.mjs:
 lucide-react/dist/esm/icons/heart.mjs:
 lucide-react/dist/esm/icons/house.mjs:
 lucide-react/dist/esm/icons/image.mjs:
+lucide-react/dist/esm/icons/layers.mjs:
 lucide-react/dist/esm/icons/lock.mjs:
 lucide-react/dist/esm/icons/mail.mjs:
 lucide-react/dist/esm/icons/map-pin.mjs:
@@ -54437,6 +54655,7 @@ lucide-react/dist/esm/icons/shield.mjs:
 lucide-react/dist/esm/icons/smartphone.mjs:
 lucide-react/dist/esm/icons/star.mjs:
 lucide-react/dist/esm/icons/target.mjs:
+lucide-react/dist/esm/icons/tent.mjs:
 lucide-react/dist/esm/icons/trash-2.mjs:
 lucide-react/dist/esm/icons/trending-up.mjs:
 lucide-react/dist/esm/icons/triangle-alert.mjs:
