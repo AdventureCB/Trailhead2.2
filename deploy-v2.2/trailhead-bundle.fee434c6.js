@@ -51605,7 +51605,7 @@ ${suffix}`;
             });
           }
         }
-        supabase.from("camping_spots").select("id, name, lat, lng, spot_type, fee, source, source_id, description, photo_url, visibility, user_id").limit(5e4).then(({ data: csRows, error: csErr }) => {
+        supabase.from("camping_spots").select("id, name, lat, lng, spot_type, fee, source, source_id, description, photo_url, visibility, user_id").order("created_at", { ascending: false }).limit(5e4).then(({ data: csRows, error: csErr }) => {
           if (csErr) {
             console.error("[hydrate] camping_spots fetch error", csErr);
             return;
