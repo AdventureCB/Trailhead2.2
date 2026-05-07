@@ -43274,7 +43274,7 @@ ${suffix}`;
       lines: { type: "FeatureCollection", features: lines }
     };
   }
-  function useTripReportsLayer(mapRef, ready, rows, visible, onSelect) {
+  function useTripReportsLayer(mapRef, ready, rows, visible, onSelect, selectedId) {
     const handlerRef = (0, import_react4.useRef)(onSelect);
     (0, import_react4.useEffect)(() => {
       handlerRef.current = onSelect;
@@ -43357,12 +43357,14 @@ ${suffix}`;
           });
         }
         const collections = tripReportsToGeoJSON(rows);
+        const filteredLines = selectedId ? { ...collections.lines, features: collections.lines.features.filter((f) => f.properties && f.properties.id === selectedId) } : collections.lines;
+        const filteredEnds = selectedId ? { ...collections.ends, features: collections.ends.features.filter((f) => f.properties && f.properties.id === selectedId) } : collections.ends;
         const sStart = map.getSource("trip-reports-starts");
         if (sStart) sStart.setData(collections.starts);
         const sEnd = map.getSource("trip-reports-ends");
-        if (sEnd) sEnd.setData(collections.ends);
+        if (sEnd) sEnd.setData(filteredEnds);
         const sLine = map.getSource("trip-reports-lines");
-        if (sLine) sLine.setData(collections.lines);
+        if (sLine) sLine.setData(filteredLines);
         const vis = visible ? "visible" : "none";
         ["trip-reports-points", "trip-reports-end-points", "trip-reports-line"].forEach((id) => {
           if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", vis);
@@ -43380,7 +43382,7 @@ ${suffix}`;
       else map.once("load", ensureLayers);
       return () => {
       };
-    }, [mapRef, ready, rows, visible]);
+    }, [mapRef, ready, rows, visible, selectedId]);
   }
   function campingSpotsToGeoJSON(rows) {
     return {
@@ -45986,7 +45988,7 @@ ${suffix}`;
       setSelectedTrip(trip);
       setSelectedSpot(null);
       setSelectedLand(null);
-    });
+    }, selectedTrip && selectedTrip.id);
     useMapViewport(mapInst, mapReady, onMapViewportChange);
     (0, import_react4.useEffect)(() => {
       if (!addingMode || !mapInst.current || !mapReady) return;
@@ -46626,7 +46628,7 @@ ${suffix}`;
       setSelectedTrip(trip);
       setSelectedSpot(null);
       setSelectedLand(null);
-    });
+    }, selectedTrip && selectedTrip.id);
     useMapViewport(mapInst, mapReady, onMapViewportChange);
     (0, import_react4.useEffect)(() => {
       let cancelled = false;
@@ -47861,7 +47863,7 @@ ${suffix}`;
       setSelectedTrip(trip);
       setSelectedSpot(null);
       setSelectedLand(null);
-    });
+    }, selectedTrip && selectedTrip.id);
     useMapViewport(mapInst, mapReady, onMapViewportChange);
     const [selectedTrip, setSelectedTrip] = (0, import_react4.useState)(null);
     (0, import_react4.useEffect)(() => {
