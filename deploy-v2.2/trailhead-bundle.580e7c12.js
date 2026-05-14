@@ -48746,20 +48746,37 @@ ${suffix}`;
         setLayerRefreshTick((x) => x + 1);
       }, 250);
       const flips = [];
-      if (showCampingSpots && setShowCampingSpots) flips.push(setShowCampingSpots);
-      if (showPublicLands && setShowPublicLands) flips.push(setShowPublicLands);
-      if (showTripReports && setShowTripReports) flips.push(setShowTripReports);
-      if (showTripPlans && setShowTripPlans) flips.push(setShowTripPlans);
+      if (showCampingSpots && setShowCampingSpots) flips.push({ setter: setShowCampingSpots, gap: 140, isVector: false });
+      if (showTripReports && setShowTripReports) flips.push({ setter: setShowTripReports, gap: 140, isVector: false });
+      if (showTripPlans && setShowTripPlans) flips.push({ setter: setShowTripPlans, gap: 140, isVector: false });
+      if (showPublicLands && setShowPublicLands) flips.push({ setter: setShowPublicLands, gap: 800, isVector: true });
       const staggerStart = 500;
-      const stagger = 250;
-      const offToOn = 140;
-      const stepTimers = flips.flatMap((setter, i) => {
+      const stagger = 300;
+      const stepTimers = flips.flatMap((f, i) => {
         const offAt = staggerStart + i * stagger;
-        const onAt = offAt + offToOn;
-        return [
-          setTimeout(() => setter(false), offAt),
-          setTimeout(() => setter(true), onAt)
+        const onAt = offAt + f.gap;
+        const timers = [
+          setTimeout(() => f.setter(false), offAt),
+          setTimeout(() => f.setter(true), onAt)
         ];
+        if (f.isVector) {
+          timers.push(setTimeout(() => {
+            if (!mapInst.current) return;
+            try {
+              mapInst.current.panBy([0, 1], { duration: 0 });
+            } catch (_) {
+            }
+            try {
+              mapInst.current.panBy([0, -1], { duration: 0 });
+            } catch (_) {
+            }
+            try {
+              mapInst.current.triggerRepaint();
+            } catch (_) {
+            }
+          }, onAt + 100));
+        }
+        return timers;
       });
       return () => {
         clearTimeout(t1);
