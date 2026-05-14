@@ -49219,7 +49219,34 @@ ${suffix}`;
         /* @__PURE__ */ import_react4.default.createElement(SquarePlus, { size: 18, color: T.copper }),
         "TO FEED"
       )), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginTop: 10, padding: "8px 10px", background: T.darkBg, borderRadius: 6, fontFamily: sans, fontSize: 10, color: T.tertiary, wordBreak: "break-all" } }, url));
-    })(), addSpotPos && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 7, background: `${T.darkCard}F5`, border: `1px solid ${T.copper}`, borderRadius: 10, padding: 14, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 } }, /* @__PURE__ */ import_react4.default.createElement(Tent, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 1.5 } }, "NEW SPOT"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, marginLeft: "auto" } }, addSpotPos.lat.toFixed(4), ", ", addSpotPos.lng.toFixed(4))), /* @__PURE__ */ import_react4.default.createElement(
+    })(), addSpotPos && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 7, background: `${T.darkCard}F5`, border: `1px solid ${T.copper}`, borderRadius: 10, padding: 14, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 1.5 } }, "NEW POINT"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, marginLeft: "auto" } }, addSpotPos.lat.toFixed(4), ", ", addSpotPos.lng.toFixed(4))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 8, padding: 3, marginBottom: 12 } }, /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        disabled: true,
+        style: { flex: 1, padding: "9px 8px", borderRadius: 6, background: T.green, border: "none", cursor: "default", fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 700, letterSpacing: 0.6, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }
+      },
+      /* @__PURE__ */ import_react4.default.createElement(Tent, { size: 12 }),
+      "CAMP SITE"
+    ), /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: () => {
+          if (!planBuilder) return;
+          const lat = addSpotPos.lat, lng = addSpotPos.lng;
+          setAddSpotPos(null);
+          setAddSpotName("");
+          setAddSpotDesc("");
+          setAddSpotVisibility("public");
+          setAddSpotPhotos([]);
+          const seed = { lat, lng, type: "waypoint", label: "" };
+          if (planActive) planBuilder.add(seed);
+          else planBuilder.enter(seed);
+        },
+        style: { flex: 1, padding: "9px 8px", borderRadius: 6, background: "transparent", border: "none", cursor: "pointer", fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 0.6, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }
+      },
+      /* @__PURE__ */ import_react4.default.createElement(Route, { size: 12 }),
+      planActive ? "ADD TO PLAN" : "TRIP PLAN"
+    )), /* @__PURE__ */ import_react4.default.createElement(
       "input",
       {
         autoFocus: true,
