@@ -21837,22 +21837,30 @@
   ];
   var Layers = createLucideIcon("layers", __iconNode26);
 
-  // node_modules/lucide-react/dist/esm/icons/lock.mjs
+  // node_modules/lucide-react/dist/esm/icons/link-2.mjs
   var __iconNode27 = [
+    ["path", { d: "M9 17H7A5 5 0 0 1 7 7h2", key: "8i5ue5" }],
+    ["path", { d: "M15 7h2a5 5 0 1 1 0 10h-2", key: "1b9ql8" }],
+    ["line", { x1: "8", x2: "16", y1: "12", y2: "12", key: "1jonct" }]
+  ];
+  var Link2 = createLucideIcon("link-2", __iconNode27);
+
+  // node_modules/lucide-react/dist/esm/icons/lock.mjs
+  var __iconNode28 = [
     ["rect", { width: "18", height: "11", x: "3", y: "11", rx: "2", ry: "2", key: "1w4ew1" }],
     ["path", { d: "M7 11V7a5 5 0 0 1 10 0v4", key: "fwvmzm" }]
   ];
-  var Lock = createLucideIcon("lock", __iconNode27);
+  var Lock = createLucideIcon("lock", __iconNode28);
 
   // node_modules/lucide-react/dist/esm/icons/mail.mjs
-  var __iconNode28 = [
+  var __iconNode29 = [
     ["path", { d: "m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7", key: "132q7q" }],
     ["rect", { x: "2", y: "4", width: "20", height: "16", rx: "2", key: "izxlao" }]
   ];
-  var Mail = createLucideIcon("mail", __iconNode28);
+  var Mail = createLucideIcon("mail", __iconNode29);
 
   // node_modules/lucide-react/dist/esm/icons/map-pin.mjs
-  var __iconNode29 = [
+  var __iconNode30 = [
     [
       "path",
       {
@@ -21862,10 +21870,10 @@
     ],
     ["circle", { cx: "12", cy: "10", r: "3", key: "ilqhr7" }]
   ];
-  var MapPin = createLucideIcon("map-pin", __iconNode29);
+  var MapPin = createLucideIcon("map-pin", __iconNode30);
 
   // node_modules/lucide-react/dist/esm/icons/map.mjs
-  var __iconNode30 = [
+  var __iconNode31 = [
     [
       "path",
       {
@@ -21876,19 +21884,19 @@
     ["path", { d: "M15 5.764v15", key: "1pn4in" }],
     ["path", { d: "M9 3.236v15", key: "1uimfh" }]
   ];
-  var Map2 = createLucideIcon("map", __iconNode30);
+  var Map2 = createLucideIcon("map", __iconNode31);
 
   // node_modules/lucide-react/dist/esm/icons/maximize-2.mjs
-  var __iconNode31 = [
+  var __iconNode32 = [
     ["path", { d: "M15 3h6v6", key: "1q9fwt" }],
     ["path", { d: "m21 3-7 7", key: "1l2asr" }],
     ["path", { d: "m3 21 7-7", key: "tjx5ai" }],
     ["path", { d: "M9 21H3v-6", key: "wtvkvv" }]
   ];
-  var Maximize2 = createLucideIcon("maximize-2", __iconNode31);
+  var Maximize2 = createLucideIcon("maximize-2", __iconNode32);
 
   // node_modules/lucide-react/dist/esm/icons/message-circle.mjs
-  var __iconNode32 = [
+  var __iconNode33 = [
     [
       "path",
       {
@@ -21897,29 +21905,29 @@
       }
     ]
   ];
-  var MessageCircle = createLucideIcon("message-circle", __iconNode32);
+  var MessageCircle = createLucideIcon("message-circle", __iconNode33);
 
   // node_modules/lucide-react/dist/esm/icons/minimize-2.mjs
-  var __iconNode33 = [
+  var __iconNode34 = [
     ["path", { d: "m14 10 7-7", key: "oa77jy" }],
     ["path", { d: "M20 10h-6V4", key: "mjg0md" }],
     ["path", { d: "m3 21 7-7", key: "tjx5ai" }],
     ["path", { d: "M4 14h6v6", key: "rmj7iw" }]
   ];
-  var Minimize2 = createLucideIcon("minimize-2", __iconNode33);
+  var Minimize2 = createLucideIcon("minimize-2", __iconNode34);
 
   // node_modules/lucide-react/dist/esm/icons/mountain.mjs
-  var __iconNode34 = [["path", { d: "m8 3 4 8 5-5 5 15H2L8 3z", key: "otkl63" }]];
-  var Mountain = createLucideIcon("mountain", __iconNode34);
+  var __iconNode35 = [["path", { d: "m8 3 4 8 5-5 5 15H2L8 3z", key: "otkl63" }]];
+  var Mountain = createLucideIcon("mountain", __iconNode35);
 
   // node_modules/lucide-react/dist/esm/icons/navigation.mjs
-  var __iconNode35 = [
+  var __iconNode36 = [
     ["polygon", { points: "3 11 22 2 13 21 11 13 3 11", key: "1ltx0t" }]
   ];
-  var Navigation = createLucideIcon("navigation", __iconNode35);
+  var Navigation = createLucideIcon("navigation", __iconNode36);
 
   // node_modules/lucide-react/dist/esm/icons/pen-line.mjs
-  var __iconNode36 = [
+  var __iconNode37 = [
     ["path", { d: "M13 21h8", key: "1jsn5i" }],
     [
       "path",
@@ -21929,42 +21937,42 @@
       }
     ]
   ];
-  var PenLine = createLucideIcon("pen-line", __iconNode36);
+  var PenLine = createLucideIcon("pen-line", __iconNode37);
 
   // node_modules/lucide-react/dist/esm/icons/plus.mjs
-  var __iconNode37 = [
+  var __iconNode38 = [
     ["path", { d: "M5 12h14", key: "1ays0h" }],
     ["path", { d: "M12 5v14", key: "s699le" }]
   ];
-  var Plus = createLucideIcon("plus", __iconNode37);
+  var Plus = createLucideIcon("plus", __iconNode38);
 
   // node_modules/lucide-react/dist/esm/icons/radio.mjs
-  var __iconNode38 = [
+  var __iconNode39 = [
     ["path", { d: "M16.247 7.761a6 6 0 0 1 0 8.478", key: "1fwjs5" }],
     ["path", { d: "M19.075 4.933a10 10 0 0 1 0 14.134", key: "ehdyv1" }],
     ["path", { d: "M4.925 19.067a10 10 0 0 1 0-14.134", key: "1q22gi" }],
     ["path", { d: "M7.753 16.239a6 6 0 0 1 0-8.478", key: "r2q7qm" }],
     ["circle", { cx: "12", cy: "12", r: "2", key: "1c9p78" }]
   ];
-  var Radio = createLucideIcon("radio", __iconNode38);
+  var Radio = createLucideIcon("radio", __iconNode39);
 
   // node_modules/lucide-react/dist/esm/icons/route.mjs
-  var __iconNode39 = [
+  var __iconNode40 = [
     ["circle", { cx: "6", cy: "19", r: "3", key: "1kj8tv" }],
     ["path", { d: "M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15", key: "1d8sl" }],
     ["circle", { cx: "18", cy: "5", r: "3", key: "gq8acd" }]
   ];
-  var Route = createLucideIcon("route", __iconNode39);
+  var Route = createLucideIcon("route", __iconNode40);
 
   // node_modules/lucide-react/dist/esm/icons/search.mjs
-  var __iconNode40 = [
+  var __iconNode41 = [
     ["path", { d: "m21 21-4.34-4.34", key: "14j7rj" }],
     ["circle", { cx: "11", cy: "11", r: "8", key: "4ej97u" }]
   ];
-  var Search = createLucideIcon("search", __iconNode40);
+  var Search = createLucideIcon("search", __iconNode41);
 
   // node_modules/lucide-react/dist/esm/icons/send.mjs
-  var __iconNode41 = [
+  var __iconNode42 = [
     [
       "path",
       {
@@ -21974,10 +21982,10 @@
     ],
     ["path", { d: "m21.854 2.147-10.94 10.939", key: "12cjpa" }]
   ];
-  var Send = createLucideIcon("send", __iconNode41);
+  var Send = createLucideIcon("send", __iconNode42);
 
   // node_modules/lucide-react/dist/esm/icons/settings.mjs
-  var __iconNode42 = [
+  var __iconNode43 = [
     [
       "path",
       {
@@ -21987,20 +21995,20 @@
     ],
     ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
   ];
-  var Settings = createLucideIcon("settings", __iconNode42);
+  var Settings = createLucideIcon("settings", __iconNode43);
 
   // node_modules/lucide-react/dist/esm/icons/share-2.mjs
-  var __iconNode43 = [
+  var __iconNode44 = [
     ["circle", { cx: "18", cy: "5", r: "3", key: "gq8acd" }],
     ["circle", { cx: "6", cy: "12", r: "3", key: "w7nqdw" }],
     ["circle", { cx: "18", cy: "19", r: "3", key: "1xt0gg" }],
     ["line", { x1: "8.59", x2: "15.42", y1: "13.51", y2: "17.49", key: "47mynk" }],
     ["line", { x1: "15.41", x2: "8.59", y1: "6.51", y2: "10.49", key: "1n3mei" }]
   ];
-  var Share2 = createLucideIcon("share-2", __iconNode43);
+  var Share2 = createLucideIcon("share-2", __iconNode44);
 
   // node_modules/lucide-react/dist/esm/icons/shield.mjs
-  var __iconNode44 = [
+  var __iconNode45 = [
     [
       "path",
       {
@@ -22009,17 +22017,25 @@
       }
     ]
   ];
-  var Shield = createLucideIcon("shield", __iconNode44);
+  var Shield = createLucideIcon("shield", __iconNode45);
 
   // node_modules/lucide-react/dist/esm/icons/smartphone.mjs
-  var __iconNode45 = [
+  var __iconNode46 = [
     ["rect", { width: "14", height: "20", x: "5", y: "2", rx: "2", ry: "2", key: "1yt0o3" }],
     ["path", { d: "M12 18h.01", key: "mhygvu" }]
   ];
-  var Smartphone = createLucideIcon("smartphone", __iconNode45);
+  var Smartphone = createLucideIcon("smartphone", __iconNode46);
+
+  // node_modules/lucide-react/dist/esm/icons/square-plus.mjs
+  var __iconNode47 = [
+    ["rect", { width: "18", height: "18", x: "3", y: "3", rx: "2", key: "afitv7" }],
+    ["path", { d: "M8 12h8", key: "1wcyev" }],
+    ["path", { d: "M12 8v8", key: "napkw2" }]
+  ];
+  var SquarePlus = createLucideIcon("square-plus", __iconNode47);
 
   // node_modules/lucide-react/dist/esm/icons/star.mjs
-  var __iconNode46 = [
+  var __iconNode48 = [
     [
       "path",
       {
@@ -22028,44 +22044,44 @@
       }
     ]
   ];
-  var Star = createLucideIcon("star", __iconNode46);
+  var Star = createLucideIcon("star", __iconNode48);
 
   // node_modules/lucide-react/dist/esm/icons/target.mjs
-  var __iconNode47 = [
+  var __iconNode49 = [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["circle", { cx: "12", cy: "12", r: "6", key: "1vlfrh" }],
     ["circle", { cx: "12", cy: "12", r: "2", key: "1c9p78" }]
   ];
-  var Target = createLucideIcon("target", __iconNode47);
+  var Target = createLucideIcon("target", __iconNode49);
 
   // node_modules/lucide-react/dist/esm/icons/tent.mjs
-  var __iconNode48 = [
+  var __iconNode50 = [
     ["path", { d: "M3.5 21 14 3", key: "1szst5" }],
     ["path", { d: "M20.5 21 10 3", key: "1310c3" }],
     ["path", { d: "M15.5 21 12 15l-3.5 6", key: "1ddtfw" }],
     ["path", { d: "M2 21h20", key: "1nyx9w" }]
   ];
-  var Tent = createLucideIcon("tent", __iconNode48);
+  var Tent = createLucideIcon("tent", __iconNode50);
 
   // node_modules/lucide-react/dist/esm/icons/trash-2.mjs
-  var __iconNode49 = [
+  var __iconNode51 = [
     ["path", { d: "M10 11v6", key: "nco0om" }],
     ["path", { d: "M14 11v6", key: "outv1u" }],
     ["path", { d: "M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6", key: "miytrc" }],
     ["path", { d: "M3 6h18", key: "d0wm0j" }],
     ["path", { d: "M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2", key: "e791ji" }]
   ];
-  var Trash2 = createLucideIcon("trash-2", __iconNode49);
+  var Trash2 = createLucideIcon("trash-2", __iconNode51);
 
   // node_modules/lucide-react/dist/esm/icons/trending-up.mjs
-  var __iconNode50 = [
+  var __iconNode52 = [
     ["path", { d: "M16 7h6v6", key: "box55l" }],
     ["path", { d: "m22 7-8.5 8.5-5-5L2 17", key: "1t1m79" }]
   ];
-  var TrendingUp = createLucideIcon("trending-up", __iconNode50);
+  var TrendingUp = createLucideIcon("trending-up", __iconNode52);
 
   // node_modules/lucide-react/dist/esm/icons/triangle-alert.mjs
-  var __iconNode51 = [
+  var __iconNode53 = [
     [
       "path",
       {
@@ -22076,10 +22092,10 @@
     ["path", { d: "M12 9v4", key: "juzpu7" }],
     ["path", { d: "M12 17h.01", key: "p32p05" }]
   ];
-  var TriangleAlert = createLucideIcon("triangle-alert", __iconNode51);
+  var TriangleAlert = createLucideIcon("triangle-alert", __iconNode53);
 
   // node_modules/lucide-react/dist/esm/icons/trophy.mjs
-  var __iconNode52 = [
+  var __iconNode54 = [
     ["path", { d: "M10 14.66v1.626a2 2 0 0 1-.976 1.696A5 5 0 0 0 7 21.978", key: "1n3hpd" }],
     ["path", { d: "M14 14.66v1.626a2 2 0 0 0 .976 1.696A5 5 0 0 1 17 21.978", key: "rfe1zi" }],
     ["path", { d: "M18 9h1.5a1 1 0 0 0 0-5H18", key: "7xy6bh" }],
@@ -22087,36 +22103,36 @@
     ["path", { d: "M6 9a6 6 0 0 0 12 0V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1z", key: "1mhfuq" }],
     ["path", { d: "M6 9H4.5a1 1 0 0 1 0-5H6", key: "tex48p" }]
   ];
-  var Trophy = createLucideIcon("trophy", __iconNode52);
+  var Trophy = createLucideIcon("trophy", __iconNode54);
 
   // node_modules/lucide-react/dist/esm/icons/user-check.mjs
-  var __iconNode53 = [
+  var __iconNode55 = [
     ["path", { d: "m16 11 2 2 4-4", key: "9rsbq5" }],
     ["path", { d: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2", key: "1yyitq" }],
     ["circle", { cx: "9", cy: "7", r: "4", key: "nufk8" }]
   ];
-  var UserCheck = createLucideIcon("user-check", __iconNode53);
+  var UserCheck = createLucideIcon("user-check", __iconNode55);
 
   // node_modules/lucide-react/dist/esm/icons/user-plus.mjs
-  var __iconNode54 = [
+  var __iconNode56 = [
     ["path", { d: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2", key: "1yyitq" }],
     ["circle", { cx: "9", cy: "7", r: "4", key: "nufk8" }],
     ["line", { x1: "19", x2: "19", y1: "8", y2: "14", key: "1bvyxn" }],
     ["line", { x1: "22", x2: "16", y1: "11", y2: "11", key: "1shjgl" }]
   ];
-  var UserPlus = createLucideIcon("user-plus", __iconNode54);
+  var UserPlus = createLucideIcon("user-plus", __iconNode56);
 
   // node_modules/lucide-react/dist/esm/icons/users.mjs
-  var __iconNode55 = [
+  var __iconNode57 = [
     ["path", { d: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2", key: "1yyitq" }],
     ["path", { d: "M16 3.128a4 4 0 0 1 0 7.744", key: "16gr8j" }],
     ["path", { d: "M22 21v-2a4 4 0 0 0-3-3.87", key: "kshegd" }],
     ["circle", { cx: "9", cy: "7", r: "4", key: "nufk8" }]
   ];
-  var Users = createLucideIcon("users", __iconNode55);
+  var Users = createLucideIcon("users", __iconNode57);
 
   // node_modules/lucide-react/dist/esm/icons/video.mjs
-  var __iconNode56 = [
+  var __iconNode58 = [
     [
       "path",
       {
@@ -22126,10 +22142,10 @@
     ],
     ["rect", { x: "2", y: "6", width: "14", height: "12", rx: "2", key: "158x01" }]
   ];
-  var Video = createLucideIcon("video", __iconNode56);
+  var Video = createLucideIcon("video", __iconNode58);
 
   // node_modules/lucide-react/dist/esm/icons/wrench.mjs
-  var __iconNode57 = [
+  var __iconNode59 = [
     [
       "path",
       {
@@ -22138,17 +22154,17 @@
       }
     ]
   ];
-  var Wrench = createLucideIcon("wrench", __iconNode57);
+  var Wrench = createLucideIcon("wrench", __iconNode59);
 
   // node_modules/lucide-react/dist/esm/icons/x.mjs
-  var __iconNode58 = [
+  var __iconNode60 = [
     ["path", { d: "M18 6 6 18", key: "1bl5f8" }],
     ["path", { d: "m6 6 12 12", key: "d8bk6v" }]
   ];
-  var X = createLucideIcon("x", __iconNode58);
+  var X = createLucideIcon("x", __iconNode60);
 
   // node_modules/lucide-react/dist/esm/icons/zap.mjs
-  var __iconNode59 = [
+  var __iconNode61 = [
     [
       "path",
       {
@@ -22157,7 +22173,7 @@
       }
     ]
   ];
-  var Zap = createLucideIcon("zap", __iconNode59);
+  var Zap = createLucideIcon("zap", __iconNode61);
 
   // node_modules/tslib/tslib.es6.mjs
   function __rest(s, e) {
@@ -44433,7 +44449,7 @@ ${suffix}`;
       next();
     }, style: { position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: `${T.charcoal}AA`, border: "none", borderRadius: "50%", width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 22, color: T.white })))), images.length > 1 && /* @__PURE__ */ import_react4.default.createElement("div", { onClick: (e) => e.stopPropagation(), style: { display: "flex", gap: 6, padding: "12px 16px", overflowX: "auto", maxWidth: 430, width: "100%" } }, images.map((img, i) => /* @__PURE__ */ import_react4.default.createElement("img", { key: i, src: img, alt: "", onClick: () => setIdx(i), style: { width: 48, height: 48, borderRadius: 6, objectFit: "cover", flexShrink: 0, cursor: "pointer", border: i === idx ? `2px solid ${T.copper}` : `2px solid transparent`, opacity: i === idx ? 1 : 0.5, transition: "opacity 0.15s, border 0.15s" } }))));
   }
-  function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onViewBuild, onOpenTripDetail, feedItems, onUpdateFeed, onUpdatePost, likedPostIds, onTogglePostLike, postComments, onAddComment, onDeleteComment, likedCommentIds, onToggleCommentLike, currentUserId, currentUserName, currentUserHandle, currentUserAvatar, onDeletePost, onEditPost, onAddNotification, forumUserReplies, forumViewCounts, savedRoutes, onSaveRoute, onUnsaveRoute, onStartNav, onAwardPoints, isGuest, onGuestTap, pendingPostNav, onConsumePendingPostNav, onSharedPostMissing, convoyRsvps, onRsvpConvoy, onSearchUsers, filterFn, hideFilters, onlineUserIds, tripReports, tripAuthors, onNewTripReport, onOpenTripDraft }) {
+  function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onViewBuild, onOpenTripDetail, feedItems, onUpdateFeed, onUpdatePost, likedPostIds, onTogglePostLike, postComments, onAddComment, onDeleteComment, likedCommentIds, onToggleCommentLike, currentUserId, currentUserName, currentUserHandle, currentUserAvatar, onDeletePost, onEditPost, onAddNotification, forumUserReplies, forumViewCounts, savedRoutes, onSaveRoute, onUnsaveRoute, onStartNav, onAwardPoints, isGuest, onGuestTap, pendingPostNav, onConsumePendingPostNav, onSharedPostMissing, convoyRsvps, onRsvpConvoy, onSearchUsers, filterFn, hideFilters, onlineUserIds, tripReports, tripAuthors, onNewTripReport, onOpenTripDraft, onOpenSpotOnMap, onOpenHQOnMap }) {
     const [activeFilter, setActiveFilter] = (0, import_react4.useState)("ALL");
     const filters = ["ALL", "BUILDS", "CONVOYS", "TRIP REPORTS", "PHOTOS", "FORUM"];
     const likedPosts = likedPostIds || {};
@@ -44650,7 +44666,24 @@ ${suffix}`;
     };
     const renderCard = (item) => {
       if (item.type === "POST") {
-        return /* @__PURE__ */ import_react4.default.createElement("div", { key: item.id, style: cardStyle }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "12px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 32, height: 32, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", ...avatarOnlineStyle(item.userId, onlineUserIds) } }, item.avatarUrl ? /* @__PURE__ */ import_react4.default.createElement("img", { src: item.avatarUrl, alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, fontWeight: 700, color: T.white } }, item.initial)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5 } }, /* @__PURE__ */ import_react4.default.createElement("span", { onClick: () => onViewUser && onViewUser(item.userId || item.handle || item.user.replace(/\s/g, "_")), style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, cursor: "pointer" } }, item.user), /* @__PURE__ */ import_react4.default.createElement(RankBadge, { points: getPoints(item.user), size: 12 })), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary, display: "block" } }, formatPostTime(item.time))), ownPostMenu(item)), feedEditBar(item), feedDeleteConfirm(item), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 14px" } }, item.title && editingFeedPost !== item.id && /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 15, color: T.white, margin: "0 0 8px", lineHeight: 1.6, whiteSpace: "pre-wrap" } }, item.title), item.location && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5, marginTop: 4 } }, /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 11, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, item.location))), actionBar(item));
+        return /* @__PURE__ */ import_react4.default.createElement("div", { key: item.id, style: cardStyle }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "12px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 32, height: 32, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", ...avatarOnlineStyle(item.userId, onlineUserIds) } }, item.avatarUrl ? /* @__PURE__ */ import_react4.default.createElement("img", { src: item.avatarUrl, alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, fontWeight: 700, color: T.white } }, item.initial)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5 } }, /* @__PURE__ */ import_react4.default.createElement("span", { onClick: () => onViewUser && onViewUser(item.userId || item.handle || item.user.replace(/\s/g, "_")), style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, cursor: "pointer" } }, item.user), /* @__PURE__ */ import_react4.default.createElement(RankBadge, { points: getPoints(item.user), size: 12 })), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary, display: "block" } }, formatPostTime(item.time))), ownPostMenu(item)), feedEditBar(item), feedDeleteConfirm(item), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 14px" } }, item.subtitle && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5, marginBottom: 6, fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 0.6, fontWeight: 600 } }, /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 10, color: T.copper }), item.subtitle), item.spotId && /* @__PURE__ */ import_react4.default.createElement(
+          "div",
+          {
+            onClick: () => onOpenSpotOnMap && onOpenSpotOnMap(item.spotId),
+            style: { borderRadius: 10, overflow: "hidden", border: `1px solid ${T.green}40`, marginBottom: 10, background: `${T.charcoal}80`, cursor: "pointer" }
+          },
+          item.image && /* @__PURE__ */ import_react4.default.createElement("img", { src: item.image, alt: "", style: { width: "100%", height: 160, objectFit: "cover", display: "block" } }),
+          /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "10px 12px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 6 } }, /* @__PURE__ */ import_react4.default.createElement(Tent, { size: 12, color: T.green }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.green, letterSpacing: 1.2, fontWeight: 700 } }, "CAMPING SPOT")), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 14, color: T.white, margin: 0, fontWeight: 600, lineHeight: 1.4 } }, item.spotName || item.title), item.body && /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "4px 0 0", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" } }, item.body), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, marginTop: 6 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.green, fontWeight: 600 } }, "VIEW SPOT"), /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 12, color: T.green })))
+        ), item.hqShare && /* @__PURE__ */ import_react4.default.createElement(
+          "div",
+          {
+            onClick: () => onOpenHQOnMap && onOpenHQOnMap(),
+            style: { borderRadius: 10, overflow: "hidden", border: `1px solid ${T.red}50`, marginBottom: 10, background: `${T.charcoal}80`, cursor: "pointer", display: "flex", alignItems: "center", gap: 12, padding: 12 }
+          },
+          /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 44, height: 44, borderRadius: "50%", background: T.red, border: `2px solid ${T.white}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(Star, { size: 22, color: T.white, fill: T.white, strokeWidth: 1.5 })),
+          /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 9, color: T.red, letterSpacing: 1.2, fontWeight: 700, marginBottom: 2 } }, "HEADQUARTERS"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700 } }, item.title), item.body && /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 11, color: T.tertiary, marginTop: 2, lineHeight: 1.3 } }, item.body)),
+          /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 16, color: T.red })
+        ), item.title && !item.spotId && !item.hqShare && editingFeedPost !== item.id && /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 15, color: T.white, margin: "0 0 8px", lineHeight: 1.6, whiteSpace: "pre-wrap" } }, item.title), item.location && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5, marginTop: 4 } }, /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 11, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, item.location))), actionBar(item));
       }
       if (item.type === "RECOVERY") {
         return /* @__PURE__ */ import_react4.default.createElement("div", { key: item.id, style: cardStyle }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: `${T.red}18`, padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement(TriangleAlert, { size: 16, color: T.red }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, fontWeight: 700, color: T.red, letterSpacing: 0.5 } }, "RECOVERY NEEDED")), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, formatPostTime(item.time))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 8 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 24, height: 24, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, fontWeight: 700, color: T.white } }, item.initial)), /* @__PURE__ */ import_react4.default.createElement("span", { onClick: () => onViewUser && onViewUser(item.userId || item.handle || item.user.replace(/\s/g, "_")), style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, cursor: "pointer" } }, item.user), /* @__PURE__ */ import_react4.default.createElement(RankBadge, { points: getPoints(item.user), size: 11 })), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 15, color: T.white, margin: "0 0 8px", lineHeight: 1.5 } }, item.title), item.body && /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 12px", lineHeight: 1.6 } }, item.body), item.vehicle && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, marginBottom: 8 } }, /* @__PURE__ */ import_react4.default.createElement(Wrench, { size: 11, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, item.vehicle)), item.photoUrls && item.photoUrls.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 } }, item.photoUrls.map((p, pi) => {
@@ -47943,7 +47976,7 @@ ${suffix}`;
       /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 16, color: T.tertiary })
     )));
   }
-  function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onLoadCampingSpotPhotos, onNewTripReport, currentUserId, onMapViewportChange, tripReports, showTripReports, setShowTripReports, onOpenTripDetail }) {
+  function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onLoadCampingSpotPhotos, onNewTripReport, currentUserId, onMapViewportChange, tripReports, showTripReports, setShowTripReports, onOpenTripDetail, pendingSpotNav, onConsumePendingSpotNav, pendingHQOpen, onConsumePendingHQOpen, onShareCampingSpotToFeed, onShareHQToFeed, onShareTripToFeed, onOpenDM, onShowToast }) {
     const mapRef = (0, import_react4.useRef)(null);
     const mapInst = (0, import_react4.useRef)(null);
     const [mapReady, setMapReady] = (0, import_react4.useState)(false);
@@ -47988,30 +48021,65 @@ ${suffix}`;
     })();
     const [selectedTrip, setSelectedTrip] = (0, import_react4.useState)(null);
     const [selectedHQ, setSelectedHQ] = (0, import_react4.useState)(null);
+    const [shareTarget, setShareTarget] = (0, import_react4.useState)(null);
     useCampingSpotsLayer(mapInst, mapReady, campingSpots, showCampingSpots, (spot) => {
       setSelectedSpot(spot);
       setSelectedLand(null);
       setSelectedTrip(null);
       setSelectedHQ(null);
+      setShareTarget(null);
     });
     usePublicLandsLayer(mapInst, mapReady, showPublicLands, (land) => {
       setSelectedLand(land);
       setSelectedSpot(null);
       setSelectedTrip(null);
       setSelectedHQ(null);
+      setShareTarget(null);
     });
     useTripReportsLayer(mapInst, mapReady, tripReports || [], showTripReports, (trip) => {
       setSelectedTrip(trip);
       setSelectedSpot(null);
       setSelectedLand(null);
       setSelectedHQ(null);
+      setShareTarget(null);
     }, selectedTrip && selectedTrip.id);
     useLonePeakHQMarker(mapInst, mapReady, (hq) => {
       setSelectedHQ(hq);
       setSelectedSpot(null);
       setSelectedLand(null);
       setSelectedTrip(null);
+      setShareTarget(null);
     });
+    (0, import_react4.useEffect)(() => {
+      if (!pendingSpotNav || !mapReady) return;
+      const spot = (campingSpots || []).find((s) => s.id === pendingSpotNav);
+      if (!spot) return;
+      setSelectedSpot(spot);
+      setSelectedLand(null);
+      setSelectedTrip(null);
+      setSelectedHQ(null);
+      if (mapInst.current) {
+        try {
+          mapInst.current.flyTo({ center: [spot.lng, spot.lat], zoom: 13, duration: 800 });
+        } catch (e) {
+        }
+      }
+      onConsumePendingSpotNav && onConsumePendingSpotNav();
+    }, [pendingSpotNav, campingSpots, mapReady]);
+    (0, import_react4.useEffect)(() => {
+      if (!pendingHQOpen || !mapReady) return;
+      setSelectedHQ(LPO_HQ);
+      setSelectedSpot(null);
+      setSelectedLand(null);
+      setSelectedTrip(null);
+      if (mapInst.current) {
+        try {
+          mapInst.current.flyTo({ center: [LPO_HQ.lng, LPO_HQ.lat], zoom: 14, duration: 800 });
+        } catch (e) {
+        }
+      }
+      onConsumePendingHQOpen && onConsumePendingHQOpen();
+    }, [pendingHQOpen, mapReady]);
     useMapViewport(mapInst, mapReady, onMapViewportChange);
     (0, import_react4.useEffect)(() => {
       let cancelled = false;
@@ -48194,8 +48262,16 @@ ${suffix}`;
         },
         /* @__PURE__ */ import_react4.default.createElement(PenLine, { size: 12 }),
         "EDIT"
+      ), /* @__PURE__ */ import_react4.default.createElement(
+        "button",
+        {
+          onClick: () => setShareTarget({ kind: "spot", data: spot }),
+          style: { display: "inline-flex", alignItems: "center", gap: 5, padding: "8px 12px", background: T.charcoal, border: `1px solid ${T.tertiary}50`, borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }
+        },
+        /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 12 }),
+        "SHARE"
       ))), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setSelectedSpot(null), style: { background: "none", border: "none", cursor: "pointer", padding: 4, color: T.tertiary } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 16 }))));
-    })(), selectedLand && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 6, background: `${T.darkCard}F5`, border: `1px solid ${T.charcoal}`, borderRadius: 10, padding: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "flex-start", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 36, height: 36, borderRadius: 6, background: PUBLIC_LANDS_COLORS[selectedLand.mang_name] || PUBLIC_LANDS_DEFAULT_COLOR, flexShrink: 0, border: `1px solid ${T.charcoal}` } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, marginBottom: 2 } }, selectedLand.unit_nm || selectedLand.loc_nm || "Public land"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600, marginBottom: 4 } }, PUBLIC_LANDS_NAMES[selectedLand.mang_name] || selectedLand.mang_name || "Unknown manager"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.4 } }, selectedLand.des_tp ? selectedLand.des_tp : null, selectedLand.des_tp && selectedLand.state_nm ? " \xB7 " : null, selectedLand.state_nm, selectedLand.pub_access ? ` \xB7 ${PUBLIC_ACCESS_NAMES[selectedLand.pub_access] || selectedLand.pub_access}` : null)), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setSelectedLand(null), style: { background: "none", border: "none", cursor: "pointer", padding: 4, color: T.tertiary } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 16 })))), selectedTrip && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 6, background: `${T.darkCard}F5`, border: `1px solid ${T.charcoal}`, borderRadius: 10, padding: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "flex-start", gap: 10 } }, selectedTrip.hero_img ? /* @__PURE__ */ import_react4.default.createElement("img", { src: selectedTrip.hero_img, alt: "", style: { width: 48, height: 48, borderRadius: 6, objectFit: "cover", flexShrink: 0, border: `1px solid ${T.charcoal}` } }) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 48, height: 48, borderRadius: 6, background: "#8B6FAF", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Mountain, { size: 24, color: T.white, strokeWidth: 1.4 })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 9, color: "#8B6FAF", letterSpacing: 1.5, fontWeight: 700, marginBottom: 2 } }, "TRIP REPORT"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, marginBottom: 4, lineHeight: 1.3 } }, selectedTrip.name), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 8, fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.4, marginBottom: 8 } }, selectedTrip.difficulty && /* @__PURE__ */ import_react4.default.createElement("span", { style: { color: T.copper, fontWeight: 600 } }, selectedTrip.difficulty.toUpperCase()), (selectedTrip.region || selectedTrip.state_code) && /* @__PURE__ */ import_react4.default.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: 3 } }, /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 10, color: T.tertiary }), [selectedTrip.region, selectedTrip.state_code].filter(Boolean).join(", ")), selectedTrip.distance_mi != null && /* @__PURE__ */ import_react4.default.createElement("span", null, Number(selectedTrip.distance_mi).toFixed(1), " MI"), selectedTrip.elev_gain_ft != null && /* @__PURE__ */ import_react4.default.createElement("span", null, "+", Number(selectedTrip.elev_gain_ft).toLocaleString(), " FT")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 12, fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.3, marginBottom: 10 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: 5 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { width: 12, height: 12, borderRadius: "50%", background: "#8B6FAF", border: `2px solid ${T.white}`, boxSizing: "border-box", display: "inline-block" } }), "Start"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: 5 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { width: 12, height: 12, borderRadius: "50%", background: T.white, border: `2px solid #8B6FAF`, boxSizing: "border-box", display: "inline-block" } }), "End")), onOpenTripDetail && selectedTrip.slug && /* @__PURE__ */ import_react4.default.createElement(
+    })(), selectedLand && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 6, background: `${T.darkCard}F5`, border: `1px solid ${T.charcoal}`, borderRadius: 10, padding: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "flex-start", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 36, height: 36, borderRadius: 6, background: PUBLIC_LANDS_COLORS[selectedLand.mang_name] || PUBLIC_LANDS_DEFAULT_COLOR, flexShrink: 0, border: `1px solid ${T.charcoal}` } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, marginBottom: 2 } }, selectedLand.unit_nm || selectedLand.loc_nm || "Public land"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600, marginBottom: 4 } }, PUBLIC_LANDS_NAMES[selectedLand.mang_name] || selectedLand.mang_name || "Unknown manager"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.4 } }, selectedLand.des_tp ? selectedLand.des_tp : null, selectedLand.des_tp && selectedLand.state_nm ? " \xB7 " : null, selectedLand.state_nm, selectedLand.pub_access ? ` \xB7 ${PUBLIC_ACCESS_NAMES[selectedLand.pub_access] || selectedLand.pub_access}` : null)), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setSelectedLand(null), style: { background: "none", border: "none", cursor: "pointer", padding: 4, color: T.tertiary } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 16 })))), selectedTrip && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 6, background: `${T.darkCard}F5`, border: `1px solid ${T.charcoal}`, borderRadius: 10, padding: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "flex-start", gap: 10 } }, selectedTrip.hero_img ? /* @__PURE__ */ import_react4.default.createElement("img", { src: selectedTrip.hero_img, alt: "", style: { width: 48, height: 48, borderRadius: 6, objectFit: "cover", flexShrink: 0, border: `1px solid ${T.charcoal}` } }) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 48, height: 48, borderRadius: 6, background: "#8B6FAF", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Mountain, { size: 24, color: T.white, strokeWidth: 1.4 })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 9, color: "#8B6FAF", letterSpacing: 1.5, fontWeight: 700, marginBottom: 2 } }, "TRIP REPORT"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, marginBottom: 4, lineHeight: 1.3 } }, selectedTrip.name), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 8, fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.4, marginBottom: 8 } }, selectedTrip.difficulty && /* @__PURE__ */ import_react4.default.createElement("span", { style: { color: T.copper, fontWeight: 600 } }, selectedTrip.difficulty.toUpperCase()), (selectedTrip.region || selectedTrip.state_code) && /* @__PURE__ */ import_react4.default.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: 3 } }, /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 10, color: T.tertiary }), [selectedTrip.region, selectedTrip.state_code].filter(Boolean).join(", ")), selectedTrip.distance_mi != null && /* @__PURE__ */ import_react4.default.createElement("span", null, Number(selectedTrip.distance_mi).toFixed(1), " MI"), selectedTrip.elev_gain_ft != null && /* @__PURE__ */ import_react4.default.createElement("span", null, "+", Number(selectedTrip.elev_gain_ft).toLocaleString(), " FT")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 12, fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.3, marginBottom: 10 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: 5 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { width: 12, height: 12, borderRadius: "50%", background: "#8B6FAF", border: `2px solid ${T.white}`, boxSizing: "border-box", display: "inline-block" } }), "Start"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: 5 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { width: 12, height: 12, borderRadius: "50%", background: T.white, border: `2px solid #8B6FAF`, boxSizing: "border-box", display: "inline-block" } }), "End")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" } }, onOpenTripDetail && selectedTrip.slug && /* @__PURE__ */ import_react4.default.createElement(
       "button",
       {
         onClick: () => {
@@ -48207,7 +48283,15 @@ ${suffix}`;
       },
       /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 12 }),
       "OPEN TRIP"
-    )), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setSelectedTrip(null), style: { background: "none", border: "none", cursor: "pointer", padding: 4, color: T.tertiary } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 16 })))), selectedHQ && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 6, background: `${T.darkCard}F5`, border: `1px solid ${T.red}50`, borderRadius: 10, padding: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "flex-start", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 44, height: 44, borderRadius: "50%", background: T.red, border: `2px solid ${T.white}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(Star, { size: 22, color: T.white, fill: T.white, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 9, color: T.red, letterSpacing: 1.5, fontWeight: 700, marginBottom: 2 } }, "HEADQUARTERS"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, marginBottom: 4 } }, selectedHQ.name), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 12, color: T.warmStone || T.tertiary, lineHeight: 1.4, marginBottom: 10 } }, selectedHQ.address), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6 } }, /* @__PURE__ */ import_react4.default.createElement(
+    ), /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: () => setShareTarget({ kind: "trip", data: selectedTrip }),
+        style: { display: "inline-flex", alignItems: "center", gap: 5, padding: "8px 12px", background: T.charcoal, border: `1px solid ${T.tertiary}50`, borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }
+      },
+      /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 12 }),
+      "SHARE"
+    ))), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setSelectedTrip(null), style: { background: "none", border: "none", cursor: "pointer", padding: 4, color: T.tertiary } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 16 })))), selectedHQ && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 6, background: `${T.darkCard}F5`, border: `1px solid ${T.red}50`, borderRadius: 10, padding: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "flex-start", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 44, height: 44, borderRadius: "50%", background: T.red, border: `2px solid ${T.white}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(Star, { size: 22, color: T.white, fill: T.white, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 9, color: T.red, letterSpacing: 1.5, fontWeight: 700, marginBottom: 2 } }, "HEADQUARTERS"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, marginBottom: 4 } }, selectedHQ.name), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 12, color: T.warmStone || T.tertiary, lineHeight: 1.4, marginBottom: 10 } }, selectedHQ.address), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6 } }, /* @__PURE__ */ import_react4.default.createElement(
       "button",
       {
         onClick: () => window.open(`https://www.google.com/maps/dir/?api=1&destination=${selectedHQ.lat},${selectedHQ.lng}&travelmode=driving`, "_blank", "noopener"),
@@ -48225,7 +48309,120 @@ ${suffix}`;
       },
       /* @__PURE__ */ import_react4.default.createElement(Globe, { size: 12 }),
       "WEBSITE"
-    ))), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setSelectedHQ(null), style: { background: "none", border: "none", cursor: "pointer", padding: 4, color: T.tertiary } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 16 })))), addSpotPos && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 7, background: `${T.darkCard}F5`, border: `1px solid ${T.copper}`, borderRadius: 10, padding: 14, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 } }, /* @__PURE__ */ import_react4.default.createElement(Tent, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 1.5 } }, "NEW SPOT"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, marginLeft: "auto" } }, addSpotPos.lat.toFixed(4), ", ", addSpotPos.lng.toFixed(4))), /* @__PURE__ */ import_react4.default.createElement(
+    ), /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: () => setShareTarget({ kind: "hq", data: selectedHQ }),
+        style: { flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 8px", background: T.charcoal, color: T.white, border: `1px solid ${T.tertiary}50`, borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, whiteSpace: "nowrap" }
+      },
+      /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 12 }),
+      "SHARE"
+    ))), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setSelectedHQ(null), style: { background: "none", border: "none", cursor: "pointer", padding: 4, color: T.tertiary } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 16 })))), shareTarget && (() => {
+      const target = shareTarget;
+      const origin = typeof window !== "undefined" && window.location && window.location.origin || "";
+      const url = target.kind === "spot" ? `${origin}/spots/${target.data.id}` : target.kind === "trip" ? `${origin}/trips/${target.data.slug}` : `${origin}/hq`;
+      const titleText = target.kind === "hq" ? LPO_HQ.name : target.data.name;
+      const subText = target.kind === "spot" ? "Camping spot" : target.kind === "trip" ? "Trip report" : "Lone Peak Overland HQ";
+      const accent = target.kind === "spot" ? T.green : target.kind === "trip" ? "#8B6FAF" : T.red;
+      const handleCopy = async () => {
+        try {
+          if (navigator.clipboard) await navigator.clipboard.writeText(url);
+          else {
+            const ta = document.createElement("textarea");
+            ta.value = url;
+            document.body.appendChild(ta);
+            ta.select();
+            try {
+              document.execCommand("copy");
+            } finally {
+              document.body.removeChild(ta);
+            }
+          }
+          onShowToast && onShowToast("Link copied to clipboard");
+        } catch (e) {
+        }
+        setShareTarget(null);
+      };
+      const handleNativeShare = async () => {
+        try {
+          if (navigator.share) await navigator.share({ title: titleText, url });
+          else await handleCopy();
+        } catch (e) {
+        }
+        setShareTarget(null);
+      };
+      const handleDM = () => {
+        if (!onOpenDM) return;
+        const sharedPost = target.kind === "spot" ? {
+          id: "spot_" + target.data.id,
+          type: "camping_spot",
+          spotId: target.data.id,
+          title: target.data.name,
+          body: target.data.description || null,
+          image: Array.isArray(target.data.photos) && target.data.photos.length > 0 ? typeof target.data.photos[0] === "string" ? target.data.photos[0] : target.data.photos[0] && target.data.photos[0].url || null : null,
+          lat: target.data.lat,
+          lng: target.data.lng,
+          url
+        } : target.kind === "trip" ? {
+          id: "trip_" + target.data.id,
+          type: "trip_report",
+          tripId: target.data.id,
+          tripSlug: target.data.slug,
+          title: target.data.name,
+          body: target.data.description || null,
+          image: target.data.hero_img || null,
+          url
+        } : {
+          id: "hq",
+          type: "hq",
+          title: LPO_HQ.name,
+          body: LPO_HQ.address,
+          url
+        };
+        onOpenDM(null, "", sharedPost);
+        setShareTarget(null);
+      };
+      const handleFeed = () => {
+        if (target.kind === "spot") onShareCampingSpotToFeed && onShareCampingSpotToFeed(target.data);
+        else if (target.kind === "trip") onShareTripToFeed && onShareTripToFeed(target.data);
+        else if (target.kind === "hq") onShareHQToFeed && onShareHQToFeed();
+        setShareTarget(null);
+      };
+      return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 9, background: `${T.darkCard}F8`, border: `1px solid ${accent}50`, borderRadius: 10, padding: 14, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 12 } }, /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 14, color: accent }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: accent, letterSpacing: 1.2, fontWeight: 700, marginBottom: 1 } }, "SHARE \xB7 ", subText.toUpperCase()), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, titleText)), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setShareTarget(null), style: { background: "none", border: "none", cursor: "pointer", padding: 4, color: T.tertiary } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 14 }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement(
+        "button",
+        {
+          onClick: handleCopy,
+          style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "12px 6px", background: T.charcoal, border: `1px solid ${T.tertiary}30`, borderRadius: 8, cursor: "pointer", fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 700, letterSpacing: 0.4 }
+        },
+        /* @__PURE__ */ import_react4.default.createElement(Link2, { size: 18, color: T.copper }),
+        "COPY LINK"
+      ), typeof navigator !== "undefined" && navigator.share && /* @__PURE__ */ import_react4.default.createElement(
+        "button",
+        {
+          onClick: handleNativeShare,
+          style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "12px 6px", background: T.charcoal, border: `1px solid ${T.tertiary}30`, borderRadius: 8, cursor: "pointer", fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 700, letterSpacing: 0.4 }
+        },
+        /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 18, color: T.copper }),
+        "MORE"
+      ), /* @__PURE__ */ import_react4.default.createElement(
+        "button",
+        {
+          onClick: handleDM,
+          disabled: !onOpenDM,
+          style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "12px 6px", background: T.charcoal, border: `1px solid ${T.tertiary}30`, borderRadius: 8, cursor: onOpenDM ? "pointer" : "default", fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 700, letterSpacing: 0.4, opacity: onOpenDM ? 1 : 0.4 }
+        },
+        /* @__PURE__ */ import_react4.default.createElement(Send, { size: 18, color: T.copper }),
+        "SEND DM"
+      ), /* @__PURE__ */ import_react4.default.createElement(
+        "button",
+        {
+          onClick: handleFeed,
+          style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "12px 6px", background: T.charcoal, border: `1px solid ${T.tertiary}30`, borderRadius: 8, cursor: "pointer", fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 700, letterSpacing: 0.4 }
+        },
+        /* @__PURE__ */ import_react4.default.createElement(SquarePlus, { size: 18, color: T.copper }),
+        "TO FEED"
+      )), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginTop: 10, padding: "8px 10px", background: T.darkBg, borderRadius: 6, fontFamily: sans, fontSize: 10, color: T.tertiary, wordBreak: "break-all" } }, url));
+    })(), addSpotPos && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 7, background: `${T.darkCard}F5`, border: `1px solid ${T.copper}`, borderRadius: 10, padding: 14, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 } }, /* @__PURE__ */ import_react4.default.createElement(Tent, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 1.5 } }, "NEW SPOT"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, marginLeft: "auto" } }, addSpotPos.lat.toFixed(4), ", ", addSpotPos.lng.toFixed(4))), /* @__PURE__ */ import_react4.default.createElement(
       "input",
       {
         autoFocus: true,
@@ -48481,7 +48678,7 @@ ${suffix}`;
       lightbox.urls.length > 1 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", bottom: 18, left: 0, right: 0, textAlign: "center", fontFamily: sans, fontSize: 11, color: T.white, letterSpacing: 0.5 } }, lightbox.index + 1, " / ", lightbox.urls.length)
     ));
   }
-  function RoutesScreen({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, currentUserId, tripReports, showTripReports, setShowTripReports, onMapViewportChange, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onLoadCampingSpotPhotos, onOpenTripDetail, onNewTripReport }) {
+  function RoutesScreen({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, currentUserId, tripReports, showTripReports, setShowTripReports, onMapViewportChange, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onLoadCampingSpotPhotos, onOpenTripDetail, onNewTripReport, pendingSpotNav, onConsumePendingSpotNav, pendingHQOpen, onConsumePendingHQOpen, onShareCampingSpotToFeed, onShareHQToFeed, onShareTripToFeed, onOpenDM, onShowToast }) {
     return /* @__PURE__ */ import_react4.default.createElement("div", { style: { height: "100%", display: "flex", flexDirection: "column", minHeight: 0, position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement(
       ExploreMap,
       {
@@ -48501,6 +48698,15 @@ ${suffix}`;
         showTripReports,
         setShowTripReports,
         onOpenTripDetail,
+        pendingSpotNav,
+        onConsumePendingSpotNav,
+        pendingHQOpen,
+        onConsumePendingHQOpen,
+        onShareCampingSpotToFeed,
+        onShareHQToFeed,
+        onShareTripToFeed,
+        onOpenDM,
+        onShowToast,
         fillParent: true
       }
     ));
@@ -51390,6 +51596,13 @@ ${suffix}`;
                 e.stopPropagation();
                 onRsvpConvoy && onRsvpConvoy(convoyId, myStatus === opt.value ? null : opt.value);
               }, style: { flex: 1, fontFamily: sans, fontSize: 10, letterSpacing: 0.8, fontWeight: 600, padding: "10px 0", background: myStatus === opt.value ? `${opt.color}25` : "transparent", color: myStatus === opt.value ? opt.color : T.tertiary, border: "none", borderRight: oi < 2 ? `1px solid ${isMe ? "rgba(255,255,255,0.1)" : T.charcoal}` : "none", cursor: "pointer", transition: "all 0.15s" } }, myStatus === opt.value ? `\u2713 ${opt.label}` : opt.label))));
+            })() : msg.sharedPost && (msg.sharedPost.type === "camping_spot" || msg.sharedPost.type === "trip_report" || msg.sharedPost.type === "hq") ? (() => {
+              const sp = msg.sharedPost;
+              const accent = sp.type === "camping_spot" ? T.green : sp.type === "trip_report" ? "#8B6FAF" : T.red;
+              const Icon2 = sp.type === "camping_spot" ? Tent : sp.type === "trip_report" ? Mountain : Star;
+              const label = sp.type === "camping_spot" ? "CAMPING SPOT" : sp.type === "trip_report" ? "TRIP REPORT" : "HEADQUARTERS";
+              const cta = sp.type === "camping_spot" ? "VIEW SPOT" : sp.type === "trip_report" ? "OPEN TRIP" : "OPEN HQ";
+              return /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => onOpenPost && onOpenPost(sp), style: { borderRadius: 8, overflow: "hidden", border: `1px solid ${accent}40`, marginBottom: msg.text ? 8 : 0, background: isMe ? "rgba(0,0,0,0.15)" : `${T.charcoal}80`, cursor: "pointer", transition: "opacity 0.15s" }, onMouseEnter: (e) => e.currentTarget.style.opacity = "0.85", onMouseLeave: (e) => e.currentTarget.style.opacity = "1" }, sp.image && /* @__PURE__ */ import_react4.default.createElement("img", { src: sp.image, alt: "", style: { width: "100%", height: 120, objectFit: "cover", display: "block" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "10px 12px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 6 } }, /* @__PURE__ */ import_react4.default.createElement(Icon2, { size: 12, color: accent }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: accent, letterSpacing: 1.2, fontWeight: 700 } }, label)), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.white, margin: 0, lineHeight: 1.4, fontWeight: 600 } }, sp.title), sp.body && /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "4px 0 0", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" } }, sp.body), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, marginTop: 6 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: accent, fontWeight: 600 } }, cta), /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 12, color: accent }))));
             })() : msg.sharedPost ? /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => onOpenPost && onOpenPost(msg.sharedPost), style: { borderRadius: 8, overflow: "hidden", border: `1px solid ${isMe ? "rgba(255,255,255,0.15)" : T.charcoal}`, marginBottom: msg.text ? 8 : 0, background: isMe ? "rgba(0,0,0,0.15)" : `${T.charcoal}80`, cursor: "pointer", transition: "opacity 0.15s" }, onMouseEnter: (e) => e.currentTarget.style.opacity = "0.85", onMouseLeave: (e) => e.currentTarget.style.opacity = "1" }, msg.sharedPost.image && /* @__PURE__ */ import_react4.default.createElement("img", { src: msg.sharedPost.image, alt: "", style: { width: "100%", height: 120, objectFit: "cover", display: "block" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "10px 12px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 6 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 20, height: 20, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 8, fontWeight: 700, color: T.white } }, msg.sharedPost.initial)), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: isMe ? "rgba(255,255,255,0.7)" : T.tertiary } }, "@", msg.sharedPost.user), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: isMe ? "rgba(255,255,255,0.45)" : `${T.tertiary}80`, marginLeft: "auto", textTransform: "uppercase", letterSpacing: 0.5 } }, msg.sharedPost.type)), msg.sharedPost.sharedFromOwnerHandle && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, marginBottom: 4 } }, /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 10, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600 } }, "Shared from @", msg.sharedPost.sharedFromOwnerHandle, "'s build")), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.white, margin: 0, lineHeight: 1.4 } }, msg.sharedPost.title), msg.sharedPost.type === "recovery" && msg.sharedPost.location && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, marginTop: 4 } }, /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 10, color: T.red }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, msg.sharedPost.location), msg.sharedPost.urgency && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 8, color: T.white, background: msg.sharedPost.urgency === "HIGH" ? T.red : T.copper, padding: "1px 5px", borderRadius: 3, fontWeight: 600, marginLeft: 4 } }, msg.sharedPost.urgency)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, marginTop: 6 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600 } }, msg.sharedPost.type === "recovery" ? "VIEW ALERT" : "VIEW POST"), /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 12, color: T.copper })))) : null,
             msg.photos && msg.photos.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 4, marginBottom: msg.text ? 8 : 0, flexWrap: "wrap" } }, msg.photos.map((p, pi) => {
               const url = typeof p === "string" ? p : p && p.url;
@@ -51535,6 +51748,21 @@ ${suffix}`;
       const tripMatch = path.match(/^\/trips\/(.+?)\/?$/);
       if (tripMatch) {
         return { kind: "trip", slug: decodeURIComponent(tripMatch[1]) };
+      }
+      const spotMatch = path.match(/^\/spots\/(.+?)\/?$/);
+      if (spotMatch) {
+        try {
+          window.history.replaceState(null, "", "/");
+        } catch (e) {
+        }
+        return { kind: "spot", id: decodeURIComponent(spotMatch[1]) };
+      }
+      if (/^\/hq\/?$/.test(path)) {
+        try {
+          window.history.replaceState(null, "", "/");
+        } catch (e) {
+        }
+        return { kind: "hq" };
       }
     } catch (e) {
     }
@@ -52714,7 +52942,11 @@ ${suffix}`;
       setIsGuest(false);
       setAuthState("login");
     };
-    const [screen, setScreen] = (0, import_react4.useState)(() => initialSharedLink && initialSharedLink.kind === "trip" ? "routes" : "feed");
+    const [screen, setScreen] = (0, import_react4.useState)(() => {
+      if (!initialSharedLink) return "feed";
+      if (initialSharedLink.kind === "trip" || initialSharedLink.kind === "spot" || initialSharedLink.kind === "hq") return "routes";
+      return "feed";
+    });
     const [profileStack, setProfileStack] = (0, import_react4.useState)([]);
     const [showRecovery, setShowRecovery] = (0, import_react4.useState)(false);
     const [showCompose, setShowCompose] = (0, import_react4.useState)(false);
@@ -52730,6 +52962,8 @@ ${suffix}`;
     const [pendingThread, setPendingThread] = (0, import_react4.useState)(null);
     const [pendingBuildNav, setPendingBuildNav] = (0, import_react4.useState)(null);
     const [pendingTripNav, setPendingTripNav] = (0, import_react4.useState)(initialSharedLink && initialSharedLink.kind === "trip" ? initialSharedLink.slug : null);
+    const [pendingSpotNav, setPendingSpotNav] = (0, import_react4.useState)(initialSharedLink && initialSharedLink.kind === "spot" ? initialSharedLink.id : null);
+    const [pendingHQOpen, setPendingHQOpen] = (0, import_react4.useState)(!!(initialSharedLink && initialSharedLink.kind === "hq"));
     const [pendingPostNav, setPendingPostNav] = (0, import_react4.useState)(initialSharedLink && initialSharedLink.kind === "post" ? initialSharedLink.id : null);
     const [sharedLinkToast, setSharedLinkToast] = (0, import_react4.useState)("");
     const [appErrorToast, setAppErrorToast] = (0, import_react4.useState)("");
@@ -52875,6 +53109,22 @@ ${suffix}`;
       window.addEventListener("popstate", onPop);
       return () => window.removeEventListener("popstate", onPop);
     }, [allTripReports]);
+    (0, import_react4.useEffect)(() => {
+      if (!pendingSpotNav) return;
+      const existing = (viewportCampingSpots || []).concat(userCampingSpots || []).find((s) => s.id === pendingSpotNav);
+      if (existing) return;
+      let cancelled = false;
+      supabase.from("camping_spots").select("*").eq("id", pendingSpotNav).maybeSingle().then(({ data, error }) => {
+        if (cancelled || error || !data) return;
+        setViewportCampingSpots((prev) => prev.some((s) => s.id === data.id) ? prev : [data, ...prev]);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }, [pendingSpotNav]);
+    (0, import_react4.useEffect)(() => {
+      if (pendingSpotNav || pendingHQOpen) setScreen("routes");
+    }, [pendingSpotNav, pendingHQOpen]);
     const [tripAuthors, setTripAuthors] = (0, import_react4.useState)({});
     (0, import_react4.useEffect)(() => {
       if (!Array.isArray(tripReports) || tripReports.length === 0) return;
@@ -54235,6 +54485,58 @@ ${suffix}`;
       awardPoints(POINTS.feedPost, "Trip Shared");
       showErrorToast("Trip shared to your feed");
     };
+    const shareCampingSpotToFeed = (spot) => {
+      if (!spot || !spot.id) return;
+      const meName = currentProfile && currentProfile.full_name || "You";
+      const meHandle = currentProfile && currentProfile.handle || "";
+      const meInitial = meName.charAt(0).toUpperCase();
+      const photos = Array.isArray(spot.photos) ? spot.photos.map((p) => typeof p === "string" ? p : p && p.url || null).filter(Boolean) : [];
+      const heroImg = photos[0] || null;
+      addPost({
+        id: "shared_spot_" + Date.now(),
+        type: "POST",
+        user: meName,
+        handle: meHandle ? `@${meHandle}` : void 0,
+        initial: meInitial,
+        time: Date.now(),
+        title: spot.name,
+        body: spot.description || null,
+        subtitle: "Shared a camping spot",
+        image: heroImg,
+        photoUrls: heroImg ? [heroImg] : void 0,
+        likes: 0,
+        comments: 0,
+        spotId: spot.id,
+        spotName: spot.name,
+        spotLat: spot.lat,
+        spotLng: spot.lng,
+        spotType: spot.spot_type || null,
+        spotFee: spot.fee || null
+      });
+      awardPoints(POINTS.feedPost, "Spot Shared");
+      showErrorToast("Spot shared to your feed");
+    };
+    const shareHQToFeed = () => {
+      const meName = currentProfile && currentProfile.full_name || "You";
+      const meHandle = currentProfile && currentProfile.handle || "";
+      const meInitial = meName.charAt(0).toUpperCase();
+      addPost({
+        id: "shared_hq_" + Date.now(),
+        type: "POST",
+        user: meName,
+        handle: meHandle ? `@${meHandle}` : void 0,
+        initial: meInitial,
+        time: Date.now(),
+        title: LPO_HQ.name,
+        body: LPO_HQ.address,
+        subtitle: "Shared Lone Peak Overland HQ",
+        likes: 0,
+        comments: 0,
+        hqShare: true
+      });
+      awardPoints(POINTS.feedPost, "HQ Shared");
+      showErrorToast("HQ shared to your feed");
+    };
     const slugifyTripName = (name) => {
       if (!name) return "";
       return String(name).normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
@@ -54720,6 +55022,8 @@ ${suffix}`;
           if (!slug) return;
           setPendingTripNav(slug);
         },
+        onOpenSpotOnMap: (id) => setPendingSpotNav(id),
+        onOpenHQOnMap: () => setPendingHQOpen(true),
         tripReports: allTripReports,
         tripAuthors,
         onNewTripReport: () => setShowTripCreator(true),
@@ -54828,7 +55132,7 @@ ${suffix}`;
     }, onGoToPost: (id) => {
       setProfileStack([]);
       setScreen("feed");
-    }, myPoints: myTotalPoints }) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, isGuest && /* @__PURE__ */ import_react4.default.createElement(GuestBanner, { onSignIn: () => setShowGuestPrompt(true) }), screen === "feed" && renderFeedScopedTo({ hideFilters: false }), screen === "forum" && /* @__PURE__ */ import_react4.default.createElement(ForumScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), pendingThread, onPendingHandled: () => setPendingThread(null), onAddNotification: requireAuth(addNotification), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onAddFeedPost: requireAuth((post2) => addPost(post2)), userThreads: forumUserThreads, setUserThreads: requireAuth(setForumUserThreads), userReplies: forumUserReplies, setUserReplies: requireAuth(setForumUserReplies), likedForumItems: forumLikedItems, setLikedForumItems: requireAuth(setForumLikedItems), forumLikeCounts, setForumLikeCounts: requireAuth(setForumLikeCounts), forumViewCounts, setForumViewCounts, onAwardPoints: awardPoints }), screen === "routes" && /* @__PURE__ */ import_react4.default.createElement(RoutesScreen, { campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, tripReports: allTripReports, showTripReports, setShowTripReports, onMapViewportChange, onAddCampingSpot: requireAuth(addCampingSpot), onUpdateCampingSpot: requireAuth(updateCampingSpot), onDeleteCampingSpot: requireAuth(deleteCampingSpot), onLoadCampingSpotPhotos: loadCampingSpotPhotos, onOpenTripDetail: (slug) => setPendingTripNav(slug), onNewTripReport: () => setShowTripCreator(true) }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onPostBuildToFeed: requireAuth((b, opts) => {
+    }, myPoints: myTotalPoints }) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, isGuest && /* @__PURE__ */ import_react4.default.createElement(GuestBanner, { onSignIn: () => setShowGuestPrompt(true) }), screen === "feed" && renderFeedScopedTo({ hideFilters: false }), screen === "forum" && /* @__PURE__ */ import_react4.default.createElement(ForumScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), pendingThread, onPendingHandled: () => setPendingThread(null), onAddNotification: requireAuth(addNotification), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onAddFeedPost: requireAuth((post2) => addPost(post2)), userThreads: forumUserThreads, setUserThreads: requireAuth(setForumUserThreads), userReplies: forumUserReplies, setUserReplies: requireAuth(setForumUserReplies), likedForumItems: forumLikedItems, setLikedForumItems: requireAuth(setForumLikedItems), forumLikeCounts, setForumLikeCounts: requireAuth(setForumLikeCounts), forumViewCounts, setForumViewCounts, onAwardPoints: awardPoints }), screen === "routes" && /* @__PURE__ */ import_react4.default.createElement(RoutesScreen, { campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, tripReports: allTripReports, showTripReports, setShowTripReports, onMapViewportChange, onAddCampingSpot: requireAuth(addCampingSpot), onUpdateCampingSpot: requireAuth(updateCampingSpot), onDeleteCampingSpot: requireAuth(deleteCampingSpot), onLoadCampingSpotPhotos: loadCampingSpotPhotos, onOpenTripDetail: (slug) => setPendingTripNav(slug), onNewTripReport: () => setShowTripCreator(true), pendingSpotNav, onConsumePendingSpotNav: () => setPendingSpotNav(null), pendingHQOpen, onConsumePendingHQOpen: () => setPendingHQOpen(false), onShareCampingSpotToFeed: requireAuth(shareCampingSpotToFeed), onShareHQToFeed: requireAuth(shareHQToFeed), onShareTripToFeed: requireAuth(shareTripToFeed), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onShowToast: showErrorToast }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onPostBuildToFeed: requireAuth((b, opts) => {
       const rawBd = b.buildData;
       const bd = scrubLocalPhotosFromBuildData(rawBd);
       const isLocalUrl = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:"));
@@ -55319,6 +55623,21 @@ ${suffix}`;
           setActiveDmConvId(null);
           if (sp.type === "FORUM" && sp.threadId) {
             openForumThread(sp.threadId, sp.forumCat, sp.forumSub);
+          } else if (sp.type === "camping_spot" && sp.spotId) {
+            setProfileStack([]);
+            setShowRecovery(false);
+            setShowCompose(false);
+            setPendingSpotNav(sp.spotId);
+          } else if (sp.type === "trip_report" && sp.tripSlug) {
+            setProfileStack([]);
+            setShowRecovery(false);
+            setShowCompose(false);
+            setPendingTripNav(sp.tripSlug);
+          } else if (sp.type === "hq") {
+            setProfileStack([]);
+            setShowRecovery(false);
+            setShowCompose(false);
+            setPendingHQOpen(true);
           } else {
             setProfileStack([]);
             setShowRecovery(false);
@@ -55419,6 +55738,7 @@ lucide-react/dist/esm/icons/heart.mjs:
 lucide-react/dist/esm/icons/house.mjs:
 lucide-react/dist/esm/icons/image.mjs:
 lucide-react/dist/esm/icons/layers.mjs:
+lucide-react/dist/esm/icons/link-2.mjs:
 lucide-react/dist/esm/icons/lock.mjs:
 lucide-react/dist/esm/icons/mail.mjs:
 lucide-react/dist/esm/icons/map-pin.mjs:
@@ -55438,6 +55758,7 @@ lucide-react/dist/esm/icons/settings.mjs:
 lucide-react/dist/esm/icons/share-2.mjs:
 lucide-react/dist/esm/icons/shield.mjs:
 lucide-react/dist/esm/icons/smartphone.mjs:
+lucide-react/dist/esm/icons/square-plus.mjs:
 lucide-react/dist/esm/icons/star.mjs:
 lucide-react/dist/esm/icons/target.mjs:
 lucide-react/dist/esm/icons/tent.mjs:
