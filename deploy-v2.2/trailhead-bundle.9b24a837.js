@@ -43688,67 +43688,96 @@ ${suffix}`;
     (0, import_react4.useEffect)(() => {
       handlerRef.current = onMarkerTap;
     }, [onMarkerTap]);
-    const routedGeomRef = (0, import_react4.useRef)(null);
-    const routedSigRef = (0, import_react4.useRef)(null);
-    const [routedTick, setRoutedTick] = (0, import_react4.useState)(0);
+    const segmentCacheRef = (0, import_react4.useRef)({});
+    const [segmentTick, setSegmentTick] = (0, import_react4.useState)(0);
+    const segmentKey = (from, to) => `${from.lng.toFixed(5)},${from.lat.toFixed(5)}|${to.lng.toFixed(5)},${to.lat.toFixed(5)}`;
+    const segments = (0, import_react4.useMemo)(() => {
+      const valid = (points || []).filter((p) => p && p.lat != null && p.lng != null);
+      if (valid.length < 2) return [];
+      const out = [];
+      for (let i = 0; i < valid.length - 1; i++) {
+        const from = valid[i], to = valid[i + 1];
+        const key = segmentKey(from, to);
+        const cached = segmentCacheRef.current[key] || { status: "pending" };
+        out.push({ from, to, key, ...cached });
+      }
+      return out;
+    }, [points, segmentTick]);
     (0, import_react4.useEffect)(() => {
       const map = mapRef && mapRef.current;
       if (!ready || !map || !window.mapboxgl) return;
-      const ensureLineLayer = () => {
-        if (!map.getSource("plan-builder-line")) {
-          map.addSource("plan-builder-line", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      const ensure = () => {
+        if (!map.getSource("plan-builder-line-routed")) {
+          map.addSource("plan-builder-line-routed", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+          map.addSource("plan-builder-line-offroad", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
           map.addLayer({
-            id: "plan-builder-line",
+            id: "plan-builder-line-routed",
             type: "line",
-            source: "plan-builder-line",
+            source: "plan-builder-line-routed",
             layout: { "line-cap": "round", "line-join": "round" },
-            paint: {
-              "line-color": T.copper,
-              "line-width": 3,
-              "line-opacity": 0.9,
-              "line-dasharray": [2, 2]
-            }
+            paint: { "line-color": T.copper, "line-width": 3, "line-opacity": 0.9, "line-dasharray": [2, 2] }
+          });
+          map.addLayer({
+            id: "plan-builder-line-offroad",
+            type: "line",
+            source: "plan-builder-line-offroad",
+            layout: { "line-cap": "round", "line-join": "round" },
+            paint: { "line-color": T.red, "line-width": 3, "line-opacity": 0.95, "line-dasharray": [1, 1.4] }
           });
         }
-        const validPoints = (points || []).filter((p) => p && p.lat != null && p.lng != null);
-        const straightCoords = validPoints.map((p) => [p.lng, p.lat]);
-        const sig = validPoints.map((p) => `${p.lng.toFixed(5)},${p.lat.toFixed(5)}`).join("|");
-        const lineCoords = routedSigRef.current === sig && routedGeomRef.current ? routedGeomRef.current : straightCoords;
-        const geom = lineCoords.length >= 2 ? { type: "FeatureCollection", features: [{ type: "Feature", geometry: { type: "LineString", coordinates: lineCoords }, properties: {} }] } : { type: "FeatureCollection", features: [] };
-        const src = map.getSource("plan-builder-line");
-        if (src) src.setData(geom);
+        const routed = [];
+        const offroad = [];
+        segments.forEach((s) => {
+          if (s.status === "routed" && s.coords) {
+            routed.push({ type: "Feature", geometry: { type: "LineString", coordinates: s.coords }, properties: {} });
+          } else if (s.status === "offroad") {
+            offroad.push({ type: "Feature", geometry: { type: "LineString", coordinates: [[s.from.lng, s.from.lat], [s.to.lng, s.to.lat]] }, properties: {} });
+          } else {
+            routed.push({ type: "Feature", geometry: { type: "LineString", coordinates: [[s.from.lng, s.from.lat], [s.to.lng, s.to.lat]] }, properties: {} });
+          }
+        });
+        const sR = map.getSource("plan-builder-line-routed");
+        if (sR) sR.setData({ type: "FeatureCollection", features: routed });
+        const sO = map.getSource("plan-builder-line-offroad");
+        if (sO) sO.setData({ type: "FeatureCollection", features: offroad });
         try {
-          map.moveLayer("plan-builder-line");
+          map.moveLayer("plan-builder-line-routed");
+        } catch (_) {
+        }
+        try {
+          map.moveLayer("plan-builder-line-offroad");
         } catch (_) {
         }
       };
-      if (map.isStyleLoaded()) ensureLineLayer();
-      else map.once("load", ensureLineLayer);
-    }, [mapRef, ready, points, routedTick]);
+      if (map.isStyleLoaded()) ensure();
+      else map.once("load", ensure);
+    }, [mapRef, ready, segments]);
     (0, import_react4.useEffect)(() => {
-      const validPoints = (points || []).filter((p) => p && p.lat != null && p.lng != null);
-      const sig = validPoints.map((p) => `${p.lng.toFixed(5)},${p.lat.toFixed(5)}`).join("|");
-      if (validPoints.length < 2) {
-        routedGeomRef.current = null;
-        routedSigRef.current = null;
-        return;
+      const valid = (points || []).filter((p) => p && p.lat != null && p.lng != null);
+      if (valid.length < 2) return;
+      const toFetch = [];
+      for (let i = 0; i < valid.length - 1; i++) {
+        const from = valid[i], to = valid[i + 1];
+        const key = segmentKey(from, to);
+        if (!segmentCacheRef.current[key]) {
+          segmentCacheRef.current[key] = { status: "pending" };
+          toFetch.push({ from, to, key });
+        }
       }
-      if (routedSigRef.current === sig && routedGeomRef.current) return;
+      if (toFetch.length === 0) return;
       let cancelled = false;
       const timer = setTimeout(async () => {
-        const from = validPoints[0];
-        const to = validPoints[validPoints.length - 1];
-        const waypoints = validPoints.slice(1, -1);
-        const dir = await mapboxDirections(from, to, { waypoints });
+        const results = await Promise.all(toFetch.map((s) => mapboxDirections(s.from, s.to)));
         if (cancelled) return;
-        if (dir && dir.geometry && Array.isArray(dir.geometry.coordinates) && dir.geometry.coordinates.length >= 2) {
-          routedGeomRef.current = dir.geometry.coordinates;
-          routedSigRef.current = sig;
-        } else {
-          routedGeomRef.current = null;
-          routedSigRef.current = null;
-        }
-        setRoutedTick((t) => t + 1);
+        results.forEach((dir, idx) => {
+          const { key } = toFetch[idx];
+          if (dir && dir.geometry && Array.isArray(dir.geometry.coordinates) && dir.geometry.coordinates.length >= 2) {
+            segmentCacheRef.current[key] = { status: "routed", coords: dir.geometry.coordinates };
+          } else {
+            segmentCacheRef.current[key] = { status: "offroad" };
+          }
+        });
+        setSegmentTick((t) => t + 1);
       }, 400);
       return () => {
         cancelled = true;
