@@ -46,7 +46,7 @@ window.onerror = function(msg, url, line, col, err) {
 <div id="root">
   <p style="color:#999;padding:20px;font-family:sans-serif">Loading Trailhead...</p>
 </div>
-<script src="${BUNDLE_NAME}"></script>
+<script src="/${BUNDLE_NAME}"></script>
 </body>
 </html>
 HTMLEOF
