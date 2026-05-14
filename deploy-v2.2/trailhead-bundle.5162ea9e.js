@@ -43372,6 +43372,19 @@ ${suffix}`;
           map.addSource("trip-reports-ends", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
           map.addSource("trip-reports-lines", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
           map.addLayer({
+            id: "trip-reports-line-glow",
+            type: "line",
+            source: "trip-reports-lines",
+            layout: { "line-cap": "round", "line-join": "round" },
+            paint: {
+              "line-color": "#8B6FAF",
+              "line-width": 11,
+              "line-opacity": 0,
+              // toggled to 0.35 when a trip is selected
+              "line-blur": 2
+            }
+          });
+          map.addLayer({
             id: "trip-reports-line",
             type: "line",
             source: "trip-reports-lines",
@@ -43380,6 +43393,17 @@ ${suffix}`;
               "line-color": "#8B6FAF",
               "line-width": 3,
               "line-opacity": 0.85
+            }
+          });
+          map.addLayer({
+            id: "trip-reports-line-hit",
+            type: "line",
+            source: "trip-reports-lines",
+            layout: { "line-cap": "round", "line-join": "round" },
+            paint: {
+              "line-color": "#8B6FAF",
+              "line-width": 22,
+              "line-opacity": 1e-3
             }
           });
           map.addLayer({
@@ -43430,7 +43454,7 @@ ${suffix}`;
               lng: Number(p.start_lng)
             });
           };
-          ["trip-reports-points", "trip-reports-end-points", "trip-reports-line"].forEach((id) => {
+          ["trip-reports-points", "trip-reports-end-points", "trip-reports-line", "trip-reports-line-hit"].forEach((id) => {
             map.on("click", id, surfaceTrip);
             map.on("mouseenter", id, () => {
               map.getCanvas().style.cursor = "pointer";
@@ -43449,11 +43473,18 @@ ${suffix}`;
         if (sEnd) sEnd.setData(filteredEnds);
         const sLine = map.getSource("trip-reports-lines");
         if (sLine) sLine.setData(filteredLines);
+        if (map.getLayer("trip-reports-line")) {
+          map.setPaintProperty("trip-reports-line", "line-width", selectedId ? 5 : 3);
+          map.setPaintProperty("trip-reports-line", "line-opacity", selectedId ? 1 : 0.85);
+        }
+        if (map.getLayer("trip-reports-line-glow")) {
+          map.setPaintProperty("trip-reports-line-glow", "line-opacity", selectedId ? 0.35 : 0);
+        }
         const vis = visible ? "visible" : "none";
-        ["trip-reports-points", "trip-reports-end-points", "trip-reports-line"].forEach((id) => {
+        ["trip-reports-points", "trip-reports-end-points", "trip-reports-line", "trip-reports-line-glow", "trip-reports-line-hit"].forEach((id) => {
           if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", vis);
         });
-        ["trip-reports-line", "trip-reports-end-points", "trip-reports-points"].forEach((id) => {
+        ["trip-reports-line-glow", "trip-reports-line", "trip-reports-end-points", "trip-reports-points", "trip-reports-line-hit"].forEach((id) => {
           if (map.getLayer(id)) {
             try {
               map.moveLayer(id);
@@ -43521,6 +43552,18 @@ ${suffix}`;
           map.addSource("trip-plans-ends", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
           map.addSource("trip-plans-lines", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
           map.addLayer({
+            id: "trip-plans-line-glow",
+            type: "line",
+            source: "trip-plans-lines",
+            layout: { "line-cap": "round", "line-join": "round" },
+            paint: {
+              "line-color": T.copper,
+              "line-width": 11,
+              "line-opacity": 0,
+              "line-blur": 2
+            }
+          });
+          map.addLayer({
             id: "trip-plans-line",
             type: "line",
             source: "trip-plans-lines",
@@ -43530,6 +43573,17 @@ ${suffix}`;
               "line-width": 3,
               "line-opacity": 0.85,
               "line-dasharray": [2, 2]
+            }
+          });
+          map.addLayer({
+            id: "trip-plans-line-hit",
+            type: "line",
+            source: "trip-plans-lines",
+            layout: { "line-cap": "round", "line-join": "round" },
+            paint: {
+              "line-color": T.copper,
+              "line-width": 22,
+              "line-opacity": 1e-3
             }
           });
           map.addLayer({
@@ -43583,7 +43637,7 @@ ${suffix}`;
               kind: "plan"
             });
           };
-          ["trip-plans-points", "trip-plans-end-points", "trip-plans-line"].forEach((id) => {
+          ["trip-plans-points", "trip-plans-end-points", "trip-plans-line", "trip-plans-line-hit"].forEach((id) => {
             map.on("click", id, surfacePlan);
             map.on("mouseenter", id, () => {
               map.getCanvas().style.cursor = "pointer";
@@ -43602,11 +43656,18 @@ ${suffix}`;
         if (sEnd) sEnd.setData(filteredEnds);
         const sLine = map.getSource("trip-plans-lines");
         if (sLine) sLine.setData(filteredLines);
+        if (map.getLayer("trip-plans-line")) {
+          map.setPaintProperty("trip-plans-line", "line-width", selectedId ? 5 : 3);
+          map.setPaintProperty("trip-plans-line", "line-opacity", selectedId ? 1 : 0.85);
+        }
+        if (map.getLayer("trip-plans-line-glow")) {
+          map.setPaintProperty("trip-plans-line-glow", "line-opacity", selectedId ? 0.35 : 0);
+        }
         const vis = visible ? "visible" : "none";
-        ["trip-plans-points", "trip-plans-end-points", "trip-plans-line"].forEach((id) => {
+        ["trip-plans-points", "trip-plans-end-points", "trip-plans-line", "trip-plans-line-glow", "trip-plans-line-hit"].forEach((id) => {
           if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", vis);
         });
-        ["trip-plans-line", "trip-plans-end-points", "trip-plans-points"].forEach((id) => {
+        ["trip-plans-line-glow", "trip-plans-line", "trip-plans-end-points", "trip-plans-points", "trip-plans-line-hit"].forEach((id) => {
           if (map.getLayer(id)) {
             try {
               map.moveLayer(id);
@@ -48525,7 +48586,7 @@ ${suffix}`;
       if (!planActive || !mapInst.current || !mapReady) return;
       const map = mapInst.current;
       const onClick = (e) => {
-        const features = map.queryRenderedFeatures(e.point, { layers: ["camping-spots-points", "camping-spots-clusters", "trip-reports-points", "trip-reports-end-points", "trip-plans-points", "trip-plans-end-points"].filter((id) => map.getLayer(id)) });
+        const features = map.queryRenderedFeatures(e.point, { layers: ["camping-spots-points", "camping-spots-clusters", "trip-reports-points", "trip-reports-end-points", "trip-reports-line-hit", "trip-plans-points", "trip-plans-end-points", "trip-plans-line-hit"].filter((id) => map.getLayer(id)) });
         if (features && features.length > 0) return;
         setPlanTapPos({ lat: e.lngLat.lat, lng: e.lngLat.lng });
       };
