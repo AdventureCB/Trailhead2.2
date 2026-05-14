@@ -43013,7 +43013,18 @@ ${suffix}`;
         duration: route.duration,
         // seconds
         distanceText: formatMetersUS(route.distance),
-        durationText: formatSeconds(route.duration)
+        durationText: formatSeconds(route.duration),
+        // Snapped input locations — Mapbox snaps each input to the nearest
+        // road and reports the snapped coords here. Comparing to the input
+        // tells us whether the request endpoint is actually on a road or
+        // got silently relocated (which is the signal for "off-road tail").
+        waypoints: Array.isArray(data.waypoints) ? data.waypoints.map((w) => ({
+          location: w.location || null,
+          // [lng, lat]
+          distance: w.distance != null ? w.distance : null,
+          // meters from input to snapped point
+          name: w.name || ""
+        })) : []
       };
       if (opts.steps) {
         const leg = route.legs && route.legs[0];
@@ -43688,6 +43699,7 @@ ${suffix}`;
     (0, import_react4.useEffect)(() => {
       handlerRef.current = onMarkerTap;
     }, [onMarkerTap]);
+    const OFFROAD_THRESHOLD_M = 50;
     const segmentCacheRef = (0, import_react4.useRef)({});
     const [segmentTick, setSegmentTick] = (0, import_react4.useState)(0);
     const segmentKey = (from, to) => `${from.lng.toFixed(5)},${from.lat.toFixed(5)}|${to.lng.toFixed(5)},${to.lat.toFixed(5)}`;
@@ -43730,6 +43742,12 @@ ${suffix}`;
         segments.forEach((s) => {
           if (s.status === "routed" && s.coords) {
             routed.push({ type: "Feature", geometry: { type: "LineString", coordinates: s.coords }, properties: {} });
+            if (s.snappedStart && haversine(s.from.lat, s.from.lng, s.snappedStart[1], s.snappedStart[0]) > OFFROAD_THRESHOLD_M) {
+              offroad.push({ type: "Feature", geometry: { type: "LineString", coordinates: [[s.from.lng, s.from.lat], s.snappedStart] }, properties: {} });
+            }
+            if (s.snappedEnd && haversine(s.to.lat, s.to.lng, s.snappedEnd[1], s.snappedEnd[0]) > OFFROAD_THRESHOLD_M) {
+              offroad.push({ type: "Feature", geometry: { type: "LineString", coordinates: [s.snappedEnd, [s.to.lng, s.to.lat]] }, properties: {} });
+            }
           } else if (s.status === "offroad") {
             offroad.push({ type: "Feature", geometry: { type: "LineString", coordinates: [[s.from.lng, s.from.lat], [s.to.lng, s.to.lat]] }, properties: {} });
           } else {
@@ -43772,7 +43790,14 @@ ${suffix}`;
         results.forEach((dir, idx) => {
           const { key } = toFetch[idx];
           if (dir && dir.geometry && Array.isArray(dir.geometry.coordinates) && dir.geometry.coordinates.length >= 2) {
-            segmentCacheRef.current[key] = { status: "routed", coords: dir.geometry.coordinates };
+            const wpStart = dir.waypoints && dir.waypoints[0] && dir.waypoints[0].location;
+            const wpEnd = dir.waypoints && dir.waypoints[dir.waypoints.length - 1] && dir.waypoints[dir.waypoints.length - 1].location;
+            segmentCacheRef.current[key] = {
+              status: "routed",
+              coords: dir.geometry.coordinates,
+              snappedStart: wpStart || null,
+              snappedEnd: wpEnd || null
+            };
           } else {
             segmentCacheRef.current[key] = { status: "offroad" };
           }
