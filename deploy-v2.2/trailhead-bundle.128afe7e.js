@@ -43627,6 +43627,9 @@ ${suffix}`;
     (0, import_react4.useEffect)(() => {
       handlerRef.current = onMarkerTap;
     }, [onMarkerTap]);
+    const routedGeomRef = (0, import_react4.useRef)(null);
+    const routedSigRef = (0, import_react4.useRef)(null);
+    const [routedTick, setRoutedTick] = (0, import_react4.useState)(0);
     (0, import_react4.useEffect)(() => {
       const map = mapRef && mapRef.current;
       if (!ready || !map || !window.mapboxgl) return;
@@ -43646,8 +43649,11 @@ ${suffix}`;
             }
           });
         }
-        const coords = (points || []).filter((p) => p && p.lat != null && p.lng != null).map((p) => [p.lng, p.lat]);
-        const geom = coords.length >= 2 ? { type: "FeatureCollection", features: [{ type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: {} }] } : { type: "FeatureCollection", features: [] };
+        const validPoints = (points || []).filter((p) => p && p.lat != null && p.lng != null);
+        const straightCoords = validPoints.map((p) => [p.lng, p.lat]);
+        const sig = validPoints.map((p) => `${p.lng.toFixed(5)},${p.lat.toFixed(5)}`).join("|");
+        const lineCoords = routedSigRef.current === sig && routedGeomRef.current ? routedGeomRef.current : straightCoords;
+        const geom = lineCoords.length >= 2 ? { type: "FeatureCollection", features: [{ type: "Feature", geometry: { type: "LineString", coordinates: lineCoords }, properties: {} }] } : { type: "FeatureCollection", features: [] };
         const src = map.getSource("plan-builder-line");
         if (src) src.setData(geom);
         try {
@@ -43657,7 +43663,37 @@ ${suffix}`;
       };
       if (map.isStyleLoaded()) ensureLineLayer();
       else map.once("load", ensureLineLayer);
-    }, [mapRef, ready, points]);
+    }, [mapRef, ready, points, routedTick]);
+    (0, import_react4.useEffect)(() => {
+      const validPoints = (points || []).filter((p) => p && p.lat != null && p.lng != null);
+      const sig = validPoints.map((p) => `${p.lng.toFixed(5)},${p.lat.toFixed(5)}`).join("|");
+      if (validPoints.length < 2) {
+        routedGeomRef.current = null;
+        routedSigRef.current = null;
+        return;
+      }
+      if (routedSigRef.current === sig && routedGeomRef.current) return;
+      let cancelled = false;
+      const timer = setTimeout(async () => {
+        const from = validPoints[0];
+        const to = validPoints[validPoints.length - 1];
+        const waypoints = validPoints.slice(1, -1);
+        const dir = await mapboxDirections(from, to, { waypoints });
+        if (cancelled) return;
+        if (dir && dir.geometry && Array.isArray(dir.geometry.coordinates) && dir.geometry.coordinates.length >= 2) {
+          routedGeomRef.current = dir.geometry.coordinates;
+          routedSigRef.current = sig;
+        } else {
+          routedGeomRef.current = null;
+          routedSigRef.current = null;
+        }
+        setRoutedTick((t) => t + 1);
+      }, 400);
+      return () => {
+        cancelled = true;
+        clearTimeout(timer);
+      };
+    }, [points]);
     (0, import_react4.useEffect)(() => {
       const map = mapRef && mapRef.current;
       if (!ready || !map || !window.mapboxgl) return;
