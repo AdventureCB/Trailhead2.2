@@ -43374,7 +43374,7 @@ ${suffix}`;
       lines: { type: "FeatureCollection", features: lines }
     };
   }
-  function useTripReportsLayer(mapRef, ready, rows, visible, onSelect, selectedId) {
+  function useTripReportsLayer(mapRef, ready, rows, visible, onSelect, selectedId, refreshKey) {
     const handlerRef = (0, import_react4.useRef)(onSelect);
     (0, import_react4.useEffect)(() => {
       handlerRef.current = onSelect;
@@ -43520,7 +43520,7 @@ ${suffix}`;
       else map.once("load", ensureLayers);
       return () => {
       };
-    }, [mapRef, ready, rows, visible, selectedId]);
+    }, [mapRef, ready, rows, visible, selectedId, refreshKey]);
   }
   function tripPlansToGeoJSON(rows) {
     const starts = [], ends = [], lines = [];
@@ -43561,7 +43561,7 @@ ${suffix}`;
       lines: { type: "FeatureCollection", features: lines }
     };
   }
-  function useTripPlansLayer(mapRef, ready, rows, visible, onSelect, selectedId) {
+  function useTripPlansLayer(mapRef, ready, rows, visible, onSelect, selectedId, refreshKey) {
     const handlerRef = (0, import_react4.useRef)(onSelect);
     (0, import_react4.useEffect)(() => {
       handlerRef.current = onSelect;
@@ -43710,7 +43710,7 @@ ${suffix}`;
       else map.once("load", ensureLayers);
       return () => {
       };
-    }, [mapRef, ready, rows, visible, selectedId]);
+    }, [mapRef, ready, rows, visible, selectedId, refreshKey]);
   }
   function usePlanBuilderLayer(mapRef, ready, points, onMarkerTap, endAnchorId) {
     const markersRef = (0, import_react4.useRef)([]);
@@ -43890,7 +43890,7 @@ ${suffix}`;
       }))
     };
   }
-  function useCampingSpotsLayer(mapRef, ready, rows, visible, onSelect) {
+  function useCampingSpotsLayer(mapRef, ready, rows, visible, onSelect, refreshKey) {
     const handlerRef = (0, import_react4.useRef)(onSelect);
     (0, import_react4.useEffect)(() => {
       handlerRef.current = onSelect;
@@ -44038,7 +44038,7 @@ ${suffix}`;
       return () => {
         cancelled = true;
       };
-    }, [mapRef, ready, rows, visible]);
+    }, [mapRef, ready, rows, visible, refreshKey]);
   }
   var PUBLIC_LANDS_COLORS = {
     // Overlander-prime federal
@@ -44103,7 +44103,7 @@ ${suffix}`;
     const entries = Object.entries(PUBLIC_LANDS_COLORS).flatMap(([k, v]) => [k, v]);
     return ["match", ["get", "Mang_Name"], ...entries, PUBLIC_LANDS_DEFAULT_COLOR];
   }
-  function usePublicLandsLayer(mapRef, ready, visible, onSelect) {
+  function usePublicLandsLayer(mapRef, ready, visible, onSelect, refreshKey) {
     const handlerRef = (0, import_react4.useRef)(onSelect);
     (0, import_react4.useEffect)(() => {
       handlerRef.current = onSelect;
@@ -44169,7 +44169,7 @@ ${suffix}`;
       };
       if (map.isStyleLoaded()) ensureLayers();
       else map.once("load", ensureLayers);
-    }, [mapRef, ready, visible]);
+    }, [mapRef, ready, visible, refreshKey]);
   }
   function MapLayerToggle({ showCamping, setShowCamping, showPublicLands, setShowPublicLands, showTripReports, setShowTripReports, showTripPlans, setShowTripPlans }) {
     const [open, setOpen] = (0, import_react4.useState)(false);
@@ -48712,22 +48712,39 @@ ${suffix}`;
       setSelectedHQ(null);
       setShareTarget(null);
     };
+    const [layerRefreshTick, setLayerRefreshTick] = (0, import_react4.useState)(0);
+    (0, import_react4.useEffect)(() => {
+      if (!mapReady || !mapInst.current) return;
+      const t = setTimeout(() => {
+        if (!mapInst.current) return;
+        try {
+          mapInst.current.resize();
+        } catch (_) {
+        }
+        try {
+          mapInst.current.triggerRepaint();
+        } catch (_) {
+        }
+        setLayerRefreshTick((x) => x + 1);
+      }, 250);
+      return () => clearTimeout(t);
+    }, [mapReady]);
     useCampingSpotsLayer(mapInst, mapReady, campingSpots, showCampingSpots, (spot) => {
       clearOtherSelections();
       setSelectedSpot(spot);
-    });
+    }, layerRefreshTick);
     usePublicLandsLayer(mapInst, mapReady, showPublicLands, (land) => {
       clearOtherSelections();
       setSelectedLand(land);
-    });
+    }, layerRefreshTick);
     useTripReportsLayer(mapInst, mapReady, tripReports || [], showTripReports, (trip) => {
       clearOtherSelections();
       setSelectedTrip(trip);
-    }, selectedTrip && selectedTrip.id);
+    }, selectedTrip && selectedTrip.id, layerRefreshTick);
     useTripPlansLayer(mapInst, mapReady, tripPlans || [], showTripPlans, (plan) => {
       clearOtherSelections();
       setSelectedPlan(plan);
-    }, selectedPlan && selectedPlan.id);
+    }, selectedPlan && selectedPlan.id, layerRefreshTick);
     useLonePeakHQMarker(mapInst, mapReady, (hq) => {
       clearOtherSelections();
       setSelectedHQ(hq);
