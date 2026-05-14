@@ -48636,6 +48636,48 @@ ${suffix}`;
     }, [addingMode, mapReady]);
     const [planTapPos, setPlanTapPos] = (0, import_react4.useState)(null);
     const planActive = !!(planBuilder && planBuilder.active);
+    const stagedMarkerRef = (0, import_react4.useRef)(null);
+    (0, import_react4.useEffect)(() => {
+      if (!mapInst.current || !window.mapboxgl) {
+        if (stagedMarkerRef.current) {
+          try {
+            stagedMarkerRef.current.remove();
+          } catch (_) {
+          }
+          stagedMarkerRef.current = null;
+        }
+        return;
+      }
+      if (planTapPos) {
+        if (!stagedMarkerRef.current) {
+          const el = document.createElement("div");
+          el.style.cssText = `width:30px;height:30px;border-radius:50%;background:${T.darkBg}D0;border:2px dashed ${T.copper};box-shadow:0 2px 8px rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;font-family:${sans};font-size:14px;color:${T.copper};font-weight:700;`;
+          el.textContent = "?";
+          const marker = new window.mapboxgl.Marker({ element: el, anchor: "center" }).setLngLat([planTapPos.lng, planTapPos.lat]).addTo(mapInst.current);
+          stagedMarkerRef.current = marker;
+        } else {
+          try {
+            stagedMarkerRef.current.setLngLat([planTapPos.lng, planTapPos.lat]);
+          } catch (_) {
+          }
+        }
+      } else if (stagedMarkerRef.current) {
+        try {
+          stagedMarkerRef.current.remove();
+        } catch (_) {
+        }
+        stagedMarkerRef.current = null;
+      }
+    }, [planTapPos, mapReady]);
+    (0, import_react4.useEffect)(() => () => {
+      if (stagedMarkerRef.current) {
+        try {
+          stagedMarkerRef.current.remove();
+        } catch (_) {
+        }
+        stagedMarkerRef.current = null;
+      }
+    }, []);
     (0, import_react4.useEffect)(() => {
       if (!planActive || !mapInst.current || !mapReady) return;
       const map = mapInst.current;
