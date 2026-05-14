@@ -48745,21 +48745,25 @@ ${suffix}`;
         }
         setLayerRefreshTick((x) => x + 1);
       }, 250);
-      const t2 = setTimeout(() => {
-        const flips = [];
-        if (showCampingSpots && setShowCampingSpots) flips.push([true, setShowCampingSpots]);
-        if (showPublicLands && setShowPublicLands) flips.push([true, setShowPublicLands]);
-        if (showTripReports && setShowTripReports) flips.push([true, setShowTripReports]);
-        if (showTripPlans && setShowTripPlans) flips.push([true, setShowTripPlans]);
-        if (flips.length === 0) return;
-        flips.forEach(([, setter]) => setter(false));
-        setTimeout(() => {
-          flips.forEach(([orig, setter]) => setter(orig));
-        }, 120);
-      }, 500);
+      const flips = [];
+      if (showCampingSpots && setShowCampingSpots) flips.push(setShowCampingSpots);
+      if (showPublicLands && setShowPublicLands) flips.push(setShowPublicLands);
+      if (showTripReports && setShowTripReports) flips.push(setShowTripReports);
+      if (showTripPlans && setShowTripPlans) flips.push(setShowTripPlans);
+      const staggerStart = 500;
+      const stagger = 250;
+      const offToOn = 140;
+      const stepTimers = flips.flatMap((setter, i) => {
+        const offAt = staggerStart + i * stagger;
+        const onAt = offAt + offToOn;
+        return [
+          setTimeout(() => setter(false), offAt),
+          setTimeout(() => setter(true), onAt)
+        ];
+      });
       return () => {
         clearTimeout(t1);
-        clearTimeout(t2);
+        stepTimers.forEach(clearTimeout);
       };
     }, [mapReady]);
     useCampingSpotsLayer(mapInst, mapReady, campingSpots, showCampingSpots, (spot) => {
