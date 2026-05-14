@@ -43504,10 +43504,7 @@ ${suffix}`;
         }
         const vis = visible ? "visible" : "none";
         ["trip-reports-points", "trip-reports-end-points", "trip-reports-line", "trip-reports-line-glow", "trip-reports-line-hit"].forEach((id) => {
-          if (map.getLayer(id)) {
-            if (vis === "visible") map.setLayoutProperty(id, "visibility", "none");
-            map.setLayoutProperty(id, "visibility", vis);
-          }
+          if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", vis);
         });
         ["trip-reports-line-glow", "trip-reports-line", "trip-reports-end-points", "trip-reports-points", "trip-reports-line-hit"].forEach((id) => {
           if (map.getLayer(id)) {
@@ -43700,10 +43697,7 @@ ${suffix}`;
         }
         const vis = visible ? "visible" : "none";
         ["trip-plans-points", "trip-plans-end-points", "trip-plans-line", "trip-plans-line-glow", "trip-plans-line-hit"].forEach((id) => {
-          if (map.getLayer(id)) {
-            if (vis === "visible") map.setLayoutProperty(id, "visibility", "none");
-            map.setLayoutProperty(id, "visibility", vis);
-          }
+          if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", vis);
         });
         ["trip-plans-line-glow", "trip-plans-line", "trip-plans-end-points", "trip-plans-points", "trip-plans-line-hit"].forEach((id) => {
           if (map.getLayer(id)) {
@@ -44175,10 +44169,7 @@ ${suffix}`;
         }
         const vis = visible ? "visible" : "none";
         ["public-lands-fill", "public-lands-line"].forEach((id) => {
-          if (map.getLayer(id)) {
-            if (vis === "visible") map.setLayoutProperty(id, "visibility", "none");
-            map.setLayoutProperty(id, "visibility", vis);
-          }
+          if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", vis);
         });
         try {
           map.triggerRepaint();
