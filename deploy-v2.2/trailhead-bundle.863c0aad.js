@@ -43390,11 +43390,12 @@ ${suffix}`;
           map.addSource("trip-reports-starts", { type: "geojson", data: initialCols.starts });
           map.addSource("trip-reports-ends", { type: "geojson", data: initialFilteredEnds });
           map.addSource("trip-reports-lines", { type: "geojson", data: initialFilteredLines });
+          const initialVis = visible ? "visible" : "none";
           map.addLayer({
             id: "trip-reports-line-glow",
             type: "line",
             source: "trip-reports-lines",
-            layout: { "line-cap": "round", "line-join": "round" },
+            layout: { "line-cap": "round", "line-join": "round", visibility: initialVis },
             paint: {
               "line-color": "#8B6FAF",
               "line-width": 11,
@@ -43407,7 +43408,7 @@ ${suffix}`;
             id: "trip-reports-line",
             type: "line",
             source: "trip-reports-lines",
-            layout: { "line-cap": "round", "line-join": "round" },
+            layout: { "line-cap": "round", "line-join": "round", visibility: initialVis },
             paint: {
               "line-color": "#8B6FAF",
               "line-width": 3,
@@ -43418,7 +43419,7 @@ ${suffix}`;
             id: "trip-reports-line-hit",
             type: "line",
             source: "trip-reports-lines",
-            layout: { "line-cap": "round", "line-join": "round" },
+            layout: { "line-cap": "round", "line-join": "round", visibility: initialVis },
             paint: {
               "line-color": "#8B6FAF",
               "line-width": 22,
@@ -43429,6 +43430,7 @@ ${suffix}`;
             id: "trip-reports-end-points",
             type: "circle",
             source: "trip-reports-ends",
+            layout: { visibility: initialVis },
             paint: {
               "circle-color": T.white,
               "circle-radius": 7,
@@ -43441,6 +43443,7 @@ ${suffix}`;
             id: "trip-reports-points",
             type: "circle",
             source: "trip-reports-starts",
+            layout: { visibility: initialVis },
             paint: {
               "circle-color": "#8B6FAF",
               // NPS purple, distinct from camping palette
@@ -43501,7 +43504,10 @@ ${suffix}`;
         }
         const vis = visible ? "visible" : "none";
         ["trip-reports-points", "trip-reports-end-points", "trip-reports-line", "trip-reports-line-glow", "trip-reports-line-hit"].forEach((id) => {
-          if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", vis);
+          if (map.getLayer(id)) {
+            if (vis === "visible") map.setLayoutProperty(id, "visibility", "none");
+            map.setLayoutProperty(id, "visibility", vis);
+          }
         });
         ["trip-reports-line-glow", "trip-reports-line", "trip-reports-end-points", "trip-reports-points", "trip-reports-line-hit"].forEach((id) => {
           if (map.getLayer(id)) {
@@ -43577,11 +43583,12 @@ ${suffix}`;
           map.addSource("trip-plans-starts", { type: "geojson", data: initialCols.starts });
           map.addSource("trip-plans-ends", { type: "geojson", data: initialFilteredEnds });
           map.addSource("trip-plans-lines", { type: "geojson", data: initialFilteredLines });
+          const initialVis = visible ? "visible" : "none";
           map.addLayer({
             id: "trip-plans-line-glow",
             type: "line",
             source: "trip-plans-lines",
-            layout: { "line-cap": "round", "line-join": "round" },
+            layout: { "line-cap": "round", "line-join": "round", visibility: initialVis },
             paint: {
               "line-color": T.copper,
               "line-width": 11,
@@ -43593,7 +43600,7 @@ ${suffix}`;
             id: "trip-plans-line",
             type: "line",
             source: "trip-plans-lines",
-            layout: { "line-cap": "round", "line-join": "round" },
+            layout: { "line-cap": "round", "line-join": "round", visibility: initialVis },
             paint: {
               "line-color": T.copper,
               "line-width": 3,
@@ -43605,7 +43612,7 @@ ${suffix}`;
             id: "trip-plans-line-hit",
             type: "line",
             source: "trip-plans-lines",
-            layout: { "line-cap": "round", "line-join": "round" },
+            layout: { "line-cap": "round", "line-join": "round", visibility: initialVis },
             paint: {
               "line-color": T.copper,
               "line-width": 22,
@@ -43616,6 +43623,7 @@ ${suffix}`;
             id: "trip-plans-end-points",
             type: "circle",
             source: "trip-plans-ends",
+            layout: { visibility: initialVis },
             paint: {
               "circle-color": T.white,
               "circle-radius": 6,
@@ -43628,6 +43636,7 @@ ${suffix}`;
             id: "trip-plans-points",
             type: "circle",
             source: "trip-plans-starts",
+            layout: { visibility: initialVis },
             paint: {
               "circle-color": T.copper,
               "circle-radius": 7,
@@ -43691,7 +43700,10 @@ ${suffix}`;
         }
         const vis = visible ? "visible" : "none";
         ["trip-plans-points", "trip-plans-end-points", "trip-plans-line", "trip-plans-line-glow", "trip-plans-line-hit"].forEach((id) => {
-          if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", vis);
+          if (map.getLayer(id)) {
+            if (vis === "visible") map.setLayoutProperty(id, "visibility", "none");
+            map.setLayoutProperty(id, "visibility", vis);
+          }
         });
         ["trip-plans-line-glow", "trip-plans-line", "trip-plans-end-points", "trip-plans-points", "trip-plans-line-hit"].forEach((id) => {
           if (map.getLayer(id)) {
@@ -44120,11 +44132,13 @@ ${suffix}`;
           });
           const beforeId = ["camping-spots-clusters", "camping-spots-cluster-count", "camping-spots-points"].find((id) => map.getLayer(id));
           const fillColor = buildPublicLandsColorExpression();
+          const initialVis = visible ? "visible" : "none";
           map.addLayer({
             id: "public-lands-fill",
             type: "fill",
             source: "public-lands",
             "source-layer": MAPBOX_PUBLIC_LANDS_SOURCE_LAYER,
+            layout: { visibility: initialVis },
             paint: { "fill-color": fillColor, "fill-opacity": 0.42 }
           }, beforeId);
           map.addLayer({
@@ -44132,6 +44146,7 @@ ${suffix}`;
             type: "line",
             source: "public-lands",
             "source-layer": MAPBOX_PUBLIC_LANDS_SOURCE_LAYER,
+            layout: { visibility: initialVis },
             paint: { "line-color": "#1a1a1a", "line-width": 0.6, "line-opacity": 0.45 }
           }, beforeId);
           fillClick = (e) => {
@@ -44160,7 +44175,10 @@ ${suffix}`;
         }
         const vis = visible ? "visible" : "none";
         ["public-lands-fill", "public-lands-line"].forEach((id) => {
-          if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", vis);
+          if (map.getLayer(id)) {
+            if (vis === "visible") map.setLayoutProperty(id, "visibility", "none");
+            map.setLayoutProperty(id, "visibility", vis);
+          }
         });
         try {
           map.triggerRepaint();
