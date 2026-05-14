@@ -43621,7 +43621,7 @@ ${suffix}`;
       };
     }, [mapRef, ready, rows, visible, selectedId]);
   }
-  function usePlanBuilderLayer(mapRef, ready, points, onMarkerTap) {
+  function usePlanBuilderLayer(mapRef, ready, points, onMarkerTap, endAnchorId) {
     const markersRef = (0, import_react4.useRef)([]);
     const handlerRef = (0, import_react4.useRef)(onMarkerTap);
     (0, import_react4.useEffect)(() => {
@@ -43707,8 +43707,14 @@ ${suffix}`;
       (points || []).forEach((p, idx) => {
         if (!p || p.lat == null || p.lng == null) return;
         const isCamp = p.type === "camp";
+        const isEndAnchor = endAnchorId && p.id === endAnchorId;
+        const baseColor = isCamp ? "#5B8C5A" : T.copper;
+        const bg = isEndAnchor ? T.white : baseColor;
+        const fg = isEndAnchor ? baseColor : T.white;
+        const stroke = isEndAnchor ? baseColor : T.white;
+        const strokeWidth = isEndAnchor ? 3 : 2;
         const el = document.createElement("div");
-        el.style.cssText = `width:30px;height:30px;border-radius:50%;background:${isCamp ? "#5B8C5A" : T.copper};color:${T.white};border:2px solid ${T.white};box-shadow:0 2px 8px rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;font-family:${sans};font-size:13px;font-weight:700;letter-spacing:0.3px;cursor:pointer;`;
+        el.style.cssText = `width:30px;height:30px;border-radius:50%;background:${bg};color:${fg};border:${strokeWidth}px solid ${stroke};box-shadow:0 2px 8px rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;font-family:${sans};font-size:13px;font-weight:700;letter-spacing:0.3px;cursor:pointer;`;
         el.textContent = String(idx + 1);
         el.addEventListener("click", (ev) => {
           ev.stopPropagation();
@@ -43727,7 +43733,7 @@ ${suffix}`;
         });
         markersRef.current = [];
       };
-    }, [mapRef, ready, points]);
+    }, [mapRef, ready, points, endAnchorId]);
   }
   function campingSpotsToGeoJSON(rows) {
     return {
@@ -48400,7 +48406,8 @@ ${suffix}`;
       setSelectedHQ(hq);
     });
     const [selectedPlanPointId, setSelectedPlanPointId] = (0, import_react4.useState)(null);
-    usePlanBuilderLayer(mapInst, mapReady, planBuilder && planBuilder.points || [], (id) => setSelectedPlanPointId(id));
+    const [planInsertTarget, setPlanInsertTarget] = (0, import_react4.useState)(null);
+    usePlanBuilderLayer(mapInst, mapReady, planBuilder && planBuilder.points || [], (id) => setSelectedPlanPointId(id), planBuilder && planBuilder.endAnchorId || null);
     (0, import_react4.useEffect)(() => {
       if (!pendingSpotNav || !mapReady) return;
       const spot = (campingSpots || []).find((s) => s.id === pendingSpotNav);
@@ -48692,15 +48699,7 @@ ${suffix}`;
       ), planBuilder && /* @__PURE__ */ import_react4.default.createElement(
         "button",
         {
-          onClick: () => {
-            const seed = { lat: spot.lat, lng: spot.lng, type: "camp", label: spot.name, sourceId: spot.id, sourceType: "spot", sourceName: spot.name };
-            if (planActive) {
-              planBuilder.add(seed);
-            } else {
-              planBuilder.enter(seed);
-            }
-            setSelectedSpot(null);
-          },
+          onClick: () => setPlanInsertTarget({ kind: "spot", data: { lat: spot.lat, lng: spot.lng, type: "camp", label: spot.name, sourceId: spot.id, sourceType: "spot", sourceName: spot.name }, dismissPopup: () => setSelectedSpot(null) }),
           style: { display: "inline-flex", alignItems: "center", gap: 5, padding: "8px 12px", background: T.copper, border: "none", borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }
         },
         /* @__PURE__ */ import_react4.default.createElement(Route, { size: 12 }),
@@ -48729,15 +48728,7 @@ ${suffix}`;
     ), planBuilder && selectedTrip.lat != null && /* @__PURE__ */ import_react4.default.createElement(
       "button",
       {
-        onClick: () => {
-          const seed = { lat: selectedTrip.lat, lng: selectedTrip.lng, type: "waypoint", label: selectedTrip.name, sourceId: selectedTrip.id, sourceType: "trip", sourceName: selectedTrip.name };
-          if (planActive) {
-            planBuilder.add(seed);
-          } else {
-            planBuilder.enter(seed);
-          }
-          setSelectedTrip(null);
-        },
+        onClick: () => setPlanInsertTarget({ kind: "trip", data: { lat: selectedTrip.lat, lng: selectedTrip.lng, type: "waypoint", label: selectedTrip.name, sourceId: selectedTrip.id, sourceType: "trip", sourceName: selectedTrip.name }, dismissPopup: () => setSelectedTrip(null) }),
         style: { display: "inline-flex", alignItems: "center", gap: 5, padding: "8px 12px", background: T.copper, border: "none", borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }
       },
       /* @__PURE__ */ import_react4.default.createElement(Route, { size: 12 }),
@@ -48791,15 +48782,7 @@ ${suffix}`;
     )), planBuilder && /* @__PURE__ */ import_react4.default.createElement(
       "button",
       {
-        onClick: () => {
-          const seed = { lat: selectedHQ.lat, lng: selectedHQ.lng, type: "waypoint", label: selectedHQ.name, sourceType: "hq", sourceName: selectedHQ.name };
-          if (planActive) {
-            planBuilder.add(seed);
-          } else {
-            planBuilder.enter(seed);
-          }
-          setSelectedHQ(null);
-        },
+        onClick: () => setPlanInsertTarget({ kind: "hq", data: { lat: selectedHQ.lat, lng: selectedHQ.lng, type: "waypoint", label: selectedHQ.name, sourceType: "hq", sourceName: selectedHQ.name }, dismissPopup: () => setSelectedHQ(null) }),
         style: { width: "100%", marginTop: 6, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 8px", background: T.copper, color: T.white, border: "none", borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5 }
       },
       /* @__PURE__ */ import_react4.default.createElement(Route, { size: 12 }),
@@ -49126,7 +49109,47 @@ ${suffix}`;
         style: { flex: 1, padding: "10px", borderRadius: 8, background: editName.trim() ? T.green : T.charcoal, border: "none", cursor: editName.trim() ? "pointer" : "default", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5, opacity: editName.trim() ? 1 : 0.5 }
       },
       "SAVE"
-    ))), planActive && planTapPos && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 10, background: `${T.darkCard}F8`, border: `1px solid ${T.copper}50`, borderRadius: 10, padding: 14, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 12 } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 1.2 } }, "ADD POINT"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, marginLeft: "auto" } }, planTapPos.lat.toFixed(4), ", ", planTapPos.lng.toFixed(4))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement(
+    ))), planInsertTarget && (() => {
+      const target = planInsertTarget;
+      const close = () => {
+        setPlanInsertTarget(null);
+      };
+      const haveAny = planActive && (planBuilder.points || []).length > 0;
+      const handle = (position) => {
+        if (!planActive) {
+          planBuilder.enter(target.data, { position: position === "end" ? "end" : "start" });
+        } else {
+          planBuilder.add(target.data, { position });
+        }
+        if (target.dismissPopup) target.dismissPopup();
+        close();
+      };
+      return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 11, background: `${T.darkCard}F8`, border: `1px solid ${T.copper}50`, borderRadius: 10, padding: 14, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 12 } }, /* @__PURE__ */ import_react4.default.createElement(Route, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 1.2 } }, "WHERE IN THE TRIP?"), target.data.label && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, marginLeft: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 200 } }, "\xB7 ", target.data.label), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: close, style: { background: "none", border: "none", cursor: "pointer", padding: 2, color: T.tertiary, marginLeft: "auto" } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 14 }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement(
+        "button",
+        {
+          onClick: () => handle("start"),
+          style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "12px 6px", background: T.copper, border: "none", borderRadius: 8, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }
+        },
+        /* @__PURE__ */ import_react4.default.createElement(ArrowUp, { size: 18, color: T.white, style: { transform: "rotate(-90deg)" } }),
+        "START"
+      ), haveAny && /* @__PURE__ */ import_react4.default.createElement(
+        "button",
+        {
+          onClick: () => handle("middle"),
+          style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "12px 6px", background: T.charcoal, border: `1px solid ${T.copper}80`, borderRadius: 8, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }
+        },
+        /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 18, color: T.copper }),
+        "MIDDLE"
+      ), /* @__PURE__ */ import_react4.default.createElement(
+        "button",
+        {
+          onClick: () => handle("end"),
+          style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "12px 6px", background: T.white, border: `2px solid ${T.copper}`, borderRadius: 8, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 0.5 }
+        },
+        /* @__PURE__ */ import_react4.default.createElement(ArrowUp, { size: 18, color: T.copper, style: { transform: "rotate(90deg)" } }),
+        "END"
+      )), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 10, lineHeight: 1.4 } }, haveAny ? "End-pinned points stay last in the route \u2014 new map taps insert before them." : "Pick End to anchor a destination \u2014 every tap after will go between you and there."));
+    })(), planActive && planTapPos && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 10, background: `${T.darkCard}F8`, border: `1px solid ${T.copper}50`, borderRadius: 10, padding: 14, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 12 } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 1.2 } }, "ADD POINT"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, marginLeft: "auto" } }, planTapPos.lat.toFixed(4), ", ", planTapPos.lng.toFixed(4))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement(
       "button",
       {
         onClick: () => {
@@ -49186,6 +49209,16 @@ ${suffix}`;
           rows: 3,
           style: { width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", resize: "vertical", lineHeight: 1.5, marginBottom: 10 }
         }
+      ), /* @__PURE__ */ import_react4.default.createElement(
+        "button",
+        {
+          onClick: () => {
+            if (planBuilder.endAnchorId === pt.id) planBuilder.clearEndAnchor();
+            else planBuilder.setEndAnchor(pt.id);
+          },
+          style: { width: "100%", padding: "10px", borderRadius: 8, background: T.darkBg, border: `1px solid ${planBuilder.endAnchorId === pt.id ? T.copper : T.charcoal}`, color: planBuilder.endAnchorId === pt.id ? T.copper : T.tertiary, cursor: "pointer", fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, marginBottom: 10 }
+        },
+        planBuilder.endAnchorId === pt.id ? "\u2713 ANCHORED AS END (TAP TO RELEASE)" : "ANCHOR AS END OF TRIP"
       ), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement(
         "button",
         {
@@ -53605,20 +53638,65 @@ ${suffix}`;
     const showTripCreator = !!tripCreatorMode;
     const [planBuilderActive, setPlanBuilderActive] = (0, import_react4.useState)(false);
     const [planBuilderPoints, setPlanBuilderPoints] = (0, import_react4.useState)([]);
+    const [planBuilderEndAnchorId, setPlanBuilderEndAnchorId] = (0, import_react4.useState)(null);
     const [planSavePromptOpen, setPlanSavePromptOpen] = (0, import_react4.useState)(false);
     const newPlanPointId = () => "pp_" + Date.now() + "_" + Math.floor(Math.random() * 1e3);
-    const enterPlanBuilder = (seed) => {
+    const enterPlanBuilder = (seed, opts = {}) => {
       setPlanBuilderActive(true);
-      setPlanBuilderPoints(seed ? [{ id: newPlanPointId(), type: "waypoint", note: "", ...seed }] : []);
+      if (!seed) {
+        setPlanBuilderPoints([]);
+        setPlanBuilderEndAnchorId(null);
+        return;
+      }
+      const id = newPlanPointId();
+      setPlanBuilderPoints([{ id, type: "waypoint", note: "", ...seed }]);
+      setPlanBuilderEndAnchorId(opts.position === "end" ? id : null);
     };
     const exitPlanBuilder = () => {
       setPlanBuilderActive(false);
       setPlanBuilderPoints([]);
+      setPlanBuilderEndAnchorId(null);
       setPlanSavePromptOpen(false);
     };
-    const addPlanPoint = (point) => setPlanBuilderPoints((prev) => [...prev, { id: newPlanPointId(), type: "waypoint", note: "", ...point }]);
+    const addPlanPoint = (point, opts = {}) => {
+      const id = newPlanPointId();
+      const next = { id, type: "waypoint", note: "", ...point };
+      setPlanBuilderPoints((prev) => {
+        const arr = [...prev];
+        const pos = opts.position;
+        if (pos === "start") {
+          arr.unshift(next);
+          return arr;
+        }
+        if (pos === "end") {
+          arr.push(next);
+          return arr;
+        }
+        if (pos === "middle") {
+          const insertAt = Math.max(0, arr.length - 1);
+          arr.splice(insertAt, 0, next);
+          return arr;
+        }
+        if (planBuilderEndAnchorId) {
+          const anchorIdx = arr.findIndex((p) => p.id === planBuilderEndAnchorId);
+          if (anchorIdx >= 0) {
+            arr.splice(anchorIdx, 0, next);
+            return arr;
+          }
+        }
+        arr.push(next);
+        return arr;
+      });
+      if (opts.position === "end") setPlanBuilderEndAnchorId(id);
+      return id;
+    };
     const updatePlanPoint = (id, updates) => setPlanBuilderPoints((prev) => prev.map((p) => p.id === id ? { ...p, ...updates } : p));
-    const removePlanPoint = (id) => setPlanBuilderPoints((prev) => prev.filter((p) => p.id !== id));
+    const removePlanPoint = (id) => {
+      setPlanBuilderPoints((prev) => prev.filter((p) => p.id !== id));
+      if (planBuilderEndAnchorId === id) setPlanBuilderEndAnchorId(null);
+    };
+    const setPlanBuilderEndAnchor = (id) => setPlanBuilderEndAnchorId(id);
+    const clearPlanBuilderEndAnchor = () => setPlanBuilderEndAnchorId(null);
     const commitPlanToDraft = async ({ name, description } = {}) => {
       if (planBuilderPoints.length === 0) {
         showErrorToast("Add at least one point first.");
@@ -55904,7 +55982,7 @@ ${suffix}`;
     }, onGoToPost: (id) => {
       setProfileStack([]);
       setScreen("feed");
-    }, myPoints: myTotalPoints }) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, isGuest && /* @__PURE__ */ import_react4.default.createElement(GuestBanner, { onSignIn: () => setShowGuestPrompt(true) }), screen === "feed" && renderFeedScopedTo({ hideFilters: false }), screen === "forum" && /* @__PURE__ */ import_react4.default.createElement(ForumScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), pendingThread, onPendingHandled: () => setPendingThread(null), onAddNotification: requireAuth(addNotification), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onAddFeedPost: requireAuth((post2) => addPost(post2)), userThreads: forumUserThreads, setUserThreads: requireAuth(setForumUserThreads), userReplies: forumUserReplies, setUserReplies: requireAuth(setForumUserReplies), likedForumItems: forumLikedItems, setLikedForumItems: requireAuth(setForumLikedItems), forumLikeCounts, setForumLikeCounts: requireAuth(setForumLikeCounts), forumViewCounts, setForumViewCounts, onAwardPoints: awardPoints }), screen === "routes" && /* @__PURE__ */ import_react4.default.createElement(RoutesScreen, { campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, tripReports: allTripReports, showTripReports, setShowTripReports, tripPlans: allTripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot: requireAuth(addCampingSpot), onUpdateCampingSpot: requireAuth(updateCampingSpot), onDeleteCampingSpot: requireAuth(deleteCampingSpot), onLoadCampingSpotPhotos: loadCampingSpotPhotos, onOpenTripDetail: (slug) => setPendingTripNav(slug), onOpenTripPlanDraft: (id) => setEditingTripId(id), onNewTripReport: () => setTripCreatorMode("report"), onNewTripPlan: () => requireAuth(() => enterPlanBuilder())(), pendingSpotNav, onConsumePendingSpotNav: () => setPendingSpotNav(null), pendingHQOpen, onConsumePendingHQOpen: () => setPendingHQOpen(false), pendingPlanNav, onConsumePendingPlanNav: () => setPendingPlanNav(null), onShareCampingSpotToFeed: requireAuth(shareCampingSpotToFeed), onShareHQToFeed: requireAuth(shareHQToFeed), onShareTripToFeed: requireAuth(shareTripToFeed), onShareTripPlanToFeed: requireAuth(shareTripPlanToFeed), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onShowToast: showErrorToast, planBuilder: { active: planBuilderActive, points: planBuilderPoints, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen } }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onPostBuildToFeed: requireAuth((b, opts) => {
+    }, myPoints: myTotalPoints }) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, isGuest && /* @__PURE__ */ import_react4.default.createElement(GuestBanner, { onSignIn: () => setShowGuestPrompt(true) }), screen === "feed" && renderFeedScopedTo({ hideFilters: false }), screen === "forum" && /* @__PURE__ */ import_react4.default.createElement(ForumScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), pendingThread, onPendingHandled: () => setPendingThread(null), onAddNotification: requireAuth(addNotification), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onAddFeedPost: requireAuth((post2) => addPost(post2)), userThreads: forumUserThreads, setUserThreads: requireAuth(setForumUserThreads), userReplies: forumUserReplies, setUserReplies: requireAuth(setForumUserReplies), likedForumItems: forumLikedItems, setLikedForumItems: requireAuth(setForumLikedItems), forumLikeCounts, setForumLikeCounts: requireAuth(setForumLikeCounts), forumViewCounts, setForumViewCounts, onAwardPoints: awardPoints }), screen === "routes" && /* @__PURE__ */ import_react4.default.createElement(RoutesScreen, { campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, tripReports: allTripReports, showTripReports, setShowTripReports, tripPlans: allTripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot: requireAuth(addCampingSpot), onUpdateCampingSpot: requireAuth(updateCampingSpot), onDeleteCampingSpot: requireAuth(deleteCampingSpot), onLoadCampingSpotPhotos: loadCampingSpotPhotos, onOpenTripDetail: (slug) => setPendingTripNav(slug), onOpenTripPlanDraft: (id) => setEditingTripId(id), onNewTripReport: () => setTripCreatorMode("report"), onNewTripPlan: () => requireAuth(() => enterPlanBuilder())(), pendingSpotNav, onConsumePendingSpotNav: () => setPendingSpotNav(null), pendingHQOpen, onConsumePendingHQOpen: () => setPendingHQOpen(false), pendingPlanNav, onConsumePendingPlanNav: () => setPendingPlanNav(null), onShareCampingSpotToFeed: requireAuth(shareCampingSpotToFeed), onShareHQToFeed: requireAuth(shareHQToFeed), onShareTripToFeed: requireAuth(shareTripToFeed), onShareTripPlanToFeed: requireAuth(shareTripPlanToFeed), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onShowToast: showErrorToast, planBuilder: { active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen } }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onPostBuildToFeed: requireAuth((b, opts) => {
       const rawBd = b.buildData;
       const bd = scrubLocalPhotosFromBuildData(rawBd);
       const isLocalUrl = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:"));
