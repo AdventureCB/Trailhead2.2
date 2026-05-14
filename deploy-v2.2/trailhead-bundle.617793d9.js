@@ -43508,6 +43508,10 @@ ${suffix}`;
             }
           }
         });
+        try {
+          map.triggerRepaint();
+        } catch (_) {
+        }
       };
       if (map.isStyleLoaded()) ensureLayers();
       else map.once("load", ensureLayers);
@@ -43691,6 +43695,10 @@ ${suffix}`;
             }
           }
         });
+        try {
+          map.triggerRepaint();
+        } catch (_) {
+        }
       };
       if (map.isStyleLoaded()) ensureLayers();
       else map.once("load", ensureLayers);
@@ -44014,6 +44022,10 @@ ${suffix}`;
             }
           }
         });
+        try {
+          map.triggerRepaint();
+        } catch (_) {
+        }
       };
       if (map.isStyleLoaded()) ensureLayers();
       else map.once("load", ensureLayers);
@@ -44144,6 +44156,10 @@ ${suffix}`;
         ["public-lands-fill", "public-lands-line"].forEach((id) => {
           if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", vis);
         });
+        try {
+          map.triggerRepaint();
+        } catch (_) {
+        }
       };
       if (map.isStyleLoaded()) ensureLayers();
       else map.once("load", ensureLayers);
