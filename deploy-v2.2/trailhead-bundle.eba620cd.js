@@ -49120,7 +49120,7 @@ ${suffix}`;
       const willPlanPick = !!planActive;
       const previewColor = willPlanPick ? T.copper : T.green;
       return /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: lpPos.x - 28, top: lpPos.y - 28, width: 56, height: 56, borderRadius: "50%", border: `2px solid ${T.white}`, background: `${previewColor}30`, pointerEvents: "none", zIndex: 30, boxShadow: "0 4px 14px rgba(0,0,0,0.4)" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: lpPos.x - 1, top: lpPos.y - 11, width: 2, height: 22, background: T.white, pointerEvents: "none", zIndex: 31, boxShadow: "0 0 4px rgba(0,0,0,0.6)" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: lpPos.x - 11, top: lpPos.y - 1, width: 22, height: 2, background: T.white, pointerEvents: "none", zIndex: 31, boxShadow: "0 0 4px rgba(0,0,0,0.6)" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: 10, left: "50%", transform: "translateX(-50%)", zIndex: 33, background: `${T.darkCard}F0`, border: `1px solid ${previewColor}80`, borderRadius: 8, padding: "8px 14px", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, letterSpacing: 0.4, boxShadow: "0 4px 12px rgba(0,0,0,0.4)", pointerEvents: "none", textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontSize: 9, color: previewColor, letterSpacing: 1.2, fontWeight: 700, marginBottom: 2 } }, willPlanPick ? "DRAG TO POSITION \xB7 RELEASE TO ADD POINT" : "DRAG TO POSITION \xB7 RELEASE TO ADD SPOT"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, lpPos.lat.toFixed(5), ", ", lpPos.lng.toFixed(5))));
-    })(), planActive && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: 0, left: 0, right: 0, zIndex: 10, background: T.copper, color: T.white, padding: "10px 14px", boxShadow: "0 4px 14px rgba(0,0,0,0.4)", display: "flex", alignItems: "center", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement(Route, { size: 16, color: T.white, strokeWidth: 2 }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 1.2 } }, "PLANNING TRIP"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, opacity: 0.9 } }, planBuilder.points.length === 0 ? "Tap the map to add your first point" : `${planBuilder.points.length} point${planBuilder.points.length === 1 ? "" : "s"} \xB7 tap map to add more`)), /* @__PURE__ */ import_react4.default.createElement(
+    })(), planActive && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: 0, left: 0, right: 0, zIndex: 10, background: T.copper, color: T.white, padding: "10px 14px", boxShadow: "0 4px 14px rgba(0,0,0,0.4)", display: "flex", alignItems: "center", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement(Route, { size: 16, color: T.white, strokeWidth: 2 }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 1.2 } }, planBuilder.editingId ? "EDITING ROUTE" : "PLANNING TRIP"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, opacity: 0.9 } }, planBuilder.points.length === 0 ? "Tap the map to add your first point" : `${planBuilder.points.length} point${planBuilder.points.length === 1 ? "" : "s"} \xB7 tap map to add more`)), /* @__PURE__ */ import_react4.default.createElement(
       "button",
       {
         onClick: () => {
@@ -49134,7 +49134,17 @@ ${suffix}`;
     ), /* @__PURE__ */ import_react4.default.createElement(
       "button",
       {
-        onClick: () => planBuilder.points.length > 0 ? planBuilder.setSavePromptOpen(true) : onShowToast && onShowToast("Add at least one point before saving."),
+        onClick: () => {
+          if (planBuilder.points.length === 0) {
+            onShowToast && onShowToast("Add at least one point before saving.");
+            return;
+          }
+          if (planBuilder.editingId) {
+            planBuilder.commit({});
+            return;
+          }
+          planBuilder.setSavePromptOpen(true);
+        },
         disabled: planBuilder.points.length === 0,
         style: { background: planBuilder.points.length > 0 ? T.white : "rgba(255,255,255,0.3)", border: "none", color: T.copper, padding: "6px 14px", borderRadius: 6, cursor: planBuilder.points.length > 0 ? "pointer" : "default", fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, opacity: planBuilder.points.length > 0 ? 1 : 0.6 }
       },
@@ -54209,10 +54219,12 @@ ${suffix}`;
     const [planBuilderActive, setPlanBuilderActive] = (0, import_react4.useState)(false);
     const [planBuilderPoints, setPlanBuilderPoints] = (0, import_react4.useState)([]);
     const [planBuilderEndAnchorId, setPlanBuilderEndAnchorId] = (0, import_react4.useState)(null);
+    const [planBuilderEditingId, setPlanBuilderEditingId] = (0, import_react4.useState)(null);
     const [planSavePromptOpen, setPlanSavePromptOpen] = (0, import_react4.useState)(false);
     const newPlanPointId = () => "pp_" + Date.now() + "_" + Math.floor(Math.random() * 1e3);
     const enterPlanBuilder = (seed, opts = {}) => {
       setPlanBuilderActive(true);
+      setPlanBuilderEditingId(null);
       if (!seed) {
         setPlanBuilderPoints([]);
         setPlanBuilderEndAnchorId(null);
@@ -54226,6 +54238,7 @@ ${suffix}`;
       setPlanBuilderActive(false);
       setPlanBuilderPoints([]);
       setPlanBuilderEndAnchorId(null);
+      setPlanBuilderEditingId(null);
       setPlanSavePromptOpen(false);
     };
     const addPlanPoint = (point, opts = {}) => {
@@ -54272,8 +54285,14 @@ ${suffix}`;
         showErrorToast("Add at least one point first.");
         return null;
       }
-      const draft = await createTripDraft({ name: name || "Untitled plan", description: description || "", kind: "plan" });
-      if (!draft) return null;
+      let draftId;
+      if (planBuilderEditingId) {
+        draftId = planBuilderEditingId;
+      } else {
+        const draft = await createTripDraft({ name: name || "Untitled plan", description: description || "", kind: "plan" });
+        if (!draft) return null;
+        draftId = draft.id;
+      }
       const pins = planBuilderPoints.map((p) => ({
         lat: p.lat,
         lng: p.lng,
@@ -54337,10 +54356,10 @@ ${suffix}`;
         updates.end_lat = last.lat;
         updates.end_lng = last.lng;
       }
-      await updateTripDraft(draft.id, updates);
+      await updateTripDraft(draftId, updates);
       exitPlanBuilder();
-      setDetailTripId(draft.id);
-      return draft;
+      setDetailTripId(draftId);
+      return { id: draftId };
     };
     const [showTripPinFullscreen, setShowTripPinFullscreen] = (0, import_react4.useState)(false);
     const [pendingThread, setPendingThread] = (0, import_react4.useState)(null);
@@ -56598,7 +56617,7 @@ ${suffix}`;
     }, onGoToPost: (id) => {
       setProfileStack([]);
       setScreen("feed");
-    }, myPoints: myTotalPoints }) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, isGuest && /* @__PURE__ */ import_react4.default.createElement(GuestBanner, { onSignIn: () => setShowGuestPrompt(true) }), screen === "feed" && renderFeedScopedTo({ hideFilters: false }), screen === "forum" && /* @__PURE__ */ import_react4.default.createElement(ForumScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), pendingThread, onPendingHandled: () => setPendingThread(null), onAddNotification: requireAuth(addNotification), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onAddFeedPost: requireAuth((post2) => addPost(post2)), userThreads: forumUserThreads, setUserThreads: requireAuth(setForumUserThreads), userReplies: forumUserReplies, setUserReplies: requireAuth(setForumUserReplies), likedForumItems: forumLikedItems, setLikedForumItems: requireAuth(setForumLikedItems), forumLikeCounts, setForumLikeCounts: requireAuth(setForumLikeCounts), forumViewCounts, setForumViewCounts, onAwardPoints: awardPoints }), screen === "routes" && /* @__PURE__ */ import_react4.default.createElement(RoutesScreen, { campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, tripReports: allTripReports, showTripReports, setShowTripReports, tripPlans: allTripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot: requireAuth(addCampingSpot), onUpdateCampingSpot: requireAuth(updateCampingSpot), onDeleteCampingSpot: requireAuth(deleteCampingSpot), onLoadCampingSpotPhotos: loadCampingSpotPhotos, onOpenTripDetail: (slug) => setPendingTripNav(slug), onOpenTripPlanDraft: (id) => setDetailTripId(id), onNewTripReport: () => setTripCreatorMode("report"), onNewTripPlan: () => requireAuth(() => enterPlanBuilder())(), pendingSpotNav, onConsumePendingSpotNav: () => setPendingSpotNav(null), pendingHQOpen, onConsumePendingHQOpen: () => setPendingHQOpen(false), pendingPlanNav, onConsumePendingPlanNav: () => setPendingPlanNav(null), onShareCampingSpotToFeed: requireAuth(shareCampingSpotToFeed), onShareHQToFeed: requireAuth(shareHQToFeed), onShareTripToFeed: requireAuth(shareTripToFeed), onShareTripPlanToFeed: requireAuth(shareTripPlanToFeed), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onShowToast: showErrorToast, planBuilder: { active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen } }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onPostBuildToFeed: requireAuth((b, opts) => {
+    }, myPoints: myTotalPoints }) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, isGuest && /* @__PURE__ */ import_react4.default.createElement(GuestBanner, { onSignIn: () => setShowGuestPrompt(true) }), screen === "feed" && renderFeedScopedTo({ hideFilters: false }), screen === "forum" && /* @__PURE__ */ import_react4.default.createElement(ForumScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), pendingThread, onPendingHandled: () => setPendingThread(null), onAddNotification: requireAuth(addNotification), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onAddFeedPost: requireAuth((post2) => addPost(post2)), userThreads: forumUserThreads, setUserThreads: requireAuth(setForumUserThreads), userReplies: forumUserReplies, setUserReplies: requireAuth(setForumUserReplies), likedForumItems: forumLikedItems, setLikedForumItems: requireAuth(setForumLikedItems), forumLikeCounts, setForumLikeCounts: requireAuth(setForumLikeCounts), forumViewCounts, setForumViewCounts, onAwardPoints: awardPoints }), screen === "routes" && /* @__PURE__ */ import_react4.default.createElement(RoutesScreen, { campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, tripReports: allTripReports, showTripReports, setShowTripReports, tripPlans: allTripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot: requireAuth(addCampingSpot), onUpdateCampingSpot: requireAuth(updateCampingSpot), onDeleteCampingSpot: requireAuth(deleteCampingSpot), onLoadCampingSpotPhotos: loadCampingSpotPhotos, onOpenTripDetail: (slug) => setPendingTripNav(slug), onOpenTripPlanDraft: (id) => setDetailTripId(id), onNewTripReport: () => setTripCreatorMode("report"), onNewTripPlan: () => requireAuth(() => enterPlanBuilder())(), pendingSpotNav, onConsumePendingSpotNav: () => setPendingSpotNav(null), pendingHQOpen, onConsumePendingHQOpen: () => setPendingHQOpen(false), pendingPlanNav, onConsumePendingPlanNav: () => setPendingPlanNav(null), onShareCampingSpotToFeed: requireAuth(shareCampingSpotToFeed), onShareHQToFeed: requireAuth(shareHQToFeed), onShareTripToFeed: requireAuth(shareTripToFeed), onShareTripPlanToFeed: requireAuth(shareTripPlanToFeed), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onShowToast: showErrorToast, planBuilder: { active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, editingId: planBuilderEditingId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen } }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onPostBuildToFeed: requireAuth((b, opts) => {
       const rawBd = b.buildData;
       const bd = scrubLocalPhotosFromBuildData(rawBd);
       const isLocalUrl = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:"));
@@ -56761,6 +56780,7 @@ ${suffix}`;
             setPlanBuilderActive(true);
             setPlanBuilderPoints(seedPoints.map((p) => ({ id: "pp_seed_" + Math.random().toString(36).slice(2), ...p })));
             setPlanBuilderEndAnchorId(null);
+            setPlanBuilderEditingId(t.id);
             setScreen("routes");
           },
           onViewUser: (handleOrId) => {
