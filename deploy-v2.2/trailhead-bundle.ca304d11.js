@@ -48603,6 +48603,138 @@ ${suffix}`;
         }
       };
     }, [planActive, mapReady]);
+    const [lpActive, setLpActive] = (0, import_react4.useState)(false);
+    const [lpPos, setLpPos] = (0, import_react4.useState)(null);
+    const lpActiveRef = (0, import_react4.useRef)(false);
+    const lpPosRef = (0, import_react4.useRef)(null);
+    const lpTimerRef = (0, import_react4.useRef)(null);
+    const lpStartRef = (0, import_react4.useRef)({ x: 0, y: 0, t: 0 });
+    const planActiveRef = (0, import_react4.useRef)(planActive);
+    const addingModeRef = (0, import_react4.useRef)(addingMode);
+    const addSpotPosRef = (0, import_react4.useRef)(addSpotPos);
+    const editingSpotRef = (0, import_react4.useRef)(editingSpot);
+    (0, import_react4.useEffect)(() => {
+      planActiveRef.current = planActive;
+    }, [planActive]);
+    (0, import_react4.useEffect)(() => {
+      addingModeRef.current = addingMode;
+    }, [addingMode]);
+    (0, import_react4.useEffect)(() => {
+      addSpotPosRef.current = addSpotPos;
+    }, [addSpotPos]);
+    (0, import_react4.useEffect)(() => {
+      editingSpotRef.current = editingSpot;
+    }, [editingSpot]);
+    (0, import_react4.useEffect)(() => {
+      if (!mapReady || !mapInst.current || !mapRef.current) return;
+      const map = mapInst.current;
+      const container = mapRef.current;
+      const cancelTimer = () => {
+        if (lpTimerRef.current) {
+          clearTimeout(lpTimerRef.current);
+          lpTimerRef.current = null;
+        }
+      };
+      const writeLpPos = (clientX, clientY) => {
+        const rect = container.getBoundingClientRect();
+        const x = clientX - rect.left;
+        const y = clientY - rect.top;
+        const ll = map.unproject([x, y]);
+        const next = { x, y, lat: ll.lat, lng: ll.lng };
+        lpPosRef.current = next;
+        setLpPos(next);
+      };
+      const finishLongPress = (commit) => {
+        cancelTimer();
+        if (!lpActiveRef.current) return;
+        lpActiveRef.current = false;
+        setLpActive(false);
+        try {
+          map.dragPan.enable();
+        } catch (_) {
+        }
+        try {
+          container.style.cursor = "";
+        } catch (_) {
+        }
+        const pos = lpPosRef.current;
+        lpPosRef.current = null;
+        setLpPos(null);
+        if (commit && pos) {
+          if (planActiveRef.current) {
+            setPlanTapPos({ lat: pos.lat, lng: pos.lng });
+          } else {
+            setAddSpotPos({ lat: pos.lat, lng: pos.lng });
+            setSelectedSpot(null);
+            setSelectedLand(null);
+          }
+        }
+      };
+      const onPointerDown = (e) => {
+        if (e.pointerType === "mouse" && e.button !== 0) return;
+        if (addingModeRef.current) return;
+        if (addSpotPosRef.current || editingSpotRef.current) return;
+        cancelTimer();
+        lpStartRef.current = { x: e.clientX, y: e.clientY, t: Date.now() };
+        lpTimerRef.current = setTimeout(() => {
+          lpTimerRef.current = null;
+          writeLpPos(lpStartRef.current.x, lpStartRef.current.y);
+          lpActiveRef.current = true;
+          setLpActive(true);
+          try {
+            map.dragPan.disable();
+          } catch (_) {
+          }
+          try {
+            container.style.cursor = "grabbing";
+          } catch (_) {
+          }
+          try {
+            navigator.vibrate && navigator.vibrate(40);
+          } catch (_) {
+          }
+        }, 500);
+      };
+      const onPointerMove = (e) => {
+        if (lpActiveRef.current) {
+          writeLpPos(e.clientX, e.clientY);
+          try {
+            e.preventDefault();
+          } catch (_) {
+          }
+          return;
+        }
+        if (lpTimerRef.current) {
+          const dx = Math.abs(e.clientX - lpStartRef.current.x);
+          const dy = Math.abs(e.clientY - lpStartRef.current.y);
+          if (dx > 8 || dy > 8) cancelTimer();
+        }
+      };
+      const onPointerUp = () => {
+        if (lpActiveRef.current) finishLongPress(true);
+        else cancelTimer();
+      };
+      const onPointerCancel = () => finishLongPress(false);
+      container.addEventListener("pointerdown", onPointerDown);
+      container.addEventListener("pointermove", onPointerMove, { passive: false });
+      container.addEventListener("pointerup", onPointerUp);
+      container.addEventListener("pointercancel", onPointerCancel);
+      container.addEventListener("pointerleave", onPointerCancel);
+      return () => {
+        cancelTimer();
+        container.removeEventListener("pointerdown", onPointerDown);
+        container.removeEventListener("pointermove", onPointerMove);
+        container.removeEventListener("pointerup", onPointerUp);
+        container.removeEventListener("pointercancel", onPointerCancel);
+        container.removeEventListener("pointerleave", onPointerCancel);
+        if (lpActiveRef.current) {
+          try {
+            map.dragPan.enable();
+          } catch (_) {
+          }
+        }
+      };
+    }, [mapReady]);
     (0, import_react4.useEffect)(() => {
       const q = query.trim();
       if (q.length < 2) {
@@ -48634,7 +48766,12 @@ ${suffix}`;
       if (!mapInst.current) return;
       mapInst.current.flyTo({ center: [lng, lat], zoom, duration: 700 });
     };
-    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", flex: 1, display: "flex", flexDirection: "column", minHeight: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", overflow: "hidden", flex: 1, minHeight: 420 } }, /* @__PURE__ */ import_react4.default.createElement("div", { ref: mapRef, style: { width: "100%", height: "100%" } }), planActive && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: 0, left: 0, right: 0, zIndex: 10, background: T.copper, color: T.white, padding: "10px 14px", boxShadow: "0 4px 14px rgba(0,0,0,0.4)", display: "flex", alignItems: "center", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement(Route, { size: 16, color: T.white, strokeWidth: 2 }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 1.2 } }, "PLANNING TRIP"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, opacity: 0.9 } }, planBuilder.points.length === 0 ? "Tap the map to add your first point" : `${planBuilder.points.length} point${planBuilder.points.length === 1 ? "" : "s"} \xB7 tap map to add more`)), /* @__PURE__ */ import_react4.default.createElement(
+    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", flex: 1, display: "flex", flexDirection: "column", minHeight: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", overflow: "hidden", flex: 1, minHeight: 420 } }, /* @__PURE__ */ import_react4.default.createElement("div", { ref: mapRef, style: { width: "100%", height: "100%" } }), lpActive && lpPos && (() => {
+      const isCamp = false;
+      const willPlanPick = !!planActive;
+      const previewColor = willPlanPick ? T.copper : T.green;
+      return /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: lpPos.x - 28, top: lpPos.y - 28, width: 56, height: 56, borderRadius: "50%", border: `2px solid ${T.white}`, background: `${previewColor}30`, pointerEvents: "none", zIndex: 30, boxShadow: "0 4px 14px rgba(0,0,0,0.4)" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: lpPos.x - 1, top: lpPos.y - 11, width: 2, height: 22, background: T.white, pointerEvents: "none", zIndex: 31, boxShadow: "0 0 4px rgba(0,0,0,0.6)" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: lpPos.x - 11, top: lpPos.y - 1, width: 22, height: 2, background: T.white, pointerEvents: "none", zIndex: 31, boxShadow: "0 0 4px rgba(0,0,0,0.6)" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: lpPos.x - 22, top: lpPos.y - 84, width: 44, height: 44, borderRadius: "50%", background: previewColor, color: T.white, border: `3px solid ${T.white}`, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none", zIndex: 32, boxShadow: "0 6px 18px rgba(0,0,0,0.55)", transition: "transform 0.05s linear" } }, willPlanPick ? /* @__PURE__ */ import_react4.default.createElement(Route, { size: 20, color: T.white, strokeWidth: 2 }) : /* @__PURE__ */ import_react4.default.createElement(Tent, { size: 20, color: T.white, strokeWidth: 2 })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: lpPos.x - 1, top: lpPos.y - 60, width: 2, height: 38, background: `${T.white}AA`, pointerEvents: "none", zIndex: 30 } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: 10, left: "50%", transform: "translateX(-50%)", zIndex: 33, background: `${T.darkCard}F0`, border: `1px solid ${previewColor}80`, borderRadius: 8, padding: "8px 14px", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, letterSpacing: 0.4, boxShadow: "0 4px 12px rgba(0,0,0,0.4)", pointerEvents: "none", textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontSize: 9, color: previewColor, letterSpacing: 1.2, fontWeight: 700, marginBottom: 2 } }, willPlanPick ? "DRAG TO POSITION \xB7 RELEASE TO ADD POINT" : "DRAG TO POSITION \xB7 RELEASE TO ADD SPOT"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, lpPos.lat.toFixed(5), ", ", lpPos.lng.toFixed(5))));
+    })(), planActive && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: 0, left: 0, right: 0, zIndex: 10, background: T.copper, color: T.white, padding: "10px 14px", boxShadow: "0 4px 14px rgba(0,0,0,0.4)", display: "flex", alignItems: "center", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement(Route, { size: 16, color: T.white, strokeWidth: 2 }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 1.2 } }, "PLANNING TRIP"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, opacity: 0.9 } }, planBuilder.points.length === 0 ? "Tap the map to add your first point" : `${planBuilder.points.length} point${planBuilder.points.length === 1 ? "" : "s"} \xB7 tap map to add more`)), /* @__PURE__ */ import_react4.default.createElement(
       "button",
       {
         onClick: () => {
