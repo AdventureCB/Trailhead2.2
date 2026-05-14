@@ -46970,7 +46970,7 @@ ${suffix}`;
   var rdInput = { width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none", boxSizing: "border-box" };
   var rdLabel = { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 };
   var rdStatBox = { textAlign: "center", padding: "10px 0", background: T.darkCard, borderRadius: 8 };
-  function RouteMapPreview({ pins, points, photos, highlightedPinIdx, onPhotoSelect, isFullscreen }) {
+  function RouteMapPreview({ pins, points, photos, highlightedPinIdx, onPhotoSelect, isFullscreen, offroadRanges }) {
     const mapRef = (0, import_react4.useRef)(null);
     const mapInst = (0, import_react4.useRef)(null);
     const markersRef = (0, import_react4.useRef)([]);
@@ -47026,14 +47026,40 @@ ${suffix}`;
           if (cancelled) return;
           const polyPath = normPoints.length > 1 ? normPoints.map((p) => [p.lng, p.lat]) : normPins.length > 1 ? normPins.map((p) => [p.lng, p.lat]) : [];
           if (polyPath.length > 1 && !map.getSource("route-line")) {
-            map.addSource("route-line", { type: "geojson", data: { type: "Feature", geometry: { type: "LineString", coordinates: polyPath }, properties: {} } });
-            map.addLayer({
-              id: "route-line-layer",
-              type: "line",
-              source: "route-line",
-              layout: { "line-join": "round", "line-cap": "round" },
-              paint: { "line-color": T.red, "line-width": 3, "line-opacity": 0.85 }
-            });
+            const hasOffroad = Array.isArray(offroadRanges) && offroadRanges.length > 0 && normPoints.length > 1;
+            if (hasOffroad) {
+              map.addSource("route-line", { type: "geojson", data: { type: "Feature", geometry: { type: "LineString", coordinates: polyPath }, properties: {} } });
+              map.addLayer({
+                id: "route-line-layer",
+                type: "line",
+                source: "route-line",
+                layout: { "line-join": "round", "line-cap": "round" },
+                paint: { "line-color": T.copper, "line-width": 3, "line-opacity": 0.9 }
+              });
+              const offroadFeatures = offroadRanges.map(([a, b]) => {
+                const slice = polyPath.slice(a, b + 1);
+                return slice.length >= 2 ? { type: "Feature", geometry: { type: "LineString", coordinates: slice }, properties: {} } : null;
+              }).filter(Boolean);
+              if (offroadFeatures.length > 0) {
+                map.addSource("route-line-offroad", { type: "geojson", data: { type: "FeatureCollection", features: offroadFeatures } });
+                map.addLayer({
+                  id: "route-line-offroad-layer",
+                  type: "line",
+                  source: "route-line-offroad",
+                  layout: { "line-join": "round", "line-cap": "round" },
+                  paint: { "line-color": T.red, "line-width": 3, "line-opacity": 0.95, "line-dasharray": [1, 1.4] }
+                });
+              }
+            } else {
+              map.addSource("route-line", { type: "geojson", data: { type: "Feature", geometry: { type: "LineString", coordinates: polyPath }, properties: {} } });
+              map.addLayer({
+                id: "route-line-layer",
+                type: "line",
+                source: "route-line",
+                layout: { "line-join": "round", "line-cap": "round" },
+                paint: { "line-color": T.red, "line-width": 3, "line-opacity": 0.85 }
+              });
+            }
           }
           const photoList = photos || [];
           let photoIdx = 0;
@@ -48563,7 +48589,7 @@ ${suffix}`;
         placeholder: "\u2014",
         style: { width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, background: T.darkCard, border: `1px dashed ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, outline: "none" }
       }
-    ) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { ...cardStyle, padding: "10px 12px", fontFamily: sans, fontSize: 13, color: trip.party_size != null ? T.white : T.tertiary } }, trip.party_size != null ? trip.party_size : "\u2014")))), (trip.distance_mi != null || trip.elev_gain_ft != null || trip.max_elev_ft != null || trip.duration_min != null) && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 8 } }, "TRIP STATS"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, trip.distance_mi != null && /* @__PURE__ */ import_react4.default.createElement(StatBlock, { label: "DISTANCE", value: `${Number(trip.distance_mi).toFixed(1)} MI` }), trip.duration_min != null && /* @__PURE__ */ import_react4.default.createElement(StatBlock, { label: "TIME", value: `${Math.floor(trip.duration_min / 60)}H ${trip.duration_min % 60}M` }), trip.elev_gain_ft != null && /* @__PURE__ */ import_react4.default.createElement(StatBlock, { label: "ELEV GAIN", value: `+${Number(trip.elev_gain_ft).toLocaleString()} FT` }), trip.max_elev_ft != null && /* @__PURE__ */ import_react4.default.createElement(StatBlock, { label: "MAX ELEV", value: `${Number(trip.max_elev_ft).toLocaleString()} FT` }))), (trip.start_label || trip.start_lat != null && trip.start_lng != null) && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 8 } }, "TRAILHEAD"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { ...cardStyle, padding: 14 } }, trip.start_label && /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 14, color: T.white, fontWeight: 600, marginBottom: 4 } }, trip.start_label), trip.start_lat != null && trip.start_lng != null && /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, marginBottom: 10 } }, trip.start_lat.toFixed(5), ", ", trip.start_lng.toFixed(5)), trip.start_lat != null && trip.start_lng != null && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => window.open(`https://www.google.com/maps/dir/?api=1&destination=${trip.start_lat},${trip.start_lng}&travelmode=driving`, "_blank", "noopener"), style: { display: "inline-flex", alignItems: "center", gap: 6, padding: "9px 14px", borderRadius: 6, background: T.green, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, /* @__PURE__ */ import_react4.default.createElement(Navigation, { size: 13, color: T.white }), /* @__PURE__ */ import_react4.default.createElement("span", null, "GET DIRECTIONS")))), hasMap && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 8 } }, "ROUTE"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { borderRadius: 12, overflow: "hidden", border: `1px solid ${T.charcoal}`, height: 260, position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement(RouteMapPreview, { pins, points, photos }), canEditInline && onEditPlanRoute && /* @__PURE__ */ import_react4.default.createElement(
+    ) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { ...cardStyle, padding: "10px 12px", fontFamily: sans, fontSize: 13, color: trip.party_size != null ? T.white : T.tertiary } }, trip.party_size != null ? trip.party_size : "\u2014")))), (trip.distance_mi != null || trip.elev_gain_ft != null || trip.max_elev_ft != null || trip.duration_min != null) && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 8 } }, "TRIP STATS"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, trip.distance_mi != null && /* @__PURE__ */ import_react4.default.createElement(StatBlock, { label: "DISTANCE", value: `${Number(trip.distance_mi).toFixed(1)} MI` }), trip.duration_min != null && /* @__PURE__ */ import_react4.default.createElement(StatBlock, { label: "TIME", value: `${Math.floor(trip.duration_min / 60)}H ${trip.duration_min % 60}M` }), trip.elev_gain_ft != null && /* @__PURE__ */ import_react4.default.createElement(StatBlock, { label: "ELEV GAIN", value: `+${Number(trip.elev_gain_ft).toLocaleString()} FT` }), trip.max_elev_ft != null && /* @__PURE__ */ import_react4.default.createElement(StatBlock, { label: "MAX ELEV", value: `${Number(trip.max_elev_ft).toLocaleString()} FT` }))), (trip.start_label || trip.start_lat != null && trip.start_lng != null) && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 8 } }, "TRAILHEAD"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { ...cardStyle, padding: 14 } }, trip.start_label && /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 14, color: T.white, fontWeight: 600, marginBottom: 4 } }, trip.start_label), trip.start_lat != null && trip.start_lng != null && /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, marginBottom: 10 } }, trip.start_lat.toFixed(5), ", ", trip.start_lng.toFixed(5)), trip.start_lat != null && trip.start_lng != null && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => window.open(`https://www.google.com/maps/dir/?api=1&destination=${trip.start_lat},${trip.start_lng}&travelmode=driving`, "_blank", "noopener"), style: { display: "inline-flex", alignItems: "center", gap: 6, padding: "9px 14px", borderRadius: 6, background: T.green, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, /* @__PURE__ */ import_react4.default.createElement(Navigation, { size: 13, color: T.white }), /* @__PURE__ */ import_react4.default.createElement("span", null, "GET DIRECTIONS")))), hasMap && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 8 } }, "ROUTE"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { borderRadius: 12, overflow: "hidden", border: `1px solid ${T.charcoal}`, height: 260, position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement(RouteMapPreview, { pins, points, photos, offroadRanges: Array.isArray(rd.offroadRanges) ? rd.offroadRanges : void 0 }), canEditInline && onEditPlanRoute && /* @__PURE__ */ import_react4.default.createElement(
       "button",
       {
         onClick: () => onEditPlanRoute(trip),
@@ -54257,7 +54283,48 @@ ${suffix}`;
         sourceId: p.sourceId || void 0,
         sourceType: p.sourceType || void 0
       }));
-      const routeData = { pins, points: planBuilderPoints.map((p) => ({ lat: p.lat, lng: p.lng })) };
+      const OFFROAD_THRESHOLD_M = 50;
+      const densePoints = [];
+      const offroadRanges = [];
+      const pushPoint = (lat, lng) => {
+        densePoints.push({ lat, lng });
+        return densePoints.length - 1;
+      };
+      const recordOffroad = (a, b) => {
+        if (b > a) offroadRanges.push([a, b]);
+      };
+      pushPoint(planBuilderPoints[0].lat, planBuilderPoints[0].lng);
+      if (planBuilderPoints.length >= 2) {
+        const segResults = await Promise.all(
+          planBuilderPoints.slice(0, -1).map((from, i) => mapboxDirections(from, planBuilderPoints[i + 1]))
+        );
+        segResults.forEach((dir, i) => {
+          const from = planBuilderPoints[i];
+          const to = planBuilderPoints[i + 1];
+          const segStartIdx = densePoints.length - 1;
+          if (!dir || !dir.geometry || !Array.isArray(dir.geometry.coordinates) || dir.geometry.coordinates.length < 2) {
+            const toIdx = pushPoint(to.lat, to.lng);
+            recordOffroad(segStartIdx, toIdx);
+            return;
+          }
+          const coords = dir.geometry.coordinates;
+          const wpStart = dir.waypoints && dir.waypoints[0] && dir.waypoints[0].location;
+          const wpEnd = dir.waypoints && dir.waypoints[dir.waypoints.length - 1] && dir.waypoints[dir.waypoints.length - 1].location;
+          let routedStartIdx = segStartIdx;
+          if (wpStart && haversine(from.lat, from.lng, wpStart[1], wpStart[0]) > OFFROAD_THRESHOLD_M) {
+            const tailIdx = pushPoint(wpStart[1], wpStart[0]);
+            recordOffroad(segStartIdx, tailIdx);
+            routedStartIdx = tailIdx;
+          }
+          coords.slice(1).forEach((c) => pushPoint(c[1], c[0]));
+          const routedEndIdx = densePoints.length - 1;
+          if (wpEnd && haversine(to.lat, to.lng, wpEnd[1], wpEnd[0]) > OFFROAD_THRESHOLD_M) {
+            const toIdx = pushPoint(to.lat, to.lng);
+            recordOffroad(routedEndIdx, toIdx);
+          }
+        });
+      }
+      const routeData = { pins, points: densePoints, offroadRanges };
       const first = planBuilderPoints[0];
       const last = planBuilderPoints[planBuilderPoints.length - 1];
       const updates = {
