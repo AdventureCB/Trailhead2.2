@@ -43384,9 +43384,12 @@ ${suffix}`;
       if (!ready || !map || !window.mapboxgl) return;
       const ensureLayers = () => {
         if (!map.getSource("trip-reports-starts")) {
-          map.addSource("trip-reports-starts", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-          map.addSource("trip-reports-ends", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-          map.addSource("trip-reports-lines", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+          const initialCols = tripReportsToGeoJSON(rows);
+          const initialFilteredLines = selectedId ? { ...initialCols.lines, features: initialCols.lines.features.filter((f) => f.properties && f.properties.id === selectedId) } : initialCols.lines;
+          const initialFilteredEnds = selectedId ? { ...initialCols.ends, features: initialCols.ends.features.filter((f) => f.properties && f.properties.id === selectedId) } : initialCols.ends;
+          map.addSource("trip-reports-starts", { type: "geojson", data: initialCols.starts });
+          map.addSource("trip-reports-ends", { type: "geojson", data: initialFilteredEnds });
+          map.addSource("trip-reports-lines", { type: "geojson", data: initialFilteredLines });
           map.addLayer({
             id: "trip-reports-line-glow",
             type: "line",
@@ -43568,9 +43571,12 @@ ${suffix}`;
       if (!ready || !map || !window.mapboxgl) return;
       const ensureLayers = () => {
         if (!map.getSource("trip-plans-starts")) {
-          map.addSource("trip-plans-starts", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-          map.addSource("trip-plans-ends", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-          map.addSource("trip-plans-lines", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+          const initialCols = tripPlansToGeoJSON(rows);
+          const initialFilteredLines = selectedId ? { ...initialCols.lines, features: initialCols.lines.features.filter((f) => f.properties && f.properties.id === selectedId) } : initialCols.lines;
+          const initialFilteredEnds = selectedId ? { ...initialCols.ends, features: initialCols.ends.features.filter((f) => f.properties && f.properties.id === selectedId) } : initialCols.ends;
+          map.addSource("trip-plans-starts", { type: "geojson", data: initialCols.starts });
+          map.addSource("trip-plans-ends", { type: "geojson", data: initialFilteredEnds });
+          map.addSource("trip-plans-lines", { type: "geojson", data: initialFilteredLines });
           map.addLayer({
             id: "trip-plans-line-glow",
             type: "line",
@@ -43899,7 +43905,7 @@ ${suffix}`;
         if (!map.getSource("camping-spots")) {
           map.addSource("camping-spots", {
             type: "geojson",
-            data: { type: "FeatureCollection", features: [] },
+            data: campingSpotsToGeoJSON(rows),
             cluster: true,
             // Higher max zoom so dense areas keep clustering until you're
             // really zoomed in. Below this we render individuals as circles
@@ -56126,12 +56132,12 @@ ${suffix}`;
     const updateTripDraft = async (id, updates) => {
       const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
       if (!uid || !id || typeof id !== "string" || id.length < 20) return null;
-      if (updates && updates.route_data && updates.end_lat == null && updates.route_geom == null) {
+      if (updates && updates.route_data) {
         const derived = deriveTripGeom(updates.route_data);
-        if (derived.end) {
+        if (updates.end_lat == null && derived.end) {
           updates = { ...updates, end_lat: derived.end.lat, end_lng: derived.end.lng };
         }
-        if (derived.geom) {
+        if (updates.route_geom == null && derived.geom) {
           updates = { ...updates, route_geom: derived.geom };
         }
       }
