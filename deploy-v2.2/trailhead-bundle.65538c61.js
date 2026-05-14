@@ -48746,37 +48746,19 @@ ${suffix}`;
         setLayerRefreshTick((x) => x + 1);
       }, 250);
       const flips = [];
-      if (showCampingSpots && setShowCampingSpots) flips.push({ setter: setShowCampingSpots, gap: 140, isVector: false });
-      if (showTripReports && setShowTripReports) flips.push({ setter: setShowTripReports, gap: 140, isVector: false });
-      if (showTripPlans && setShowTripPlans) flips.push({ setter: setShowTripPlans, gap: 140, isVector: false });
-      if (showPublicLands && setShowPublicLands) flips.push({ setter: setShowPublicLands, gap: 800, isVector: true });
+      if (showCampingSpots && setShowCampingSpots) flips.push({ setter: setShowCampingSpots, gap: 140 });
+      if (showTripReports && setShowTripReports) flips.push({ setter: setShowTripReports, gap: 140 });
+      if (showTripPlans && setShowTripPlans) flips.push({ setter: setShowTripPlans, gap: 140 });
+      if (showPublicLands && setShowPublicLands) flips.push({ setter: setShowPublicLands, gap: 1200 });
       const staggerStart = 500;
       const stagger = 300;
       const stepTimers = flips.flatMap((f, i) => {
         const offAt = staggerStart + i * stagger;
         const onAt = offAt + f.gap;
-        const timers = [
+        return [
           setTimeout(() => f.setter(false), offAt),
           setTimeout(() => f.setter(true), onAt)
         ];
-        if (f.isVector) {
-          timers.push(setTimeout(() => {
-            if (!mapInst.current) return;
-            try {
-              mapInst.current.panBy([0, 1], { duration: 0 });
-            } catch (_) {
-            }
-            try {
-              mapInst.current.panBy([0, -1], { duration: 0 });
-            } catch (_) {
-            }
-            try {
-              mapInst.current.triggerRepaint();
-            } catch (_) {
-            }
-          }, onAt + 100));
-        }
-        return timers;
       });
       return () => {
         clearTimeout(t1);
