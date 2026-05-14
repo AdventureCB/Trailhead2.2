@@ -48746,45 +48746,16 @@ ${suffix}`;
         setLayerRefreshTick((x) => x + 1);
       }, 250);
       const t2 = setTimeout(() => {
-        const map = mapInst.current;
-        if (!map) return;
-        const layerIds = [
-          "camping-spots-clusters",
-          "camping-spots-cluster-count",
-          "camping-spots-points",
-          "trip-reports-line-glow",
-          "trip-reports-line",
-          "trip-reports-line-hit",
-          "trip-reports-end-points",
-          "trip-reports-points",
-          "trip-plans-line-glow",
-          "trip-plans-line",
-          "trip-plans-line-hit",
-          "trip-plans-end-points",
-          "trip-plans-points",
-          "public-lands-fill",
-          "public-lands-line"
-        ];
-        layerIds.forEach((id) => {
-          if (!map.getLayer(id)) return;
-          try {
-            const current = map.getLayoutProperty(id, "visibility") || "visible";
-            const opposite = current === "visible" ? "none" : "visible";
-            map.setLayoutProperty(id, "visibility", opposite);
-            requestAnimationFrame(() => {
-              if (!mapInst.current || !map.getLayer(id)) return;
-              try {
-                map.setLayoutProperty(id, "visibility", current);
-              } catch (_) {
-              }
-            });
-          } catch (_) {
-          }
-        });
-        try {
-          map.triggerRepaint();
-        } catch (_) {
-        }
+        const flips = [];
+        if (showCampingSpots && setShowCampingSpots) flips.push([true, setShowCampingSpots]);
+        if (showPublicLands && setShowPublicLands) flips.push([true, setShowPublicLands]);
+        if (showTripReports && setShowTripReports) flips.push([true, setShowTripReports]);
+        if (showTripPlans && setShowTripPlans) flips.push([true, setShowTripPlans]);
+        if (flips.length === 0) return;
+        flips.forEach(([, setter]) => setter(false));
+        setTimeout(() => {
+          flips.forEach(([orig, setter]) => setter(orig));
+        }, 120);
       }, 500);
       return () => {
         clearTimeout(t1);
