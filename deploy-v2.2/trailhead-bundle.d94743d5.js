@@ -48733,7 +48733,7 @@ ${suffix}`;
     const [layerRefreshTick, setLayerRefreshTick] = (0, import_react4.useState)(0);
     (0, import_react4.useEffect)(() => {
       if (!mapReady || !mapInst.current) return;
-      const t = setTimeout(() => {
+      const t1 = setTimeout(() => {
         if (!mapInst.current) return;
         try {
           mapInst.current.resize();
@@ -48745,7 +48745,51 @@ ${suffix}`;
         }
         setLayerRefreshTick((x) => x + 1);
       }, 250);
-      return () => clearTimeout(t);
+      const t2 = setTimeout(() => {
+        const map = mapInst.current;
+        if (!map) return;
+        const layerIds = [
+          "camping-spots-clusters",
+          "camping-spots-cluster-count",
+          "camping-spots-points",
+          "trip-reports-line-glow",
+          "trip-reports-line",
+          "trip-reports-line-hit",
+          "trip-reports-end-points",
+          "trip-reports-points",
+          "trip-plans-line-glow",
+          "trip-plans-line",
+          "trip-plans-line-hit",
+          "trip-plans-end-points",
+          "trip-plans-points",
+          "public-lands-fill",
+          "public-lands-line"
+        ];
+        layerIds.forEach((id) => {
+          if (!map.getLayer(id)) return;
+          try {
+            const current = map.getLayoutProperty(id, "visibility") || "visible";
+            const opposite = current === "visible" ? "none" : "visible";
+            map.setLayoutProperty(id, "visibility", opposite);
+            requestAnimationFrame(() => {
+              if (!mapInst.current || !map.getLayer(id)) return;
+              try {
+                map.setLayoutProperty(id, "visibility", current);
+              } catch (_) {
+              }
+            });
+          } catch (_) {
+          }
+        });
+        try {
+          map.triggerRepaint();
+        } catch (_) {
+        }
+      }, 500);
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+      };
     }, [mapReady]);
     useCampingSpotsLayer(mapInst, mapReady, campingSpots, showCampingSpots, (spot) => {
       clearOtherSelections();
