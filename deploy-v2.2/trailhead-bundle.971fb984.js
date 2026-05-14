@@ -43225,7 +43225,12 @@ ${suffix}`;
   }
   function deriveTripGeom(rd) {
     if (!rd || typeof rd !== "object") return { end: null, geom: null };
-    const pts = Array.isArray(rd.points) && rd.points.length > 0 ? rd.points : Array.isArray(rd.pins) ? rd.pins : [];
+    const rawPts = Array.isArray(rd.points) && rd.points.length > 0 ? rd.points : Array.isArray(rd.pins) ? rd.pins : [];
+    const pts = rawPts.map((p) => {
+      if (p && typeof p === "object" && p.lat != null && p.lng != null) return p;
+      if (Array.isArray(p) && p.length >= 2 && isFinite(p[0]) && isFinite(p[1])) return { lng: p[0], lat: p[1] };
+      return null;
+    }).filter(Boolean);
     if (pts.length === 0) return { end: null, geom: null };
     const target = 80;
     const step = Math.max(1, Math.floor(pts.length / target));
@@ -46987,6 +46992,11 @@ ${suffix}`;
       if ((!pins || pins.length === 0) && (!points || points.length === 0)) return;
       if (!mapRef.current) return;
       let cancelled = false;
+      const norm = (p) => {
+        if (p && typeof p === "object" && !Array.isArray(p) && p.lat != null && p.lng != null) return p;
+        if (Array.isArray(p) && p.length >= 2 && isFinite(p[0]) && isFinite(p[1])) return { lng: p[0], lat: p[1] };
+        return null;
+      };
       const init = async () => {
         let mapboxgl;
         try {
@@ -46995,11 +47005,14 @@ ${suffix}`;
           return;
         }
         if (cancelled || !mapRef.current || mapInst.current) return;
-        const allPts = points && points.length > 0 ? points : pins;
+        const normPoints = (points || []).map(norm).filter(Boolean);
+        const normPins = (pins || []).map(norm).filter(Boolean);
+        const allPts = normPoints.length > 0 ? normPoints : normPins;
+        if (allPts.length === 0) return;
         const first = allPts[0];
         const bounds = new mapboxgl.LngLatBounds([first.lng, first.lat], [first.lng, first.lat]);
         allPts.forEach((p) => bounds.extend([p.lng, p.lat]));
-        if (pins) pins.forEach((p) => bounds.extend([p.lng, p.lat]));
+        normPins.forEach((p) => bounds.extend([p.lng, p.lat]));
         const map = new mapboxgl.Map({
           container: mapRef.current,
           style: MAPBOX_STYLE,
@@ -47011,7 +47024,7 @@ ${suffix}`;
         mapInst.current = map;
         const onMapLoad = () => {
           if (cancelled) return;
-          const polyPath = points && points.length > 1 ? points.map((p) => [p.lng, p.lat]) : pins && pins.length > 1 ? pins.map((p) => [p.lng, p.lat]) : [];
+          const polyPath = normPoints.length > 1 ? normPoints.map((p) => [p.lng, p.lat]) : normPins.length > 1 ? normPins.map((p) => [p.lng, p.lat]) : [];
           if (polyPath.length > 1 && !map.getSource("route-line")) {
             map.addSource("route-line", { type: "geojson", data: { type: "Feature", geometry: { type: "LineString", coordinates: polyPath }, properties: {} } });
             map.addLayer({
@@ -54244,7 +54257,7 @@ ${suffix}`;
         sourceId: p.sourceId || void 0,
         sourceType: p.sourceType || void 0
       }));
-      const routeData = { pins, points: planBuilderPoints.map((p) => [p.lng, p.lat]) };
+      const routeData = { pins, points: planBuilderPoints.map((p) => ({ lat: p.lat, lng: p.lng })) };
       const first = planBuilderPoints[0];
       const last = planBuilderPoints[planBuilderPoints.length - 1];
       const updates = {
