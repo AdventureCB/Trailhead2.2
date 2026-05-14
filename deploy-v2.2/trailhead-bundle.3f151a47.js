@@ -48609,6 +48609,35 @@ ${suffix}`;
     const lpPosRef = (0, import_react4.useRef)(null);
     const lpTimerRef = (0, import_react4.useRef)(null);
     const lpStartRef = (0, import_react4.useRef)({ x: 0, y: 0, t: 0 });
+    const magnifierContainerRef = (0, import_react4.useRef)(null);
+    const magnifierMapRef = (0, import_react4.useRef)(null);
+    const ensureMagnifier = (centerLngLat, zoom) => {
+      if (magnifierMapRef.current || !window.mapboxgl || !magnifierContainerRef.current) return;
+      try {
+        const m = new window.mapboxgl.Map({
+          container: magnifierContainerRef.current,
+          style: MAPBOX_STYLE,
+          center: centerLngLat,
+          zoom,
+          interactive: false,
+          attributionControl: false
+        });
+        magnifierMapRef.current = m;
+      } catch (e) {
+        console.warn("[magnifier] init failed", e);
+      }
+    };
+    (0, import_react4.useEffect)(() => {
+      return () => {
+        if (magnifierMapRef.current) {
+          try {
+            magnifierMapRef.current.remove();
+          } catch (_) {
+          }
+          magnifierMapRef.current = null;
+        }
+      };
+    }, []);
     const planActiveRef = (0, import_react4.useRef)(planActive);
     const addingModeRef = (0, import_react4.useRef)(addingMode);
     const addSpotPosRef = (0, import_react4.useRef)(addSpotPos);
@@ -48693,11 +48722,30 @@ ${suffix}`;
             navigator.vibrate && navigator.vibrate(40);
           } catch (_) {
           }
+          const cur = lpPosRef.current;
+          if (cur) {
+            const targetZoom = Math.max(6, Math.min(18, (map.getZoom() || 10) + 3));
+            if (!magnifierMapRef.current) {
+              ensureMagnifier([cur.lng, cur.lat], targetZoom);
+            } else {
+              try {
+                magnifierMapRef.current.jumpTo({ center: [cur.lng, cur.lat], zoom: targetZoom });
+                magnifierMapRef.current.resize();
+              } catch (_) {
+              }
+            }
+          }
         }, 500);
       };
       const onPointerMove = (e) => {
         if (lpActiveRef.current) {
           writeLpPos(e.clientX, e.clientY);
+          if (magnifierMapRef.current && lpPosRef.current) {
+            try {
+              magnifierMapRef.current.setCenter([lpPosRef.current.lng, lpPosRef.current.lat]);
+            } catch (_) {
+            }
+          }
           try {
             e.preventDefault();
           } catch (_) {
@@ -48766,11 +48814,26 @@ ${suffix}`;
       if (!mapInst.current) return;
       mapInst.current.flyTo({ center: [lng, lat], zoom, duration: 700 });
     };
-    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", flex: 1, display: "flex", flexDirection: "column", minHeight: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", overflow: "hidden", flex: 1, minHeight: 420 } }, /* @__PURE__ */ import_react4.default.createElement("div", { ref: mapRef, style: { width: "100%", height: "100%" } }), lpActive && lpPos && (() => {
-      const isCamp = false;
+    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", flex: 1, display: "flex", flexDirection: "column", minHeight: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", overflow: "hidden", flex: 1, minHeight: 420 } }, /* @__PURE__ */ import_react4.default.createElement("div", { ref: mapRef, style: { width: "100%", height: "100%" } }), (() => {
+      const SIZE = 160;
+      let x = 16, y = 16, visibility = "hidden";
+      if (lpActive && lpPos) {
+        visibility = "visible";
+        x = lpPos.x - SIZE / 2;
+        y = lpPos.y - SIZE - 60;
+        const wrapperW = mapRef.current && mapRef.current.clientWidth || 9999;
+        const wrapperH = mapRef.current && mapRef.current.clientHeight || 9999;
+        if (y < 8) {
+          y = lpPos.y + 60;
+        }
+        x = Math.max(8, Math.min(wrapperW - SIZE - 8, x));
+        y = Math.max(8, Math.min(wrapperH - SIZE - 8, y));
+      }
+      return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: x, top: y, width: SIZE, height: SIZE, zIndex: 32, pointerEvents: "none", visibility, transition: "left 0.04s linear, top 0.04s linear" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, borderRadius: "50%", overflow: "hidden", border: `4px solid ${T.white}`, boxShadow: "0 10px 28px rgba(0,0,0,0.55)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { ref: magnifierContainerRef, style: { width: "100%", height: "100%" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", width: 22, height: 22 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, top: 0, width: 2, height: 22, background: T.white, boxShadow: "0 0 4px rgba(0,0,0,0.7)" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 0, top: 10, width: 22, height: 2, background: T.white, boxShadow: "0 0 4px rgba(0,0,0,0.7)" } })))));
+    })(), lpActive && lpPos && (() => {
       const willPlanPick = !!planActive;
       const previewColor = willPlanPick ? T.copper : T.green;
-      return /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: lpPos.x - 28, top: lpPos.y - 28, width: 56, height: 56, borderRadius: "50%", border: `2px solid ${T.white}`, background: `${previewColor}30`, pointerEvents: "none", zIndex: 30, boxShadow: "0 4px 14px rgba(0,0,0,0.4)" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: lpPos.x - 1, top: lpPos.y - 11, width: 2, height: 22, background: T.white, pointerEvents: "none", zIndex: 31, boxShadow: "0 0 4px rgba(0,0,0,0.6)" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: lpPos.x - 11, top: lpPos.y - 1, width: 22, height: 2, background: T.white, pointerEvents: "none", zIndex: 31, boxShadow: "0 0 4px rgba(0,0,0,0.6)" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: lpPos.x - 22, top: lpPos.y - 84, width: 44, height: 44, borderRadius: "50%", background: previewColor, color: T.white, border: `3px solid ${T.white}`, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none", zIndex: 32, boxShadow: "0 6px 18px rgba(0,0,0,0.55)", transition: "transform 0.05s linear" } }, willPlanPick ? /* @__PURE__ */ import_react4.default.createElement(Route, { size: 20, color: T.white, strokeWidth: 2 }) : /* @__PURE__ */ import_react4.default.createElement(Tent, { size: 20, color: T.white, strokeWidth: 2 })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: lpPos.x - 1, top: lpPos.y - 60, width: 2, height: 38, background: `${T.white}AA`, pointerEvents: "none", zIndex: 30 } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: 10, left: "50%", transform: "translateX(-50%)", zIndex: 33, background: `${T.darkCard}F0`, border: `1px solid ${previewColor}80`, borderRadius: 8, padding: "8px 14px", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, letterSpacing: 0.4, boxShadow: "0 4px 12px rgba(0,0,0,0.4)", pointerEvents: "none", textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontSize: 9, color: previewColor, letterSpacing: 1.2, fontWeight: 700, marginBottom: 2 } }, willPlanPick ? "DRAG TO POSITION \xB7 RELEASE TO ADD POINT" : "DRAG TO POSITION \xB7 RELEASE TO ADD SPOT"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, lpPos.lat.toFixed(5), ", ", lpPos.lng.toFixed(5))));
+      return /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: lpPos.x - 28, top: lpPos.y - 28, width: 56, height: 56, borderRadius: "50%", border: `2px solid ${T.white}`, background: `${previewColor}30`, pointerEvents: "none", zIndex: 30, boxShadow: "0 4px 14px rgba(0,0,0,0.4)" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: lpPos.x - 1, top: lpPos.y - 11, width: 2, height: 22, background: T.white, pointerEvents: "none", zIndex: 31, boxShadow: "0 0 4px rgba(0,0,0,0.6)" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: lpPos.x - 11, top: lpPos.y - 1, width: 22, height: 2, background: T.white, pointerEvents: "none", zIndex: 31, boxShadow: "0 0 4px rgba(0,0,0,0.6)" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: 10, left: "50%", transform: "translateX(-50%)", zIndex: 33, background: `${T.darkCard}F0`, border: `1px solid ${previewColor}80`, borderRadius: 8, padding: "8px 14px", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, letterSpacing: 0.4, boxShadow: "0 4px 12px rgba(0,0,0,0.4)", pointerEvents: "none", textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontSize: 9, color: previewColor, letterSpacing: 1.2, fontWeight: 700, marginBottom: 2 } }, willPlanPick ? "DRAG TO POSITION \xB7 RELEASE TO ADD POINT" : "DRAG TO POSITION \xB7 RELEASE TO ADD SPOT"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, lpPos.lat.toFixed(5), ", ", lpPos.lng.toFixed(5))));
     })(), planActive && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: 0, left: 0, right: 0, zIndex: 10, background: T.copper, color: T.white, padding: "10px 14px", boxShadow: "0 4px 14px rgba(0,0,0,0.4)", display: "flex", alignItems: "center", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement(Route, { size: 16, color: T.white, strokeWidth: 2 }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 1.2 } }, "PLANNING TRIP"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, opacity: 0.9 } }, planBuilder.points.length === 0 ? "Tap the map to add your first point" : `${planBuilder.points.length} point${planBuilder.points.length === 1 ? "" : "s"} \xB7 tap map to add more`)), /* @__PURE__ */ import_react4.default.createElement(
       "button",
       {
