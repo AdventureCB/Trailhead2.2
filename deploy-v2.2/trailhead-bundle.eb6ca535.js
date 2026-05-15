@@ -44832,14 +44832,14 @@ ${suffix}`;
     borderRadius: 12,
     overflow: "hidden"
   };
-  function BottomNav({ active, onNav }) {
+  function BottomNav({ active, onNav, isGuest }) {
     const items = [
       { key: "feed", label: "Feed", icon: House },
       { key: "forum", label: "Forum", icon: Compass },
       { key: "routes", label: "Maps", icon: Map2 },
       { key: "builds", label: "Builds", icon: Wrench },
-      { key: "ranks", label: "Ranks", icon: Trophy }
-    ];
+      !isGuest ? { key: "ranks", label: "Ranks", icon: Trophy } : null
+    ].filter(Boolean);
     return /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", position: "sticky", bottom: 0, background: T.darkCard, padding: "10px 0 max(10px, env(safe-area-inset-bottom))", borderTop: `1px solid ${T.charcoal}`, zIndex: 100, flexShrink: 0 } }, items.map((it) => {
       const Icon2 = it.icon;
       const isActive = active === it.key;
@@ -57472,7 +57472,7 @@ ${suffix}`;
       const ownerName = isReshare ? b.owner || null : null;
       addPost({ id: "feedbuild_" + Date.now(), type: "BUILDS", user: meName, initial: meName.charAt(0).toUpperCase(), time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, subtitle: isReshare ? `Shared @${ownerHandle}'s build` : "Added a new build", vehicle: `${b.year} ${b.make} ${b.model}`, photoUrls: heroImg ? [heroImg] : void 0, image: heroImg, likes: 0, comments: 0, buildData: bd, buildRawId: b.rawId != null ? b.rawId : null, sharedFromOwnerHandle: ownerHandle, sharedFromOwnerName: ownerName, _skipBuildIdCol: isReshare });
       awardPoints(POINTS.feedPost, "Build Shared");
-    }) }), screen === "ranks" && (isGuest ? /* @__PURE__ */ import_react4.default.createElement(GuestGateScreen, { title: "RANKS REQUIRE AN ACCOUNT", subtitle: "Sign in to see the leaderboard and start earning points from your posts, routes and builds.", onSignIn: goToLoginFromGuest }) : /* @__PURE__ */ import_react4.default.createElement(RanksScreen, { myPoints: myTotalPoints, pointsBreakdown })))), screen === "feed" && !isOverlay && !isGuest && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setShowCompose(true), style: { position: "absolute", bottom: 68, right: 16, width: 52, height: 52, borderRadius: "50%", background: T.red, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 4px 20px ${T.red}60`, zIndex: 90 } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 24, color: T.white, strokeWidth: 2 })), /* @__PURE__ */ import_react4.default.createElement(BottomNav, { active: isOverlay ? "" : screen, onNav: handleNav }), mapData && /* @__PURE__ */ import_react4.default.createElement(
+    }) }), screen === "ranks" && (isGuest ? /* @__PURE__ */ import_react4.default.createElement(GuestGateScreen, { title: "RANKS REQUIRE AN ACCOUNT", subtitle: "Sign in to see the leaderboard and start earning points from your posts, routes and builds.", onSignIn: goToLoginFromGuest }) : /* @__PURE__ */ import_react4.default.createElement(RanksScreen, { myPoints: myTotalPoints, pointsBreakdown })))), screen === "feed" && !isOverlay && !isGuest && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setShowCompose(true), style: { position: "absolute", bottom: 68, right: 16, width: 52, height: 52, borderRadius: "50%", background: T.red, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 4px 20px ${T.red}60`, zIndex: 90 } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 24, color: T.white, strokeWidth: 2 })), /* @__PURE__ */ import_react4.default.createElement(BottomNav, { active: isOverlay ? "" : screen, onNav: handleNav, isGuest }), mapData && /* @__PURE__ */ import_react4.default.createElement(
       MapOverlay,
       {
         coords: mapData.coords,

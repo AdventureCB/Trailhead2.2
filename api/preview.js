@@ -55,9 +55,61 @@ const escapeHtml = (s) =>
     .replace(/'/g, "&#39;");
 
 // Mapbox Static Images — kind-tinted pin centered on the entity. 1200x630
-// is the recommended OG image aspect (1.91:1).
-const staticMap = (lng, lat, color, marker) =>
-  `https://api.mapbox.com/styles/v1/mapbox/outdoors-v12/static/pin-l-${marker}+${color.replace("#", "")}(${lng},${lat})/${lng},${lat},12,0/1200x630@2x?access_token=${MAPBOX_TOKEN}`;
+// is the recommended OG image aspect (1.91:1). Zoom 14 is tuned so the
+// pin reads clearly on iMessage's compact card preview (was 12 — too
+// regional, the pin disappeared into the basemap).
+const staticMap = (lng, lat, color, marker, zoom = 14) =>
+  `https://api.mapbox.com/styles/v1/mapbox/outdoors-v12/static/pin-l-${marker}+${color.replace("#", "")}(${lng},${lat})/${lng},${lat},${zoom},0/1200x630@2x?access_token=${MAPBOX_TOKEN}`;
+
+// Encode an array of [lng, lat] tuples as a Google polyline (precision 5)
+// for use as a path overlay on Mapbox Static Images. Mapbox swaps lat/lng
+// internally — we encode in [lat, lng] order as the polyline spec requires.
+function encodePolyline(coords) {
+  let result = "";
+  let prevLat = 0, prevLng = 0;
+  const enc = (val) => {
+    let n = val < 0 ? ~(val << 1) : (val << 1);
+    let out = "";
+    while (n >= 0x20) {
+      out += String.fromCharCode((0x20 | (n & 0x1f)) + 63);
+      n >>>= 5;
+    }
+    out += String.fromCharCode(n + 63);
+    return out;
+  };
+  for (let i = 0; i < coords.length; i++) {
+    const [lng, lat] = coords[i];
+    if (typeof lat !== "number" || typeof lng !== "number") continue;
+    const latE5 = Math.round(lat * 1e5);
+    const lngE5 = Math.round(lng * 1e5);
+    result += enc(latE5 - prevLat);
+    result += enc(lngE5 - prevLng);
+    prevLat = latE5;
+    prevLng = lngE5;
+  }
+  return result;
+}
+
+// Build a Mapbox Static Images URL with a path overlay (full route line
+// + start/end pins) auto-bounded to fit. Used for trip / plan previews
+// so the OG card shows the entire route, not just the start point.
+const staticMapWithPath = (coords, lineColor, accentColor) => {
+  if (!Array.isArray(coords) || coords.length < 2) return null;
+  // Cap the polyline length — Mapbox URL has a ~8KB limit. ~80 simplified
+  // points (the row's stored shape) keeps us comfortably under.
+  const trimmed = coords.length > 100
+    ? coords.filter((_, i) => i % Math.ceil(coords.length / 100) === 0)
+    : coords;
+  const encoded = encodeURIComponent(encodePolyline(trimmed));
+  const startLng = trimmed[0][0], startLat = trimmed[0][1];
+  const endLng = trimmed[trimmed.length - 1][0], endLat = trimmed[trimmed.length - 1][1];
+  const startPin = `pin-s+${accentColor.replace("#", "")}(${startLng},${startLat})`;
+  const endPin = `pin-s-circle+${accentColor.replace("#", "")}(${endLng},${endLat})`;
+  const path = `path-5+${lineColor.replace("#", "")}-1(${encoded})`;
+  // /auto/ tells Mapbox to fit-bounds the overlay; padding keeps the
+  // line off the edges. @2x renders at retina for sharper iMessage cards.
+  return `https://api.mapbox.com/styles/v1/mapbox/outdoors-v12/static/${path},${startPin},${endPin}/auto/1200x630@2x?padding=60&access_token=${MAPBOX_TOKEN}`;
+};
 
 async function supabaseFetch(table, queryStr) {
   const url = `${SUPABASE_URL}/rest/v1/${table}?${queryStr}`;
@@ -83,22 +135,31 @@ async function resolveEntity(type, id) {
     const want = type === "plan" ? "plan" : "report";
     const row = await supabaseFetch(
       "trip_reports",
-      `slug=eq.${encodeURIComponent(id)}&select=name,slug,description,hero_img,start_lat,start_lng,kind,distance_mi&limit=1`
+      `slug=eq.${encodeURIComponent(id)}&select=name,slug,description,hero_img,start_lat,start_lng,kind,distance_mi,route_geom&limit=1`
     );
     if (!row) return null;
     if (row.kind && row.kind !== want) return null;
     const isReport = row.kind !== "plan";
-    const heroFromMap =
-      row.start_lng != null && row.start_lat != null
-        ? staticMap(row.start_lng, row.start_lat, isReport ? "8b6faf" : "BD472A", isReport ? "circle" : "marker")
-        : null;
+    const accent = isReport ? "8b6faf" : "BD472A";
+    // Prefer the full-route polyline preview when route_geom is present
+    // (almost always — backfilled on every published row). Fall back to
+    // a single zoomed-in start pin if not.
+    const routeMap = Array.isArray(row.route_geom) && row.route_geom.length >= 2
+      ? staticMapWithPath(row.route_geom, accent, accent)
+      : null;
+    const pinMap = row.start_lng != null && row.start_lat != null
+      ? staticMap(row.start_lng, row.start_lat, accent, isReport ? "circle" : "marker", 14)
+      : null;
     const stat = row.distance_mi != null ? ` · ${Number(row.distance_mi).toFixed(1)} mi` : "";
     return {
       title: `${row.name}${isReport ? " · Trip Report" : " · Trip Plan"}`,
       description:
         row.description ||
         `${isReport ? "Overlanding trip report" : "Planned overlanding trip"}${stat} on Trailhead.`,
-      image: row.hero_img || heroFromMap,
+      // Route polyline first — it's what makes Trailhead distinctive
+      // and matches the user's intent ("show the entire route"). Hero
+      // photo is a fallback for trips where route_geom is missing.
+      image: routeMap || row.hero_img || pinMap,
     };
   }
   if (type === "spot") {
