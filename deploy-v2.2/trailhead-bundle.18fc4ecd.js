@@ -57311,6 +57311,11 @@ ${suffix}`;
           if (ids.length === 0) return;
           setSubmitting(true);
           try {
+            if (ids.length === 1) {
+              setRecipientPickerSession(null);
+              openDM(ids[0], session.caption || "", session.sharedPost || null);
+              return;
+            }
             const convId = await findOrCreateConvByUsers(ids);
             if (!convId) {
               showErrorToast("Couldn't open that conversation.");
@@ -57318,11 +57323,12 @@ ${suffix}`;
               return;
             }
             setRecipientPickerSession(null);
-            setDmInitialConvId(convId);
             setDmInitialMessage(session.caption || "");
             setDmSharedPost(session.sharedPost || null);
-            setShowDM(true);
+            setDmInitialConvId(convId);
             setActiveDmConvId(convId);
+            setDmKey((k) => k + 1);
+            setShowDM(true);
           } catch (e) {
             console.error("[picker] submit failed", e);
             showErrorToast("Couldn't open that conversation.");
