@@ -43748,6 +43748,104 @@ ${suffix}`;
       };
     }, [mapRef, ready, rows, visible, selectedId, refreshKey]);
   }
+  function ShareIntentSheet({ target, onClose, onOpenShareCompose, onShowToast }) {
+    if (!target || !target.kind) return null;
+    const origin = typeof window !== "undefined" && window.location && window.location.origin || "";
+    const data = target.data || {};
+    const cfg = (() => {
+      switch (target.kind) {
+        case "spot":
+          return { url: `${origin}/spots/${data.id}`, title: data.name || "Camping spot", label: "CAMPING SPOT", accent: "#5B8C5A" };
+        case "trip":
+          return { url: `${origin}/trips/${data.slug}`, title: data.name || "Trip report", label: "TRIP REPORT", accent: "#8B6FAF" };
+        case "plan":
+          return { url: `${origin}/plans/${data.slug}`, title: data.name || "Trip plan", label: "TRIP PLAN", accent: T.copper };
+        case "hq":
+          return { url: `${origin}/hq`, title: LPO_HQ && LPO_HQ.name || "Lone Peak HQ", label: "HEADQUARTERS", accent: T.red };
+        case "build":
+          return { url: `${origin}/builds/${data.id}`, title: data.name || (data.year && data.make ? `${data.year} ${data.make} ${data.model || ""}`.trim() : "Build"), label: "BUILD", accent: T.copper };
+        case "forum":
+          return { url: `${origin}/forum/${data.id || data.threadId}`, title: data.title || "Thread", label: "FORUM THREAD", accent: T.copper };
+        case "route":
+          return { url: `${origin}/post/${data.id}`, title: data.title || "Route", label: "ROUTE", accent: T.copper };
+        case "post":
+          return { url: `${origin}/post/${data.id}`, title: data.title || data.body || "Post", label: "POST", accent: T.copper };
+        default:
+          return { url: origin, title: "Trailhead", label: "SHARE", accent: T.copper };
+      }
+    })();
+    const handleCopy = async () => {
+      try {
+        if (navigator.clipboard) await navigator.clipboard.writeText(cfg.url);
+        else {
+          const ta = document.createElement("textarea");
+          ta.value = cfg.url;
+          document.body.appendChild(ta);
+          ta.select();
+          try {
+            document.execCommand("copy");
+          } finally {
+            document.body.removeChild(ta);
+          }
+        }
+        onShowToast && onShowToast("Link copied to clipboard");
+      } catch (e) {
+      }
+      onClose && onClose();
+    };
+    const handleNative = async () => {
+      try {
+        if (navigator.share) await navigator.share({ title: cfg.title, url: cfg.url });
+        else await handleCopy();
+      } catch (e) {
+      }
+      onClose && onClose();
+    };
+    const handleDM = () => {
+      if (onOpenShareCompose) onOpenShareCompose({ kind: target.kind, action: "dm", data });
+      onClose && onClose();
+    };
+    const handleFeed = () => {
+      if (onOpenShareCompose) onOpenShareCompose({ kind: target.kind, action: "feed", data });
+      onClose && onClose();
+    };
+    const hasNative = typeof navigator !== "undefined" && typeof navigator.share === "function";
+    return /* @__PURE__ */ import_react4.default.createElement("div", { onClick: onClose, style: { position: "fixed", inset: 0, zIndex: 1300, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center", padding: 12 } }, /* @__PURE__ */ import_react4.default.createElement("div", { onClick: (e) => e.stopPropagation(), style: { width: "100%", maxWidth: 480, background: `${T.darkCard}F8`, border: `1px solid ${cfg.accent}50`, borderRadius: 12, padding: 14, boxShadow: "0 12px 32px rgba(0,0,0,0.6)", marginBottom: 24 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 12 } }, /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 14, color: cfg.accent }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: cfg.accent, letterSpacing: 1.2, fontWeight: 700, marginBottom: 1 } }, "SHARE \xB7 ", cfg.label), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, cfg.title)), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: onClose, style: { background: "none", border: "none", cursor: "pointer", padding: 4, color: T.tertiary } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 16 }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: handleCopy,
+        style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "12px 6px", background: T.charcoal, border: `1px solid ${T.tertiary}30`, borderRadius: 8, cursor: "pointer", fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 700, letterSpacing: 0.4 }
+      },
+      /* @__PURE__ */ import_react4.default.createElement(Link2, { size: 18, color: T.copper }),
+      "COPY LINK"
+    ), hasNative && /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: handleNative,
+        style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "12px 6px", background: T.charcoal, border: `1px solid ${T.tertiary}30`, borderRadius: 8, cursor: "pointer", fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 700, letterSpacing: 0.4 }
+      },
+      /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 18, color: T.copper }),
+      "MORE"
+    ), /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: handleDM,
+        disabled: !onOpenShareCompose,
+        style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "12px 6px", background: T.charcoal, border: `1px solid ${T.tertiary}30`, borderRadius: 8, cursor: onOpenShareCompose ? "pointer" : "default", fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 700, letterSpacing: 0.4, opacity: onOpenShareCompose ? 1 : 0.4 }
+      },
+      /* @__PURE__ */ import_react4.default.createElement(Send, { size: 18, color: T.copper }),
+      "SEND DM"
+    ), /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: handleFeed,
+        disabled: !onOpenShareCompose,
+        style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "12px 6px", background: T.charcoal, border: `1px solid ${T.tertiary}30`, borderRadius: 8, cursor: onOpenShareCompose ? "pointer" : "default", fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 700, letterSpacing: 0.4, opacity: onOpenShareCompose ? 1 : 0.4 }
+      },
+      /* @__PURE__ */ import_react4.default.createElement(SquarePlus, { size: 18, color: T.copper }),
+      "TO FEED"
+    )), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginTop: 10, padding: "8px 10px", background: T.darkBg, borderRadius: 6, fontFamily: sans, fontSize: 10, color: T.tertiary, wordBreak: "break-all" } }, cfg.url)));
+  }
   function ShareRecipientPicker({ followingIdsArr, searchUsers, onCancel, onSubmit }) {
     const [followingProfiles, setFollowingProfiles] = (0, import_react4.useState)([]);
     const [followingLoaded, setFollowingLoaded] = (0, import_react4.useState)(false);
@@ -45050,7 +45148,7 @@ ${suffix}`;
       next();
     }, style: { position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: `${T.charcoal}AA`, border: "none", borderRadius: "50%", width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 22, color: T.white })))), images.length > 1 && /* @__PURE__ */ import_react4.default.createElement("div", { onClick: (e) => e.stopPropagation(), style: { display: "flex", gap: 6, padding: "12px 16px", overflowX: "auto", maxWidth: 430, width: "100%" } }, images.map((img, i) => /* @__PURE__ */ import_react4.default.createElement("img", { key: i, src: img, alt: "", onClick: () => setIdx(i), style: { width: 48, height: 48, borderRadius: 6, objectFit: "cover", flexShrink: 0, cursor: "pointer", border: i === idx ? `2px solid ${T.copper}` : `2px solid transparent`, opacity: i === idx ? 1 : 0.5, transition: "opacity 0.15s, border 0.15s" } }))));
   }
-  function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShareCompose, onViewBuild, onOpenTripDetail, feedItems, onUpdateFeed, onUpdatePost, likedPostIds, onTogglePostLike, postComments, onAddComment, onDeleteComment, likedCommentIds, onToggleCommentLike, currentUserId, currentUserName, currentUserHandle, currentUserAvatar, onDeletePost, onEditPost, onAddNotification, forumUserReplies, forumViewCounts, savedRoutes, onSaveRoute, onUnsaveRoute, onStartNav, onStartDirections, onAwardPoints, isGuest, onGuestTap, pendingPostNav, onConsumePendingPostNav, onSharedPostMissing, convoyRsvps, onRsvpConvoy, onSearchUsers, filterFn, hideFilters, onlineUserIds, tripReports, tripAuthors, onNewTripReport, onOpenTripDraft, onOpenSpotOnMap, onOpenHQOnMap }) {
+  function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShareCompose, onOpenShareIntent, onViewBuild, onOpenTripDetail, feedItems, onUpdateFeed, onUpdatePost, likedPostIds, onTogglePostLike, postComments, onAddComment, onDeleteComment, likedCommentIds, onToggleCommentLike, currentUserId, currentUserName, currentUserHandle, currentUserAvatar, onDeletePost, onEditPost, onAddNotification, forumUserReplies, forumViewCounts, savedRoutes, onSaveRoute, onUnsaveRoute, onStartNav, onStartDirections, onAwardPoints, isGuest, onGuestTap, pendingPostNav, onConsumePendingPostNav, onSharedPostMissing, convoyRsvps, onRsvpConvoy, onSearchUsers, filterFn, hideFilters, onlineUserIds, tripReports, tripAuthors, onNewTripReport, onOpenTripDraft, onOpenSpotOnMap, onOpenHQOnMap }) {
     const [activeFilter, setActiveFilter] = (0, import_react4.useState)("ALL");
     const filters = ["ALL", "BUILDS", "CONVOYS", "TRIP REPORTS", "PHOTOS", "FORUM"];
     const likedPosts = likedPostIds || {};
@@ -45197,21 +45295,8 @@ ${suffix}`;
         toggleComments(item.id);
       }, style: { display: "flex", alignItems: "center", gap: 5, padding: "8px 12px", borderRadius: 20, background: openComments === item.id ? `${T.copper}18` : "transparent", border: "none", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(MessageCircle, { size: 16, color: openComments === item.id ? T.copper : T.tertiary, strokeWidth: 1.5 }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: openComments === item.id ? T.copper : T.tertiary } }, item.comments)), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: (e) => {
         e.stopPropagation();
-        const isOpen = shareMenuId === item.id;
-        setShareMenuId(isOpen ? null : item.id);
-        setSharePickerId(null);
-        setShareSearch("");
-        setOpenComments(null);
-      }, style: { display: "flex", alignItems: "center", gap: 5, padding: "8px 12px", borderRadius: 20, background: shareMenuId === item.id ? `${T.copper}18` : "transparent", border: "none", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(Send, { size: 15, color: shareMenuId === item.id ? T.copper : T.tertiary, strokeWidth: 1.5 }))), extraLeft), shareMenuId === item.id && /* @__PURE__ */ import_react4.default.createElement("div", { style: { margin: "0 16px 10px", background: T.darkCard, borderRadius: 8, border: `1px solid ${T.charcoal}`, overflow: "hidden" }, onClick: (e) => e.stopPropagation() }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
-        setShareMenuId(null);
-        sendShareToUser(null, item);
-      }, style: { display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: "none", border: "none", borderBottom: `1px solid ${T.charcoal}`, cursor: "pointer", width: "100%" } }, /* @__PURE__ */ import_react4.default.createElement(Mail, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white } }, "Send via Direct Message"), /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 14, color: T.tertiary, style: { marginLeft: "auto" } })), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
-        setShareMenuId(null);
-        const url = window.location.origin + "/post/" + item.id;
-        navigator.clipboard && navigator.clipboard.writeText(url);
-        setCopiedToast(true);
-        setTimeout(() => setCopiedToast(false), 1800);
-      }, style: { display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: "none", border: "none", cursor: "pointer", width: "100%" } }, /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 14, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white } }, "Copy link"))), openComments === item.id && /* @__PURE__ */ import_react4.default.createElement("div", { style: { margin: "0 16px 12px", borderTop: `1px solid ${T.charcoal}`, paddingTop: 10 }, onClick: (e) => e.stopPropagation() }, allComments.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginBottom: 10, maxHeight: 280, overflowY: "auto" } }, allComments.map((c, ci) => {
+        onOpenShareIntent && onOpenShareIntent({ kind: "post", data: item });
+      }, style: { display: "flex", alignItems: "center", gap: 5, padding: "8px 12px", borderRadius: 20, background: "transparent", border: "none", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(Send, { size: 15, color: T.tertiary, strokeWidth: 1.5 }))), extraLeft), openComments === item.id && /* @__PURE__ */ import_react4.default.createElement("div", { style: { margin: "0 16px 12px", borderTop: `1px solid ${T.charcoal}`, paddingTop: 10 }, onClick: (e) => e.stopPropagation() }, allComments.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginBottom: 10, maxHeight: 280, overflowY: "auto" } }, allComments.map((c, ci) => {
         const cmtLiked = !!(c && c.id && likedComments[c.id]);
         const cmtLikeCount = c.likes || 0;
         return /* @__PURE__ */ import_react4.default.createElement("div", { key: c.id || ci, style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 28, height: 28, borderRadius: "50%", background: T.charcoal, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2, overflow: "hidden", ...avatarOnlineStyle(c.userId, onlineUserIds) } }, c.avatarUrl ? /* @__PURE__ */ import_react4.default.createElement("img", { src: c.avatarUrl, alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.copper } }, c.initial)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ import_react4.default.createElement("span", { onClick: () => onViewUser && onViewUser(c.handle || c.userId || (c.user || "").replace(/\s/g, "_")), style: { fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, cursor: "pointer" } }, "@", c.handle || c.user), /* @__PURE__ */ import_react4.default.createElement(RankBadge, { points: getPoints(c.user), size: 10 }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary } }, formatPostTime(c.time))), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.warmStone, margin: "2px 0 0", lineHeight: 1.4 } }, c.text), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => handleCommentLike(item.id, c), style: { display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 0 0 0", marginTop: 2 } }, /* @__PURE__ */ import_react4.default.createElement(Heart, { size: 12, color: cmtLiked ? T.red : T.tertiary, strokeWidth: 1.5, fill: cmtLiked ? T.red : "none" }), cmtLikeCount > 0 && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: cmtLiked ? T.red : T.tertiary } }, cmtLikeCount))));
@@ -45384,27 +45469,15 @@ ${suffix}`;
             }
           }, style: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "10px 6px", borderRadius: 8, background: T.copper, border: "none", cursor: startPin && endPin ? "pointer" : "default", opacity: startPin && endPin ? 1 : 0.4 } }, /* @__PURE__ */ import_react4.default.createElement(Navigation, { size: 13, color: T.white }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 600, letterSpacing: 0.3 } }, "START ROUTE")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: (e) => {
             e.stopPropagation();
-            setRouteShareMenu(showMenu ? null : item.id);
-          }, style: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "10px 6px", borderRadius: 8, background: T.charcoal, border: `1px solid ${T.tertiary}30`, cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 13, color: T.white }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 600, letterSpacing: 0.3 } }, "SHARE / SAVE"))), showMenu && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", bottom: "100%", right: 0, marginBottom: 6, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10, padding: "6px 0", minWidth: 180, zIndex: 50, boxShadow: "0 8px 24px rgba(0,0,0,0.5)" } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: (e) => {
-            e.stopPropagation();
-            setRouteShareMenu(null);
-            if (onOpenShareCompose) {
-              onOpenShareCompose({ kind: "route", action: "dm", data: { id: item.id, title: item.title, distance: item.distance, duration: item.duration, image: item.image || null } });
-            } else {
-              onOpenDM && onOpenDM(null, null, { type: "route", title: item.title, distance: item.distance, duration: item.duration });
-            }
-          }, style: { display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 14px", background: "none", border: "none", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(Send, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white } }, "Send in DM")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: (e) => {
-            e.stopPropagation();
-            setRouteShareMenu(null);
-          }, style: { display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 14px", background: "none", border: "none", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white } }, "Share to Feed")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { height: 1, background: T.charcoal, margin: "2px 10px" } }), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: (e) => {
-            e.stopPropagation();
             if (isSaved) {
               onUnsaveRoute && onUnsaveRoute(item.id);
             } else {
               onSaveRoute && onSaveRoute({ id: item.id, name: item.title, desc: item.body || "", difficulty: item.difficulty || "Moderate", distance: item.distance, time: item.duration, elevation: item.elevation || "\u2014", location: item.location || "", terrains: item.terrains || [], tags: item.tags || [], pins: item.pins || [], photos: item.photos || [], rating: null, reviews: 0, savedFrom: item.user, savedAt: Date.now() });
             }
-            setRouteShareMenu(null);
-          }, style: { display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 14px", background: "none", border: "none", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(Bookmark, { size: 14, color: isSaved ? T.red : T.copper, fill: isSaved ? T.red : "none" }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: isSaved ? T.red : T.white } }, isSaved ? "Unsave Route" : "Save for Later"))));
+          }, title: isSaved ? "Unsave route" : "Save route", style: { flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "10px 12px", borderRadius: 8, background: T.charcoal, border: `1px solid ${isSaved ? T.red : T.tertiary}30`, cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(Bookmark, { size: 14, color: isSaved ? T.red : T.white, fill: isSaved ? T.red : "none" })), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: (e) => {
+            e.stopPropagation();
+            onOpenShareIntent && onOpenShareIntent({ kind: "route", data: { id: item.id, title: item.title, distance: item.distance, duration: item.duration, image: item.image || null } });
+          }, style: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "10px 6px", borderRadius: 8, background: T.charcoal, border: `1px solid ${T.tertiary}30`, cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 13, color: T.white }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 600, letterSpacing: 0.3 } }, "SHARE"))));
         })()), feedEditBar(item), feedDeleteConfirm(item), actionBar(item));
       }
       if (item.type === "BUILDS") {
@@ -45771,7 +45844,7 @@ ${suffix}`;
       }
     });
   });
-  function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpenDM, onOpenShareCompose, onAddFeedPost, userThreads, setUserThreads, userReplies, setUserReplies, likedForumItems, setLikedForumItems, forumLikeCounts, setForumLikeCounts, forumViewCounts, setForumViewCounts, onAwardPoints, isGuest, onGuestTap }) {
+  function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpenDM, onOpenShareCompose, onOpenShareIntent, onAddFeedPost, userThreads, setUserThreads, userReplies, setUserReplies, likedForumItems, setLikedForumItems, forumLikeCounts, setForumLikeCounts, forumViewCounts, setForumViewCounts, onAwardPoints, isGuest, onGuestTap }) {
     const threadAgeMin = (time) => {
       if (time == null) return Number.MAX_SAFE_INTEGER;
       if (typeof time === "number") return Math.max(0, (Date.now() - time) / 6e4);
@@ -46338,13 +46411,7 @@ ${suffix}`;
         const replyTargetIdx = typeof rootParentIdx === "number" ? rootParentIdx : idx;
         return /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, marginTop: 6 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => toggleForumLike(key, post2.likes || 0), style: { display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px 4px 0" } }, /* @__PURE__ */ import_react4.default.createElement(Heart, { size: 12, color: liked ? T.red : T.tertiary, strokeWidth: 1.5, fill: liked ? T.red : "none" }), likes > 0 && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: liked ? T.red : T.tertiary } }, likes)), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
           setReplyToReply({ author: post2.author, idx: replyTargetIdx });
-        }, style: { display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px" } }, /* @__PURE__ */ import_react4.default.createElement(MessageCircle, { size: 12, color: T.tertiary, strokeWidth: 1.5 }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, "Reply")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setForumShareMenu(showShare ? null : key), style: { display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px" } }, /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 12, color: T.tertiary, strokeWidth: 1.5 })), showShare && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", bottom: "100%", right: 0, background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 8, padding: 4, marginBottom: 4, zIndex: 200, minWidth: 140, boxShadow: "0 -4px 16px rgba(0,0,0,0.5)" } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
-          shareToFeed(selectedThread.title, post2.body, post2.author);
-          setForumShareMenu(null);
-        }, style: { width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "none", border: "none", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 12, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.white } }, "Share to Feed")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
-          sendViaDM(post2.body || selectedThread.title, post2.author);
-          setForumShareMenu(null);
-        }, style: { width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "none", border: "none", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(Mail, { size: 12, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.white } }, "Send via DM")))));
+        }, style: { display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px" } }, /* @__PURE__ */ import_react4.default.createElement(MessageCircle, { size: 12, color: T.tertiary, strokeWidth: 1.5 }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, "Reply")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => onOpenShareIntent && onOpenShareIntent({ kind: "forum", data: { id: selectedThread.id, threadId: selectedThread.id, title: selectedThread.title, body: post2.body, author: post2.author, forumCat: selectedCat?.name || "", forumSub: selectedSub?.name || "", image: selectedThread.photos && selectedThread.photos[0] || null } }), style: { display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px" } }, /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 12, color: T.tertiary, strokeWidth: 1.5 })));
       };
       const threadLiked = likedForumItems[threadLikeKey];
       const threadLikes = getForumLikes(threadLikeKey, selectedThread.likes || 0);
@@ -46388,13 +46455,7 @@ ${suffix}`;
         setEditTitle(selectedThread.title);
         setEditBody(selectedThread.body || "");
         setEditPhotos(selectedThread.photos ? selectedThread.photos.map((u, i) => ({ url: u.url || u, id: i, type: u.type || "image", caption: u.caption || "" })) : []);
-      }, style: { background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex" } }, /* @__PURE__ */ import_react4.default.createElement(PenLine, { size: 16, color: T.tertiary, strokeWidth: 1.5 }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { margin: "0 16px 4px", padding: "0 0 8px" } }, selectedThread.pinned && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.copper, background: `${T.copper}20`, padding: "2px 6px", borderRadius: 3, letterSpacing: 1, marginBottom: 8, display: "inline-block" } }, "PINNED"), /* @__PURE__ */ import_react4.default.createElement("h2", { style: { fontFamily: sans, fontSize: 20, color: T.white, fontWeight: 700, margin: 0, lineHeight: 1.25 } }, selectedThread.title))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { margin: "0 16px 12px", background: T.darkCard, borderRadius: 12, padding: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 12 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 32, height: 32, borderRadius: "50%", background: T.charcoal, display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, fontWeight: 700, color: T.copper } }, selectedThread.initial)), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 } }, "@", selectedThread.author), /* @__PURE__ */ import_react4.default.createElement(RankBadgeWithName, { points: getPoints(selectedThread.author), size: 10 })), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, display: "block" } }, formatPostTime(selectedThread.time), selectedThread.editedAt ? " \xB7 edited" : ""))), selectedThread.body && /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 14, color: T.warmStone, lineHeight: 1.6, margin: 0 }, dangerouslySetInnerHTML: { __html: `${thRbCSS}<div class="th-rb">${selectedThread.body}</div>` } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginTop: 14, paddingTop: 12, borderTop: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => toggleForumLike(threadLikeKey, selectedThread.likes || 0), style: { display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 8px 4px 0" } }, /* @__PURE__ */ import_react4.default.createElement(Heart, { size: 14, color: threadLiked ? T.red : T.tertiary, strokeWidth: 1.5, fill: threadLiked ? T.red : "none" }), threadLikes > 0 && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: threadLiked ? T.red : T.tertiary } }, threadLikes)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, /* @__PURE__ */ import_react4.default.createElement(MessageCircle, { size: 14, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, allPosts.length, " replies")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, /* @__PURE__ */ import_react4.default.createElement(Eye, { size: 14, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, getViewCount(selectedThread), " views")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", marginLeft: "auto" } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setForumShareMenu(threadShareOpen ? null : threadLikeKey), style: { display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px" } }, /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 14, color: T.tertiary, strokeWidth: 1.5 })), threadShareOpen && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", bottom: "100%", right: 0, background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 8, padding: 4, marginBottom: 4, zIndex: 200, minWidth: 150, boxShadow: "0 -4px 16px rgba(0,0,0,0.5)" } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
-        shareToFeed(selectedThread.title, selectedThread.body, selectedThread.author);
-        setForumShareMenu(null);
-      }, style: { width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "none", border: "none", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 12, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.white } }, "Share to Feed")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
-        sendViaDM(selectedThread.title, selectedThread.author);
-        setForumShareMenu(null);
-      }, style: { width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "none", border: "none", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(Mail, { size: 12, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.white } }, "Send via DM")))))), allPosts.length > 0 && (() => {
+      }, style: { background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex" } }, /* @__PURE__ */ import_react4.default.createElement(PenLine, { size: 16, color: T.tertiary, strokeWidth: 1.5 }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { margin: "0 16px 4px", padding: "0 0 8px" } }, selectedThread.pinned && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.copper, background: `${T.copper}20`, padding: "2px 6px", borderRadius: 3, letterSpacing: 1, marginBottom: 8, display: "inline-block" } }, "PINNED"), /* @__PURE__ */ import_react4.default.createElement("h2", { style: { fontFamily: sans, fontSize: 20, color: T.white, fontWeight: 700, margin: 0, lineHeight: 1.25 } }, selectedThread.title))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { margin: "0 16px 12px", background: T.darkCard, borderRadius: 12, padding: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 12 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 32, height: 32, borderRadius: "50%", background: T.charcoal, display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, fontWeight: 700, color: T.copper } }, selectedThread.initial)), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 } }, "@", selectedThread.author), /* @__PURE__ */ import_react4.default.createElement(RankBadgeWithName, { points: getPoints(selectedThread.author), size: 10 })), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, display: "block" } }, formatPostTime(selectedThread.time), selectedThread.editedAt ? " \xB7 edited" : ""))), selectedThread.body && /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 14, color: T.warmStone, lineHeight: 1.6, margin: 0 }, dangerouslySetInnerHTML: { __html: `${thRbCSS}<div class="th-rb">${selectedThread.body}</div>` } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginTop: 14, paddingTop: 12, borderTop: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => toggleForumLike(threadLikeKey, selectedThread.likes || 0), style: { display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 8px 4px 0" } }, /* @__PURE__ */ import_react4.default.createElement(Heart, { size: 14, color: threadLiked ? T.red : T.tertiary, strokeWidth: 1.5, fill: threadLiked ? T.red : "none" }), threadLikes > 0 && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: threadLiked ? T.red : T.tertiary } }, threadLikes)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, /* @__PURE__ */ import_react4.default.createElement(MessageCircle, { size: 14, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, allPosts.length, " replies")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, /* @__PURE__ */ import_react4.default.createElement(Eye, { size: 14, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, getViewCount(selectedThread), " views")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => onOpenShareIntent && onOpenShareIntent({ kind: "forum", data: { id: selectedThread.id, threadId: selectedThread.id, title: selectedThread.title, body: selectedThread.body, author: selectedThread.author, forumCat: selectedCat?.name || "", forumSub: selectedSub?.name || "", image: selectedThread.photos && selectedThread.photos[0] || null } }), style: { display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px", marginLeft: "auto" } }, /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 14, color: T.tertiary, strokeWidth: 1.5 })))), allPosts.length > 0 && (() => {
         const topLevel = [];
         const subReplies = {};
         allPosts.forEach((post2, i) => {
@@ -49017,7 +49078,7 @@ ${suffix}`;
       "button",
       {
         onClick: () => onShareToFeed(trip),
-        title: "Share to feed",
+        title: "Share",
         style: { background: T.charcoal, border: `1px solid ${T.charcoal}`, padding: "6px 10px", borderRadius: 6, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }
       },
       /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 13, color: T.white }),
@@ -49145,7 +49206,7 @@ ${suffix}`;
       /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 16, color: T.tertiary })
     )));
   }
-  function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onLoadCampingSpotPhotos, onLoadCampingSpotElevation, spotAuthors, onViewUser, onStartNav, onNewTripReport, onNewTripPlan, currentUserId, onMapViewportChange, tripReports, showTripReports, setShowTripReports, tripPlans, showTripPlans, setShowTripPlans, onOpenTripDetail, onOpenTripPlanDraft, pendingSpotNav, onConsumePendingSpotNav, pendingHQOpen, onConsumePendingHQOpen, pendingPlanNav, onConsumePendingPlanNav, onShareCampingSpotToFeed, onShareHQToFeed, onShareTripToFeed, onShareTripPlanToFeed, onOpenDM, onShowToast, onOpenShareCompose, planBuilder }) {
+  function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onLoadCampingSpotPhotos, onLoadCampingSpotElevation, spotAuthors, onViewUser, onStartNav, onNewTripReport, onNewTripPlan, currentUserId, onMapViewportChange, tripReports, showTripReports, setShowTripReports, tripPlans, showTripPlans, setShowTripPlans, onOpenTripDetail, onOpenTripPlanDraft, pendingSpotNav, onConsumePendingSpotNav, pendingHQOpen, onConsumePendingHQOpen, pendingPlanNav, onConsumePendingPlanNav, onShareCampingSpotToFeed, onShareHQToFeed, onShareTripToFeed, onShareTripPlanToFeed, onOpenDM, onShowToast, onOpenShareCompose, onOpenShareIntent, planBuilder }) {
     const mapRef = (0, import_react4.useRef)(null);
     const mapInst = (0, import_react4.useRef)(null);
     const [mapReady, setMapReady] = (0, import_react4.useState)(false);
@@ -49188,14 +49249,12 @@ ${suffix}`;
     const [selectedTrip, setSelectedTrip] = (0, import_react4.useState)(null);
     const [selectedPlan, setSelectedPlan] = (0, import_react4.useState)(null);
     const [selectedHQ, setSelectedHQ] = (0, import_react4.useState)(null);
-    const [shareTarget, setShareTarget] = (0, import_react4.useState)(null);
     const clearOtherSelections = () => {
       setSelectedSpot(null);
       setSelectedLand(null);
       setSelectedTrip(null);
       setSelectedPlan(null);
       setSelectedHQ(null);
-      setShareTarget(null);
     };
     const [layerRefreshTick, setLayerRefreshTick] = (0, import_react4.useState)(0);
     (0, import_react4.useEffect)(() => {
@@ -49810,7 +49869,7 @@ ${suffix}`;
       ), /* @__PURE__ */ import_react4.default.createElement(
         "button",
         {
-          onClick: () => setShareTarget({ kind: "spot", data: spot }),
+          onClick: () => onOpenShareIntent && onOpenShareIntent({ kind: "spot", data: spot }),
           style: { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 18px", background: T.charcoal, border: `1px solid ${T.tertiary}50`, borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }
         },
         /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 12 }),
@@ -49839,7 +49898,7 @@ ${suffix}`;
     ), /* @__PURE__ */ import_react4.default.createElement(
       "button",
       {
-        onClick: () => setShareTarget({ kind: "trip", data: selectedTrip }),
+        onClick: () => onOpenShareIntent && onOpenShareIntent({ kind: "trip", data: selectedTrip }),
         style: { display: "inline-flex", alignItems: "center", gap: 5, padding: "8px 12px", background: T.charcoal, border: `1px solid ${T.tertiary}50`, borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }
       },
       /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 12 }),
@@ -49867,7 +49926,7 @@ ${suffix}`;
     ), /* @__PURE__ */ import_react4.default.createElement(
       "button",
       {
-        onClick: () => setShareTarget({ kind: "plan", data: selectedPlan }),
+        onClick: () => onOpenShareIntent && onOpenShareIntent({ kind: "plan", data: selectedPlan }),
         style: { display: "inline-flex", alignItems: "center", gap: 5, padding: "8px 12px", background: T.charcoal, border: `1px solid ${T.tertiary}50`, borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }
       },
       /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 12 }),
@@ -49893,7 +49952,7 @@ ${suffix}`;
     ), /* @__PURE__ */ import_react4.default.createElement(
       "button",
       {
-        onClick: () => setShareTarget({ kind: "hq", data: selectedHQ }),
+        onClick: () => onOpenShareIntent && onOpenShareIntent({ kind: "hq", data: selectedHQ }),
         style: { flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 8px", background: T.charcoal, color: T.white, border: `1px solid ${T.tertiary}50`, borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, whiteSpace: "nowrap" }
       },
       /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 12 }),
@@ -49906,134 +49965,7 @@ ${suffix}`;
       },
       /* @__PURE__ */ import_react4.default.createElement(Route, { size: 12 }),
       planActive ? "ADD TO PLAN" : "START A TRIP HERE"
-    )), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setSelectedHQ(null), style: { background: "none", border: "none", cursor: "pointer", padding: 4, color: T.tertiary } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 16 })))), shareTarget && (() => {
-      const target = shareTarget;
-      const origin = typeof window !== "undefined" && window.location && window.location.origin || "";
-      const url = target.kind === "spot" ? `${origin}/spots/${target.data.id}` : target.kind === "trip" ? `${origin}/trips/${target.data.slug}` : target.kind === "plan" ? `${origin}/plans/${target.data.slug}` : `${origin}/hq`;
-      const titleText = target.kind === "hq" ? LPO_HQ.name : target.data.name;
-      const subText = target.kind === "spot" ? "Camping spot" : target.kind === "trip" ? "Trip report" : target.kind === "plan" ? "Trip plan" : "Lone Peak Overland HQ";
-      const accent = target.kind === "spot" ? T.green : target.kind === "trip" ? "#8B6FAF" : target.kind === "plan" ? T.copper : T.red;
-      const handleCopy = async () => {
-        try {
-          if (navigator.clipboard) await navigator.clipboard.writeText(url);
-          else {
-            const ta = document.createElement("textarea");
-            ta.value = url;
-            document.body.appendChild(ta);
-            ta.select();
-            try {
-              document.execCommand("copy");
-            } finally {
-              document.body.removeChild(ta);
-            }
-          }
-          onShowToast && onShowToast("Link copied to clipboard");
-        } catch (e) {
-        }
-        setShareTarget(null);
-      };
-      const handleNativeShare = async () => {
-        try {
-          if (navigator.share) await navigator.share({ title: titleText, url });
-          else await handleCopy();
-        } catch (e) {
-        }
-        setShareTarget(null);
-      };
-      const handleDM = () => {
-        if (onOpenShareCompose) {
-          onOpenShareCompose({ kind: target.kind, action: "dm", data: target.data });
-          setShareTarget(null);
-          return;
-        }
-        if (!onOpenDM) return;
-        const sharedPost = target.kind === "spot" ? {
-          id: "spot_" + target.data.id,
-          type: "camping_spot",
-          spotId: target.data.id,
-          title: target.data.name,
-          body: target.data.description || null,
-          image: spotStaticMapUrl(target.data.lat, target.data.lng),
-          lat: target.data.lat,
-          lng: target.data.lng,
-          url
-        } : target.kind === "trip" ? {
-          id: "trip_" + target.data.id,
-          type: "trip_report",
-          tripId: target.data.id,
-          tripSlug: target.data.slug,
-          title: target.data.name,
-          body: target.data.description || null,
-          image: target.data.hero_img || null,
-          url
-        } : target.kind === "plan" ? {
-          id: "plan_" + target.data.id,
-          type: "trip_plan",
-          planId: target.data.id,
-          planSlug: target.data.slug,
-          title: target.data.name,
-          body: target.data.description || null,
-          image: target.data.hero_img || null,
-          plannedStart: target.data.planned_start || null,
-          plannedEnd: target.data.planned_end || null,
-          url
-        } : {
-          id: "hq",
-          type: "hq",
-          title: LPO_HQ.name,
-          body: LPO_HQ.address,
-          url
-        };
-        onOpenDM(null, "", sharedPost);
-        setShareTarget(null);
-      };
-      const handleFeed = () => {
-        if (onOpenShareCompose) {
-          onOpenShareCompose({ kind: target.kind, action: "feed", data: target.data });
-          setShareTarget(null);
-          return;
-        }
-        if (target.kind === "spot") onShareCampingSpotToFeed && onShareCampingSpotToFeed(target.data);
-        else if (target.kind === "trip") onShareTripToFeed && onShareTripToFeed(target.data);
-        else if (target.kind === "plan") onShareTripPlanToFeed && onShareTripPlanToFeed(target.data);
-        else if (target.kind === "hq") onShareHQToFeed && onShareHQToFeed();
-        setShareTarget(null);
-      };
-      return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 9, background: `${T.darkCard}F8`, border: `1px solid ${accent}50`, borderRadius: 10, padding: 14, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 12 } }, /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 14, color: accent }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: accent, letterSpacing: 1.2, fontWeight: 700, marginBottom: 1 } }, "SHARE \xB7 ", subText.toUpperCase()), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, titleText)), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setShareTarget(null), style: { background: "none", border: "none", cursor: "pointer", padding: 4, color: T.tertiary } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 14 }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement(
-        "button",
-        {
-          onClick: handleCopy,
-          style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "12px 6px", background: T.charcoal, border: `1px solid ${T.tertiary}30`, borderRadius: 8, cursor: "pointer", fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 700, letterSpacing: 0.4 }
-        },
-        /* @__PURE__ */ import_react4.default.createElement(Link2, { size: 18, color: T.copper }),
-        "COPY LINK"
-      ), typeof navigator !== "undefined" && navigator.share && /* @__PURE__ */ import_react4.default.createElement(
-        "button",
-        {
-          onClick: handleNativeShare,
-          style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "12px 6px", background: T.charcoal, border: `1px solid ${T.tertiary}30`, borderRadius: 8, cursor: "pointer", fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 700, letterSpacing: 0.4 }
-        },
-        /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 18, color: T.copper }),
-        "MORE"
-      ), /* @__PURE__ */ import_react4.default.createElement(
-        "button",
-        {
-          onClick: handleDM,
-          disabled: !onOpenDM,
-          style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "12px 6px", background: T.charcoal, border: `1px solid ${T.tertiary}30`, borderRadius: 8, cursor: onOpenDM ? "pointer" : "default", fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 700, letterSpacing: 0.4, opacity: onOpenDM ? 1 : 0.4 }
-        },
-        /* @__PURE__ */ import_react4.default.createElement(Send, { size: 18, color: T.copper }),
-        "SEND DM"
-      ), /* @__PURE__ */ import_react4.default.createElement(
-        "button",
-        {
-          onClick: handleFeed,
-          style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "12px 6px", background: T.charcoal, border: `1px solid ${T.tertiary}30`, borderRadius: 8, cursor: "pointer", fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 700, letterSpacing: 0.4 }
-        },
-        /* @__PURE__ */ import_react4.default.createElement(SquarePlus, { size: 18, color: T.copper }),
-        "TO FEED"
-      )), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginTop: 10, padding: "8px 10px", background: T.darkBg, borderRadius: 6, fontFamily: sans, fontSize: 10, color: T.tertiary, wordBreak: "break-all" } }, url));
-    })(), editingSpot && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 8, background: `${T.darkCard}F5`, border: `1px solid ${T.copper}`, borderRadius: 10, padding: 14, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 } }, /* @__PURE__ */ import_react4.default.createElement(PenLine, { size: 13, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 1.5 } }, "EDIT SPOT"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setEditingSpot(null), style: { background: "none", border: "none", cursor: "pointer", padding: 2, color: T.tertiary, marginLeft: "auto" } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 14 }))), /* @__PURE__ */ import_react4.default.createElement(
+    )), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setSelectedHQ(null), style: { background: "none", border: "none", cursor: "pointer", padding: 4, color: T.tertiary } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 16 })))), editingSpot && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 8, background: `${T.darkCard}F5`, border: `1px solid ${T.copper}`, borderRadius: 10, padding: 14, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 } }, /* @__PURE__ */ import_react4.default.createElement(PenLine, { size: 13, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 1.5 } }, "EDIT SPOT"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setEditingSpot(null), style: { background: "none", border: "none", cursor: "pointer", padding: 2, color: T.tertiary, marginLeft: "auto" } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 14 }))), /* @__PURE__ */ import_react4.default.createElement(
       "input",
       {
         autoFocus: true,
@@ -50500,7 +50432,7 @@ ${suffix}`;
       lightbox.urls.length > 1 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", bottom: 18, left: 0, right: 0, textAlign: "center", fontFamily: sans, fontSize: 11, color: T.white, letterSpacing: 0.5 } }, lightbox.index + 1, " / ", lightbox.urls.length)
     ));
   }
-  function RoutesScreen({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, currentUserId, tripReports, showTripReports, setShowTripReports, tripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onLoadCampingSpotPhotos, onLoadCampingSpotElevation, spotAuthors, onOpenTripDetail, onOpenTripPlanDraft, onNewTripReport, onNewTripPlan, pendingSpotNav, onConsumePendingSpotNav, pendingHQOpen, onConsumePendingHQOpen, pendingPlanNav, onConsumePendingPlanNav, onShareCampingSpotToFeed, onShareHQToFeed, onShareTripToFeed, onShareTripPlanToFeed, onOpenDM, onShowToast, onOpenShareCompose, onViewUser, onStartNav, planBuilder }) {
+  function RoutesScreen({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, currentUserId, tripReports, showTripReports, setShowTripReports, tripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onLoadCampingSpotPhotos, onLoadCampingSpotElevation, spotAuthors, onOpenTripDetail, onOpenTripPlanDraft, onNewTripReport, onNewTripPlan, pendingSpotNav, onConsumePendingSpotNav, pendingHQOpen, onConsumePendingHQOpen, pendingPlanNav, onConsumePendingPlanNav, onShareCampingSpotToFeed, onShareHQToFeed, onShareTripToFeed, onShareTripPlanToFeed, onOpenDM, onShowToast, onOpenShareCompose, onOpenShareIntent, onViewUser, onStartNav, planBuilder }) {
     return /* @__PURE__ */ import_react4.default.createElement("div", { style: { height: "100%", display: "flex", flexDirection: "column", minHeight: 0, position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement(
       ExploreMap,
       {
@@ -50544,12 +50476,13 @@ ${suffix}`;
         onOpenDM,
         onShowToast,
         onOpenShareCompose,
+        onOpenShareIntent,
         planBuilder,
         fillParent: true
       }
     ));
   }
-  function BuildsScreen({ onViewUser, userBuilds, allBuilds: allBuildsProp, currentUserId, followingIds, onAddBuild, onUpdateBuild, onPostBuildToFeed, onOpenDM, onOpenShareCompose, userRoutes, pendingBuildNav, onConsumePendingBuildNav, isGuest, onGuestTap, likedBuildIds, buildLikeCounts, onToggleBuildLike }) {
+  function BuildsScreen({ onViewUser, userBuilds, allBuilds: allBuildsProp, currentUserId, followingIds, onAddBuild, onUpdateBuild, onPostBuildToFeed, onOpenDM, onOpenShareCompose, onOpenShareIntent, userRoutes, pendingBuildNav, onConsumePendingBuildNav, isGuest, onGuestTap, likedBuildIds, buildLikeCounts, onToggleBuildLike }) {
     const [filter, setFilter] = (0, import_react4.useState)("all");
     const [search, setSearch] = (0, import_react4.useState)("");
     const [detailBuildId, setDetailBuildId] = (0, import_react4.useState)(null);
@@ -50705,32 +50638,12 @@ ${suffix}`;
       ), /* @__PURE__ */ import_react4.default.createElement(
         "button",
         {
-          onClick: () => setShareMenuOpen((v) => !v),
+          onClick: () => onOpenShareIntent && onOpenShareIntent({ kind: "build", data: detailBuild }),
           style: { flex: 1, padding: "14px", borderRadius: 10, background: T.charcoal, border: `1px solid ${T.tertiary}40`, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, cursor: "pointer" }
         },
         /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 16, color: T.white }),
         /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 1.5 } }, "SHARE")
-      )), shareMenuOpen && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => setShareMenuOpen(false), style: { position: "fixed", inset: 0, zIndex: 80 } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: 68, right: 16, width: 220, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10, padding: 6, zIndex: 90, boxShadow: "0 10px 30px rgba(0,0,0,0.5)" } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
-        setShareMenuOpen(false);
-        if (onOpenShareCompose) onOpenShareCompose({ kind: "build", action: "feed", data: detailBuild });
-        else if (onPostBuildToFeed) {
-          onPostBuildToFeed(detailBuild);
-          setShareToast("Shared to feed");
-          setTimeout(() => setShareToast(""), 2e3);
-        }
-      }, style: { width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "none", border: "none", cursor: "pointer", borderRadius: 6 } }, /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 } }, "Share to Feed")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
-        const link = `https://trailhead.lpo/builds/${detailBuild.rawId || detailBuild.id}`;
-        if (navigator.clipboard) navigator.clipboard.writeText(link).catch(() => {
-        });
-        setShareMenuOpen(false);
-        setShareToast("Link copied");
-        setTimeout(() => setShareToast(""), 2e3);
-      }, style: { width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "none", border: "none", cursor: "pointer", borderRadius: 6 } }, /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 } }, "Copy Link")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
-        setShareMenuOpen(false);
-        if (onOpenShareCompose) {
-          onOpenShareCompose({ kind: "build", action: "dm", data: detailBuild });
-        }
-      }, style: { width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "none", border: "none", cursor: "pointer", borderRadius: 6 } }, /* @__PURE__ */ import_react4.default.createElement(Send, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 } }, "Send via DM")))), shareToast && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "fixed", bottom: 90, left: "50%", transform: "translateX(-50%)", background: T.charcoal, border: `1px solid ${T.copper}`, borderRadius: 8, padding: "10px 16px", zIndex: 100, boxShadow: "0 4px 20px rgba(0,0,0,0.5)" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 } }, shareToast))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "18px 16px 0" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 12 } }, "TECHNICAL SPECIFICATIONS"), modRows.length === 0 ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { ...cardStyle, padding: 20, textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Wrench, { size: 28, color: T.tertiary, strokeWidth: 0.8, style: { opacity: 0.4, marginBottom: 8 } }), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: sans, fontSize: 12, color: T.tertiary, margin: 0 } }, "No specs added yet"), detailBuild.isMine && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
+      )), shareToast && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "fixed", bottom: 90, left: "50%", transform: "translateX(-50%)", background: T.charcoal, border: `1px solid ${T.copper}`, borderRadius: 8, padding: "10px 16px", zIndex: 100, boxShadow: "0 4px 20px rgba(0,0,0,0.5)" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 } }, shareToast))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "18px 16px 0" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 12 } }, "TECHNICAL SPECIFICATIONS"), modRows.length === 0 ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { ...cardStyle, padding: 20, textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Wrench, { size: 28, color: T.tertiary, strokeWidth: 0.8, style: { opacity: 0.4, marginBottom: 8 } }), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: sans, fontSize: 12, color: T.tertiary, margin: 0 } }, "No specs added yet"), detailBuild.isMine && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
         const src = (userBuilds || []).find((ub) => ub.id === detailBuild.rawId);
         if (src) setEditingBuild(src);
       }, style: { marginTop: 10, padding: "8px 14px", borderRadius: 8, background: T.copper, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 1 } }, "ADD MODS")) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 10 } }, modRows.map((row) => {
@@ -54824,6 +54737,11 @@ ${suffix}`;
     const [planBuilderEditingId, setPlanBuilderEditingId] = (0, import_react4.useState)(null);
     const [planSavePromptOpen, setPlanSavePromptOpen] = (0, import_react4.useState)(false);
     const [shareComposeTarget, setShareComposeTarget] = (0, import_react4.useState)(null);
+    const [shareIntentTarget, setShareIntentTarget] = (0, import_react4.useState)(null);
+    const openShareIntent = (req) => {
+      if (!req || !req.kind) return;
+      setShareIntentTarget({ kind: req.kind, data: req.data || {} });
+    };
     const [recipientPickerSession, setRecipientPickerSession] = (0, import_react4.useState)(null);
     const newPlanPointId = () => "pp_" + Date.now() + "_" + Math.floor(Math.random() * 1e3);
     const enterPlanBuilder = (seed, opts = {}) => {
@@ -57462,6 +57380,7 @@ ${suffix}`;
         onUnsaveRoute: requireAuth((routeId) => setSavedRoutes((prev) => prev.filter((r) => r.id !== routeId && r.name !== routeId))),
         onStartNav: (route) => setActiveNavRoute(route),
         onStartDirections: startDirectionsTo,
+        onOpenShareIntent: openShareIntent,
         onAwardPoints: awardPoints,
         filterFn,
         hideFilters
@@ -57539,7 +57458,7 @@ ${suffix}`;
     }, onGoToPost: (id) => {
       setProfileStack([]);
       setScreen("feed");
-    }, myPoints: myTotalPoints }) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, isGuest && /* @__PURE__ */ import_react4.default.createElement(GuestBanner, { onSignIn: () => setShowGuestPrompt(true) }), screen === "feed" && renderFeedScopedTo({ hideFilters: false }), screen === "forum" && /* @__PURE__ */ import_react4.default.createElement(ForumScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), pendingThread, onPendingHandled: () => setPendingThread(null), onAddNotification: requireAuth(addNotification), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onOpenShareCompose: openShareCompose, onAddFeedPost: requireAuth((post2) => addPost(post2)), userThreads: forumUserThreads, setUserThreads: requireAuth(setForumUserThreads), userReplies: forumUserReplies, setUserReplies: requireAuth(setForumUserReplies), likedForumItems: forumLikedItems, setLikedForumItems: requireAuth(setForumLikedItems), forumLikeCounts, setForumLikeCounts: requireAuth(setForumLikeCounts), forumViewCounts, setForumViewCounts, onAwardPoints: awardPoints }), screen === "routes" && /* @__PURE__ */ import_react4.default.createElement(RoutesScreen, { campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, tripReports: allTripReports, showTripReports, setShowTripReports, tripPlans: allTripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot: requireAuth(addCampingSpot), onUpdateCampingSpot: requireAuth(updateCampingSpot), onDeleteCampingSpot: requireAuth(deleteCampingSpot), onLoadCampingSpotPhotos: loadCampingSpotPhotos, onLoadCampingSpotElevation: loadCampingSpotElevation, spotAuthors, onViewUser: openUserProfile, onStartNav: (route) => setActiveNavRoute(route), onOpenTripDetail: (slug) => setPendingTripNav(slug), onOpenTripPlanDraft: (id) => setDetailTripId(id), onNewTripReport: () => setTripCreatorMode("report"), onNewTripPlan: () => requireAuth(() => enterPlanBuilder())(), pendingSpotNav, onConsumePendingSpotNav: () => setPendingSpotNav(null), pendingHQOpen, onConsumePendingHQOpen: () => setPendingHQOpen(false), pendingPlanNav, onConsumePendingPlanNav: () => setPendingPlanNav(null), onShareCampingSpotToFeed: requireAuth(shareCampingSpotToFeed), onShareHQToFeed: requireAuth(shareHQToFeed), onShareTripToFeed: requireAuth(shareTripToFeed), onShareTripPlanToFeed: requireAuth(shareTripPlanToFeed), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onShowToast: showErrorToast, onOpenShareCompose: openShareCompose, planBuilder: { active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, editingId: planBuilderEditingId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen } }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onOpenShareCompose: openShareCompose, onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onPostBuildToFeed: requireAuth((b, opts) => {
+    }, myPoints: myTotalPoints }) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, isGuest && /* @__PURE__ */ import_react4.default.createElement(GuestBanner, { onSignIn: () => setShowGuestPrompt(true) }), screen === "feed" && renderFeedScopedTo({ hideFilters: false }), screen === "forum" && /* @__PURE__ */ import_react4.default.createElement(ForumScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), pendingThread, onPendingHandled: () => setPendingThread(null), onAddNotification: requireAuth(addNotification), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onOpenShareCompose: openShareCompose, onOpenShareIntent: openShareIntent, onAddFeedPost: requireAuth((post2) => addPost(post2)), userThreads: forumUserThreads, setUserThreads: requireAuth(setForumUserThreads), userReplies: forumUserReplies, setUserReplies: requireAuth(setForumUserReplies), likedForumItems: forumLikedItems, setLikedForumItems: requireAuth(setForumLikedItems), forumLikeCounts, setForumLikeCounts: requireAuth(setForumLikeCounts), forumViewCounts, setForumViewCounts, onAwardPoints: awardPoints }), screen === "routes" && /* @__PURE__ */ import_react4.default.createElement(RoutesScreen, { campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, onOpenShareIntent: openShareIntent, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, tripReports: allTripReports, showTripReports, setShowTripReports, tripPlans: allTripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot: requireAuth(addCampingSpot), onUpdateCampingSpot: requireAuth(updateCampingSpot), onDeleteCampingSpot: requireAuth(deleteCampingSpot), onLoadCampingSpotPhotos: loadCampingSpotPhotos, onLoadCampingSpotElevation: loadCampingSpotElevation, spotAuthors, onViewUser: openUserProfile, onStartNav: (route) => setActiveNavRoute(route), onOpenTripDetail: (slug) => setPendingTripNav(slug), onOpenTripPlanDraft: (id) => setDetailTripId(id), onNewTripReport: () => setTripCreatorMode("report"), onNewTripPlan: () => requireAuth(() => enterPlanBuilder())(), pendingSpotNav, onConsumePendingSpotNav: () => setPendingSpotNav(null), pendingHQOpen, onConsumePendingHQOpen: () => setPendingHQOpen(false), pendingPlanNav, onConsumePendingPlanNav: () => setPendingPlanNav(null), onShareCampingSpotToFeed: requireAuth(shareCampingSpotToFeed), onShareHQToFeed: requireAuth(shareHQToFeed), onShareTripToFeed: requireAuth(shareTripToFeed), onShareTripPlanToFeed: requireAuth(shareTripPlanToFeed), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onShowToast: showErrorToast, onOpenShareCompose: openShareCompose, planBuilder: { active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, editingId: planBuilderEditingId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen } }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onOpenShareCompose: openShareCompose, onOpenShareIntent: openShareIntent, onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onPostBuildToFeed: requireAuth((b, opts) => {
       const rawBd = b.buildData;
       const bd = scrubLocalPhotosFromBuildData(rawBd);
       const isLocalUrl = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:"));
@@ -57714,11 +57633,22 @@ ${suffix}`;
           isLiked: !!(likedTripIds && likedTripIds[trip.id]),
           likeCount: tripLikeCounts && tripLikeCounts[trip.id] || 0,
           onToggleLike: requireAuth(toggleTripLike),
-          onShareToFeed: requireAuth((t) => openShareCompose({ kind: t.kind === "plan" ? "plan" : "trip", action: "feed", data: t })),
+          onShareToFeed: requireAuth((t) => openShareIntent({ kind: t.kind === "plan" ? "plan" : "trip", data: t })),
           onStartDirections: startDirectionsTo
         }
       ));
-    })(), shareComposeTarget && (() => {
+    })(), /* @__PURE__ */ import_react4.default.createElement(
+      ShareIntentSheet,
+      {
+        target: shareIntentTarget,
+        onClose: () => setShareIntentTarget(null),
+        onOpenShareCompose: (req) => {
+          setShareIntentTarget(null);
+          openShareCompose(req);
+        },
+        onShowToast: showErrorToast
+      }
+    ), shareComposeTarget && (() => {
       const t = shareComposeTarget;
       const accent = t.accent || T.copper;
       const Icon2 = t.IconComponent || Share2;
