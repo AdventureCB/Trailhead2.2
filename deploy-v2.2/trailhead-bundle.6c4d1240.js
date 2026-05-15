@@ -43049,6 +43049,10 @@ ${suffix}`;
       return null;
     }
   }
+  function spotStaticMapUrl(lat, lng, { width = 600, height = 320, zoom = 13 } = {}) {
+    if (lat == null || lng == null || !isFinite(lat) || !isFinite(lng)) return null;
+    return `https://api.mapbox.com/styles/v1/mapbox/outdoors-v12/static/pin-l-campsite+5B8C5A(${lng},${lat})/${lng},${lat},${zoom}/${width}x${height}@2x?access_token=${MAPBOX_TOKEN}`;
+  }
   if (!document.querySelector("style[data-trailhead-mapbox]")) {
     const mbStyle = document.createElement("style");
     mbStyle.setAttribute("data-trailhead-mapbox", "1");
@@ -48675,7 +48679,7 @@ ${suffix}`;
       /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 16, color: T.tertiary })
     )));
   }
-  function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onLoadCampingSpotPhotos, onNewTripReport, onNewTripPlan, currentUserId, onMapViewportChange, tripReports, showTripReports, setShowTripReports, tripPlans, showTripPlans, setShowTripPlans, onOpenTripDetail, onOpenTripPlanDraft, pendingSpotNav, onConsumePendingSpotNav, pendingHQOpen, onConsumePendingHQOpen, pendingPlanNav, onConsumePendingPlanNav, onShareCampingSpotToFeed, onShareHQToFeed, onShareTripToFeed, onShareTripPlanToFeed, onOpenDM, onShowToast, planBuilder }) {
+  function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onLoadCampingSpotPhotos, onNewTripReport, onNewTripPlan, currentUserId, onMapViewportChange, tripReports, showTripReports, setShowTripReports, tripPlans, showTripPlans, setShowTripPlans, onOpenTripDetail, onOpenTripPlanDraft, pendingSpotNav, onConsumePendingSpotNav, pendingHQOpen, onConsumePendingHQOpen, pendingPlanNav, onConsumePendingPlanNav, onShareCampingSpotToFeed, onShareHQToFeed, onShareTripToFeed, onShareTripPlanToFeed, onOpenDM, onShowToast, onOpenShareCompose, planBuilder }) {
     const mapRef = (0, import_react4.useRef)(null);
     const mapInst = (0, import_react4.useRef)(null);
     const [mapReady, setMapReady] = (0, import_react4.useState)(false);
@@ -49462,13 +49466,18 @@ ${suffix}`;
       };
       const handleDM = () => {
         if (!onOpenDM) return;
+        if (target.kind === "spot" && onOpenShareCompose) {
+          onOpenShareCompose({ kind: "spot", action: "dm", data: target.data });
+          setShareTarget(null);
+          return;
+        }
         const sharedPost = target.kind === "spot" ? {
           id: "spot_" + target.data.id,
           type: "camping_spot",
           spotId: target.data.id,
           title: target.data.name,
           body: target.data.description || null,
-          image: Array.isArray(target.data.photos) && target.data.photos.length > 0 ? typeof target.data.photos[0] === "string" ? target.data.photos[0] : target.data.photos[0] && target.data.photos[0].url || null : null,
+          image: spotStaticMapUrl(target.data.lat, target.data.lng),
           lat: target.data.lat,
           lng: target.data.lng,
           url
@@ -49503,8 +49512,12 @@ ${suffix}`;
         setShareTarget(null);
       };
       const handleFeed = () => {
-        if (target.kind === "spot") onShareCampingSpotToFeed && onShareCampingSpotToFeed(target.data);
-        else if (target.kind === "trip") onShareTripToFeed && onShareTripToFeed(target.data);
+        if (target.kind === "spot" && onOpenShareCompose) {
+          onOpenShareCompose({ kind: "spot", action: "feed", data: target.data });
+          setShareTarget(null);
+          return;
+        }
+        if (target.kind === "trip") onShareTripToFeed && onShareTripToFeed(target.data);
         else if (target.kind === "plan") onShareTripPlanToFeed && onShareTripPlanToFeed(target.data);
         else if (target.kind === "hq") onShareHQToFeed && onShareHQToFeed();
         setShareTarget(null);
@@ -50003,7 +50016,7 @@ ${suffix}`;
       lightbox.urls.length > 1 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", bottom: 18, left: 0, right: 0, textAlign: "center", fontFamily: sans, fontSize: 11, color: T.white, letterSpacing: 0.5 } }, lightbox.index + 1, " / ", lightbox.urls.length)
     ));
   }
-  function RoutesScreen({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, currentUserId, tripReports, showTripReports, setShowTripReports, tripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onLoadCampingSpotPhotos, onOpenTripDetail, onOpenTripPlanDraft, onNewTripReport, onNewTripPlan, pendingSpotNav, onConsumePendingSpotNav, pendingHQOpen, onConsumePendingHQOpen, pendingPlanNav, onConsumePendingPlanNav, onShareCampingSpotToFeed, onShareHQToFeed, onShareTripToFeed, onShareTripPlanToFeed, onOpenDM, onShowToast, planBuilder }) {
+  function RoutesScreen({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, currentUserId, tripReports, showTripReports, setShowTripReports, tripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onLoadCampingSpotPhotos, onOpenTripDetail, onOpenTripPlanDraft, onNewTripReport, onNewTripPlan, pendingSpotNav, onConsumePendingSpotNav, pendingHQOpen, onConsumePendingHQOpen, pendingPlanNav, onConsumePendingPlanNav, onShareCampingSpotToFeed, onShareHQToFeed, onShareTripToFeed, onShareTripPlanToFeed, onOpenDM, onShowToast, onOpenShareCompose, planBuilder }) {
     return /* @__PURE__ */ import_react4.default.createElement("div", { style: { height: "100%", display: "flex", flexDirection: "column", minHeight: 0, position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement(
       ExploreMap,
       {
@@ -50040,6 +50053,7 @@ ${suffix}`;
         onShareTripPlanToFeed,
         onOpenDM,
         onShowToast,
+        onOpenShareCompose,
         planBuilder,
         fillParent: true
       }
@@ -54323,6 +54337,7 @@ ${suffix}`;
     const [planBuilderEndAnchorId, setPlanBuilderEndAnchorId] = (0, import_react4.useState)(null);
     const [planBuilderEditingId, setPlanBuilderEditingId] = (0, import_react4.useState)(null);
     const [planSavePromptOpen, setPlanSavePromptOpen] = (0, import_react4.useState)(false);
+    const [shareComposeTarget, setShareComposeTarget] = (0, import_react4.useState)(null);
     const newPlanPointId = () => "pp_" + Date.now() + "_" + Math.floor(Math.random() * 1e3);
     const enterPlanBuilder = (seed, opts = {}) => {
       setPlanBuilderActive(true);
@@ -56067,13 +56082,13 @@ ${suffix}`;
       awardPoints(POINTS.feedPost, "Plan Shared");
       showErrorToast("Plan shared to your feed");
     };
-    const shareCampingSpotToFeed = (spot) => {
+    const shareCampingSpotToFeed = (spot, captionRaw) => {
       if (!spot || !spot.id) return;
+      const caption = (captionRaw || "").trim();
       const meName = currentProfile && currentProfile.full_name || "You";
       const meHandle = currentProfile && currentProfile.handle || "";
       const meInitial = meName.charAt(0).toUpperCase();
-      const photos = Array.isArray(spot.photos) ? spot.photos.map((p) => typeof p === "string" ? p : p && p.url || null).filter(Boolean) : [];
-      const heroImg = photos[0] || null;
+      const mapImg = spotStaticMapUrl(spot.lat, spot.lng);
       addPost({
         id: "shared_spot_" + Date.now(),
         type: "POST",
@@ -56081,11 +56096,13 @@ ${suffix}`;
         handle: meHandle ? `@${meHandle}` : void 0,
         initial: meInitial,
         time: Date.now(),
-        title: spot.name,
+        title: caption || null,
         body: spot.description || null,
         subtitle: "Shared a camping spot",
-        image: heroImg,
-        photoUrls: heroImg ? [heroImg] : void 0,
+        image: mapImg,
+        // Don't push the static map URL into photoUrls — the post-photos
+        // pipeline would try to upload it. The image field is enough for
+        // the inline spot card render to use.
         likes: 0,
         comments: 0,
         spotId: spot.id,
@@ -56719,7 +56736,7 @@ ${suffix}`;
     }, onGoToPost: (id) => {
       setProfileStack([]);
       setScreen("feed");
-    }, myPoints: myTotalPoints }) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, isGuest && /* @__PURE__ */ import_react4.default.createElement(GuestBanner, { onSignIn: () => setShowGuestPrompt(true) }), screen === "feed" && renderFeedScopedTo({ hideFilters: false }), screen === "forum" && /* @__PURE__ */ import_react4.default.createElement(ForumScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), pendingThread, onPendingHandled: () => setPendingThread(null), onAddNotification: requireAuth(addNotification), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onAddFeedPost: requireAuth((post2) => addPost(post2)), userThreads: forumUserThreads, setUserThreads: requireAuth(setForumUserThreads), userReplies: forumUserReplies, setUserReplies: requireAuth(setForumUserReplies), likedForumItems: forumLikedItems, setLikedForumItems: requireAuth(setForumLikedItems), forumLikeCounts, setForumLikeCounts: requireAuth(setForumLikeCounts), forumViewCounts, setForumViewCounts, onAwardPoints: awardPoints }), screen === "routes" && /* @__PURE__ */ import_react4.default.createElement(RoutesScreen, { campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, tripReports: allTripReports, showTripReports, setShowTripReports, tripPlans: allTripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot: requireAuth(addCampingSpot), onUpdateCampingSpot: requireAuth(updateCampingSpot), onDeleteCampingSpot: requireAuth(deleteCampingSpot), onLoadCampingSpotPhotos: loadCampingSpotPhotos, onOpenTripDetail: (slug) => setPendingTripNav(slug), onOpenTripPlanDraft: (id) => setDetailTripId(id), onNewTripReport: () => setTripCreatorMode("report"), onNewTripPlan: () => requireAuth(() => enterPlanBuilder())(), pendingSpotNav, onConsumePendingSpotNav: () => setPendingSpotNav(null), pendingHQOpen, onConsumePendingHQOpen: () => setPendingHQOpen(false), pendingPlanNav, onConsumePendingPlanNav: () => setPendingPlanNav(null), onShareCampingSpotToFeed: requireAuth(shareCampingSpotToFeed), onShareHQToFeed: requireAuth(shareHQToFeed), onShareTripToFeed: requireAuth(shareTripToFeed), onShareTripPlanToFeed: requireAuth(shareTripPlanToFeed), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onShowToast: showErrorToast, planBuilder: { active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, editingId: planBuilderEditingId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen } }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onPostBuildToFeed: requireAuth((b, opts) => {
+    }, myPoints: myTotalPoints }) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, isGuest && /* @__PURE__ */ import_react4.default.createElement(GuestBanner, { onSignIn: () => setShowGuestPrompt(true) }), screen === "feed" && renderFeedScopedTo({ hideFilters: false }), screen === "forum" && /* @__PURE__ */ import_react4.default.createElement(ForumScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), pendingThread, onPendingHandled: () => setPendingThread(null), onAddNotification: requireAuth(addNotification), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onAddFeedPost: requireAuth((post2) => addPost(post2)), userThreads: forumUserThreads, setUserThreads: requireAuth(setForumUserThreads), userReplies: forumUserReplies, setUserReplies: requireAuth(setForumUserReplies), likedForumItems: forumLikedItems, setLikedForumItems: requireAuth(setForumLikedItems), forumLikeCounts, setForumLikeCounts: requireAuth(setForumLikeCounts), forumViewCounts, setForumViewCounts, onAwardPoints: awardPoints }), screen === "routes" && /* @__PURE__ */ import_react4.default.createElement(RoutesScreen, { campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, tripReports: allTripReports, showTripReports, setShowTripReports, tripPlans: allTripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot: requireAuth(addCampingSpot), onUpdateCampingSpot: requireAuth(updateCampingSpot), onDeleteCampingSpot: requireAuth(deleteCampingSpot), onLoadCampingSpotPhotos: loadCampingSpotPhotos, onOpenTripDetail: (slug) => setPendingTripNav(slug), onOpenTripPlanDraft: (id) => setDetailTripId(id), onNewTripReport: () => setTripCreatorMode("report"), onNewTripPlan: () => requireAuth(() => enterPlanBuilder())(), pendingSpotNav, onConsumePendingSpotNav: () => setPendingSpotNav(null), pendingHQOpen, onConsumePendingHQOpen: () => setPendingHQOpen(false), pendingPlanNav, onConsumePendingPlanNav: () => setPendingPlanNav(null), onShareCampingSpotToFeed: requireAuth(shareCampingSpotToFeed), onShareHQToFeed: requireAuth(shareHQToFeed), onShareTripToFeed: requireAuth(shareTripToFeed), onShareTripPlanToFeed: requireAuth(shareTripPlanToFeed), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onShowToast: showErrorToast, onOpenShareCompose: (t) => setShareComposeTarget(t), planBuilder: { active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, editingId: planBuilderEditingId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen } }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onPostBuildToFeed: requireAuth((b, opts) => {
       const rawBd = b.buildData;
       const bd = scrubLocalPhotosFromBuildData(rawBd);
       const isLocalUrl = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:"));
@@ -56897,6 +56914,64 @@ ${suffix}`;
           onShareToFeed: requireAuth(trip.kind === "plan" ? shareTripPlanToFeed : shareTripToFeed)
         }
       ));
+    })(), shareComposeTarget && shareComposeTarget.kind === "spot" && (() => {
+      const spot = shareComposeTarget.data;
+      const action = shareComposeTarget.action;
+      const mapImg = spotStaticMapUrl(spot.lat, spot.lng);
+      const Inner = () => {
+        const [caption, setCaption] = (0, import_react4.useState)("");
+        const [submitting, setSubmitting] = (0, import_react4.useState)(false);
+        const submit = async () => {
+          if (submitting) return;
+          setSubmitting(true);
+          if (action === "feed") {
+            shareCampingSpotToFeed(spot, caption);
+            setShareComposeTarget(null);
+          } else {
+            const url = typeof window !== "undefined" && window.location && window.location.origin || "";
+            const sharedPost = {
+              id: "spot_" + spot.id,
+              type: "camping_spot",
+              spotId: spot.id,
+              title: spot.name,
+              body: spot.description || null,
+              image: mapImg,
+              lat: spot.lat,
+              lng: spot.lng,
+              url: `${url}/spots/${spot.id}`
+            };
+            setShareComposeTarget(null);
+            openDM(null, caption || "", sharedPost);
+          }
+        };
+        return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkBg, borderRadius: 14, border: `1px solid ${T.green}40`, padding: 18, width: "100%", maxWidth: 420, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 16px 40px rgba(0,0,0,0.6)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 12 } }, /* @__PURE__ */ import_react4.default.createElement(Tent, { size: 16, color: T.green }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.green, fontWeight: 700, letterSpacing: 1.4 } }, action === "feed" ? "SHARE TO FEED" : "SEND VIA DM"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setShareComposeTarget(null), style: { background: "none", border: "none", cursor: "pointer", padding: 2, color: T.tertiary, marginLeft: "auto" } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 16 }))), /* @__PURE__ */ import_react4.default.createElement(
+          "textarea",
+          {
+            autoFocus: true,
+            value: caption,
+            onChange: (e) => setCaption(e.target.value.slice(0, 280)),
+            placeholder: action === "feed" ? "Add a caption (optional)\u2026" : "Add a message (optional)\u2026",
+            rows: 3,
+            style: { width: "100%", boxSizing: "border-box", padding: "11px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", resize: "vertical", lineHeight: 1.5, marginBottom: 12 }
+          }
+        ), /* @__PURE__ */ import_react4.default.createElement("div", { style: { borderRadius: 10, overflow: "hidden", border: `1px solid ${T.green}40`, background: `${T.charcoal}80`, marginBottom: 16 } }, mapImg && /* @__PURE__ */ import_react4.default.createElement("img", { src: mapImg, alt: "", style: { width: "100%", height: 180, objectFit: "cover", display: "block" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "10px 12px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 6 } }, /* @__PURE__ */ import_react4.default.createElement(Tent, { size: 12, color: T.green }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.green, letterSpacing: 1.2, fontWeight: 700 } }, "CAMPING SPOT")), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 14, color: T.white, margin: 0, fontWeight: 600, lineHeight: 1.4 } }, spot.name), spot.description && /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "4px 0 0", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" } }, spot.description), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, marginTop: 6 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.green, fontWeight: 600 } }, "VIEW SPOT"), /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 12, color: T.green })))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement(
+          "button",
+          {
+            onClick: () => setShareComposeTarget(null),
+            style: { flex: 1, padding: "12px", borderRadius: 8, background: T.charcoal, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 700, letterSpacing: 0.5 }
+          },
+          "CANCEL"
+        ), /* @__PURE__ */ import_react4.default.createElement(
+          "button",
+          {
+            onClick: submit,
+            disabled: submitting,
+            style: { flex: 2, padding: "12px", borderRadius: 8, background: !submitting ? T.green : T.charcoal, border: "none", cursor: !submitting ? "pointer" : "default", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5, opacity: !submitting ? 1 : 0.5 }
+          },
+          action === "feed" ? submitting ? "POSTING\u2026" : "POST TO FEED" : submitting ? "OPENING\u2026" : "CHOOSE RECIPIENT"
+        ))));
+      };
+      return /* @__PURE__ */ import_react4.default.createElement(Inner, null);
     })(), showTripCreator && !showTripPinFullscreen && !showRecorder && /* @__PURE__ */ import_react4.default.createElement(
       TripReportCreator,
       {
