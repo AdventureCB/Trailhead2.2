@@ -48760,6 +48760,13 @@ ${suffix}`;
           setTimeout(() => f.setter(true), onAt)
         ];
       });
+      if (showTripReports && setShowTripReports && showPublicLands) {
+        const finalAt = staggerStart + flips.length * stagger + 500;
+        stepTimers.push(
+          setTimeout(() => setShowTripReports(false), finalAt),
+          setTimeout(() => setShowTripReports(true), finalAt + 140)
+        );
+      }
       return () => {
         clearTimeout(t1);
         stepTimers.forEach(clearTimeout);
