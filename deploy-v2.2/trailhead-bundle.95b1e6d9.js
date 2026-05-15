@@ -49060,6 +49060,60 @@ ${suffix}`;
       if (trip.route_data && (Array.isArray(trip.route_data.pins) && trip.route_data.pins.length > 0 || Array.isArray(trip.route_data.points) && trip.route_data.points.length > 0)) return;
       onLoadRouteData(trip.id);
     }, [trip.id]);
+    const statsHealedRef = (0, import_react4.useRef)(/* @__PURE__ */ new Set());
+    (0, import_react4.useEffect)(() => {
+      if (!trip.id || !isPlan || !isOwner || typeof onUpdate !== "function") return;
+      if (statsHealedRef.current.has(trip.id)) return;
+      const rd2 = trip.route_data;
+      if (!rd2) return;
+      const pts = Array.isArray(rd2.points) ? rd2.points : [];
+      if (pts.length < 2) return;
+      const needsDist = trip.distance_mi == null;
+      const needsElev = trip.elev_gain_ft == null || trip.max_elev_ft == null;
+      if (!needsDist && !needsElev) return;
+      statsHealedRef.current.add(trip.id);
+      (async () => {
+        const updates = {};
+        if (needsDist) {
+          let m = 0;
+          for (let i = 1; i < pts.length; i++) {
+            const a = pts[i - 1], b = pts[i];
+            const aLat = a && a.lat != null ? a.lat : Array.isArray(a) ? a[1] : null;
+            const aLng = a && a.lng != null ? a.lng : Array.isArray(a) ? a[0] : null;
+            const bLat = b && b.lat != null ? b.lat : Array.isArray(b) ? b[1] : null;
+            const bLng = b && b.lng != null ? b.lng : Array.isArray(b) ? b[0] : null;
+            if (aLat == null || aLng == null || bLat == null || bLng == null) continue;
+            m += haversine(aLat, aLng, bLat, bLng);
+          }
+          if (m > 0) updates.distance_mi = Number((m / 1609.344).toFixed(2));
+        }
+        if (needsElev) {
+          try {
+            const normPts = pts.map((p) => p && p.lat != null ? p : Array.isArray(p) ? { lng: p[0], lat: p[1] } : null).filter(Boolean);
+            const elevs = await fetchElevationsAlongPath(normPts);
+            if (Array.isArray(elevs) && elevs.length > 1) {
+              let gainM = 0, maxM = -Infinity;
+              for (let i = 0; i < elevs.length; i++) {
+                if (typeof elevs[i] !== "number" || !isFinite(elevs[i])) continue;
+                if (elevs[i] > maxM) maxM = elevs[i];
+                if (i > 0 && typeof elevs[i - 1] === "number" && elevs[i] > elevs[i - 1]) {
+                  gainM += elevs[i] - elevs[i - 1];
+                }
+              }
+              if (isFinite(maxM)) updates.max_elev_ft = Math.round(maxM * 3.28084);
+              updates.elev_gain_ft = Math.round(gainM * 3.28084);
+            }
+          } catch (e) {
+          }
+        }
+        if (Object.keys(updates).length > 0) {
+          try {
+            await onUpdate(trip.id, updates);
+          } catch (e) {
+          }
+        }
+      })();
+    }, [trip.id, trip.route_data]);
     (0, import_react4.useEffect)(() => {
       if (!trip.id || !onBumpView) return;
       onBumpView(trip.id);
