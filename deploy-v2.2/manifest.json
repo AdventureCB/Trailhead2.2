@@ -9,13 +9,13 @@
   "orientation": "portrait",
   "icons": [
     {
-      "src": "/lone-peak-flag.png",
-      "sizes": "192x192",
+      "src": "/summit-lp-logo.png",
+      "sizes": "256x256",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
-      "src": "/lone-peak-flag.png",
+      "src": "/summit-lp-logo.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"

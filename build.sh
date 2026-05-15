@@ -28,7 +28,7 @@ cat > ${DEPLOY_DIR}/index.html << HTMLEOF
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Trailhead">
-<link rel="apple-touch-icon" href="/lone-peak-flag.png">
+<link rel="apple-touch-icon" href="/summit-lp-logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@400;600;700&display=swap" rel="stylesheet">
 <style>

@@ -47625,41 +47625,11 @@ ${suffix}`;
                 prevPosRef.current = { lat, lng };
                 if (!userMarkerRef.current) {
                   const el = document.createElement("div");
-                  el.style.cssText = `width:54px;height:54px;display:flex;align-items:center;justify-content:center;`;
-                  el.innerHTML = `<svg width="54" height="54" viewBox="0 0 54 54" style="display:block;overflow:visible">
-                  <!-- accuracy halo (does not rotate) -->
-                  <circle cx="27" cy="27" r="23" fill="rgba(189,71,42,0.14)" stroke="rgba(189,71,42,0.45)" stroke-width="1"/>
-                  <g class="dir" style="transform-origin:27px 27px;transform:rotate(0deg);transition:transform 0.18s linear">
-                    <!-- soft ground shadow under the rig -->
-                    <ellipse cx="27" cy="48" rx="16" ry="3" fill="rgba(0,0,0,0.45)"/>
-                    <!-- wheels (front + rear, both sides) -->
-                    <rect x="7" y="15" width="5" height="9" rx="1.4" fill="#0E0E0E" stroke="#000" stroke-width="0.4"/>
-                    <rect x="42" y="15" width="5" height="9" rx="1.4" fill="#0E0E0E" stroke="#000" stroke-width="0.4"/>
-                    <rect x="7" y="33" width="5" height="9" rx="1.4" fill="#0E0E0E" stroke="#000" stroke-width="0.4"/>
-                    <rect x="42" y="33" width="5" height="9" rx="1.4" fill="#0E0E0E" stroke="#000" stroke-width="0.4"/>
-                    <!-- body \u2014 copper, white outline so it pops on any basemap -->
-                    <rect x="11" y="6" width="32" height="40" rx="4" fill="#BD472A" stroke="#FFFFFF" stroke-width="2"/>
-                    <!-- right-side shading strip for a subtle 3D feel -->
-                    <rect x="38" y="9" width="3.5" height="34" rx="1" fill="rgba(0,0,0,0.22)"/>
-                    <!-- front bumper / hood shading -->
-                    <rect x="13" y="6" width="28" height="6" rx="2" fill="rgba(0,0,0,0.18)"/>
-                    <!-- headlights -->
-                    <circle cx="16.5" cy="9" r="1.7" fill="#FFE9A0"/>
-                    <circle cx="37.5" cy="9" r="1.7" fill="#FFE9A0"/>
-                    <!-- windshield (perspective trapezoid) -->
-                    <path d="M14.5 15 L39.5 15 L37 20.5 L17 20.5 Z" fill="#B7D2EA" stroke="rgba(0,0,0,0.25)" stroke-width="0.5"/>
-                    <!-- cab roof \u2014 slightly darker copper -->
-                    <rect x="15" y="20.5" width="24" height="6" fill="#8E3320"/>
-                    <!-- back window -->
-                    <rect x="17" y="26.5" width="20" height="3" rx="0.6" fill="#B7D2EA" opacity="0.72"/>
-                    <!-- truck bed with two stripes (overlanding rack feel) -->
-                    <rect x="14" y="30" width="26" height="14" rx="1" fill="rgba(0,0,0,0.28)"/>
-                    <line x1="14" y1="34" x2="40" y2="34" stroke="#FFFFFF" stroke-width="0.55" opacity="0.45"/>
-                    <line x1="14" y1="38" x2="40" y2="38" stroke="#FFFFFF" stroke-width="0.55" opacity="0.45"/>
-                    <line x1="14" y1="42" x2="40" y2="42" stroke="#FFFFFF" stroke-width="0.55" opacity="0.45"/>
-                    <!-- tail lights -->
-                    <rect x="14" y="44" width="3.5" height="1.6" rx="0.4" fill="#E63946"/>
-                    <rect x="36.5" y="44" width="3.5" height="1.6" rx="0.4" fill="#E63946"/>
+                  el.style.cssText = `width:36px;height:36px;display:flex;align-items:center;justify-content:center;`;
+                  el.innerHTML = `<svg width="36" height="36" viewBox="0 0 36 36" style="display:block">
+                  <circle cx="18" cy="18" r="11" fill="rgba(59,130,246,0.18)" stroke="rgba(59,130,246,0.4)" stroke-width="1"/>
+                  <g class="dir" style="transform-origin:18px 18px;transform:rotate(0deg);transition:transform 0.15s linear">
+                    <path d="M18 5 L24 22 L18 19 L12 22 Z" fill="#3B82F6" stroke="#FFFFFF" stroke-width="1.5" stroke-linejoin="round"/>
                   </g>
                 </svg>`;
                   userMarkerRef.current = new mapboxgl.Marker({ element: el, anchor: "center" }).setLngLat([lng, lat]).addTo(map);
