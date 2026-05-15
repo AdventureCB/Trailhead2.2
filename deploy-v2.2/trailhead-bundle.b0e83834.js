@@ -49211,7 +49211,21 @@ ${suffix}`;
     ), heroFullscreen && hasMap && /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => setHeroFullscreen(false), style: { position: "fixed", inset: 0, zIndex: 1400, background: T.darkBg, display: "flex", flexDirection: "column" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px", borderBottom: `1px solid ${T.charcoal}`, background: T.darkBg, flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 0.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingRight: 12 } }, trip.name), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: (e) => {
       e.stopPropagation();
       setHeroFullscreen(false);
-    }, style: { background: T.charcoal, border: "none", padding: 8, borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 16, color: T.white }))), /* @__PURE__ */ import_react4.default.createElement("div", { onClick: (e) => e.stopPropagation(), style: { flex: 1, position: "relative", minHeight: 0 } }, /* @__PURE__ */ import_react4.default.createElement(RouteMapPreview, { pins, points, photos, offroadRanges: Array.isArray(rd.offroadRanges) ? rd.offroadRanges : void 0 }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "16px" } }, isPlan && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 8, padding: "3px 10px", background: `${T.copper}20`, color: T.copper, borderRadius: 4, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1.2 } }, /* @__PURE__ */ import_react4.default.createElement(Route, { size: 11, color: T.copper }), "TRIP PLAN", trip.visibility === "private" && /* @__PURE__ */ import_react4.default.createElement("span", { style: { marginLeft: 4 } }, "\xB7 PRIVATE")), canEditInline ? /* @__PURE__ */ import_react4.default.createElement(
+    }, style: { background: T.charcoal, border: "none", padding: 8, borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 16, color: T.white }))), /* @__PURE__ */ import_react4.default.createElement("div", { onClick: (e) => e.stopPropagation(), style: { flex: 1, position: "relative", minHeight: 0 } }, /* @__PURE__ */ import_react4.default.createElement(RouteMapPreview, { pins, points, photos, offroadRanges: Array.isArray(rd.offroadRanges) ? rd.offroadRanges : void 0 }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "16px" } }, isPlan && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 10px", background: `${T.copper}20`, color: T.copper, borderRadius: 4, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1.2 } }, /* @__PURE__ */ import_react4.default.createElement(Route, { size: 11, color: T.copper }), "TRIP PLAN"), isOwner ? /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: () => {
+          if (typeof onUpdate !== "function") return;
+          const next = trip.visibility === "public" ? "private" : "public";
+          const updates = next === "public" ? { visibility: "public", status: "published" } : { visibility: "private" };
+          onUpdate(trip.id, updates);
+        },
+        title: trip.visibility === "public" ? "Tap to make private" : "Tap to make public",
+        style: { display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", background: trip.visibility === "public" ? `${T.green}25` : `${T.copper}20`, color: trip.visibility === "public" ? T.green : T.copper, border: `1px solid ${trip.visibility === "public" ? T.green : T.copper}50`, borderRadius: 4, cursor: "pointer", fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1.2 }
+      },
+      trip.visibility === "public" ? /* @__PURE__ */ import_react4.default.createElement(Globe, { size: 11 }) : /* @__PURE__ */ import_react4.default.createElement(Lock, { size: 11 }),
+      trip.visibility === "public" ? "PUBLIC" : "PRIVATE"
+    ) : trip.visibility === "private" ? /* @__PURE__ */ import_react4.default.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 10px", background: `${T.copper}20`, color: T.copper, borderRadius: 4, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1.2 } }, /* @__PURE__ */ import_react4.default.createElement(Lock, { size: 11 }), "PRIVATE") : null), canEditInline ? /* @__PURE__ */ import_react4.default.createElement(
       "input",
       {
         value: titleDraft,
@@ -55076,7 +55090,14 @@ ${suffix}`;
         distance_mi: totalMeters > 0 ? Number((totalMeters / 1609.344).toFixed(2)) : null,
         duration_min: totalSeconds > 0 ? Math.round(totalSeconds / 60) : null,
         elev_gain_ft: elevGainFt,
-        max_elev_ft: maxElevFt
+        max_elev_ft: maxElevFt,
+        // Plans go straight to 'published' on commit. They have no
+        // separate review step like trip reports do, and the RLS for
+        // public plans requires status='published' alongside
+        // visibility='public' before non-owners can see them on the map.
+        // Owners stay seeing the plan regardless via the auth.uid()
+        // branch in the SELECT policy.
+        status: "published"
       };
       if (planBuilderPoints.length > 1) {
         updates.end_lat = last.lat;
@@ -57636,8 +57657,16 @@ ${suffix}`;
       setShowCompose(false);
       setComposePrefillConvoy(null);
     }, onSubmit: async (newPost) => {
-      if (composePrefillConvoy && composePrefillConvoy.planId && newPost && newPost.type === "CONVOYS") newPost = { ...newPost, planId: composePrefillConvoy.planId };
+      const planIdForConvoy = composePrefillConvoy && composePrefillConvoy.planId;
+      if (planIdForConvoy && newPost && newPost.type === "CONVOYS") newPost = { ...newPost, planId: planIdForConvoy };
       const created = await addPost(newPost);
+      if (created && created.type === "CONVOYS" && planIdForConvoy) {
+        try {
+          await updateTripDraft(planIdForConvoy, { visibility: "public", status: "published" });
+        } catch (e) {
+          console.warn("[plan\u2192convoy] failed to publish plan", e);
+        }
+      }
       awardPoints(newPost.type === "RECOVERY" ? 0 : POINTS.feedPost, newPost.type === "RECOVERY" ? "" : "Feed Post");
       if (newPost.photoUrls && newPost.photoUrls.length > 0) awardPoints(POINTS.photoUploaded * newPost.photoUrls.length, "Photos Uploaded");
       if (created && created.type === "CONVOYS" && created.id && typeof created.id === "string" && created.id.length > 20 && created.id.includes("-")) {
