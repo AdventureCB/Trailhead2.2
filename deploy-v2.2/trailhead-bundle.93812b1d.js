@@ -45170,11 +45170,14 @@ ${suffix}`;
           if (el && el.scrollIntoView) el.scrollIntoView({ behavior: "smooth", block: "start" });
         }, 80);
         setTimeout(() => setHighlightedPostId(null), 2600);
-      } else {
-        onSharedPostMissing && onSharedPostMissing();
+        onConsumePendingPostNav && onConsumePendingPostNav();
+        return;
       }
-      onConsumePendingPostNav && onConsumePendingPostNav();
-    }, [pendingPostNav]);
+      if (feedItems.length > 0) {
+        onSharedPostMissing && onSharedPostMissing();
+        onConsumePendingPostNav && onConsumePendingPostNav();
+      }
+    }, [pendingPostNav, feedItems]);
     const [commentText, setCommentText] = (0, import_react4.useState)("");
     const [shareMenuId, setShareMenuId] = (0, import_react4.useState)(null);
     const [sharePickerId, setSharePickerId] = (0, import_react4.useState)(null);
@@ -53910,6 +53913,53 @@ ${suffix}`;
       }
     });
     const [currentProfile, setCurrentProfile] = (0, import_react4.useState)(null);
+    const hydrateGuestData = async () => {
+      try {
+        const { data: postRows, error: postErr } = await supabase.from("posts").select("*").order("created_at", { ascending: false }).limit(100);
+        if (postErr) console.warn("[guest-hydrate] posts fetch error", postErr);
+        if (Array.isArray(postRows) && postRows.length > 0) {
+          const authorIds = Array.from(new Set(postRows.map((r) => r.user_id).filter(Boolean)));
+          const authorsById = {};
+          if (authorIds.length > 0) {
+            try {
+              const { data: authorProfs } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").in("id", authorIds);
+              if (Array.isArray(authorProfs)) authorProfs.forEach((p) => {
+                authorsById[p.id] = p;
+              });
+            } catch (e) {
+            }
+          }
+          setFeedItems(postRows.map((r) => dbRowToFeedItem(r, authorsById[r.user_id] || null)));
+        }
+      } catch (e) {
+        console.warn("[guest-hydrate] posts fetch failed", e);
+      }
+      try {
+        const { data: buildRows } = await supabase.from("builds").select("*").order("created_at", { ascending: false }).limit(100);
+        if (Array.isArray(buildRows)) {
+          const ownerIds = Array.from(new Set(buildRows.map((b) => b.user_id).filter(Boolean)));
+          const ownersById = {};
+          if (ownerIds.length > 0) {
+            try {
+              const { data: ownerProfs } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").in("id", ownerIds);
+              if (Array.isArray(ownerProfs)) ownerProfs.forEach((p) => {
+                ownersById[p.id] = p;
+              });
+            } catch (e) {
+            }
+          }
+          setAllBuilds(buildRows.map((b) => dbRowToLocalBuild(b, ownersById[b.user_id] || null)));
+        }
+      } catch (e) {
+        console.warn("[guest-hydrate] builds fetch failed", e);
+      }
+      try {
+        const { data: tripRows } = await supabase.from("trip_reports").select("id,user_id,name,slug,description,hero_img,start_lat,start_lng,end_lat,end_lng,route_geom,kind,visibility,status,distance_mi,elev_gain_ft,max_elev_ft,duration_min,region,state_code,terrains,tags,difficulty,planned_start,planned_end,party_size,view_count,created_at,updated_at").eq("status", "published").order("created_at", { ascending: false }).limit(100);
+        if (Array.isArray(tripRows)) setTripReports(tripRows);
+      } catch (e) {
+        console.warn("[guest-hydrate] trip_reports fetch failed", e);
+      }
+    };
     const hydrateUserData = async (session) => {
       if (!session || !session.user || !session.user.id) return;
       const uid = session.user.id;
@@ -54267,7 +54317,7 @@ ${suffix}`;
           if (hasHandle) hydrateUserData(session);
           else setAppReady(true);
         } else {
-          setAppReady(true);
+          hydrateGuestData().finally(() => setAppReady(true));
         }
       });
       const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
