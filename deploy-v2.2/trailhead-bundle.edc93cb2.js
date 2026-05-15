@@ -49421,22 +49421,22 @@ ${suffix}`;
           },
           /* @__PURE__ */ import_react4.default.createElement("img", { src: url, alt: "", loading: "lazy", style: { width: "100%", height: "100%", objectFit: "cover", display: "block" } })
         )));
-      })(), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginTop: 10, flexWrap: "wrap" } }, /* @__PURE__ */ import_react4.default.createElement(
+      })(), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "center", gap: 10, rowGap: 8, marginTop: 14, flexWrap: "wrap" } }, /* @__PURE__ */ import_react4.default.createElement(
         "button",
         {
           onClick: () => window.open(`https://www.google.com/maps/dir/?api=1&destination=${spot.lat},${spot.lng}&travelmode=driving`, "_blank", "noopener"),
-          style: { display: "inline-flex", alignItems: "center", gap: 5, padding: "8px 12px", background: T.green, border: "none", borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }
+          style: { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 16px", background: T.green, border: "none", borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }
         },
         /* @__PURE__ */ import_react4.default.createElement(Navigation, { size: 12 }),
         "DIRECTIONS"
-      ), ext && /* @__PURE__ */ import_react4.default.createElement("a", { href: ext.url, target: "_blank", rel: "noopener noreferrer", style: { display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", background: T.copper, color: T.white, borderRadius: 6, textDecoration: "none", fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5 } }, /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 12 }), /* @__PURE__ */ import_react4.default.createElement("span", null, ext.label)), isMine && /* @__PURE__ */ import_react4.default.createElement(
+      ), ext && /* @__PURE__ */ import_react4.default.createElement("a", { href: ext.url, target: "_blank", rel: "noopener noreferrer", style: { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 16px", background: T.copper, color: T.white, borderRadius: 6, textDecoration: "none", fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5 } }, /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 12 }), /* @__PURE__ */ import_react4.default.createElement("span", null, ext.label)), isMine && /* @__PURE__ */ import_react4.default.createElement(
         "button",
         {
           onClick: () => {
             setEditingSpot(spot);
             setSelectedSpot(null);
           },
-          style: { display: "inline-flex", alignItems: "center", gap: 5, padding: "8px 12px", background: T.charcoal, border: `1px solid ${T.copper}50`, borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 0.5 }
+          style: { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 16px", background: T.charcoal, border: `1px solid ${T.copper}50`, borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 0.5 }
         },
         /* @__PURE__ */ import_react4.default.createElement(PenLine, { size: 12 }),
         "EDIT"
@@ -49444,7 +49444,7 @@ ${suffix}`;
         "button",
         {
           onClick: () => setShareTarget({ kind: "spot", data: spot }),
-          style: { display: "inline-flex", alignItems: "center", gap: 5, padding: "8px 12px", background: T.charcoal, border: `1px solid ${T.tertiary}50`, borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }
+          style: { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 16px", background: T.charcoal, border: `1px solid ${T.tertiary}50`, borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }
         },
         /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 12 }),
         "SHARE"
@@ -49452,7 +49452,7 @@ ${suffix}`;
         "button",
         {
           onClick: () => setPlanInsertTarget({ kind: "spot", data: { lat: spot.lat, lng: spot.lng, type: "camp", label: spot.name, sourceId: spot.id, sourceType: "spot", sourceName: spot.name }, dismissPopup: () => setSelectedSpot(null) }),
-          style: { display: "inline-flex", alignItems: "center", gap: 5, padding: "8px 12px", background: T.copper, border: "none", borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }
+          style: { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 16px", background: T.copper, border: "none", borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }
         },
         /* @__PURE__ */ import_react4.default.createElement(Route, { size: 12 }),
         planActive ? "ADD TO PLAN" : "PLAN A TRIP"
