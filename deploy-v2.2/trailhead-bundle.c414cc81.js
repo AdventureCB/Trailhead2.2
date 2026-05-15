@@ -43736,6 +43736,96 @@ ${suffix}`;
       };
     }, [mapRef, ready, rows, visible, selectedId, refreshKey]);
   }
+  function ShareRecipientPicker({ followingIdsArr, searchUsers, onCancel, onSubmit }) {
+    const [followingProfiles, setFollowingProfiles] = (0, import_react4.useState)([]);
+    const [followingLoaded, setFollowingLoaded] = (0, import_react4.useState)(false);
+    const [searchQ, setSearchQ] = (0, import_react4.useState)("");
+    const [searchResults, setSearchResults] = (0, import_react4.useState)([]);
+    const [searching, setSearching] = (0, import_react4.useState)(false);
+    const [selected, setSelected] = (0, import_react4.useState)({});
+    const [submitting, setSubmitting] = (0, import_react4.useState)(false);
+    (0, import_react4.useEffect)(() => {
+      const ids = followingIdsArr || [];
+      if (ids.length === 0) {
+        setFollowingLoaded(true);
+        return;
+      }
+      let cancelled = false;
+      supabase.from("profiles").select("id, full_name, handle, avatar_url").in("id", ids).then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) {
+          console.error("[picker] following fetch error", error);
+          setFollowingLoaded(true);
+          return;
+        }
+        setFollowingProfiles(Array.isArray(data) ? data : []);
+        setFollowingLoaded(true);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }, []);
+    (0, import_react4.useEffect)(() => {
+      const q = searchQ.trim();
+      if (q.length < 2) {
+        setSearchResults([]);
+        setSearching(false);
+        return;
+      }
+      setSearching(true);
+      let cancelled = false;
+      const t = setTimeout(async () => {
+        const results = await searchUsers(q, 12);
+        if (cancelled) return;
+        setSearchResults(results || []);
+        setSearching(false);
+      }, 300);
+      return () => {
+        cancelled = true;
+        clearTimeout(t);
+      };
+    }, [searchQ]);
+    const toggle = (profile) => {
+      setSelected((prev) => {
+        const next = { ...prev };
+        if (next[profile.id]) delete next[profile.id];
+        else next[profile.id] = profile;
+        return next;
+      });
+    };
+    const selectedList = Object.values(selected);
+    const submit = async () => {
+      if (submitting) return;
+      const ids = selectedList.map((p) => p.id);
+      if (ids.length === 0) return;
+      setSubmitting(true);
+      try {
+        await onSubmit(ids);
+      } finally {
+        setSubmitting(false);
+      }
+    };
+    const followingIdSet = new Set(followingProfiles.map((p) => p.id));
+    const searchOnly = (searchResults || []).filter((p) => !followingIdSet.has(p.id));
+    const followingFiltered = searchQ.trim().length >= 2 ? followingProfiles.filter((p) => {
+      const q = searchQ.trim().toLowerCase();
+      return (p.full_name || "").toLowerCase().includes(q) || (p.handle || "").toLowerCase().includes(q);
+    }) : followingProfiles;
+    const RowButton = ({ profile }) => {
+      const isSel = !!selected[profile.id];
+      const initial = (profile.full_name || profile.handle || "U").charAt(0).toUpperCase();
+      return /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => toggle(profile), style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: isSel ? `${T.copper}18` : "none", border: "none", borderBottom: `1px solid ${T.charcoal}40`, cursor: "pointer", width: "100%", textAlign: "left" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 32, height: 32, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 } }, profile.avatar_url ? /* @__PURE__ */ import_react4.default.createElement("img", { src: profile.avatar_url, alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, fontWeight: 700, color: T.white } }, initial)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, display: "block" } }, profile.full_name || profile.handle), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, "@", profile.handle)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 22, height: 22, borderRadius: "50%", border: `2px solid ${isSel ? T.copper : T.tertiary}`, background: isSel ? T.copper : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, isSel && /* @__PURE__ */ import_react4.default.createElement("span", { style: { color: T.white, fontSize: 12, fontWeight: 700, lineHeight: 1 } }, "\u2713")));
+    };
+    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1300, display: "flex", alignItems: "stretch", justifyContent: "center", padding: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkBg, width: "100%", maxWidth: 430, height: "100%", display: "flex", flexDirection: "column" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", background: T.charcoal, borderBottom: `1px solid ${T.darkCard}`, flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: onCancel, style: { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 22, color: T.white, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, fontWeight: 700, color: T.white, letterSpacing: 1 } }, "SEND TO")), selectedList.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "10px 14px", borderBottom: `1px solid ${T.charcoal}`, display: "flex", flexWrap: "wrap", gap: 6 } }, selectedList.map((p) => /* @__PURE__ */ import_react4.default.createElement("button", { key: p.id, onClick: () => toggle(p), style: { display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 8px 5px 5px", background: `${T.copper}25`, border: `1px solid ${T.copper}50`, borderRadius: 14, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 18, height: 18, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" } }, p.avatar_url ? /* @__PURE__ */ import_react4.default.createElement("img", { src: p.avatar_url, alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, fontWeight: 700, color: T.white } }, (p.full_name || p.handle || "?").charAt(0).toUpperCase())), /* @__PURE__ */ import_react4.default.createElement("span", null, p.full_name || p.handle), /* @__PURE__ */ import_react4.default.createElement(X, { size: 11, color: T.white })))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "10px 14px", borderBottom: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, background: T.charcoal, borderRadius: 8, padding: "8px 12px" } }, /* @__PURE__ */ import_react4.default.createElement(Search, { size: 14, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("input", { autoFocus: true, value: searchQ, onChange: (e) => setSearchQ(e.target.value), placeholder: "Search by name or @handle\u2026", style: { flex: 1, background: "none", border: "none", outline: "none", color: T.white, fontFamily: sans, fontSize: 13, padding: 0 } }), searchQ && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setSearchQ(""), style: { background: "none", border: "none", cursor: "pointer", padding: 2, display: "flex", color: T.tertiary } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 12 })))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, overflowY: "auto" } }, followingFiltered.length > 0 && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "12px 14px 6px", fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.4, fontWeight: 700 } }, "FOLLOWING", searchQ.trim().length >= 2 ? " (FILTERED)" : ""), followingFiltered.map((p) => /* @__PURE__ */ import_react4.default.createElement(RowButton, { key: p.id, profile: p }))), searchQ.trim().length >= 2 && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "12px 14px 6px", fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.4, fontWeight: 700 } }, "OTHER USERS"), searching && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "12px 14px", fontFamily: sans, fontSize: 12, color: T.tertiary } }, "Searching\u2026"), !searching && searchOnly.length === 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "12px 14px", fontFamily: sans, fontSize: 12, color: T.tertiary } }, "No matches."), !searching && searchOnly.map((p) => /* @__PURE__ */ import_react4.default.createElement(RowButton, { key: p.id, profile: p }))), followingLoaded && followingFiltered.length === 0 && searchQ.trim().length < 2 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "32px 16px", textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Users, { size: 32, color: T.tertiary, style: { opacity: 0.4, marginBottom: 10 } }), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "0 0 6px" } }, "You're not following anyone yet."), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, margin: 0, lineHeight: 1.5 } }, "Use the search above to find someone to send to."))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "12px 14px", background: T.charcoal, borderTop: `1px solid ${T.darkCard}`, flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: submit,
+        disabled: selectedList.length === 0 || submitting,
+        style: { width: "100%", padding: "13px", borderRadius: 8, background: selectedList.length > 0 && !submitting ? T.copper : T.darkCard, border: "none", cursor: selectedList.length > 0 && !submitting ? "pointer" : "default", fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 0.6, opacity: selectedList.length > 0 && !submitting ? 1 : 0.5 }
+      },
+      submitting ? "OPENING\u2026" : selectedList.length === 0 ? "PICK SOMEONE" : selectedList.length === 1 ? `SEND TO ${selectedList[0].full_name || "@" + selectedList[0].handle}` : `SEND TO ${selectedList.length} PEOPLE`
+    ))));
+  }
   function usePlanBuilderLayer(mapRef, ready, points, onMarkerTap, endAnchorId) {
     const markersRef = (0, import_react4.useRef)([]);
     const handlerRef = (0, import_react4.useRef)(onMarkerTap);
@@ -57244,72 +57334,14 @@ ${suffix}`;
         ))));
       };
       return /* @__PURE__ */ import_react4.default.createElement(Inner, null);
-    })(), recipientPickerSession && /* @__PURE__ */ (() => {
-      const session = recipientPickerSession;
-      const close = () => setRecipientPickerSession(null);
-      const Inner = () => {
-        const [followingProfiles, setFollowingProfiles] = (0, import_react4.useState)([]);
-        const [followingLoaded, setFollowingLoaded] = (0, import_react4.useState)(false);
-        const [searchQ, setSearchQ] = (0, import_react4.useState)("");
-        const [searchResults, setSearchResults] = (0, import_react4.useState)([]);
-        const [searching, setSearching] = (0, import_react4.useState)(false);
-        const [selected, setSelected] = (0, import_react4.useState)({});
-        const [submitting, setSubmitting] = (0, import_react4.useState)(false);
-        (0, import_react4.useEffect)(() => {
-          const ids = followingIds && Array.from(followingIds) || [];
-          if (ids.length === 0) {
-            setFollowingLoaded(true);
-            return;
-          }
-          let cancelled = false;
-          supabase.from("profiles").select("id, full_name, handle, avatar_url").in("id", ids).then(({ data, error }) => {
-            if (cancelled) return;
-            if (error) {
-              console.error("[picker] following fetch error", error);
-              setFollowingLoaded(true);
-              return;
-            }
-            setFollowingProfiles(Array.isArray(data) ? data : []);
-            setFollowingLoaded(true);
-          });
-          return () => {
-            cancelled = true;
-          };
-        }, []);
-        (0, import_react4.useEffect)(() => {
-          const q = searchQ.trim();
-          if (q.length < 2) {
-            setSearchResults([]);
-            setSearching(false);
-            return;
-          }
-          setSearching(true);
-          let cancelled = false;
-          const t = setTimeout(async () => {
-            const results = await searchUsers(q, 12);
-            if (cancelled) return;
-            setSearchResults(results || []);
-            setSearching(false);
-          }, 300);
-          return () => {
-            cancelled = true;
-            clearTimeout(t);
-          };
-        }, [searchQ]);
-        const toggle = (profile) => {
-          setSelected((prev) => {
-            const next = { ...prev };
-            if (next[profile.id]) delete next[profile.id];
-            else next[profile.id] = profile;
-            return next;
-          });
-        };
-        const selectedList = Object.values(selected);
-        const submit = async () => {
-          if (submitting) return;
-          const ids = selectedList.map((p) => p.id);
-          if (ids.length === 0) return;
-          setSubmitting(true);
+    })(), recipientPickerSession && /* @__PURE__ */ import_react4.default.createElement(
+      ShareRecipientPicker,
+      {
+        followingIdsArr: Array.from(followingIds || []),
+        searchUsers,
+        onCancel: () => setRecipientPickerSession(null),
+        onSubmit: async (ids) => {
+          const session = recipientPickerSession;
           try {
             if (ids.length === 1) {
               setRecipientPickerSession(null);
@@ -57319,7 +57351,6 @@ ${suffix}`;
             const convId = await findOrCreateConvByUsers(ids);
             if (!convId) {
               showErrorToast("Couldn't open that conversation.");
-              setSubmitting(false);
               return;
             }
             setRecipientPickerSession(null);
@@ -57332,32 +57363,10 @@ ${suffix}`;
           } catch (e) {
             console.error("[picker] submit failed", e);
             showErrorToast("Couldn't open that conversation.");
-            setSubmitting(false);
           }
-        };
-        const followingIdSet = new Set(followingProfiles.map((p) => p.id));
-        const searchOnly = (searchResults || []).filter((p) => !followingIdSet.has(p.id));
-        const followingFiltered = searchQ.trim().length >= 2 ? followingProfiles.filter((p) => {
-          const q = searchQ.trim().toLowerCase();
-          return (p.full_name || "").toLowerCase().includes(q) || (p.handle || "").toLowerCase().includes(q);
-        }) : followingProfiles;
-        const RowButton = ({ profile }) => {
-          const isSel = !!selected[profile.id];
-          const initial = (profile.full_name || profile.handle || "U").charAt(0).toUpperCase();
-          return /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => toggle(profile), style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: isSel ? `${T.copper}18` : "none", border: "none", borderBottom: `1px solid ${T.charcoal}40`, cursor: "pointer", width: "100%", textAlign: "left" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 32, height: 32, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 } }, profile.avatar_url ? /* @__PURE__ */ import_react4.default.createElement("img", { src: profile.avatar_url, alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, fontWeight: 700, color: T.white } }, initial)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, display: "block" } }, profile.full_name || profile.handle), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, "@", profile.handle)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 22, height: 22, borderRadius: "50%", border: `2px solid ${isSel ? T.copper : T.tertiary}`, background: isSel ? T.copper : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, isSel && /* @__PURE__ */ import_react4.default.createElement("span", { style: { color: T.white, fontSize: 12, fontWeight: 700, lineHeight: 1 } }, "\u2713")));
-        };
-        return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1300, display: "flex", alignItems: "stretch", justifyContent: "center", padding: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkBg, width: "100%", maxWidth: 430, height: "100%", display: "flex", flexDirection: "column" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", background: T.charcoal, borderBottom: `1px solid ${T.darkCard}`, flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: close, style: { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 22, color: T.white, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, fontWeight: 700, color: T.white, letterSpacing: 1 } }, "SEND TO")), selectedList.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "10px 14px", borderBottom: `1px solid ${T.charcoal}`, display: "flex", flexWrap: "wrap", gap: 6 } }, selectedList.map((p) => /* @__PURE__ */ import_react4.default.createElement("button", { key: p.id, onClick: () => toggle(p), style: { display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 8px 5px 5px", background: `${T.copper}25`, border: `1px solid ${T.copper}50`, borderRadius: 14, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 18, height: 18, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" } }, p.avatar_url ? /* @__PURE__ */ import_react4.default.createElement("img", { src: p.avatar_url, alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, fontWeight: 700, color: T.white } }, (p.full_name || p.handle || "?").charAt(0).toUpperCase())), /* @__PURE__ */ import_react4.default.createElement("span", null, p.full_name || p.handle), /* @__PURE__ */ import_react4.default.createElement(X, { size: 11, color: T.white })))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "10px 14px", borderBottom: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, background: T.charcoal, borderRadius: 8, padding: "8px 12px" } }, /* @__PURE__ */ import_react4.default.createElement(Search, { size: 14, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("input", { autoFocus: true, value: searchQ, onChange: (e) => setSearchQ(e.target.value), placeholder: "Search by name or @handle\u2026", style: { flex: 1, background: "none", border: "none", outline: "none", color: T.white, fontFamily: sans, fontSize: 13, padding: 0 } }), searchQ && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setSearchQ(""), style: { background: "none", border: "none", cursor: "pointer", padding: 2, display: "flex", color: T.tertiary } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 12 })))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, overflowY: "auto" } }, followingFiltered.length > 0 && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "12px 14px 6px", fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.4, fontWeight: 700 } }, "FOLLOWING", searchQ.trim().length >= 2 ? " (FILTERED)" : ""), followingFiltered.map((p) => /* @__PURE__ */ import_react4.default.createElement(RowButton, { key: p.id, profile: p }))), searchQ.trim().length >= 2 && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "12px 14px 6px", fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.4, fontWeight: 700 } }, "OTHER USERS"), searching && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "12px 14px", fontFamily: sans, fontSize: 12, color: T.tertiary } }, "Searching\u2026"), !searching && searchOnly.length === 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "12px 14px", fontFamily: sans, fontSize: 12, color: T.tertiary } }, "No matches."), !searching && searchOnly.map((p) => /* @__PURE__ */ import_react4.default.createElement(RowButton, { key: p.id, profile: p }))), followingLoaded && followingFiltered.length === 0 && searchQ.trim().length < 2 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "32px 16px", textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Users, { size: 32, color: T.tertiary, style: { opacity: 0.4, marginBottom: 10 } }), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "0 0 6px" } }, "You're not following anyone yet."), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, margin: 0, lineHeight: 1.5 } }, "Use the search above to find someone to send to."))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "12px 14px", background: T.charcoal, borderTop: `1px solid ${T.darkCard}`, flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(
-          "button",
-          {
-            onClick: submit,
-            disabled: selectedList.length === 0 || submitting,
-            style: { width: "100%", padding: "13px", borderRadius: 8, background: selectedList.length > 0 && !submitting ? T.copper : T.darkCard, border: "none", cursor: selectedList.length > 0 && !submitting ? "pointer" : "default", fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 0.6, opacity: selectedList.length > 0 && !submitting ? 1 : 0.5 }
-          },
-          submitting ? "OPENING\u2026" : selectedList.length === 0 ? "PICK SOMEONE" : selectedList.length === 1 ? `SEND TO ${selectedList[0].full_name || "@" + selectedList[0].handle}` : `SEND TO ${selectedList.length} PEOPLE`
-        ))));
-      };
-      return /* @__PURE__ */ import_react4.default.createElement(Inner, null);
-    })(), showTripCreator && !showTripPinFullscreen && !showRecorder && /* @__PURE__ */ import_react4.default.createElement(
+        }
+      }
+    ), showTripCreator && !showTripPinFullscreen && !showRecorder && /* @__PURE__ */ import_react4.default.createElement(
       TripReportCreator,
       {
         mode: tripCreatorMode,
