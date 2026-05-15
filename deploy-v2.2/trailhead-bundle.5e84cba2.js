@@ -48913,22 +48913,23 @@ ${suffix}`;
     const mapReadyAtRef = (0, import_react4.useRef)(0);
     (0, import_react4.useEffect)(() => {
       if (mapReady) mapReadyAtRef.current = Date.now();
+      else mapReadyAtRef.current = 0;
     }, [mapReady]);
-    const prevTripPlansCountRef = (0, import_react4.useRef)(0);
+    const tripPlansLateToggleFiredRef = (0, import_react4.useRef)(false);
     const tripPlansCount = (tripPlans || []).length;
     (0, import_react4.useEffect)(() => {
-      const prev = prevTripPlansCountRef.current;
-      prevTripPlansCountRef.current = tripPlansCount;
-      if (!mapReady || prev !== 0 || tripPlansCount === 0) return;
+      if (!mapReady) {
+        tripPlansLateToggleFiredRef.current = false;
+        return;
+      }
+      if (tripPlansLateToggleFiredRef.current) return;
+      if (tripPlansCount === 0) return;
       if (!showTripPlans || !setShowTripPlans) return;
+      tripPlansLateToggleFiredRef.current = true;
       const since = Date.now() - (mapReadyAtRef.current || Date.now());
       const d = Math.max(200, 1800 - since);
-      const offT = setTimeout(() => setShowTripPlans(false), d);
-      const onT = setTimeout(() => setShowTripPlans(true), d + 180);
-      return () => {
-        clearTimeout(offT);
-        clearTimeout(onT);
-      };
+      setTimeout(() => setShowTripPlans(false), d);
+      setTimeout(() => setShowTripPlans(true), d + 180);
     }, [tripPlansCount, mapReady]);
     useCampingSpotsLayer(mapInst, mapReady, campingSpots, showCampingSpots, (spot) => {
       clearOtherSelections();
