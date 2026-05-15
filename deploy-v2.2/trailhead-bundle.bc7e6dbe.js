@@ -45063,21 +45063,16 @@ ${suffix}`;
         setSharePickerId(null);
         setShareSearch("");
         setOpenComments(null);
-      }, style: { display: "flex", alignItems: "center", gap: 5, padding: "8px 12px", borderRadius: 20, background: shareMenuId === item.id ? `${T.copper}18` : "transparent", border: "none", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(Send, { size: 15, color: shareMenuId === item.id ? T.copper : T.tertiary, strokeWidth: 1.5 }))), extraLeft), shareMenuId === item.id && !sharePickerId && /* @__PURE__ */ import_react4.default.createElement("div", { style: { margin: "0 16px 10px", background: T.darkCard, borderRadius: 8, border: `1px solid ${T.charcoal}`, overflow: "hidden" }, onClick: (e) => e.stopPropagation() }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
-        setSharePickerId(item.id);
-        setTimeout(() => shareSearchRef.current && shareSearchRef.current.focus(), 50);
+      }, style: { display: "flex", alignItems: "center", gap: 5, padding: "8px 12px", borderRadius: 20, background: shareMenuId === item.id ? `${T.copper}18` : "transparent", border: "none", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(Send, { size: 15, color: shareMenuId === item.id ? T.copper : T.tertiary, strokeWidth: 1.5 }))), extraLeft), shareMenuId === item.id && /* @__PURE__ */ import_react4.default.createElement("div", { style: { margin: "0 16px 10px", background: T.darkCard, borderRadius: 8, border: `1px solid ${T.charcoal}`, overflow: "hidden" }, onClick: (e) => e.stopPropagation() }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
+        setShareMenuId(null);
+        sendShareToUser(null, item);
       }, style: { display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: "none", border: "none", borderBottom: `1px solid ${T.charcoal}`, cursor: "pointer", width: "100%" } }, /* @__PURE__ */ import_react4.default.createElement(Mail, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white } }, "Send via Direct Message"), /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 14, color: T.tertiary, style: { marginLeft: "auto" } })), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
         setShareMenuId(null);
         const url = window.location.origin + "/post/" + item.id;
         navigator.clipboard && navigator.clipboard.writeText(url);
         setCopiedToast(true);
         setTimeout(() => setCopiedToast(false), 1800);
-      }, style: { display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: "none", border: "none", cursor: "pointer", width: "100%" } }, /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 14, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white } }, "Copy link"))), sharePickerId === item.id && /* @__PURE__ */ import_react4.default.createElement("div", { style: { margin: "0 16px 10px", background: T.darkCard, borderRadius: 8, border: `1px solid ${T.charcoal}`, overflow: "hidden" }, onClick: (e) => e.stopPropagation() }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "10px 12px", borderBottom: `1px solid ${T.charcoal}`, display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
-        setSharePickerId(null);
-      }, style: { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" } }, /* @__PURE__ */ import_react4.default.createElement(ChevronLeft, { size: 16, color: T.tertiary })), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 } }, "Send to...")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "8px 12px", borderBottom: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, background: T.charcoal, borderRadius: 20, padding: "6px 12px" } }, /* @__PURE__ */ import_react4.default.createElement(Search, { size: 13, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("input", { ref: shareSearchRef, value: shareSearch, onChange: (e) => setShareSearch(e.target.value), placeholder: "Search people...", style: { flex: 1, background: "none", border: "none", outline: "none", color: T.white, fontFamily: sans, fontSize: 12, padding: 0 } }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "8px 12px", borderBottom: `1px solid ${T.charcoal}`, background: `${T.charcoal}60` } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 4 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 18, height: 18, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 7, fontWeight: 700, color: T.white } }, item.initial)), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, "@", item.user)), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 11, color: T.warmStone, margin: 0, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, item.title)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { maxHeight: 200, overflowY: "auto" } }, shareFilteredUsers.slice(0, 8).map((u) => {
-        const initial = (u.full_name || u.handle || "U").charAt(0).toUpperCase();
-        return /* @__PURE__ */ import_react4.default.createElement("button", { key: u.id, onClick: () => sendShareToUser(u.id, item), style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "none", border: "none", borderBottom: `1px solid ${T.charcoal}20`, cursor: "pointer", width: "100%" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 30, height: 30, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" } }, u.avatar_url ? /* @__PURE__ */ import_react4.default.createElement("img", { src: u.avatar_url, alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.white } }, initial)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, textAlign: "left" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, display: "block" } }, u.full_name || u.handle), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, "@", u.handle)), /* @__PURE__ */ import_react4.default.createElement(Send, { size: 14, color: T.copper }));
-      }), shareSearch.trim().length > 0 && shareFilteredUsers.length === 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "16px 12px", textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.tertiary } }, "No users found")), shareSearch.trim().length === 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "16px 12px", textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.tertiary } }, "Type a name or handle to search")))), openComments === item.id && /* @__PURE__ */ import_react4.default.createElement("div", { style: { margin: "0 16px 12px", borderTop: `1px solid ${T.charcoal}`, paddingTop: 10 }, onClick: (e) => e.stopPropagation() }, allComments.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginBottom: 10, maxHeight: 280, overflowY: "auto" } }, allComments.map((c, ci) => {
+      }, style: { display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: "none", border: "none", cursor: "pointer", width: "100%" } }, /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 14, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white } }, "Copy link"))), openComments === item.id && /* @__PURE__ */ import_react4.default.createElement("div", { style: { margin: "0 16px 12px", borderTop: `1px solid ${T.charcoal}`, paddingTop: 10 }, onClick: (e) => e.stopPropagation() }, allComments.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginBottom: 10, maxHeight: 280, overflowY: "auto" } }, allComments.map((c, ci) => {
         const cmtLiked = !!(c && c.id && likedComments[c.id]);
         const cmtLikeCount = c.likes || 0;
         return /* @__PURE__ */ import_react4.default.createElement("div", { key: c.id || ci, style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 28, height: 28, borderRadius: "50%", background: T.charcoal, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2, overflow: "hidden", ...avatarOnlineStyle(c.userId, onlineUserIds) } }, c.avatarUrl ? /* @__PURE__ */ import_react4.default.createElement("img", { src: c.avatarUrl, alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.copper } }, c.initial)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ import_react4.default.createElement("span", { onClick: () => onViewUser && onViewUser(c.handle || c.userId || (c.user || "").replace(/\s/g, "_")), style: { fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, cursor: "pointer" } }, "@", c.handle || c.user), /* @__PURE__ */ import_react4.default.createElement(RankBadge, { points: getPoints(c.user), size: 10 }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary } }, formatPostTime(c.time))), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.warmStone, margin: "2px 0 0", lineHeight: 1.4 } }, c.text), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => handleCommentLike(item.id, c), style: { display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 0 0 0", marginTop: 2 } }, /* @__PURE__ */ import_react4.default.createElement(Heart, { size: 12, color: cmtLiked ? T.red : T.tertiary, strokeWidth: 1.5, fill: cmtLiked ? T.red : "none" }), cmtLikeCount > 0 && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: cmtLiked ? T.red : T.tertiary } }, cmtLikeCount))));
@@ -45285,7 +45280,7 @@ ${suffix}`;
             openCarousel(imgs, 0);
           }, style: { width: 40, height: 40, borderRadius: 6, objectFit: "cover", marginLeft: 8, verticalAlign: "middle", cursor: "pointer" } }), mod.link && /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginTop: 3 } }, /* @__PURE__ */ import_react4.default.createElement("a", { href: ensureUrl(mod.link), target: "_blank", rel: "noopener noreferrer", onClick: (e) => e.stopPropagation(), style: { fontFamily: sans, fontSize: 10, color: T.copper, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3 } }, /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 9 }), " View Product"))));
         };
-        return /* @__PURE__ */ import_react4.default.createElement("div", { key: item.id, style: cardStyle }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "12px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 32, height: 32, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", ...avatarOnlineStyle(item.userId, onlineUserIds) } }, item.avatarUrl ? /* @__PURE__ */ import_react4.default.createElement("img", { src: item.avatarUrl, alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, fontWeight: 700, color: T.white } }, item.initial)), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5 } }, /* @__PURE__ */ import_react4.default.createElement("span", { onClick: () => onViewUser && onViewUser(item.userId || item.handle || item.user.replace(/\s/g, "_")), style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, cursor: "pointer" } }, item.user), /* @__PURE__ */ import_react4.default.createElement(RankBadge, { points: getPoints(item.user), size: 12 })), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.tertiary, display: "block" } }, item.subtitle), item.sharedFromOwnerHandle && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.copper, display: "flex", alignItems: "center", gap: 4, marginTop: 2, fontWeight: 600 } }, /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 10, color: T.copper }), "Shared from @", item.sharedFromOwnerHandle, "'s build"), item.location && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary, display: "flex", alignItems: "center", gap: 4, marginTop: 2 } }, /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 10, color: T.tertiary }), item.location)), ownPostMenu(item)), feedEditBar(item), feedDeleteConfirm(item), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative" } }, item.photoUrls && item.photoUrls[0] ? (() => {
+        return /* @__PURE__ */ import_react4.default.createElement("div", { key: item.id, style: cardStyle }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "12px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 32, height: 32, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", ...avatarOnlineStyle(item.userId, onlineUserIds) } }, item.avatarUrl ? /* @__PURE__ */ import_react4.default.createElement("img", { src: item.avatarUrl, alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, fontWeight: 700, color: T.white } }, item.initial)), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5 } }, /* @__PURE__ */ import_react4.default.createElement("span", { onClick: () => onViewUser && onViewUser(item.userId || item.handle || item.user.replace(/\s/g, "_")), style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, cursor: "pointer" } }, item.user), /* @__PURE__ */ import_react4.default.createElement(RankBadge, { points: getPoints(item.user), size: 12 })), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.tertiary, display: "block" } }, item.subtitle), item.sharedFromOwnerHandle && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.copper, display: "flex", alignItems: "center", gap: 4, marginTop: 2, fontWeight: 600 } }, /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 10, color: T.copper }), "Shared from @", item.sharedFromOwnerHandle, "'s build"), item.location && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary, display: "flex", alignItems: "center", gap: 4, marginTop: 2 } }, /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 10, color: T.tertiary }), item.location)), ownPostMenu(item)), feedEditBar(item), feedDeleteConfirm(item), item.caption && /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 14, color: T.white, margin: 0, padding: "0 16px 10px", lineHeight: 1.6, whiteSpace: "pre-wrap" } }, item.caption), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative" } }, item.photoUrls && item.photoUrls[0] ? (() => {
           const firstP = item.photoUrls[0];
           const firstUrl = typeof firstP === "string" ? firstP : firstP.url;
           const firstIsVid = typeof firstP === "object" && firstP.type === "video";
@@ -54390,6 +54385,7 @@ ${suffix}`;
     const [planBuilderEditingId, setPlanBuilderEditingId] = (0, import_react4.useState)(null);
     const [planSavePromptOpen, setPlanSavePromptOpen] = (0, import_react4.useState)(false);
     const [shareComposeTarget, setShareComposeTarget] = (0, import_react4.useState)(null);
+    const [recipientPickerSession, setRecipientPickerSession] = (0, import_react4.useState)(null);
     const newPlanPointId = () => "pp_" + Date.now() + "_" + Math.floor(Math.random() * 1e3);
     const enterPlanBuilder = (seed, opts = {}) => {
       setPlanBuilderActive(true);
@@ -55040,6 +55036,47 @@ ${suffix}`;
         console.error("[dm] findOrCreateDirectDm failed", e);
         return null;
       }
+    };
+    const findOrCreateConvByUsers = async (otherUserIds) => {
+      const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+      if (!uid || !Array.isArray(otherUserIds) || otherUserIds.length === 0) return null;
+      const dedupedOthers = Array.from(new Set(otherUserIds.filter((id) => id && id !== uid)));
+      if (dedupedOthers.length === 0) return null;
+      if (dedupedOthers.length === 1) {
+        return await findOrCreateDirectDm(dedupedOthers[0]);
+      }
+      try {
+        const { data: myParts } = await supabase.from("dm_participants").select("conversation_id").eq("user_id", uid);
+        const myConvIds = (myParts || []).map((p) => p.conversation_id);
+        if (myConvIds.length > 0) {
+          const { data: groupConvs } = await supabase.from("dm_conversations").select("id").in("id", myConvIds).eq("type", "group");
+          const groupConvIds = (groupConvs || []).map((c) => c.id);
+          if (groupConvIds.length > 0) {
+            const { data: allParts } = await supabase.from("dm_participants").select("conversation_id, user_id").in("conversation_id", groupConvIds);
+            const partSetsByConv = {};
+            (allParts || []).forEach((p) => {
+              if (!partSetsByConv[p.conversation_id]) partSetsByConv[p.conversation_id] = /* @__PURE__ */ new Set();
+              partSetsByConv[p.conversation_id].add(p.user_id);
+            });
+            const targetSet = /* @__PURE__ */ new Set([uid, ...dedupedOthers]);
+            for (const convId of Object.keys(partSetsByConv)) {
+              const partSet = partSetsByConv[convId];
+              if (partSet.size !== targetSet.size) continue;
+              let match = true;
+              targetSet.forEach((id) => {
+                if (!partSet.has(id)) match = false;
+              });
+              if (match) {
+                await ensureLocalConvoLoaded(convId);
+                return convId;
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.error("[dm] findOrCreateConvByUsers lookup failed", e);
+      }
+      return await createGroupDm(dedupedOthers);
     };
     const createGroupDm = async (otherUserIds, title) => {
       const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
@@ -56206,7 +56243,7 @@ ${suffix}`;
       const { kind, action, data } = req;
       if (!kind || !action) return;
       const origin = typeof window !== "undefined" && window.location && window.location.origin || "";
-      const sendDm = (payload) => (caption) => openDM(null, caption || "", payload);
+      const sendDm = (payload) => (caption) => setRecipientPickerSession({ caption: caption || "", sharedPost: payload });
       if (kind === "spot") {
         const img = spotStaticMapUrl(data.lat, data.lng);
         setShareComposeTarget({
@@ -57204,6 +57241,113 @@ ${suffix}`;
             style: { flex: 2, padding: "12px", borderRadius: 8, background: !submitting ? accent : T.charcoal, border: "none", cursor: !submitting ? "pointer" : "default", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5, opacity: !submitting ? 1 : 0.5 }
           },
           t.action === "feed" ? submitting ? "POSTING\u2026" : "POST TO FEED" : submitting ? "OPENING\u2026" : "CHOOSE RECIPIENT"
+        ))));
+      };
+      return /* @__PURE__ */ import_react4.default.createElement(Inner, null);
+    })(), recipientPickerSession && /* @__PURE__ */ (() => {
+      const session = recipientPickerSession;
+      const close = () => setRecipientPickerSession(null);
+      const Inner = () => {
+        const [followingProfiles, setFollowingProfiles] = (0, import_react4.useState)([]);
+        const [followingLoaded, setFollowingLoaded] = (0, import_react4.useState)(false);
+        const [searchQ, setSearchQ] = (0, import_react4.useState)("");
+        const [searchResults, setSearchResults] = (0, import_react4.useState)([]);
+        const [searching, setSearching] = (0, import_react4.useState)(false);
+        const [selected, setSelected] = (0, import_react4.useState)({});
+        const [submitting, setSubmitting] = (0, import_react4.useState)(false);
+        (0, import_react4.useEffect)(() => {
+          const ids = followingIds && Array.from(followingIds) || [];
+          if (ids.length === 0) {
+            setFollowingLoaded(true);
+            return;
+          }
+          let cancelled = false;
+          supabase.from("profiles").select("id, full_name, handle, avatar_url").in("id", ids).then(({ data, error }) => {
+            if (cancelled) return;
+            if (error) {
+              console.error("[picker] following fetch error", error);
+              setFollowingLoaded(true);
+              return;
+            }
+            setFollowingProfiles(Array.isArray(data) ? data : []);
+            setFollowingLoaded(true);
+          });
+          return () => {
+            cancelled = true;
+          };
+        }, []);
+        (0, import_react4.useEffect)(() => {
+          const q = searchQ.trim();
+          if (q.length < 2) {
+            setSearchResults([]);
+            setSearching(false);
+            return;
+          }
+          setSearching(true);
+          let cancelled = false;
+          const t = setTimeout(async () => {
+            const results = await searchUsers(q, 12);
+            if (cancelled) return;
+            setSearchResults(results || []);
+            setSearching(false);
+          }, 300);
+          return () => {
+            cancelled = true;
+            clearTimeout(t);
+          };
+        }, [searchQ]);
+        const toggle = (profile) => {
+          setSelected((prev) => {
+            const next = { ...prev };
+            if (next[profile.id]) delete next[profile.id];
+            else next[profile.id] = profile;
+            return next;
+          });
+        };
+        const selectedList = Object.values(selected);
+        const submit = async () => {
+          if (submitting) return;
+          const ids = selectedList.map((p) => p.id);
+          if (ids.length === 0) return;
+          setSubmitting(true);
+          try {
+            const convId = await findOrCreateConvByUsers(ids);
+            if (!convId) {
+              showErrorToast("Couldn't open that conversation.");
+              setSubmitting(false);
+              return;
+            }
+            setRecipientPickerSession(null);
+            setDmInitialConvId(convId);
+            setDmInitialMessage(session.caption || "");
+            setDmSharedPost(session.sharedPost || null);
+            setShowDM(true);
+            setActiveDmConvId(convId);
+          } catch (e) {
+            console.error("[picker] submit failed", e);
+            showErrorToast("Couldn't open that conversation.");
+            setSubmitting(false);
+          }
+        };
+        const followingIdSet = new Set(followingProfiles.map((p) => p.id));
+        const searchOnly = (searchResults || []).filter((p) => !followingIdSet.has(p.id));
+        const followingFiltered = searchQ.trim().length >= 2 ? followingProfiles.filter((p) => {
+          const q = searchQ.trim().toLowerCase();
+          return (p.full_name || "").toLowerCase().includes(q) || (p.handle || "").toLowerCase().includes(q);
+        }) : followingProfiles;
+        const RowButton = ({ profile }) => {
+          const isSel = !!selected[profile.id];
+          const initial = (profile.full_name || profile.handle || "U").charAt(0).toUpperCase();
+          return /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => toggle(profile), style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: isSel ? `${T.copper}18` : "none", border: "none", borderBottom: `1px solid ${T.charcoal}40`, cursor: "pointer", width: "100%", textAlign: "left" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 32, height: 32, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 } }, profile.avatar_url ? /* @__PURE__ */ import_react4.default.createElement("img", { src: profile.avatar_url, alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, fontWeight: 700, color: T.white } }, initial)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, display: "block" } }, profile.full_name || profile.handle), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, "@", profile.handle)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 22, height: 22, borderRadius: "50%", border: `2px solid ${isSel ? T.copper : T.tertiary}`, background: isSel ? T.copper : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, isSel && /* @__PURE__ */ import_react4.default.createElement("span", { style: { color: T.white, fontSize: 12, fontWeight: 700, lineHeight: 1 } }, "\u2713")));
+        };
+        return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1300, display: "flex", alignItems: "stretch", justifyContent: "center", padding: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkBg, width: "100%", maxWidth: 430, height: "100%", display: "flex", flexDirection: "column" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", background: T.charcoal, borderBottom: `1px solid ${T.darkCard}`, flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: close, style: { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 22, color: T.white, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, fontWeight: 700, color: T.white, letterSpacing: 1 } }, "SEND TO")), selectedList.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "10px 14px", borderBottom: `1px solid ${T.charcoal}`, display: "flex", flexWrap: "wrap", gap: 6 } }, selectedList.map((p) => /* @__PURE__ */ import_react4.default.createElement("button", { key: p.id, onClick: () => toggle(p), style: { display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 8px 5px 5px", background: `${T.copper}25`, border: `1px solid ${T.copper}50`, borderRadius: 14, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 18, height: 18, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" } }, p.avatar_url ? /* @__PURE__ */ import_react4.default.createElement("img", { src: p.avatar_url, alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, fontWeight: 700, color: T.white } }, (p.full_name || p.handle || "?").charAt(0).toUpperCase())), /* @__PURE__ */ import_react4.default.createElement("span", null, p.full_name || p.handle), /* @__PURE__ */ import_react4.default.createElement(X, { size: 11, color: T.white })))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "10px 14px", borderBottom: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, background: T.charcoal, borderRadius: 8, padding: "8px 12px" } }, /* @__PURE__ */ import_react4.default.createElement(Search, { size: 14, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("input", { autoFocus: true, value: searchQ, onChange: (e) => setSearchQ(e.target.value), placeholder: "Search by name or @handle\u2026", style: { flex: 1, background: "none", border: "none", outline: "none", color: T.white, fontFamily: sans, fontSize: 13, padding: 0 } }), searchQ && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setSearchQ(""), style: { background: "none", border: "none", cursor: "pointer", padding: 2, display: "flex", color: T.tertiary } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 12 })))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, overflowY: "auto" } }, followingFiltered.length > 0 && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "12px 14px 6px", fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.4, fontWeight: 700 } }, "FOLLOWING", searchQ.trim().length >= 2 ? " (FILTERED)" : ""), followingFiltered.map((p) => /* @__PURE__ */ import_react4.default.createElement(RowButton, { key: p.id, profile: p }))), searchQ.trim().length >= 2 && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "12px 14px 6px", fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.4, fontWeight: 700 } }, "OTHER USERS"), searching && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "12px 14px", fontFamily: sans, fontSize: 12, color: T.tertiary } }, "Searching\u2026"), !searching && searchOnly.length === 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "12px 14px", fontFamily: sans, fontSize: 12, color: T.tertiary } }, "No matches."), !searching && searchOnly.map((p) => /* @__PURE__ */ import_react4.default.createElement(RowButton, { key: p.id, profile: p }))), followingLoaded && followingFiltered.length === 0 && searchQ.trim().length < 2 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "32px 16px", textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Users, { size: 32, color: T.tertiary, style: { opacity: 0.4, marginBottom: 10 } }), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "0 0 6px" } }, "You're not following anyone yet."), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, margin: 0, lineHeight: 1.5 } }, "Use the search above to find someone to send to."))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "12px 14px", background: T.charcoal, borderTop: `1px solid ${T.darkCard}`, flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(
+          "button",
+          {
+            onClick: submit,
+            disabled: selectedList.length === 0 || submitting,
+            style: { width: "100%", padding: "13px", borderRadius: 8, background: selectedList.length > 0 && !submitting ? T.copper : T.darkCard, border: "none", cursor: selectedList.length > 0 && !submitting ? "pointer" : "default", fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 0.6, opacity: selectedList.length > 0 && !submitting ? 1 : 0.5 }
+          },
+          submitting ? "OPENING\u2026" : selectedList.length === 0 ? "PICK SOMEONE" : selectedList.length === 1 ? `SEND TO ${selectedList[0].full_name || "@" + selectedList[0].handle}` : `SEND TO ${selectedList.length} PEOPLE`
         ))));
       };
       return /* @__PURE__ */ import_react4.default.createElement(Inner, null);
