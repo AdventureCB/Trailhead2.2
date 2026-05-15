@@ -49048,6 +49048,9 @@ ${suffix}`;
     const [spotNotesPending, setSpotNotesPending] = (0, import_react4.useState)(null);
     const [spotNotesName, setSpotNotesName] = (0, import_react4.useState)("");
     const [spotNotesText, setSpotNotesText] = (0, import_react4.useState)("");
+    const [spotNotesVisibility, setSpotNotesVisibility] = (0, import_react4.useState)("public");
+    const [spotNotesPhotos, setSpotNotesPhotos] = (0, import_react4.useState)([]);
+    const spotNotesFileRef = (0, import_react4.useRef)(null);
     const planActive = !!(planBuilder && planBuilder.active);
     const stagedMarkerRef = (0, import_react4.useRef)(null);
     const stagedPos = planTapPos || spotNotesPending;
@@ -49125,6 +49128,25 @@ ${suffix}`;
         stagedMarkerRef.current = null;
       }
     }, []);
+    (0, import_react4.useEffect)(() => {
+      const hasStaged = !!(planTapPos || spotNotesPending);
+      if (!hasStaged || planActive) return;
+      if (!mapInst.current || !mapReady) return;
+      const map = mapInst.current;
+      const onClick = (e) => {
+        const features = map.queryRenderedFeatures(e.point, { layers: ["camping-spots-points", "camping-spots-clusters", "trip-reports-points", "trip-reports-end-points", "trip-reports-line-hit", "trip-plans-points", "trip-plans-end-points", "trip-plans-line-hit"].filter((id) => map.getLayer(id)) });
+        if (features && features.length > 0) return;
+        if (spotNotesPendingRef.current) setSpotNotesPending({ lat: e.lngLat.lat, lng: e.lngLat.lng });
+        else setPlanTapPos({ lat: e.lngLat.lat, lng: e.lngLat.lng });
+      };
+      map.on("click", onClick);
+      return () => {
+        try {
+          map.off("click", onClick);
+        } catch (_) {
+        }
+      };
+    }, [planTapPos, spotNotesPending, planActive, mapReady]);
     (0, import_react4.useEffect)(() => {
       if (!planActive || !mapInst.current || !mapReady) return;
       const map = mapInst.current;
@@ -49782,6 +49804,8 @@ ${suffix}`;
           setSpotNotesPending({ lat: planTapPos.lat, lng: planTapPos.lng });
           setSpotNotesName("");
           setSpotNotesText("");
+          setSpotNotesVisibility("public");
+          setSpotNotesPhotos([]);
           setPlanTapPos(null);
         },
         style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "12px 6px", background: T.green, border: "none", borderRadius: 8, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }
@@ -49809,53 +49833,107 @@ ${suffix}`;
       },
       /* @__PURE__ */ import_react4.default.createElement(X, { size: 20, color: T.tertiary }),
       "CANCEL"
-    ))), spotNotesPending && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 11, background: `${T.darkCard}F8`, border: `1px solid ${T.green}80`, borderRadius: 10, padding: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.55)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 8 } }, /* @__PURE__ */ import_react4.default.createElement(Tent, { size: 13, color: T.green }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.green, fontWeight: 700, letterSpacing: 1.2 } }, "NEW CAMP SITE"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, marginLeft: "auto" } }, spotNotesPending.lat.toFixed(4), ", ", spotNotesPending.lng.toFixed(4))), /* @__PURE__ */ import_react4.default.createElement(
-      "input",
-      {
-        autoFocus: true,
-        value: spotNotesName,
-        onChange: (e) => setSpotNotesName(e.target.value),
-        placeholder: "Name (required)",
-        style: { width: "100%", boxSizing: "border-box", padding: "9px 11px", borderRadius: 8, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", marginBottom: 7 }
-      }
-    ), /* @__PURE__ */ import_react4.default.createElement(
-      "textarea",
-      {
-        value: spotNotesText,
-        onChange: (e) => setSpotNotesText(e.target.value),
-        placeholder: "Notes (optional) \u2014 water, fire ring, vehicle access\u2026",
-        rows: 2,
-        style: { width: "100%", boxSizing: "border-box", padding: "9px 11px", borderRadius: 8, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", resize: "vertical", marginBottom: 8, lineHeight: 1.4 }
-      }
-    ), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement(
-      "button",
-      {
-        onClick: () => {
-          setSpotNotesPending(null);
-          setSpotNotesName("");
-          setSpotNotesText("");
+    ))), spotNotesPending && (() => {
+      const resetForm = () => {
+        setSpotNotesPending(null);
+        setSpotNotesName("");
+        setSpotNotesText("");
+        setSpotNotesVisibility("public");
+        setSpotNotesPhotos([]);
+      };
+      return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 11, background: `${T.darkCard}F8`, border: `1px solid ${T.green}80`, borderRadius: 10, padding: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.55)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 8 } }, /* @__PURE__ */ import_react4.default.createElement(Tent, { size: 13, color: T.green }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.green, fontWeight: 700, letterSpacing: 1.2 } }, "NEW CAMP SITE"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, marginLeft: "auto" } }, spotNotesPending.lat.toFixed(4), ", ", spotNotesPending.lng.toFixed(4))), /* @__PURE__ */ import_react4.default.createElement(
+        "input",
+        {
+          autoFocus: true,
+          value: spotNotesName,
+          onChange: (e) => setSpotNotesName(e.target.value),
+          placeholder: "Name (required)",
+          style: { width: "100%", boxSizing: "border-box", padding: "9px 11px", borderRadius: 8, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", marginBottom: 7 }
+        }
+      ), /* @__PURE__ */ import_react4.default.createElement(
+        "textarea",
+        {
+          value: spotNotesText,
+          onChange: (e) => setSpotNotesText(e.target.value),
+          placeholder: "Notes (optional) \u2014 water, fire ring, vehicle access\u2026",
+          rows: 2,
+          style: { width: "100%", boxSizing: "border-box", padding: "9px 11px", borderRadius: 8, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", resize: "vertical", marginBottom: 8, lineHeight: 1.4 }
+        }
+      ), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "stretch", gap: 8, marginBottom: 8 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 4, minWidth: 110 } }, /* @__PURE__ */ import_react4.default.createElement(
+        "button",
+        {
+          onClick: () => setSpotNotesVisibility("public"),
+          style: { flex: 1, padding: "6px 8px", borderRadius: 6, background: spotNotesVisibility === "public" ? T.green : T.darkBg, border: `1px solid ${spotNotesVisibility === "public" ? T.green : T.charcoal}`, cursor: "pointer", fontFamily: sans, fontSize: 9, color: spotNotesVisibility === "public" ? T.white : T.tertiary, fontWeight: 700, letterSpacing: 0.6, display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }
         },
-        style: { flex: 1, padding: "9px", borderRadius: 8, background: T.charcoal, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 600, letterSpacing: 0.5 }
-      },
-      "CANCEL"
-    ), /* @__PURE__ */ import_react4.default.createElement(
-      "button",
-      {
-        onClick: async () => {
-          if (!spotNotesName.trim() || !onAddCampingSpot) return;
-          const lat = spotNotesPending.lat, lng = spotNotesPending.lng;
-          const name = spotNotesName.trim();
-          const desc = spotNotesText.trim() || null;
-          setSpotNotesPending(null);
-          setSpotNotesName("");
-          setSpotNotesText("");
-          await onAddCampingSpot({ name, description: desc, lat, lng, spot_type: "unknown", fee: "unknown", visibility: "public", photos: [] });
+        /* @__PURE__ */ import_react4.default.createElement(Globe, { size: 11 }),
+        "PUBLIC"
+      ), /* @__PURE__ */ import_react4.default.createElement(
+        "button",
+        {
+          onClick: () => setSpotNotesVisibility("private"),
+          style: { flex: 1, padding: "6px 8px", borderRadius: 6, background: spotNotesVisibility === "private" ? T.copper : T.darkBg, border: `1px solid ${spotNotesVisibility === "private" ? T.copper : T.charcoal}`, cursor: "pointer", fontFamily: sans, fontSize: 9, color: spotNotesVisibility === "private" ? T.white : T.tertiary, fontWeight: 700, letterSpacing: 0.6, display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }
         },
-        disabled: !spotNotesName.trim(),
-        style: { flex: 2, padding: "9px", borderRadius: 8, background: spotNotesName.trim() ? T.green : T.charcoal, border: "none", cursor: spotNotesName.trim() ? "pointer" : "default", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5, opacity: spotNotesName.trim() ? 1 : 0.5 }
-      },
-      "SAVE SPOT"
-    ))), planActive && selectedPlanPointId && (() => {
+        /* @__PURE__ */ import_react4.default.createElement(Lock, { size: 11 }),
+        "PRIVATE"
+      )), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement(
+        "input",
+        {
+          ref: spotNotesFileRef,
+          type: "file",
+          accept: "image/*",
+          multiple: true,
+          style: { display: "none" },
+          onChange: (e) => {
+            const files = Array.from(e.target.files || []);
+            e.target.value = "";
+            files.forEach((file) => {
+              if (file.size > MAX_UPLOAD_BYTES) return;
+              const reader = new FileReader();
+              reader.onload = (ev) => setSpotNotesPhotos((prev) => [...prev, { url: ev.target.result, name: file.name }]);
+              reader.readAsDataURL(file);
+            });
+          }
+        }
+      ), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 5, overflowX: "auto", padding: 1 } }, spotNotesPhotos.map((p, i) => /* @__PURE__ */ import_react4.default.createElement("div", { key: i, style: { position: "relative", width: 44, height: 44, borderRadius: 6, overflow: "hidden", border: `1px solid ${T.charcoal}`, flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("img", { src: typeof p === "string" ? p : p.url, alt: "", style: { width: "100%", height: "100%", objectFit: "cover", display: "block" } }), /* @__PURE__ */ import_react4.default.createElement(
+        "button",
+        {
+          onClick: () => setSpotNotesPhotos((prev) => prev.filter((_, idx) => idx !== i)),
+          style: { position: "absolute", top: 1, right: 1, width: 16, height: 16, borderRadius: "50%", background: `${T.darkBg}D0`, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }
+        },
+        /* @__PURE__ */ import_react4.default.createElement(X, { size: 9, color: T.white })
+      ))), /* @__PURE__ */ import_react4.default.createElement(
+        "button",
+        {
+          onClick: () => spotNotesFileRef.current && spotNotesFileRef.current.click(),
+          style: { width: 44, height: 44, borderRadius: 6, background: T.darkBg, border: `1px dashed ${T.tertiary}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }
+        },
+        /* @__PURE__ */ import_react4.default.createElement(Camera, { size: 14, color: T.copper })
+      )))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement(
+        "button",
+        {
+          onClick: resetForm,
+          style: { flex: 1, padding: "9px", borderRadius: 8, background: T.charcoal, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 600, letterSpacing: 0.5 }
+        },
+        "CANCEL"
+      ), /* @__PURE__ */ import_react4.default.createElement(
+        "button",
+        {
+          onClick: async () => {
+            if (!spotNotesName.trim() || !onAddCampingSpot) return;
+            const lat = spotNotesPending.lat, lng = spotNotesPending.lng;
+            const name = spotNotesName.trim();
+            const desc = spotNotesText.trim() || null;
+            const visibility = spotNotesVisibility;
+            const photos = spotNotesPhotos;
+            resetForm();
+            await onAddCampingSpot({ name, description: desc, lat, lng, spot_type: "unknown", fee: "unknown", visibility, photos });
+          },
+          disabled: !spotNotesName.trim(),
+          style: { flex: 2, padding: "9px", borderRadius: 8, background: spotNotesName.trim() ? T.green : T.charcoal, border: "none", cursor: spotNotesName.trim() ? "pointer" : "default", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5, opacity: spotNotesName.trim() ? 1 : 0.5 }
+        },
+        "SAVE SPOT"
+      )));
+    })(), planActive && selectedPlanPointId && (() => {
       const pt = (planBuilder.points || []).find((p) => p.id === selectedPlanPointId);
       if (!pt) return null;
       const idx = planBuilder.points.findIndex((p) => p.id === selectedPlanPointId);
