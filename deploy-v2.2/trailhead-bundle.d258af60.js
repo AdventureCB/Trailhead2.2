@@ -48910,6 +48910,44 @@ ${suffix}`;
         stepTimers.forEach(clearTimeout);
       };
     }, [mapReady]);
+    const mapReadyAtRef = (0, import_react4.useRef)(0);
+    (0, import_react4.useEffect)(() => {
+      if (mapReady) mapReadyAtRef.current = Date.now();
+    }, [mapReady]);
+    const prevTripReportsCountRef = (0, import_react4.useRef)(0);
+    const prevTripPlansCountRef = (0, import_react4.useRef)(0);
+    const tripReportsCount = (tripReports || []).length;
+    const tripPlansCount = (tripPlans || []).length;
+    const lateRetoggleDelay = () => {
+      const since = Date.now() - (mapReadyAtRef.current || Date.now());
+      return Math.max(200, 1800 - since);
+    };
+    (0, import_react4.useEffect)(() => {
+      const prev = prevTripReportsCountRef.current;
+      prevTripReportsCountRef.current = tripReportsCount;
+      if (!mapReady || prev !== 0 || tripReportsCount === 0) return;
+      if (!showTripReports || !setShowTripReports) return;
+      const d = lateRetoggleDelay();
+      const offT = setTimeout(() => setShowTripReports(false), d);
+      const onT = setTimeout(() => setShowTripReports(true), d + 180);
+      return () => {
+        clearTimeout(offT);
+        clearTimeout(onT);
+      };
+    }, [tripReportsCount, mapReady]);
+    (0, import_react4.useEffect)(() => {
+      const prev = prevTripPlansCountRef.current;
+      prevTripPlansCountRef.current = tripPlansCount;
+      if (!mapReady || prev !== 0 || tripPlansCount === 0) return;
+      if (!showTripPlans || !setShowTripPlans) return;
+      const d = lateRetoggleDelay();
+      const offT = setTimeout(() => setShowTripPlans(false), d);
+      const onT = setTimeout(() => setShowTripPlans(true), d + 180);
+      return () => {
+        clearTimeout(offT);
+        clearTimeout(onT);
+      };
+    }, [tripPlansCount, mapReady]);
     useCampingSpotsLayer(mapInst, mapReady, campingSpots, showCampingSpots, (spot) => {
       clearOtherSelections();
       setSelectedSpot(spot);
