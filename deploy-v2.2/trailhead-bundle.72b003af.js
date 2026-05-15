@@ -44911,7 +44911,7 @@ ${suffix}`;
       next();
     }, style: { position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: `${T.charcoal}AA`, border: "none", borderRadius: "50%", width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 22, color: T.white })))), images.length > 1 && /* @__PURE__ */ import_react4.default.createElement("div", { onClick: (e) => e.stopPropagation(), style: { display: "flex", gap: 6, padding: "12px 16px", overflowX: "auto", maxWidth: 430, width: "100%" } }, images.map((img, i) => /* @__PURE__ */ import_react4.default.createElement("img", { key: i, src: img, alt: "", onClick: () => setIdx(i), style: { width: 48, height: 48, borderRadius: 6, objectFit: "cover", flexShrink: 0, cursor: "pointer", border: i === idx ? `2px solid ${T.copper}` : `2px solid transparent`, opacity: i === idx ? 1 : 0.5, transition: "opacity 0.15s, border 0.15s" } }))));
   }
-  function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onViewBuild, onOpenTripDetail, feedItems, onUpdateFeed, onUpdatePost, likedPostIds, onTogglePostLike, postComments, onAddComment, onDeleteComment, likedCommentIds, onToggleCommentLike, currentUserId, currentUserName, currentUserHandle, currentUserAvatar, onDeletePost, onEditPost, onAddNotification, forumUserReplies, forumViewCounts, savedRoutes, onSaveRoute, onUnsaveRoute, onStartNav, onAwardPoints, isGuest, onGuestTap, pendingPostNav, onConsumePendingPostNav, onSharedPostMissing, convoyRsvps, onRsvpConvoy, onSearchUsers, filterFn, hideFilters, onlineUserIds, tripReports, tripAuthors, onNewTripReport, onOpenTripDraft, onOpenSpotOnMap, onOpenHQOnMap }) {
+  function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShareCompose, onViewBuild, onOpenTripDetail, feedItems, onUpdateFeed, onUpdatePost, likedPostIds, onTogglePostLike, postComments, onAddComment, onDeleteComment, likedCommentIds, onToggleCommentLike, currentUserId, currentUserName, currentUserHandle, currentUserAvatar, onDeletePost, onEditPost, onAddNotification, forumUserReplies, forumViewCounts, savedRoutes, onSaveRoute, onUnsaveRoute, onStartNav, onAwardPoints, isGuest, onGuestTap, pendingPostNav, onConsumePendingPostNav, onSharedPostMissing, convoyRsvps, onRsvpConvoy, onSearchUsers, filterFn, hideFilters, onlineUserIds, tripReports, tripAuthors, onNewTripReport, onOpenTripDraft, onOpenSpotOnMap, onOpenHQOnMap }) {
     const [activeFilter, setActiveFilter] = (0, import_react4.useState)("ALL");
     const filters = ["ALL", "BUILDS", "CONVOYS", "TRIP REPORTS", "PHOTOS", "FORUM"];
     const likedPosts = likedPostIds || {};
@@ -45031,17 +45031,20 @@ ${suffix}`;
     const filtered = typeof filterFn === "function" ? baseFiltered.filter(filterFn) : baseFiltered;
     const fmtLikes = (n) => n >= 1e3 ? (n / 1e3).toFixed(1) + "K" : n;
     const sendShareToUser = (recipientHandle, item) => {
-      const shareText = "";
       const firstImage = Array.isArray(item.photoUrls) ? item.photoUrls.find((p) => {
         const isVid = typeof p === "object" && p && p.type === "video";
         return !isVid;
       }) : null;
       const previewImageUrl = firstImage ? typeof firstImage === "string" ? firstImage : firstImage.url : item.image || item.heroImg || null;
-      const sharedPost = { id: item.id, title: item.title, user: item.user, initial: item.initial, type: item.type, image: previewImageUrl, threadId: item.threadId, forumCat: item.forumCat, forumSub: item.forumSub };
       setShareMenuId(null);
       setSharePickerId(null);
       setShareSearch("");
-      onOpenDM && onOpenDM(recipientHandle, shareText, sharedPost);
+      if (onOpenShareCompose) {
+        onOpenShareCompose({ kind: "post", action: "dm", data: { ...item, image: previewImageUrl } });
+        return;
+      }
+      const sharedPost = { id: item.id, title: item.title, user: item.user, initial: item.initial, type: item.type, image: previewImageUrl, threadId: item.threadId, forumCat: item.forumCat, forumSub: item.forumSub };
+      onOpenDM && onOpenDM(recipientHandle, "", sharedPost);
     };
     const actionBar = (item, extraLeft) => {
       const liked = likedPosts[item.id];
@@ -45252,8 +45255,12 @@ ${suffix}`;
             setRouteShareMenu(showMenu ? null : item.id);
           }, style: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "10px 6px", borderRadius: 8, background: T.charcoal, border: `1px solid ${T.tertiary}30`, cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 13, color: T.white }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 600, letterSpacing: 0.3 } }, "SHARE / SAVE"))), showMenu && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", bottom: "100%", right: 0, marginBottom: 6, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10, padding: "6px 0", minWidth: 180, zIndex: 50, boxShadow: "0 8px 24px rgba(0,0,0,0.5)" } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: (e) => {
             e.stopPropagation();
-            onOpenDM && onOpenDM(null, null, { type: "route", title: item.title, distance: item.distance, duration: item.duration });
             setRouteShareMenu(null);
+            if (onOpenShareCompose) {
+              onOpenShareCompose({ kind: "route", action: "dm", data: { id: item.id, title: item.title, distance: item.distance, duration: item.duration, image: item.image || null } });
+            } else {
+              onOpenDM && onOpenDM(null, null, { type: "route", title: item.title, distance: item.distance, duration: item.duration });
+            }
           }, style: { display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 14px", background: "none", border: "none", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(Send, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white } }, "Send in DM")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: (e) => {
             e.stopPropagation();
             setRouteShareMenu(null);
@@ -45632,7 +45639,7 @@ ${suffix}`;
       }
     });
   });
-  function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpenDM, onAddFeedPost, userThreads, setUserThreads, userReplies, setUserReplies, likedForumItems, setLikedForumItems, forumLikeCounts, setForumLikeCounts, forumViewCounts, setForumViewCounts, onAwardPoints, isGuest, onGuestTap }) {
+  function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpenDM, onOpenShareCompose, onAddFeedPost, userThreads, setUserThreads, userReplies, setUserReplies, likedForumItems, setLikedForumItems, forumLikeCounts, setForumLikeCounts, forumViewCounts, setForumViewCounts, onAwardPoints, isGuest, onGuestTap }) {
     const threadAgeMin = (time) => {
       if (time == null) return Number.MAX_SAFE_INTEGER;
       if (typeof time === "number") return Math.max(0, (Date.now() - time) / 6e4);
@@ -46104,6 +46111,22 @@ ${suffix}`;
       };
       const getForumLikes = (key, baseLikes) => forumLikeCounts[key] !== void 0 ? forumLikeCounts[key] : baseLikes;
       const shareToFeed = (title, body, author) => {
+        if (onOpenShareCompose) {
+          onOpenShareCompose({
+            kind: "forum",
+            action: "feed",
+            data: {
+              id: selectedThread.id,
+              title,
+              author,
+              forumCat: selectedCat?.name || "",
+              forumSub: selectedSub?.name || "",
+              threadId: selectedThread.id,
+              image: selectedThread.photos && selectedThread.photos[0] || null
+            }
+          });
+          return;
+        }
         const feedPost = {
           id: "forum_share_" + Date.now(),
           type: "FORUM",
@@ -46124,6 +46147,22 @@ ${suffix}`;
         onAddFeedPost && onAddFeedPost(feedPost);
       };
       const sendViaDM = (title, author) => {
+        if (onOpenShareCompose) {
+          onOpenShareCompose({
+            kind: "forum",
+            action: "dm",
+            data: {
+              id: selectedThread.id,
+              title,
+              author,
+              forumCat: selectedCat?.name || "",
+              forumSub: selectedSub?.name || "",
+              threadId: selectedThread.id,
+              image: selectedThread.photos && selectedThread.photos[0] || null
+            }
+          });
+          return;
+        }
         const sharedPost = { id: selectedThread.id, title, user: author, initial: author[0], type: "FORUM", threadId: selectedThread.id, forumCat: selectedCat?.name, forumSub: selectedSub?.name };
         onOpenDM && onOpenDM(null, "", sharedPost);
       };
@@ -50076,7 +50115,7 @@ ${suffix}`;
       }
     ));
   }
-  function BuildsScreen({ onViewUser, userBuilds, allBuilds: allBuildsProp, currentUserId, followingIds, onAddBuild, onUpdateBuild, onPostBuildToFeed, onOpenDM, userRoutes, pendingBuildNav, onConsumePendingBuildNav, isGuest, onGuestTap, likedBuildIds, buildLikeCounts, onToggleBuildLike }) {
+  function BuildsScreen({ onViewUser, userBuilds, allBuilds: allBuildsProp, currentUserId, followingIds, onAddBuild, onUpdateBuild, onPostBuildToFeed, onOpenDM, onOpenShareCompose, userRoutes, pendingBuildNav, onConsumePendingBuildNav, isGuest, onGuestTap, likedBuildIds, buildLikeCounts, onToggleBuildLike }) {
     const [filter, setFilter] = (0, import_react4.useState)("all");
     const [search, setSearch] = (0, import_react4.useState)("");
     const [detailBuildId, setDetailBuildId] = (0, import_react4.useState)(null);
@@ -50238,10 +50277,13 @@ ${suffix}`;
         /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 16, color: T.white }),
         /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 1.5 } }, "SHARE")
       )), shareMenuOpen && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => setShareMenuOpen(false), style: { position: "fixed", inset: 0, zIndex: 80 } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: 68, right: 16, width: 220, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10, padding: 6, zIndex: 90, boxShadow: "0 10px 30px rgba(0,0,0,0.5)" } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
-        onPostBuildToFeed && onPostBuildToFeed(detailBuild);
         setShareMenuOpen(false);
-        setShareToast("Shared to feed");
-        setTimeout(() => setShareToast(""), 2e3);
+        if (onOpenShareCompose) onOpenShareCompose({ kind: "build", action: "feed", data: detailBuild });
+        else if (onPostBuildToFeed) {
+          onPostBuildToFeed(detailBuild);
+          setShareToast("Shared to feed");
+          setTimeout(() => setShareToast(""), 2e3);
+        }
       }, style: { width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "none", border: "none", cursor: "pointer", borderRadius: 6 } }, /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 } }, "Share to Feed")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
         const link = `https://trailhead.lpo/builds/${detailBuild.rawId || detailBuild.id}`;
         if (navigator.clipboard) navigator.clipboard.writeText(link).catch(() => {
@@ -50250,17 +50292,10 @@ ${suffix}`;
         setShareToast("Link copied");
         setTimeout(() => setShareToast(""), 2e3);
       }, style: { width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "none", border: "none", cursor: "pointer", borderRadius: 6 } }, /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 } }, "Copy Link")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
-        const isLocalUrl = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:"));
-        const bd2 = scrubLocalPhotosFromBuildData(detailBuild.buildData);
-        const rawHero = detailBuild.image || detailBuild.buildData && detailBuild.buildData.mainPhotos && detailBuild.buildData.mainPhotos[0] && detailBuild.buildData.mainPhotos[0].url || null;
-        const cleanHero = isLocalUrl(rawHero) ? bd2 && bd2.mainPhotos && bd2.mainPhotos[0] && bd2.mainPhotos[0].url || null : rawHero;
-        const heroImg = isLocalUrl(cleanHero) ? null : cleanHero;
-        const isReshare = !!(currentUserId && detailBuild.userId && detailBuild.userId !== currentUserId);
-        const ownerHandle = isReshare ? (detailBuild.handle || "").replace(/^@/, "") : null;
-        const ownerName = isReshare ? detailBuild.owner || null : null;
-        const sharedPost = { id: "build_" + detailBuild.id, type: "BUILDS", user: detailBuild.handle.replace("@", ""), initial: detailBuild.initial, title: detailBuild.name, body: `${detailBuild.year} ${detailBuild.make} ${detailBuild.model}`, image: heroImg, buildData: bd2, buildRawId: detailBuild.rawId != null ? detailBuild.rawId : null, sharedFromOwnerHandle: ownerHandle, sharedFromOwnerName: ownerName };
-        onOpenDM && onOpenDM(null, `Check out this build: ${detailBuild.name}`, sharedPost);
         setShareMenuOpen(false);
+        if (onOpenShareCompose) {
+          onOpenShareCompose({ kind: "build", action: "dm", data: detailBuild });
+        }
       }, style: { width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "none", border: "none", cursor: "pointer", borderRadius: 6 } }, /* @__PURE__ */ import_react4.default.createElement(Send, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 } }, "Send via DM")))), shareToast && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "fixed", bottom: 90, left: "50%", transform: "translateX(-50%)", background: T.charcoal, border: `1px solid ${T.copper}`, borderRadius: 8, padding: "10px 16px", zIndex: 100, boxShadow: "0 4px 20px rgba(0,0,0,0.5)" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 } }, shareToast))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "18px 16px 0" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 12 } }, "TECHNICAL SPECIFICATIONS"), modRows.length === 0 ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { ...cardStyle, padding: 20, textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Wrench, { size: 28, color: T.tertiary, strokeWidth: 0.8, style: { opacity: 0.4, marginBottom: 8 } }), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: sans, fontSize: 12, color: T.tertiary, margin: 0 } }, "No specs added yet"), detailBuild.isMine && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
         const src = (userBuilds || []).find((ub) => ub.id === detailBuild.rawId);
         if (src) setEditingBuild(src);
@@ -56162,6 +56197,192 @@ ${suffix}`;
       awardPoints(POINTS.feedPost, "HQ Shared");
       showErrorToast("HQ shared to your feed");
     };
+    const openShareCompose = (req) => {
+      if (!req) return;
+      if (typeof req.onSubmit === "function") {
+        setShareComposeTarget(req);
+        return;
+      }
+      const { kind, action, data } = req;
+      if (!kind || !action) return;
+      const origin = typeof window !== "undefined" && window.location && window.location.origin || "";
+      const sendDm = (payload) => (caption) => openDM(null, caption || "", payload);
+      if (kind === "spot") {
+        const img = spotStaticMapUrl(data.lat, data.lng);
+        setShareComposeTarget({
+          action,
+          accent: T.green,
+          IconComponent: Tent,
+          cardLabel: "CAMPING SPOT",
+          cardCta: "VIEW SPOT",
+          cardTitle: data.name,
+          cardBody: data.description || null,
+          cardImage: img,
+          onSubmit: action === "feed" ? (caption) => shareCampingSpotToFeed(data, caption) : sendDm({ id: "spot_" + data.id, type: "camping_spot", spotId: data.id, title: data.name, body: data.description || null, image: img, lat: data.lat, lng: data.lng, url: `${origin}/spots/${data.id}` })
+        });
+        return;
+      }
+      if (kind === "trip") {
+        const img = data.hero_img || tripStaticMapUrl(data.start_lat, data.start_lng, "trip");
+        setShareComposeTarget({
+          action,
+          accent: "#8B6FAF",
+          IconComponent: Mountain,
+          cardLabel: "TRIP REPORT",
+          cardCta: "OPEN TRIP",
+          cardTitle: data.name,
+          cardBody: data.description || null,
+          cardImage: img,
+          onSubmit: action === "feed" ? (caption) => shareTripToFeed(data, caption) : sendDm({ id: "trip_" + data.id, type: "trip_report", tripId: data.id, tripSlug: data.slug, title: data.name, body: data.description || null, image: img, url: `${origin}/trips/${data.slug}` })
+        });
+        return;
+      }
+      if (kind === "plan") {
+        const img = data.hero_img || tripStaticMapUrl(data.start_lat, data.start_lng, "plan");
+        setShareComposeTarget({
+          action,
+          accent: T.copper,
+          IconComponent: Route,
+          cardLabel: "TRIP PLAN",
+          cardCta: "OPEN PLAN",
+          cardTitle: data.name,
+          cardBody: data.description || null,
+          cardImage: img,
+          onSubmit: action === "feed" ? (caption) => shareTripPlanToFeed(data, caption) : sendDm({ id: "plan_" + data.id, type: "trip_plan", planId: data.id, planSlug: data.slug, title: data.name, body: data.description || null, image: img, plannedStart: data.planned_start || null, plannedEnd: data.planned_end || null, url: `${origin}/plans/${data.slug}` })
+        });
+        return;
+      }
+      if (kind === "hq") {
+        const img = hqStaticMapUrl();
+        setShareComposeTarget({
+          action,
+          accent: T.red,
+          IconComponent: Star,
+          cardLabel: "HEADQUARTERS",
+          cardCta: "OPEN HQ",
+          cardTitle: LPO_HQ.name,
+          cardBody: LPO_HQ.address,
+          cardImage: img,
+          onSubmit: action === "feed" ? (caption) => shareHQToFeed(caption) : sendDm({ id: "hq", type: "hq", title: LPO_HQ.name, body: LPO_HQ.address, image: img, url: `${origin}/hq` })
+        });
+        return;
+      }
+      if (kind === "build") {
+        const b = data;
+        const rawBd = b.buildData;
+        const bd = scrubLocalPhotosFromBuildData ? scrubLocalPhotosFromBuildData(rawBd) : rawBd;
+        const isLocalUrl = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:"));
+        const rawHero = b.image || rawBd && rawBd.mainPhotos && rawBd.mainPhotos[0] && rawBd.mainPhotos[0].url || null;
+        const cleanHero = isLocalUrl(rawHero) ? bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url || null : rawHero;
+        const heroImg = isLocalUrl(cleanHero) ? null : cleanHero;
+        const vehicle = b.vehicle || `${b.year || ""} ${b.make || ""} ${b.model || ""}`.trim();
+        const myUid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+        const isReshare = b.userId && myUid && b.userId !== myUid;
+        const ownerHandle = isReshare ? (b.handle || "").replace(/^@/, "") : null;
+        const ownerName = isReshare ? b.owner || null : null;
+        setShareComposeTarget({
+          action,
+          accent: T.copper,
+          IconComponent: Wrench,
+          cardLabel: "BUILD",
+          cardCta: "VIEW BUILD",
+          cardTitle: b.name || vehicle,
+          cardBody: vehicle || null,
+          cardImage: heroImg,
+          onSubmit: action === "feed" ? (caption) => {
+            const meName = currentProfile && currentProfile.full_name || "You";
+            addPost({
+              id: "feedbuild_" + Date.now(),
+              type: "BUILDS",
+              user: meName,
+              initial: meName.charAt(0).toUpperCase(),
+              time: Date.now(),
+              title: b.name || vehicle,
+              body: vehicle,
+              subtitle: isReshare ? `Shared @${ownerHandle}'s build` : "Added a new build",
+              caption: (caption || "").trim() || null,
+              vehicle,
+              photoUrls: heroImg ? [heroImg] : void 0,
+              image: heroImg,
+              likes: 0,
+              comments: 0,
+              buildData: bd,
+              buildRawId: b.rawId != null ? b.rawId : null,
+              sharedFromOwnerHandle: ownerHandle,
+              sharedFromOwnerName: ownerName,
+              _skipBuildIdCol: isReshare
+            });
+            awardPoints(POINTS.feedPost, "Build Shared");
+          } : sendDm({ id: "build_" + (b.id || b.rawId || Date.now()), type: "BUILDS", user: (b.handle || "").replace(/^@/, ""), initial: b.initial || (b.name || "?")[0], title: b.name || vehicle, body: vehicle, image: heroImg, buildRawId: b.rawId || b.id || null, sharedFromOwnerHandle: ownerHandle, sharedFromOwnerName: ownerName, buildData: bd })
+        });
+        return;
+      }
+      if (kind === "forum") {
+        const author = data.author || data.user || "User";
+        const cat = data.forumCat || data.cat || "";
+        const sub = data.forumSub || data.sub || "";
+        const subtitle = [cat, sub].filter(Boolean).join(" \xB7 ");
+        setShareComposeTarget({
+          action,
+          accent: T.copper,
+          IconComponent: BookOpen,
+          cardLabel: "FORUM POST",
+          cardCta: "OPEN THREAD",
+          cardTitle: data.title,
+          cardBody: subtitle || `by ${author}`,
+          cardImage: data.image || null,
+          onSubmit: action === "feed" ? (caption) => {
+            addPost({ id: "shared_forum_" + Date.now(), type: "POST", user: currentProfile && currentProfile.full_name || "You", initial: (currentProfile && currentProfile.full_name || "Y").charAt(0).toUpperCase(), time: Date.now(), title: data.title, body: subtitle, subtitle: "Shared a forum post", caption: (caption || "").trim() || null, image: data.image || null, photoUrls: data.image ? [data.image] : void 0, likes: 0, comments: 0, threadId: data.threadId, forumCat: cat, forumSub: sub });
+            awardPoints(POINTS.feedPost, "Forum Shared");
+            showErrorToast("Forum post shared to your feed");
+          } : sendDm({ id: data.threadId || data.id, type: "FORUM", title: data.title, user: author, initial: (author[0] || "U").toUpperCase(), threadId: data.threadId, forumCat: cat, forumSub: sub, image: data.image || null })
+        });
+        return;
+      }
+      if (kind === "route") {
+        setShareComposeTarget({
+          action,
+          accent: T.red,
+          IconComponent: Route,
+          cardLabel: "ROUTE",
+          cardCta: "VIEW ROUTE",
+          cardTitle: data.title || "Route",
+          cardBody: [data.distance, data.duration].filter(Boolean).join(" \xB7 ") || null,
+          cardImage: data.image || null,
+          onSubmit: action === "dm" ? sendDm({ id: data.id || "route_" + Date.now(), type: "route", title: data.title || "Route", distance: data.distance || null, duration: data.duration || null, image: data.image || null }) : (caption) => addPost({ id: "shared_route_" + Date.now(), type: "POST", user: currentProfile && currentProfile.full_name || "You", initial: (currentProfile && currentProfile.full_name || "Y").charAt(0).toUpperCase(), time: Date.now(), title: data.title || "Route", body: [data.distance, data.duration].filter(Boolean).join(" \xB7 ") || null, subtitle: "Shared a route", caption: (caption || "").trim() || null, image: data.image || null, photoUrls: data.image ? [data.image] : void 0, likes: 0, comments: 0 })
+        });
+        return;
+      }
+      if (kind === "post") {
+        const author = data.user || "";
+        setShareComposeTarget({
+          action,
+          accent: T.copper,
+          IconComponent: Share2,
+          cardLabel: (data.type || "POST").toUpperCase(),
+          cardCta: "VIEW POST",
+          cardTitle: data.title || "Post",
+          cardBody: data.body || null,
+          cardImage: data.image || Array.isArray(data.photoUrls) && data.photoUrls[0] || null,
+          onSubmit: sendDm({ id: data.id, type: data.type || "POST", user: author, initial: data.initial || (author[0] || "?").toUpperCase(), title: data.title, body: data.body, image: data.image || null, threadId: data.threadId, forumCat: data.forumCat, forumSub: data.forumSub })
+        });
+        return;
+      }
+      if (kind === "recovery") {
+        setShareComposeTarget({
+          action,
+          accent: T.red,
+          IconComponent: TriangleAlert,
+          cardLabel: "RECOVERY",
+          cardCta: "VIEW ALERT",
+          cardTitle: data.title || "Recovery needed",
+          cardBody: [data.location, data.urgency && `${data.urgency} URGENCY`].filter(Boolean).join(" \xB7 ") || null,
+          cardImage: null,
+          onSubmit: sendDm({ id: "recovery_" + (data.id || Date.now()), type: "recovery", title: `\u{1F6A8} Recovery: ${data.title || ""}`, user: data.author || data.user, initial: ((data.author || data.user || "?")[0] || "?").toUpperCase(), location: data.location, urgency: data.urgency })
+        });
+        return;
+      }
+    };
     const slugifyTripName = (name) => {
       if (!name) return "";
       return String(name).normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
@@ -56647,6 +56868,7 @@ ${suffix}`;
         onOpenMap: openMap,
         onOpenThread: (threadId, catName, subName) => openForumThread(threadId, catName, subName),
         onOpenDM: (user, msg, sp) => openDM(user, msg, sp),
+        onOpenShareCompose: openShareCompose,
         onViewBuild: handleViewBuild,
         onOpenTripDetail: (slug) => {
           if (!slug) return;
@@ -56762,7 +56984,7 @@ ${suffix}`;
     }, onGoToPost: (id) => {
       setProfileStack([]);
       setScreen("feed");
-    }, myPoints: myTotalPoints }) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, isGuest && /* @__PURE__ */ import_react4.default.createElement(GuestBanner, { onSignIn: () => setShowGuestPrompt(true) }), screen === "feed" && renderFeedScopedTo({ hideFilters: false }), screen === "forum" && /* @__PURE__ */ import_react4.default.createElement(ForumScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), pendingThread, onPendingHandled: () => setPendingThread(null), onAddNotification: requireAuth(addNotification), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onAddFeedPost: requireAuth((post2) => addPost(post2)), userThreads: forumUserThreads, setUserThreads: requireAuth(setForumUserThreads), userReplies: forumUserReplies, setUserReplies: requireAuth(setForumUserReplies), likedForumItems: forumLikedItems, setLikedForumItems: requireAuth(setForumLikedItems), forumLikeCounts, setForumLikeCounts: requireAuth(setForumLikeCounts), forumViewCounts, setForumViewCounts, onAwardPoints: awardPoints }), screen === "routes" && /* @__PURE__ */ import_react4.default.createElement(RoutesScreen, { campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, tripReports: allTripReports, showTripReports, setShowTripReports, tripPlans: allTripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot: requireAuth(addCampingSpot), onUpdateCampingSpot: requireAuth(updateCampingSpot), onDeleteCampingSpot: requireAuth(deleteCampingSpot), onLoadCampingSpotPhotos: loadCampingSpotPhotos, onOpenTripDetail: (slug) => setPendingTripNav(slug), onOpenTripPlanDraft: (id) => setDetailTripId(id), onNewTripReport: () => setTripCreatorMode("report"), onNewTripPlan: () => requireAuth(() => enterPlanBuilder())(), pendingSpotNav, onConsumePendingSpotNav: () => setPendingSpotNav(null), pendingHQOpen, onConsumePendingHQOpen: () => setPendingHQOpen(false), pendingPlanNav, onConsumePendingPlanNav: () => setPendingPlanNav(null), onShareCampingSpotToFeed: requireAuth(shareCampingSpotToFeed), onShareHQToFeed: requireAuth(shareHQToFeed), onShareTripToFeed: requireAuth(shareTripToFeed), onShareTripPlanToFeed: requireAuth(shareTripPlanToFeed), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onShowToast: showErrorToast, onOpenShareCompose: (t) => setShareComposeTarget(t), planBuilder: { active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, editingId: planBuilderEditingId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen } }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onPostBuildToFeed: requireAuth((b, opts) => {
+    }, myPoints: myTotalPoints }) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, isGuest && /* @__PURE__ */ import_react4.default.createElement(GuestBanner, { onSignIn: () => setShowGuestPrompt(true) }), screen === "feed" && renderFeedScopedTo({ hideFilters: false }), screen === "forum" && /* @__PURE__ */ import_react4.default.createElement(ForumScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), pendingThread, onPendingHandled: () => setPendingThread(null), onAddNotification: requireAuth(addNotification), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onOpenShareCompose: openShareCompose, onAddFeedPost: requireAuth((post2) => addPost(post2)), userThreads: forumUserThreads, setUserThreads: requireAuth(setForumUserThreads), userReplies: forumUserReplies, setUserReplies: requireAuth(setForumUserReplies), likedForumItems: forumLikedItems, setLikedForumItems: requireAuth(setForumLikedItems), forumLikeCounts, setForumLikeCounts: requireAuth(setForumLikeCounts), forumViewCounts, setForumViewCounts, onAwardPoints: awardPoints }), screen === "routes" && /* @__PURE__ */ import_react4.default.createElement(RoutesScreen, { campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, tripReports: allTripReports, showTripReports, setShowTripReports, tripPlans: allTripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot: requireAuth(addCampingSpot), onUpdateCampingSpot: requireAuth(updateCampingSpot), onDeleteCampingSpot: requireAuth(deleteCampingSpot), onLoadCampingSpotPhotos: loadCampingSpotPhotos, onOpenTripDetail: (slug) => setPendingTripNav(slug), onOpenTripPlanDraft: (id) => setDetailTripId(id), onNewTripReport: () => setTripCreatorMode("report"), onNewTripPlan: () => requireAuth(() => enterPlanBuilder())(), pendingSpotNav, onConsumePendingSpotNav: () => setPendingSpotNav(null), pendingHQOpen, onConsumePendingHQOpen: () => setPendingHQOpen(false), pendingPlanNav, onConsumePendingPlanNav: () => setPendingPlanNav(null), onShareCampingSpotToFeed: requireAuth(shareCampingSpotToFeed), onShareHQToFeed: requireAuth(shareHQToFeed), onShareTripToFeed: requireAuth(shareTripToFeed), onShareTripPlanToFeed: requireAuth(shareTripPlanToFeed), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onShowToast: showErrorToast, onOpenShareCompose: openShareCompose, planBuilder: { active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, editingId: planBuilderEditingId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen } }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onOpenShareCompose: openShareCompose, onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onPostBuildToFeed: requireAuth((b, opts) => {
       const rawBd = b.buildData;
       const bd = scrubLocalPhotosFromBuildData(rawBd);
       const isLocalUrl = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:"));
@@ -56937,101 +57159,37 @@ ${suffix}`;
           isLiked: !!(likedTripIds && likedTripIds[trip.id]),
           likeCount: tripLikeCounts && tripLikeCounts[trip.id] || 0,
           onToggleLike: requireAuth(toggleTripLike),
-          onShareToFeed: requireAuth((t) => setShareComposeTarget({ kind: t.kind === "plan" ? "plan" : "trip", action: "feed", data: t }))
+          onShareToFeed: requireAuth((t) => openShareCompose({ kind: t.kind === "plan" ? "plan" : "trip", action: "feed", data: t }))
         }
       ));
     })(), shareComposeTarget && (() => {
-      const target = shareComposeTarget;
-      const data = target.data;
-      const action = target.action;
-      const kind = target.kind;
-      const accent = kind === "spot" ? T.green : kind === "trip" ? "#8B6FAF" : kind === "plan" ? T.copper : T.red;
-      const Icon2 = kind === "spot" ? Tent : kind === "trip" ? Mountain : kind === "plan" ? Route : Star;
-      const label = kind === "spot" ? "CAMPING SPOT" : kind === "trip" ? "TRIP REPORT" : kind === "plan" ? "TRIP PLAN" : "HEADQUARTERS";
-      const cta = kind === "spot" ? "VIEW SPOT" : kind === "trip" ? "OPEN TRIP" : kind === "plan" ? "OPEN PLAN" : "OPEN HQ";
-      const title = kind === "hq" ? LPO_HQ.name : data.name;
-      const body = kind === "hq" ? LPO_HQ.address : data.description;
-      const heroFromTrip = kind === "trip" || kind === "plan" ? data.hero_img || null : null;
-      const mapImg = kind === "spot" ? spotStaticMapUrl(data.lat, data.lng) : kind === "trip" ? tripStaticMapUrl(data.start_lat, data.start_lng, "trip") : kind === "plan" ? tripStaticMapUrl(data.start_lat, data.start_lng, "plan") : hqStaticMapUrl();
-      const previewImg = heroFromTrip || mapImg;
-      const dmPayload = (() => {
-        const origin = typeof window !== "undefined" && window.location && window.location.origin || "";
-        if (kind === "spot") {
-          return {
-            id: "spot_" + data.id,
-            type: "camping_spot",
-            spotId: data.id,
-            title,
-            body,
-            image: previewImg,
-            lat: data.lat,
-            lng: data.lng,
-            url: `${origin}/spots/${data.id}`
-          };
-        }
-        if (kind === "trip") {
-          return {
-            id: "trip_" + data.id,
-            type: "trip_report",
-            tripId: data.id,
-            tripSlug: data.slug,
-            title,
-            body,
-            image: previewImg,
-            url: `${origin}/trips/${data.slug}`
-          };
-        }
-        if (kind === "plan") {
-          return {
-            id: "plan_" + data.id,
-            type: "trip_plan",
-            planId: data.id,
-            planSlug: data.slug,
-            title,
-            body,
-            image: previewImg,
-            plannedStart: data.planned_start || null,
-            plannedEnd: data.planned_end || null,
-            url: `${origin}/plans/${data.slug}`
-          };
-        }
-        return {
-          id: "hq",
-          type: "hq",
-          title,
-          body,
-          image: previewImg,
-          url: `${origin}/hq`
-        };
-      })();
+      const t = shareComposeTarget;
+      const accent = t.accent || T.copper;
+      const Icon2 = t.IconComponent || Share2;
       const Inner = () => {
         const [caption, setCaption] = (0, import_react4.useState)("");
         const [submitting, setSubmitting] = (0, import_react4.useState)(false);
+        const placeholder = t.captionPlaceholder || (t.action === "feed" ? "Add a caption (optional)\u2026" : "Add a message (optional)\u2026");
         const submit = async () => {
           if (submitting) return;
           setSubmitting(true);
-          if (action === "feed") {
-            if (kind === "spot") shareCampingSpotToFeed(data, caption);
-            else if (kind === "trip") shareTripToFeed(data, caption);
-            else if (kind === "plan") shareTripPlanToFeed(data, caption);
-            else if (kind === "hq") shareHQToFeed(caption);
+          try {
+            await t.onSubmit(caption);
+          } finally {
             setShareComposeTarget(null);
-          } else {
-            setShareComposeTarget(null);
-            openDM(null, caption || "", dmPayload);
           }
         };
-        return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkBg, borderRadius: 14, border: `1px solid ${accent}40`, padding: 18, width: "100%", maxWidth: 420, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 16px 40px rgba(0,0,0,0.6)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 12 } }, /* @__PURE__ */ import_react4.default.createElement(Icon2, { size: 16, color: accent }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: accent, fontWeight: 700, letterSpacing: 1.4 } }, action === "feed" ? "SHARE TO FEED" : "SEND VIA DM"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setShareComposeTarget(null), style: { background: "none", border: "none", cursor: "pointer", padding: 2, color: T.tertiary, marginLeft: "auto" } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 16 }))), /* @__PURE__ */ import_react4.default.createElement(
+        return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkBg, borderRadius: 14, border: `1px solid ${accent}40`, padding: 18, width: "100%", maxWidth: 420, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 16px 40px rgba(0,0,0,0.6)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 12 } }, /* @__PURE__ */ import_react4.default.createElement(Icon2, { size: 16, color: accent }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: accent, fontWeight: 700, letterSpacing: 1.4 } }, t.action === "feed" ? "SHARE TO FEED" : "SEND VIA DM"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setShareComposeTarget(null), style: { background: "none", border: "none", cursor: "pointer", padding: 2, color: T.tertiary, marginLeft: "auto" } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 16 }))), /* @__PURE__ */ import_react4.default.createElement(
           "textarea",
           {
             autoFocus: true,
             value: caption,
             onChange: (e) => setCaption(e.target.value.slice(0, 280)),
-            placeholder: action === "feed" ? "Add a caption (optional)\u2026" : "Add a message (optional)\u2026",
+            placeholder,
             rows: 3,
             style: { width: "100%", boxSizing: "border-box", padding: "11px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", resize: "vertical", lineHeight: 1.5, marginBottom: 12 }
           }
-        ), /* @__PURE__ */ import_react4.default.createElement("div", { style: { borderRadius: 10, overflow: "hidden", border: `1px solid ${accent}40`, background: `${T.charcoal}80`, marginBottom: 16 } }, previewImg && /* @__PURE__ */ import_react4.default.createElement("img", { src: previewImg, alt: "", style: { width: "100%", height: 180, objectFit: "cover", display: "block" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "10px 12px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 6 } }, /* @__PURE__ */ import_react4.default.createElement(Icon2, { size: 12, color: accent }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: accent, letterSpacing: 1.2, fontWeight: 700 } }, label)), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 14, color: T.white, margin: 0, fontWeight: 600, lineHeight: 1.4 } }, title), body && /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "4px 0 0", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" } }, body), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, marginTop: 6 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: accent, fontWeight: 600 } }, cta), /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 12, color: accent })))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement(
+        ), /* @__PURE__ */ import_react4.default.createElement("div", { style: { borderRadius: 10, overflow: "hidden", border: `1px solid ${accent}40`, background: `${T.charcoal}80`, marginBottom: 16 } }, t.cardImage && /* @__PURE__ */ import_react4.default.createElement("img", { src: t.cardImage, alt: "", style: { width: "100%", height: 180, objectFit: "cover", display: "block" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "10px 12px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 6 } }, /* @__PURE__ */ import_react4.default.createElement(Icon2, { size: 12, color: accent }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: accent, letterSpacing: 1.2, fontWeight: 700 } }, t.cardLabel)), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 14, color: T.white, margin: 0, fontWeight: 600, lineHeight: 1.4 } }, t.cardTitle), t.cardBody && /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "4px 0 0", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" } }, t.cardBody), t.cardCta && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, marginTop: 6 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: accent, fontWeight: 600 } }, t.cardCta), /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 12, color: accent })))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement(
           "button",
           {
             onClick: () => setShareComposeTarget(null),
@@ -57045,7 +57203,7 @@ ${suffix}`;
             disabled: submitting,
             style: { flex: 2, padding: "12px", borderRadius: 8, background: !submitting ? accent : T.charcoal, border: "none", cursor: !submitting ? "pointer" : "default", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5, opacity: !submitting ? 1 : 0.5 }
           },
-          action === "feed" ? submitting ? "POSTING\u2026" : "POST TO FEED" : submitting ? "OPENING\u2026" : "CHOOSE RECIPIENT"
+          t.action === "feed" ? submitting ? "POSTING\u2026" : "POST TO FEED" : submitting ? "OPENING\u2026" : "CHOOSE RECIPIENT"
         ))));
       };
       return /* @__PURE__ */ import_react4.default.createElement(Inner, null);
