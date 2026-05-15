@@ -43053,6 +43053,14 @@ ${suffix}`;
     if (lat == null || lng == null || !isFinite(lat) || !isFinite(lng)) return null;
     return `https://api.mapbox.com/styles/v1/mapbox/outdoors-v12/static/pin-l-campsite+5B8C5A(${lng},${lat})/${lng},${lat},${zoom}/${width}x${height}@2x?access_token=${MAPBOX_TOKEN}`;
   }
+  function tripStaticMapUrl(lat, lng, kind, { width = 600, height = 320, zoom = 11 } = {}) {
+    if (lat == null || lng == null || !isFinite(lat) || !isFinite(lng)) return null;
+    const color = kind === "plan" ? "C49A6C" : "8B6FAF";
+    return `https://api.mapbox.com/styles/v1/mapbox/outdoors-v12/static/pin-l+${color}(${lng},${lat})/${lng},${lat},${zoom}/${width}x${height}@2x?access_token=${MAPBOX_TOKEN}`;
+  }
+  function hqStaticMapUrl({ width = 600, height = 320, zoom = 13 } = {}) {
+    return `https://api.mapbox.com/styles/v1/mapbox/outdoors-v12/static/pin-l-star+BD472A(${LPO_HQ.lng},${LPO_HQ.lat})/${LPO_HQ.lng},${LPO_HQ.lat},${zoom}/${width}x${height}@2x?access_token=${MAPBOX_TOKEN}`;
+  }
   if (!document.querySelector("style[data-trailhead-mapbox]")) {
     const mbStyle = document.createElement("style");
     mbStyle.setAttribute("data-trailhead-mapbox", "1");
@@ -49465,12 +49473,12 @@ ${suffix}`;
         setShareTarget(null);
       };
       const handleDM = () => {
-        if (!onOpenDM) return;
-        if (target.kind === "spot" && onOpenShareCompose) {
-          onOpenShareCompose({ kind: "spot", action: "dm", data: target.data });
+        if (onOpenShareCompose) {
+          onOpenShareCompose({ kind: target.kind, action: "dm", data: target.data });
           setShareTarget(null);
           return;
         }
+        if (!onOpenDM) return;
         const sharedPost = target.kind === "spot" ? {
           id: "spot_" + target.data.id,
           type: "camping_spot",
@@ -49512,12 +49520,13 @@ ${suffix}`;
         setShareTarget(null);
       };
       const handleFeed = () => {
-        if (target.kind === "spot" && onOpenShareCompose) {
-          onOpenShareCompose({ kind: "spot", action: "feed", data: target.data });
+        if (onOpenShareCompose) {
+          onOpenShareCompose({ kind: target.kind, action: "feed", data: target.data });
           setShareTarget(null);
           return;
         }
-        if (target.kind === "trip") onShareTripToFeed && onShareTripToFeed(target.data);
+        if (target.kind === "spot") onShareCampingSpotToFeed && onShareCampingSpotToFeed(target.data);
+        else if (target.kind === "trip") onShareTripToFeed && onShareTripToFeed(target.data);
         else if (target.kind === "plan") onShareTripPlanToFeed && onShareTripPlanToFeed(target.data);
         else if (target.kind === "hq") onShareHQToFeed && onShareHQToFeed();
         setShareTarget(null);
@@ -55999,8 +56008,9 @@ ${suffix}`;
         setTripLikeCounts((prev) => ({ ...prev, [tripId]: Math.max((prev[tripId] || 0) + (wasLiked ? 1 : -1), 0) }));
       }
     };
-    const shareTripToFeed = (trip) => {
+    const shareTripToFeed = (trip, captionRaw) => {
       if (!trip || trip.status !== "published") return;
+      const caption = (captionRaw || "").trim();
       const meName = currentProfile && currentProfile.full_name || "You";
       const meHandle = currentProfile && currentProfile.handle || "";
       const meInitial = meName.charAt(0).toUpperCase();
@@ -56024,7 +56034,7 @@ ${suffix}`;
         handle: meHandle ? `@${meHandle}` : void 0,
         initial: meInitial,
         time: Date.now(),
-        title: trip.name,
+        title: caption || trip.name,
         body: trip.description || null,
         subtitle: isReshare ? `Shared @${ownerHandle}'s trip report` : "Shared a trip report",
         distance: distanceLabel,
@@ -56048,16 +56058,17 @@ ${suffix}`;
       awardPoints(POINTS.feedPost, "Trip Shared");
       showErrorToast("Trip shared to your feed");
     };
-    const shareTripPlanToFeed = (plan) => {
+    const shareTripPlanToFeed = (plan, captionRaw) => {
       if (!plan || !plan.id) return;
       if (plan.visibility === "private") {
         showErrorToast("Switch the plan to public visibility before sharing it to the feed.");
         return;
       }
+      const caption = (captionRaw || "").trim();
       const meName = currentProfile && currentProfile.full_name || "You";
       const meHandle = currentProfile && currentProfile.handle || "";
       const meInitial = meName.charAt(0).toUpperCase();
-      const heroImg = plan.hero_img || null;
+      const heroImg = plan.hero_img || tripStaticMapUrl(plan.start_lat, plan.start_lng, "plan");
       addPost({
         id: "shared_plan_" + Date.now(),
         type: "POST",
@@ -56065,7 +56076,7 @@ ${suffix}`;
         handle: meHandle ? `@${meHandle}` : void 0,
         initial: meInitial,
         time: Date.now(),
-        title: plan.name,
+        title: caption || plan.name,
         body: plan.description || null,
         subtitle: "Shared a trip plan",
         image: heroImg,
@@ -56115,7 +56126,8 @@ ${suffix}`;
       awardPoints(POINTS.feedPost, "Spot Shared");
       showErrorToast("Spot shared to your feed");
     };
-    const shareHQToFeed = () => {
+    const shareHQToFeed = (captionRaw) => {
+      const caption = (captionRaw || "").trim();
       const meName = currentProfile && currentProfile.full_name || "You";
       const meHandle = currentProfile && currentProfile.handle || "";
       const meInitial = meName.charAt(0).toUpperCase();
@@ -56126,9 +56138,10 @@ ${suffix}`;
         handle: meHandle ? `@${meHandle}` : void 0,
         initial: meInitial,
         time: Date.now(),
-        title: LPO_HQ.name,
+        title: caption || LPO_HQ.name,
         body: LPO_HQ.address,
         subtitle: "Shared Lone Peak Overland HQ",
+        image: hqStaticMapUrl(),
         likes: 0,
         comments: 0,
         hqShare: true
@@ -56911,13 +56924,73 @@ ${suffix}`;
           isLiked: !!(likedTripIds && likedTripIds[trip.id]),
           likeCount: tripLikeCounts && tripLikeCounts[trip.id] || 0,
           onToggleLike: requireAuth(toggleTripLike),
-          onShareToFeed: requireAuth(trip.kind === "plan" ? shareTripPlanToFeed : shareTripToFeed)
+          onShareToFeed: requireAuth((t) => setShareComposeTarget({ kind: t.kind === "plan" ? "plan" : "trip", action: "feed", data: t }))
         }
       ));
-    })(), shareComposeTarget && shareComposeTarget.kind === "spot" && (() => {
-      const spot = shareComposeTarget.data;
-      const action = shareComposeTarget.action;
-      const mapImg = spotStaticMapUrl(spot.lat, spot.lng);
+    })(), shareComposeTarget && (() => {
+      const target = shareComposeTarget;
+      const data = target.data;
+      const action = target.action;
+      const kind = target.kind;
+      const accent = kind === "spot" ? T.green : kind === "trip" ? "#8B6FAF" : kind === "plan" ? T.copper : T.red;
+      const Icon2 = kind === "spot" ? Tent : kind === "trip" ? Mountain : kind === "plan" ? Route : Star;
+      const label = kind === "spot" ? "CAMPING SPOT" : kind === "trip" ? "TRIP REPORT" : kind === "plan" ? "TRIP PLAN" : "HEADQUARTERS";
+      const cta = kind === "spot" ? "VIEW SPOT" : kind === "trip" ? "OPEN TRIP" : kind === "plan" ? "OPEN PLAN" : "OPEN HQ";
+      const title = kind === "hq" ? LPO_HQ.name : data.name;
+      const body = kind === "hq" ? LPO_HQ.address : data.description;
+      const heroFromTrip = kind === "trip" || kind === "plan" ? data.hero_img || null : null;
+      const mapImg = kind === "spot" ? spotStaticMapUrl(data.lat, data.lng) : kind === "trip" ? tripStaticMapUrl(data.start_lat, data.start_lng, "trip") : kind === "plan" ? tripStaticMapUrl(data.start_lat, data.start_lng, "plan") : hqStaticMapUrl();
+      const previewImg = heroFromTrip || mapImg;
+      const dmPayload = (() => {
+        const origin = typeof window !== "undefined" && window.location && window.location.origin || "";
+        if (kind === "spot") {
+          return {
+            id: "spot_" + data.id,
+            type: "camping_spot",
+            spotId: data.id,
+            title,
+            body,
+            image: previewImg,
+            lat: data.lat,
+            lng: data.lng,
+            url: `${origin}/spots/${data.id}`
+          };
+        }
+        if (kind === "trip") {
+          return {
+            id: "trip_" + data.id,
+            type: "trip_report",
+            tripId: data.id,
+            tripSlug: data.slug,
+            title,
+            body,
+            image: previewImg,
+            url: `${origin}/trips/${data.slug}`
+          };
+        }
+        if (kind === "plan") {
+          return {
+            id: "plan_" + data.id,
+            type: "trip_plan",
+            planId: data.id,
+            planSlug: data.slug,
+            title,
+            body,
+            image: previewImg,
+            plannedStart: data.planned_start || null,
+            plannedEnd: data.planned_end || null,
+            url: `${origin}/plans/${data.slug}`
+          };
+        }
+        return {
+          id: "hq",
+          type: "hq",
+          title,
+          body,
+          image: previewImg,
+          url: `${origin}/hq`
+        };
+      })();
       const Inner = () => {
         const [caption, setCaption] = (0, import_react4.useState)("");
         const [submitting, setSubmitting] = (0, import_react4.useState)(false);
@@ -56925,26 +56998,17 @@ ${suffix}`;
           if (submitting) return;
           setSubmitting(true);
           if (action === "feed") {
-            shareCampingSpotToFeed(spot, caption);
+            if (kind === "spot") shareCampingSpotToFeed(data, caption);
+            else if (kind === "trip") shareTripToFeed(data, caption);
+            else if (kind === "plan") shareTripPlanToFeed(data, caption);
+            else if (kind === "hq") shareHQToFeed(caption);
             setShareComposeTarget(null);
           } else {
-            const url = typeof window !== "undefined" && window.location && window.location.origin || "";
-            const sharedPost = {
-              id: "spot_" + spot.id,
-              type: "camping_spot",
-              spotId: spot.id,
-              title: spot.name,
-              body: spot.description || null,
-              image: mapImg,
-              lat: spot.lat,
-              lng: spot.lng,
-              url: `${url}/spots/${spot.id}`
-            };
             setShareComposeTarget(null);
-            openDM(null, caption || "", sharedPost);
+            openDM(null, caption || "", dmPayload);
           }
         };
-        return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkBg, borderRadius: 14, border: `1px solid ${T.green}40`, padding: 18, width: "100%", maxWidth: 420, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 16px 40px rgba(0,0,0,0.6)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 12 } }, /* @__PURE__ */ import_react4.default.createElement(Tent, { size: 16, color: T.green }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.green, fontWeight: 700, letterSpacing: 1.4 } }, action === "feed" ? "SHARE TO FEED" : "SEND VIA DM"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setShareComposeTarget(null), style: { background: "none", border: "none", cursor: "pointer", padding: 2, color: T.tertiary, marginLeft: "auto" } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 16 }))), /* @__PURE__ */ import_react4.default.createElement(
+        return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkBg, borderRadius: 14, border: `1px solid ${accent}40`, padding: 18, width: "100%", maxWidth: 420, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 16px 40px rgba(0,0,0,0.6)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 12 } }, /* @__PURE__ */ import_react4.default.createElement(Icon2, { size: 16, color: accent }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: accent, fontWeight: 700, letterSpacing: 1.4 } }, action === "feed" ? "SHARE TO FEED" : "SEND VIA DM"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setShareComposeTarget(null), style: { background: "none", border: "none", cursor: "pointer", padding: 2, color: T.tertiary, marginLeft: "auto" } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 16 }))), /* @__PURE__ */ import_react4.default.createElement(
           "textarea",
           {
             autoFocus: true,
@@ -56954,7 +57018,7 @@ ${suffix}`;
             rows: 3,
             style: { width: "100%", boxSizing: "border-box", padding: "11px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", resize: "vertical", lineHeight: 1.5, marginBottom: 12 }
           }
-        ), /* @__PURE__ */ import_react4.default.createElement("div", { style: { borderRadius: 10, overflow: "hidden", border: `1px solid ${T.green}40`, background: `${T.charcoal}80`, marginBottom: 16 } }, mapImg && /* @__PURE__ */ import_react4.default.createElement("img", { src: mapImg, alt: "", style: { width: "100%", height: 180, objectFit: "cover", display: "block" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "10px 12px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 6 } }, /* @__PURE__ */ import_react4.default.createElement(Tent, { size: 12, color: T.green }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.green, letterSpacing: 1.2, fontWeight: 700 } }, "CAMPING SPOT")), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 14, color: T.white, margin: 0, fontWeight: 600, lineHeight: 1.4 } }, spot.name), spot.description && /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "4px 0 0", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" } }, spot.description), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, marginTop: 6 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.green, fontWeight: 600 } }, "VIEW SPOT"), /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 12, color: T.green })))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement(
+        ), /* @__PURE__ */ import_react4.default.createElement("div", { style: { borderRadius: 10, overflow: "hidden", border: `1px solid ${accent}40`, background: `${T.charcoal}80`, marginBottom: 16 } }, previewImg && /* @__PURE__ */ import_react4.default.createElement("img", { src: previewImg, alt: "", style: { width: "100%", height: 180, objectFit: "cover", display: "block" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "10px 12px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 6 } }, /* @__PURE__ */ import_react4.default.createElement(Icon2, { size: 12, color: accent }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: accent, letterSpacing: 1.2, fontWeight: 700 } }, label)), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 14, color: T.white, margin: 0, fontWeight: 600, lineHeight: 1.4 } }, title), body && /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "4px 0 0", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" } }, body), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, marginTop: 6 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: accent, fontWeight: 600 } }, cta), /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 12, color: accent })))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement(
           "button",
           {
             onClick: () => setShareComposeTarget(null),
@@ -56966,7 +57030,7 @@ ${suffix}`;
           {
             onClick: submit,
             disabled: submitting,
-            style: { flex: 2, padding: "12px", borderRadius: 8, background: !submitting ? T.green : T.charcoal, border: "none", cursor: !submitting ? "pointer" : "default", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5, opacity: !submitting ? 1 : 0.5 }
+            style: { flex: 2, padding: "12px", borderRadius: 8, background: !submitting ? accent : T.charcoal, border: "none", cursor: !submitting ? "pointer" : "default", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5, opacity: !submitting ? 1 : 0.5 }
           },
           action === "feed" ? submitting ? "POSTING\u2026" : "POST TO FEED" : submitting ? "OPENING\u2026" : "CHOOSE RECIPIENT"
         ))));
