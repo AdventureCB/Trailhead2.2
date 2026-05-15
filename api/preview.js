@@ -196,6 +196,63 @@ async function resolveEntity(type, id) {
       image: staticMap(LPO_HQ.lng, LPO_HQ.lat, "BD472A", "star"),
     };
   }
+  // Generic feed posts (and route posts which share the /post/:id URL).
+  // Falls through hero_img → first non-video photo → embedded route
+  // polyline if it's a ROUTES post → null.
+  if (type === "post" || type === "route") {
+    const row = await supabaseFetch(
+      "posts",
+      `id=eq.${encodeURIComponent(id)}&select=type,title,body,hero_img,photo_urls,data&limit=1`
+    );
+    if (!row) return null;
+    // Build the image fallback chain.
+    let image = row.hero_img || null;
+    if (!image && Array.isArray(row.photo_urls) && row.photo_urls.length > 0) {
+      // First photo URL — already filtered in feedItemToDbRow to skip videos.
+      image = row.photo_urls[0];
+    }
+    // ROUTES posts carry pin coords in data.pins or data.points. If we
+    // don't have a hero photo, try to render the route polyline so the
+    // share preview is still informative for route shares.
+    if (!image && row.data) {
+      const pts = Array.isArray(row.data.points) ? row.data.points
+                : Array.isArray(row.data.pins) ? row.data.pins.map(p => [p.lng, p.lat]).filter(([a, b]) => typeof a === "number" && typeof b === "number")
+                : null;
+      if (pts && pts.length >= 2) {
+        // Local data.points may store as [lat, lng] historically — normalize
+        // by sniffing: if the first value's "lng" magnitude is plausible
+        // for latitude we swap. Lats are -90..90; lngs are -180..180. If
+        // either coord exceeds 90 it's definitely lng.
+        const sniffed = pts.map(p => {
+          const a = Array.isArray(p) ? p[0] : p.lng;
+          const b = Array.isArray(p) ? p[1] : p.lat;
+          // If a (the "lng" slot) is in -90..90 AND b is out of that range,
+          // they're probably swapped. Otherwise trust [lng, lat].
+          return Math.abs(a) <= 90 && Math.abs(b) > 90 ? [b, a] : [a, b];
+        });
+        image = staticMapWithPath(sniffed, "BD472A", "BD472A");
+      }
+    }
+    const isRoute = row.type === "ROUTES";
+    const cleanTitle = (row.title || (isRoute ? "Route" : "Trailhead Post")).slice(0, 80);
+    const desc = (row.body || (isRoute ? "Overlanding route shared on Trailhead." : "Posted to Trailhead.")).slice(0, 200);
+    return {
+      title: `${cleanTitle}${isRoute ? " · Route" : ""}`,
+      description: desc,
+      image,
+    };
+  }
+  // Forum threads aren't persisted server-side (per the architecture
+  // overview — ForumScreen state is local). Without a DB lookup we
+  // can't enrich the preview, so return the brand default which still
+  // gets a Trailhead-tagged card instead of a bare URL.
+  if (type === "forum") {
+    return {
+      title: "Forum Thread · Trailhead",
+      description: "Join the conversation on the Trailhead community forum.",
+      image: null,
+    };
+  }
   return null;
 }
 
@@ -241,6 +298,8 @@ module.exports = async function handler(req, res) {
     type === "plan" ? `/plans/${id}` :
     type === "spot" ? `/spots/${id}` :
     type === "build" ? `/builds/${id}` :
+    type === "post" || type === "route" ? `/post/${id}` :
+    type === "forum" ? `/forum/${id}` :
     type === "hq" ? `/hq` : "/";
   const canonicalUrl = `${proto}://${host}${prettyPath}`;
 
