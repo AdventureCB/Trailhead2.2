@@ -3,8 +3,18 @@
   "outputDirectory": "deploy-v2.2",
   "framework": null,
   "rewrites": [
+    { "source": "/trips/:slug", "destination": "/api/preview?type=trip&id=:slug" },
+    { "source": "/plans/:slug", "destination": "/api/preview?type=plan&id=:slug" },
+    { "source": "/spots/:id", "destination": "/api/preview?type=spot&id=:id" },
+    { "source": "/builds/:id", "destination": "/api/preview?type=build&id=:id" },
+    { "source": "/hq", "destination": "/api/preview?type=hq" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
+  "functions": {
+    "api/preview.js": {
+      "includeFiles": "deploy-v2.2/index.html"
+    }
+  },
   "headers": [
     {
       "source": "/(.*)",
