@@ -48991,7 +48991,12 @@ ${suffix}`;
   function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onEdit, onUpdate, onEditPlanRoute, onLoadRouteData, onBumpView, isLiked, likeCount, onToggleLike, onShareToFeed, onStartDirections }) {
     if (!trip) return null;
     const isPlan = trip.kind === "plan";
-    const canEditInline = isPlan && currentUserId && trip.user_id === currentUserId && typeof onUpdate === "function";
+    const isOwner = !!(currentUserId && trip.user_id === currentUserId);
+    const [editingMode, setEditingMode] = (0, import_react4.useState)(false);
+    (0, import_react4.useEffect)(() => {
+      setEditingMode(false);
+    }, [trip.id]);
+    const canEditInline = isPlan && isOwner && editingMode && typeof onUpdate === "function";
     const [titleDraft, setTitleDraft] = (0, import_react4.useState)(trip.name || "");
     const [descDraft, setDescDraft] = (0, import_react4.useState)(trip.description || "");
     const [plannedStartDraft, setPlannedStartDraft] = (0, import_react4.useState)(trip.planned_start || "");
@@ -49086,7 +49091,18 @@ ${suffix}`;
       },
       /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 13, color: T.white }),
       /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 600, letterSpacing: 0.5 } }, "SHARE")
-    ), isMine && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => onEdit && onEdit(trip.id), style: { background: T.charcoal, border: `1px solid ${T.copper}40`, padding: "6px 12px", borderRadius: 6, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 } }, /* @__PURE__ */ import_react4.default.createElement(PenLine, { size: 12, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600, letterSpacing: 0.5 } }, "EDIT")))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", height: 220, background: trip.hero_img ? T.darkBg : `linear-gradient(135deg, ${T.charcoal} 0%, ${T.copper}20 100%)`, overflow: "hidden" } }, trip.hero_img ? /* @__PURE__ */ import_react4.default.createElement("img", { src: trip.hero_img, alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Mountain, { size: 100, color: T.tertiary, strokeWidth: 0.2, style: { opacity: 0.15 } })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, background: "linear-gradient(transparent 40%, rgba(0,0,0,0.85))" } })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "16px" } }, isPlan && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 8, padding: "3px 10px", background: `${T.copper}20`, color: T.copper, borderRadius: 4, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1.2 } }, /* @__PURE__ */ import_react4.default.createElement(Route, { size: 11, color: T.copper }), "TRIP PLAN", trip.visibility === "private" && /* @__PURE__ */ import_react4.default.createElement("span", { style: { marginLeft: 4 } }, "\xB7 PRIVATE")), canEditInline ? /* @__PURE__ */ import_react4.default.createElement(
+    ), isMine && /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: () => {
+          if (isPlan) setEditingMode((m) => !m);
+          else onEdit && onEdit(trip.id);
+        },
+        style: { background: editingMode ? T.copper : T.charcoal, border: `1px solid ${T.copper}${editingMode ? "" : "40"}`, padding: "6px 12px", borderRadius: 6, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }
+      },
+      editingMode ? /* @__PURE__ */ import_react4.default.createElement(CircleCheckBig, { size: 12, color: T.white }) : /* @__PURE__ */ import_react4.default.createElement(PenLine, { size: 12, color: T.copper }),
+      /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: editingMode ? T.white : T.copper, fontWeight: 600, letterSpacing: 0.5 } }, editingMode ? "DONE" : "EDIT")
+    ))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", height: 220, background: trip.hero_img ? T.darkBg : `linear-gradient(135deg, ${T.charcoal} 0%, ${T.copper}20 100%)`, overflow: "hidden" } }, trip.hero_img ? /* @__PURE__ */ import_react4.default.createElement("img", { src: trip.hero_img, alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Mountain, { size: 100, color: T.tertiary, strokeWidth: 0.2, style: { opacity: 0.15 } })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, background: "linear-gradient(transparent 40%, rgba(0,0,0,0.85))" } })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "16px" } }, isPlan && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 8, padding: "3px 10px", background: `${T.copper}20`, color: T.copper, borderRadius: 4, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1.2 } }, /* @__PURE__ */ import_react4.default.createElement(Route, { size: 11, color: T.copper }), "TRIP PLAN", trip.visibility === "private" && /* @__PURE__ */ import_react4.default.createElement("span", { style: { marginLeft: 4 } }, "\xB7 PRIVATE")), canEditInline ? /* @__PURE__ */ import_react4.default.createElement(
       "input",
       {
         value: titleDraft,
