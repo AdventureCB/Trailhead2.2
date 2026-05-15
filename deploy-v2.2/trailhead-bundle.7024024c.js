@@ -47274,7 +47274,8 @@ ${suffix}`;
     const [selectedPhoto, setSelectedPhoto] = (0, import_react4.useState)(null);
     const [selectedWaypoint, setSelectedWaypoint] = (0, import_react4.useState)(null);
     const prevHighlightRef = (0, import_react4.useRef)(null);
-    const styleForPin = (pinIdx, isPhoto, isWaypoint, totalPins) => {
+    const styleForPin = (pinIdx, isPhoto, isWaypoint, totalPins, isCamp) => {
+      if (isCamp) return { width: 24, height: 24, background: "#5B8C5A", border: `2px solid ${T.white}`, borderRadius: "50%" };
       if (isWaypoint) return { width: 16, height: 16, background: T.copper, border: `2px solid ${T.white}`, transform: "rotate(45deg)", borderRadius: "0px" };
       if (isPhoto) return { width: 24, height: 24, background: "#4A7C59", border: `2px solid ${T.white}`, borderRadius: "50%" };
       const fill = pinIdx === 0 ? T.green : pinIdx === totalPins - 1 ? T.red : T.copper;
@@ -47363,12 +47364,13 @@ ${suffix}`;
             pins.forEach((p, i) => {
               const isPhoto = !!p.photo && !p.isWaypoint;
               const isWaypoint = !!p.isWaypoint;
-              const baseStyle = styleForPin(i, isPhoto, isWaypoint, pins.length);
-              const baseEmoji = isWaypoint ? "\u25C6" : isPhoto ? "\u{1F4F7}" : "";
+              const isCamp = p.planType === "camp";
+              const baseStyle = styleForPin(i, isPhoto, isWaypoint, pins.length, isCamp);
+              const baseEmoji = isCamp ? "\u{1F3D5}\uFE0F" : isWaypoint ? "\u25C6" : isPhoto ? "\u{1F4F7}" : "";
               const el = document.createElement("div");
               applyMarkerStyle(el, baseStyle, baseEmoji);
               const marker = new mapboxgl.Marker({ element: el }).setLngLat([p.lng, p.lat]).addTo(map);
-              const entry = { marker, el, pinIdx: i, isPhoto, isWaypoint, baseStyle, baseEmoji };
+              const entry = { marker, el, pinIdx: i, isPhoto, isWaypoint, isCamp, baseStyle, baseEmoji };
               if (isWaypoint) {
                 el.addEventListener("click", (ev) => {
                   ev.stopPropagation();
@@ -54926,6 +54928,7 @@ ${suffix}`;
       const OFFROAD_THRESHOLD_M = 50;
       const densePoints = [];
       const offroadRanges = [];
+      let totalSeconds = 0;
       const pushPoint = (lat, lng) => {
         densePoints.push({ lat, lng });
         return densePoints.length - 1;
@@ -54939,6 +54942,7 @@ ${suffix}`;
           planBuilderPoints.slice(0, -1).map((from, i) => mapboxDirections(from, planBuilderPoints[i + 1]))
         );
         segResults.forEach((dir, i) => {
+          if (dir && typeof dir.duration === "number") totalSeconds += dir.duration;
           const from = planBuilderPoints[i];
           const to = planBuilderPoints[i + 1];
           const segStartIdx = densePoints.length - 1;
@@ -54964,6 +54968,32 @@ ${suffix}`;
           }
         });
       }
+      let totalMeters = 0;
+      for (let i = 1; i < densePoints.length; i++) {
+        totalMeters += haversine(
+          densePoints[i - 1].lat,
+          densePoints[i - 1].lng,
+          densePoints[i].lat,
+          densePoints[i].lng
+        );
+      }
+      let elevGainFt = null, maxElevFt = null;
+      try {
+        const elevs = await fetchElevationsAlongPath(densePoints);
+        if (Array.isArray(elevs) && elevs.length > 1) {
+          let gainM = 0, maxM = -Infinity;
+          for (let i = 0; i < elevs.length; i++) {
+            if (typeof elevs[i] !== "number" || !isFinite(elevs[i])) continue;
+            if (elevs[i] > maxM) maxM = elevs[i];
+            if (i > 0 && typeof elevs[i - 1] === "number" && elevs[i] > elevs[i - 1]) {
+              gainM += elevs[i] - elevs[i - 1];
+            }
+          }
+          if (isFinite(maxM)) maxElevFt = Math.round(maxM * 3.28084);
+          elevGainFt = Math.round(gainM * 3.28084);
+        }
+      } catch (e) {
+      }
       const routeData = { pins, points: densePoints, offroadRanges };
       const first = planBuilderPoints[0];
       const last = planBuilderPoints[planBuilderPoints.length - 1];
@@ -54971,7 +55001,11 @@ ${suffix}`;
         route_data: routeData,
         start_lat: first.lat,
         start_lng: first.lng,
-        start_label: first.label || null
+        start_label: first.label || null,
+        distance_mi: totalMeters > 0 ? Number((totalMeters / 1609.344).toFixed(2)) : null,
+        duration_min: totalSeconds > 0 ? Math.round(totalSeconds / 60) : null,
+        elev_gain_ft: elevGainFt,
+        max_elev_ft: maxElevFt
       };
       if (planBuilderPoints.length > 1) {
         updates.end_lat = last.lat;
