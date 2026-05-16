@@ -54228,7 +54228,7 @@ ${suffix}`;
         if (profErr) console.error("[hydrate] profiles fetch error", profErr);
         console.log("[hydrate] profile row", profileRow);
         if (profileRow) setCurrentProfile(profileRow);
-        const { data: buildRows, error: buildErr } = await supabase.from("builds").select("*").order("created_at", { ascending: false });
+        const { data: buildRows, error: buildErr } = await supabase.from("builds").select("*").order("created_at", { ascending: false }).limit(500);
         if (buildErr) console.error("[hydrate] builds fetch error", buildErr);
         if (Array.isArray(buildRows)) {
           const ownerIds = Array.from(new Set(buildRows.map((b) => b.user_id).filter(Boolean)));
