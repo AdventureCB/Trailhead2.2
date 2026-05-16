@@ -56603,10 +56603,14 @@ ${suffix}`;
         }
         const all = buildRows.map((r) => dbRowToLocalBuild(r, profByUid[r.user_id] || null)).filter(Boolean);
         setAllBuilds((prev) => {
-          const byId = new Map2();
-          all.forEach((b) => byId.set(b.id, b));
-          prev.forEach((b) => byId.set(b.id, b));
-          return Array.from(byId.values());
+          const byId = {};
+          all.forEach((b) => {
+            byId[b.id] = b;
+          });
+          prev.forEach((b) => {
+            byId[b.id] = b;
+          });
+          return Object.values(byId);
         });
         const allIds = all.map((b) => b.id).filter((id) => typeof id === "string");
         if (allIds.length > 0) {
