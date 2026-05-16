@@ -47274,6 +47274,7 @@ ${suffix}`;
     const [selectedPhoto, setSelectedPhoto] = (0, import_react4.useState)(null);
     const [selectedWaypoint, setSelectedWaypoint] = (0, import_react4.useState)(null);
     const prevHighlightRef = (0, import_react4.useRef)(null);
+    const [reinitTick, setReinitTick] = (0, import_react4.useState)(0);
     const styleForPin = (pinIdx, isPhoto, isWaypoint, totalPins, isCamp) => {
       if (isCamp) return { width: 24, height: 24, background: "#5B8C5A", border: `2px solid ${T.white}`, borderRadius: "50%" };
       if (isWaypoint) return { width: 16, height: 16, background: T.copper, border: `2px solid ${T.white}`, transform: "rotate(45deg)", borderRadius: "0px" };
@@ -47433,8 +47434,60 @@ ${suffix}`;
           }
           mapInst.current = null;
         }
+        setReady(false);
       };
-    }, [pins, isFullscreen]);
+    }, [pins, isFullscreen, reinitTick]);
+    (0, import_react4.useEffect)(() => {
+      if (!ready || !mapInst.current) return;
+      const map = mapInst.current;
+      let canvas;
+      try {
+        canvas = map.getCanvas();
+      } catch (_) {
+        return;
+      }
+      if (!canvas) return;
+      const onLost = (e) => {
+        try {
+          e.preventDefault();
+        } catch (_) {
+        }
+      };
+      const onRestored = () => {
+        setReinitTick((t) => t + 1);
+      };
+      canvas.addEventListener("webglcontextlost", onLost);
+      canvas.addEventListener("webglcontextrestored", onRestored);
+      const onVis = () => {
+        if (document.hidden) return;
+        setTimeout(() => {
+          if (!mapInst.current) return;
+          try {
+            const gl = mapInst.current.painter && mapInst.current.painter.context && mapInst.current.painter.context.gl;
+            if (gl && gl.isContextLost && gl.isContextLost()) {
+              setReinitTick((t) => t + 1);
+              return;
+            }
+            mapInst.current.resize();
+            mapInst.current.triggerRepaint();
+          } catch (_) {
+            setReinitTick((t) => t + 1);
+          }
+        }, 120);
+      };
+      document.addEventListener("visibilitychange", onVis);
+      return () => {
+        try {
+          canvas.removeEventListener("webglcontextlost", onLost);
+        } catch (_) {
+        }
+        try {
+          canvas.removeEventListener("webglcontextrestored", onRestored);
+        } catch (_) {
+        }
+        document.removeEventListener("visibilitychange", onVis);
+      };
+    }, [ready]);
     (0, import_react4.useEffect)(() => {
       if (!ready || !mapInst.current) return;
       if (prevHighlightRef.current !== null) {
@@ -48993,15 +49046,17 @@ ${suffix}`;
     const diffColor = trip.difficulty === "Expert" ? T.red : trip.difficulty === "Hard" ? T.copper : trip.difficulty === "Moderate" ? T.tertiary : T.green;
     return /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => onOpen && onOpen(trip.id), style: { ...cardStyle, overflow: "hidden", cursor: "pointer" } }, trip.hero_img ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", height: 180, background: T.charcoal } }, /* @__PURE__ */ import_react4.default.createElement("img", { src: trip.hero_img, alt: "", style: { width: "100%", height: "100%", objectFit: "cover", display: "block" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, background: "linear-gradient(transparent 40%, rgba(0,0,0,0.85))" } }), trip.difficulty && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: 10, right: 10, background: `${T.darkBg}DD`, padding: "4px 10px", borderRadius: 4, backdropFilter: "blur(6px)" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: diffColor, fontWeight: 700, letterSpacing: 1 } }, trip.difficulty.toUpperCase()))) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { height: 120, background: `linear-gradient(135deg, ${T.charcoal} 0%, ${T.copper}15 100%)`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement(Mountain, { size: 56, color: T.tertiary, strokeWidth: 0.5, style: { opacity: 0.3 } }), trip.difficulty && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: 10, right: 10, background: `${T.darkBg}DD`, padding: "4px 10px", borderRadius: 4 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: diffColor, fontWeight: 700, letterSpacing: 1 } }, trip.difficulty.toUpperCase()))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "12px 14px" } }, trip.kind === "plan" && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px", background: `${T.copper}20`, color: T.copper, borderRadius: 4, fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 1 } }, /* @__PURE__ */ import_react4.default.createElement(Route, { size: 10, color: T.copper }), "PLAN"), trip.visibility === "private" && /* @__PURE__ */ import_react4.default.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px", background: `${T.tertiary}25`, color: T.tertiary, borderRadius: 4, fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 1 } }, /* @__PURE__ */ import_react4.default.createElement(Lock, { size: 10, color: T.tertiary }), "PRIVATE"), trip.status === "draft" && /* @__PURE__ */ import_react4.default.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px", background: `${T.tertiary}25`, color: T.tertiary, borderRadius: 4, fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 1 } }, "DRAFT"), trip.planned_start && /* @__PURE__ */ import_react4.default.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px", background: T.charcoal, color: T.white, borderRadius: 4, fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 0.6 } }, /* @__PURE__ */ import_react4.default.createElement(Clock, { size: 10, color: T.copper }), trip.planned_start, trip.planned_end && trip.planned_end !== trip.planned_start ? ` \u2192 ${trip.planned_end}` : "")), /* @__PURE__ */ import_react4.default.createElement("h3", { style: { fontFamily: sans, fontSize: 15, color: T.white, margin: "0 0 4px", fontWeight: 700, lineHeight: 1.3 } }, trip.name), trip.description && /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 10px", lineHeight: 1.5, overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } }, trip.description), stats.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 8 } }, stats.map((s, i) => /* @__PURE__ */ import_react4.default.createElement("span", { key: i, style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600, letterSpacing: 0.4 } }, s))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, paddingTop: 8, borderTop: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 22, height: 22, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 } }, author && author.avatar_url ? /* @__PURE__ */ import_react4.default.createElement("img", { src: author.avatar_url, alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, fontWeight: 700, color: T.white } }, initial)), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 500 } }, authorName), location2 && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, "\xB7"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary, display: "flex", alignItems: "center", gap: 3 } }, /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 11, color: T.tertiary }), location2)), trip.published_at && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, marginLeft: "auto" } }, formatPostTime(new Date(trip.published_at).getTime())))));
   }
-  function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onEdit, onUpdate, onEditPlanRoute, onLoadRouteData, onBumpView, isLiked, likeCount, onToggleLike, onShareToFeed, onStartDirections, onStartNav, onPlanConvoy }) {
+  function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onEdit, onUpdate, onDelete, onEditPlanRoute, onLoadRouteData, onBumpView, isLiked, likeCount, onToggleLike, onShareToFeed, onStartDirections, onStartNav, onPlanConvoy }) {
     if (!trip) return null;
     const isPlan = trip.kind === "plan";
     const isOwner = !!(currentUserId && trip.user_id === currentUserId);
     const [editingMode, setEditingMode] = (0, import_react4.useState)(false);
     const [heroFullscreen, setHeroFullscreen] = (0, import_react4.useState)(false);
+    const [confirmDelete, setConfirmDelete] = (0, import_react4.useState)(false);
     (0, import_react4.useEffect)(() => {
       setEditingMode(false);
       setHeroFullscreen(false);
+      setConfirmDelete(false);
     }, [trip.id]);
     const canEditInline = isPlan && isOwner && editingMode && typeof onUpdate === "function";
     const [titleDraft, setTitleDraft] = (0, import_react4.useState)(trip.name || "");
@@ -49256,7 +49311,15 @@ ${suffix}`;
         },
         /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: 2, left: isPub ? 22 : 2, width: 20, height: 20, borderRadius: "50%", background: T.white, transition: "left 0.15s", boxShadow: "0 1px 4px rgba(0,0,0,0.4)" } })
       )));
-    })(), (trip.distance_mi != null || trip.elev_gain_ft != null || trip.max_elev_ft != null || trip.duration_min != null) && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 8 } }, "TRIP STATS"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, trip.distance_mi != null && /* @__PURE__ */ import_react4.default.createElement(StatBlock, { label: "DISTANCE", value: `${Number(trip.distance_mi).toFixed(1)} MI` }), trip.duration_min != null && /* @__PURE__ */ import_react4.default.createElement(StatBlock, { label: "TIME", value: `${Math.floor(trip.duration_min / 60)}H ${trip.duration_min % 60}M` }), trip.elev_gain_ft != null && /* @__PURE__ */ import_react4.default.createElement(StatBlock, { label: "ELEV GAIN", value: `+${Number(trip.elev_gain_ft).toLocaleString()} FT` }), trip.max_elev_ft != null && /* @__PURE__ */ import_react4.default.createElement(StatBlock, { label: "MAX ELEV", value: `${Number(trip.max_elev_ft).toLocaleString()} FT` }))), (trip.start_label || trip.start_lat != null && trip.start_lng != null) && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 8 } }, "TRAILHEAD"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { ...cardStyle, padding: 14 } }, trip.start_label && /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 14, color: T.white, fontWeight: 600, marginBottom: 4 } }, trip.start_label), trip.start_lat != null && trip.start_lng != null && /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, marginBottom: 10 } }, trip.start_lat.toFixed(5), ", ", trip.start_lng.toFixed(5)), trip.start_lat != null && trip.start_lng != null && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement(
+    })(), isPlan && isOwner && editingMode && typeof onDelete === "function" && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 16px" } }, /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: () => setConfirmDelete(true),
+        style: { width: "100%", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px 14px", borderRadius: 8, background: "transparent", border: `1px solid ${T.red}60`, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.red, fontWeight: 700, letterSpacing: 0.6 }
+      },
+      /* @__PURE__ */ import_react4.default.createElement(Trash2, { size: 13, color: T.red }),
+      /* @__PURE__ */ import_react4.default.createElement("span", null, "DELETE PLAN")
+    )), (trip.distance_mi != null || trip.elev_gain_ft != null || trip.max_elev_ft != null || trip.duration_min != null) && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 8 } }, "TRIP STATS"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, trip.distance_mi != null && /* @__PURE__ */ import_react4.default.createElement(StatBlock, { label: "DISTANCE", value: `${Number(trip.distance_mi).toFixed(1)} MI` }), trip.duration_min != null && /* @__PURE__ */ import_react4.default.createElement(StatBlock, { label: "TIME", value: `${Math.floor(trip.duration_min / 60)}H ${trip.duration_min % 60}M` }), trip.elev_gain_ft != null && /* @__PURE__ */ import_react4.default.createElement(StatBlock, { label: "ELEV GAIN", value: `+${Number(trip.elev_gain_ft).toLocaleString()} FT` }), trip.max_elev_ft != null && /* @__PURE__ */ import_react4.default.createElement(StatBlock, { label: "MAX ELEV", value: `${Number(trip.max_elev_ft).toLocaleString()} FT` }))), (trip.start_label || trip.start_lat != null && trip.start_lng != null) && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 8 } }, "TRAILHEAD"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { ...cardStyle, padding: 14 } }, trip.start_label && /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 14, color: T.white, fontWeight: 600, marginBottom: 4 } }, trip.start_label), trip.start_lat != null && trip.start_lng != null && /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, marginBottom: 10 } }, trip.start_lat.toFixed(5), ", ", trip.start_lng.toFixed(5)), trip.start_lat != null && trip.start_lng != null && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement(
       "button",
       {
         onClick: () => onStartDirections && onStartDirections(trip.start_lat, trip.start_lng, trip.name || trip.start_label || "Trailhead"),
@@ -49335,7 +49398,13 @@ ${suffix}`;
       /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 44, height: 44, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 } }, author && author.avatar_url ? /* @__PURE__ */ import_react4.default.createElement("img", { src: author.avatar_url, alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 16, fontWeight: 700, color: T.white } }, initial)),
       /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 12, color: T.tertiary, letterSpacing: 1, fontWeight: 600, marginBottom: 2 } }, "WRITTEN BY"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 600 } }, authorName)),
       /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 16, color: T.tertiary })
-    )));
+    )), confirmDelete && /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => setConfirmDelete(false), style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 1500 } }, /* @__PURE__ */ import_react4.default.createElement("div", { onClick: (e) => e.stopPropagation(), style: { background: T.darkCard, border: `1px solid ${T.red}40`, borderRadius: 12, padding: 20, width: "100%", maxWidth: 360 } }, /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, margin: "0 0 8px" } }, "Delete this plan?"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 16px", lineHeight: 1.5 } }, "This can't be undone."), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setConfirmDelete(false), style: { flex: 1, padding: "11px", borderRadius: 8, background: T.charcoal, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 600 } }, "CANCEL"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: async () => {
+      setConfirmDelete(false);
+      try {
+        await onDelete(trip.id);
+      } catch (e) {
+      }
+    }, style: { flex: 1, padding: "11px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, "DELETE")))));
   }
   function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onLoadCampingSpotPhotos, onLoadCampingSpotElevation, spotAuthors, tripAuthors, onLoadRouteData, onViewUser, onStartNav, onNewTripReport, onNewTripPlan, currentUserId, onMapViewportChange, tripReports, showTripReports, setShowTripReports, tripPlans, showTripPlans, setShowTripPlans, onOpenTripDetail, onOpenTripPlanDraft, pendingSpotNav, onConsumePendingSpotNav, pendingHQOpen, onConsumePendingHQOpen, pendingPlanNav, onConsumePendingPlanNav, onShareCampingSpotToFeed, onShareHQToFeed, onShareTripToFeed, onShareTripPlanToFeed, onOpenDM, onShowToast, onOpenShareCompose, onOpenShareIntent, planBuilder }) {
     const mapRef = (0, import_react4.useRef)(null);
@@ -57902,6 +57971,10 @@ ${suffix}`;
             setEditingTripId(id);
           },
           onUpdate: requireAuth(updateTripDraft),
+          onDelete: requireAuth(async (id) => {
+            await deleteTripDraft(id);
+            setDetailTripId(null);
+          }),
           onEditPlanRoute: (t) => {
             if (!t || t.kind !== "plan") return;
             const rd = t.route_data || {};
