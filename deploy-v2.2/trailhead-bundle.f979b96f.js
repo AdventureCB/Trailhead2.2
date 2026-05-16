@@ -47434,19 +47434,17 @@ ${suffix}`;
           }
           mapInst.current = null;
         }
-        setReady(false);
       };
     }, [pins, isFullscreen, reinitTick]);
     (0, import_react4.useEffect)(() => {
-      if (!ready || !mapInst.current) return;
+      if (!ready) return;
       const map = mapInst.current;
-      let canvas;
+      if (!map) return;
+      let canvas = null;
       try {
         canvas = map.getCanvas();
       } catch (_) {
-        return;
       }
-      if (!canvas) return;
       const onLost = (e) => {
         try {
           e.preventDefault();
@@ -47456,34 +47454,34 @@ ${suffix}`;
       const onRestored = () => {
         setReinitTick((t) => t + 1);
       };
-      canvas.addEventListener("webglcontextlost", onLost);
-      canvas.addEventListener("webglcontextrestored", onRestored);
+      if (canvas) {
+        canvas.addEventListener("webglcontextlost", onLost);
+        canvas.addEventListener("webglcontextrestored", onRestored);
+      }
       const onVis = () => {
         if (document.hidden) return;
-        setTimeout(() => {
-          if (!mapInst.current) return;
-          try {
-            const gl = mapInst.current.painter && mapInst.current.painter.context && mapInst.current.painter.context.gl;
-            if (gl && gl.isContextLost && gl.isContextLost()) {
-              setReinitTick((t) => t + 1);
-              return;
-            }
-            mapInst.current.resize();
-            mapInst.current.triggerRepaint();
-          } catch (_) {
-            setReinitTick((t) => t + 1);
-          }
-        }, 120);
-      };
-      document.addEventListener("visibilitychange", onVis);
-      return () => {
+        const m = mapInst.current;
+        if (!m) return;
         try {
-          canvas.removeEventListener("webglcontextlost", onLost);
+          m.resize();
         } catch (_) {
         }
         try {
-          canvas.removeEventListener("webglcontextrestored", onRestored);
+          m.triggerRepaint();
         } catch (_) {
+        }
+      };
+      document.addEventListener("visibilitychange", onVis);
+      return () => {
+        if (canvas) {
+          try {
+            canvas.removeEventListener("webglcontextlost", onLost);
+          } catch (_) {
+          }
+          try {
+            canvas.removeEventListener("webglcontextrestored", onRestored);
+          } catch (_) {
+          }
         }
         document.removeEventListener("visibilitychange", onVis);
       };
