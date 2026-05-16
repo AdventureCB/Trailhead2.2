@@ -47323,8 +47323,9 @@ ${suffix}`;
           if (cancelled) return;
           const polyPath = normPoints.length > 1 ? normPoints.map((p) => [p.lng, p.lat]) : normPins.length > 1 ? normPins.map((p) => [p.lng, p.lat]) : [];
           if (polyPath.length > 1 && !map.getSource("route-line")) {
-            const hasOffroad = Array.isArray(offroadRanges) && offroadRanges.length > 0 && normPoints.length > 1;
-            if (hasOffroad) {
+            const isPlan = Array.isArray(offroadRanges);
+            const hasOffroad = isPlan && offroadRanges.length > 0 && normPoints.length > 1;
+            if (isPlan) {
               map.addSource("route-line", { type: "geojson", data: { type: "Feature", geometry: { type: "LineString", coordinates: polyPath }, properties: {} } });
               map.addLayer({
                 id: "route-line-layer",
@@ -47333,19 +47334,21 @@ ${suffix}`;
                 layout: { "line-join": "round", "line-cap": "round" },
                 paint: { "line-color": T.copper, "line-width": 3, "line-opacity": 0.9 }
               });
-              const offroadFeatures = offroadRanges.map(([a, b]) => {
-                const slice = polyPath.slice(a, b + 1);
-                return slice.length >= 2 ? { type: "Feature", geometry: { type: "LineString", coordinates: slice }, properties: {} } : null;
-              }).filter(Boolean);
-              if (offroadFeatures.length > 0) {
-                map.addSource("route-line-offroad", { type: "geojson", data: { type: "FeatureCollection", features: offroadFeatures } });
-                map.addLayer({
-                  id: "route-line-offroad-layer",
-                  type: "line",
-                  source: "route-line-offroad",
-                  layout: { "line-join": "round", "line-cap": "round" },
-                  paint: { "line-color": T.red, "line-width": 3, "line-opacity": 0.95, "line-dasharray": [1, 1.4] }
-                });
+              if (hasOffroad) {
+                const offroadFeatures = offroadRanges.map(([a, b]) => {
+                  const slice = polyPath.slice(a, b + 1);
+                  return slice.length >= 2 ? { type: "Feature", geometry: { type: "LineString", coordinates: slice }, properties: {} } : null;
+                }).filter(Boolean);
+                if (offroadFeatures.length > 0) {
+                  map.addSource("route-line-offroad", { type: "geojson", data: { type: "FeatureCollection", features: offroadFeatures } });
+                  map.addLayer({
+                    id: "route-line-offroad-layer",
+                    type: "line",
+                    source: "route-line-offroad",
+                    layout: { "line-join": "round", "line-cap": "round" },
+                    paint: { "line-color": T.red, "line-width": 3, "line-opacity": 0.95, "line-dasharray": [1, 1.4] }
+                  });
+                }
               }
             } else {
               map.addSource("route-line", { type: "geojson", data: { type: "Feature", geometry: { type: "LineString", coordinates: polyPath }, properties: {} } });
