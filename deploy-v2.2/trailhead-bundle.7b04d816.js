@@ -45148,7 +45148,8 @@ ${suffix}`;
       next();
     }, style: { position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: `${T.charcoal}AA`, border: "none", borderRadius: "50%", width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 22, color: T.white })))), images.length > 1 && /* @__PURE__ */ import_react4.default.createElement("div", { onClick: (e) => e.stopPropagation(), style: { display: "flex", gap: 6, padding: "12px 16px", overflowX: "auto", maxWidth: 430, width: "100%" } }, images.map((img, i) => /* @__PURE__ */ import_react4.default.createElement("img", { key: i, src: img, alt: "", onClick: () => setIdx(i), style: { width: 48, height: 48, borderRadius: 6, objectFit: "cover", flexShrink: 0, cursor: "pointer", border: i === idx ? `2px solid ${T.copper}` : `2px solid transparent`, opacity: i === idx ? 1 : 0.5, transition: "opacity 0.15s, border 0.15s" } }))));
   }
-  function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShareCompose, onOpenShareIntent, onViewBuild, onOpenTripDetail, feedItems, onUpdateFeed, onUpdatePost, likedPostIds, onTogglePostLike, postComments, onAddComment, onDeleteComment, likedCommentIds, onToggleCommentLike, currentUserId, currentUserName, currentUserHandle, currentUserAvatar, onDeletePost, onEditPost, onAddNotification, forumUserReplies, forumViewCounts, savedRoutes, onSaveRoute, onUnsaveRoute, onStartNav, onStartDirections, onAwardPoints, isGuest, onGuestTap, pendingPostNav, onConsumePendingPostNav, onSharedPostMissing, convoyRsvps, onRsvpConvoy, onSearchUsers, filterFn, hideFilters, onlineUserIds, tripReports, tripAuthors, onNewTripReport, onOpenTripDraft, onOpenSpotOnMap, onOpenHQOnMap }) {
+  function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShareCompose, onOpenShareIntent, onViewBuild, onOpenTripDetail, feedItems, onUpdateFeed, onUpdatePost, likedPostIds, onTogglePostLike, postComments, onAddComment, onDeleteComment, likedCommentIds, onToggleCommentLike, currentUserId, currentUserName, currentUserHandle, currentUserAvatar, onDeletePost, onEditPost, onAddNotification, forumUserReplies, forumViewCounts, savedRoutes, onSaveRoute, onUnsaveRoute, onStartNav, onStartDirections, onAwardPoints, isGuest, onGuestTap, pendingPostNav, onConsumePendingPostNav, onSharedPostMissing, convoyRsvps, onRsvpConvoy, onSearchUsers, filterFn, hideFilters, onlineUserIds, tripReports, tripAuthors, onNewTripReport, onOpenTripDraft, onOpenSpotOnMap, onOpenHQOnMap, onLoadMore, hasMore, loadingMore }) {
+    const loadMoreSentinelRef = (0, import_react4.useRef)(null);
     const [activeFilter, setActiveFilter] = (0, import_react4.useState)("ALL");
     const filters = ["ALL", "BUILDS", "CONVOYS", "TRIP REPORTS", "PHOTOS", "FORUM"];
     const likedPosts = likedPostIds || {};
@@ -45269,6 +45270,26 @@ ${suffix}`;
     };
     const baseFiltered = activeFilter === "ALL" ? feedItems : feedItems.filter((p) => p.type === activeFilter);
     const filtered = typeof filterFn === "function" ? baseFiltered.filter(filterFn) : baseFiltered;
+    (0, import_react4.useEffect)(() => {
+      if (typeof onLoadMore !== "function") return;
+      if (!hasMore) return;
+      if (activeFilter !== "ALL") return;
+      if (typeof filterFn === "function") return;
+      const el = loadMoreSentinelRef.current;
+      if (!el || typeof IntersectionObserver === "undefined") return;
+      const obs = new IntersectionObserver((entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting) onLoadMore();
+        });
+      }, { rootMargin: "200px 0px" });
+      obs.observe(el);
+      return () => {
+        try {
+          obs.disconnect();
+        } catch (_) {
+        }
+      };
+    }, [onLoadMore, hasMore, activeFilter, filterFn]);
     const fmtLikes = (n) => n >= 1e3 ? (n / 1e3).toFixed(1) + "K" : n;
     const sendShareToUser = (recipientHandle, item) => {
       const firstImage = Array.isArray(item.photoUrls) ? item.photoUrls.find((p) => {
@@ -45646,7 +45667,7 @@ ${suffix}`;
           }
         }
       )))));
-    })() : /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "12px 16px 16px", display: "flex", flexDirection: "column", gap: 12 } }, filtered.length === 0 ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "40px 0", textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Compass, { size: 36, color: T.tertiary, strokeWidth: 0.8, style: { opacity: 0.3, marginBottom: 10 } }), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: sans, fontSize: 14, color: T.tertiary, margin: 0 } }, "No ", activeFilter.toLowerCase(), " posts yet")) : filtered.map((item) => /* @__PURE__ */ import_react4.default.createElement("div", { key: "w_" + item.id, id: "feed-post-" + item.id, style: { scrollMarginTop: 16, outline: highlightedPostId === item.id ? `2px solid ${T.copper}` : "none", outlineOffset: 2, borderRadius: 12, transition: "outline 0.3s ease" } }, renderCard(item)))));
+    })() : /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "12px 16px 16px", display: "flex", flexDirection: "column", gap: 12 } }, filtered.length === 0 ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "40px 0", textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Compass, { size: 36, color: T.tertiary, strokeWidth: 0.8, style: { opacity: 0.3, marginBottom: 10 } }), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: sans, fontSize: 14, color: T.tertiary, margin: 0 } }, "No ", activeFilter.toLowerCase(), " posts yet")) : filtered.map((item) => /* @__PURE__ */ import_react4.default.createElement("div", { key: "w_" + item.id, id: "feed-post-" + item.id, style: { scrollMarginTop: 16, outline: highlightedPostId === item.id ? `2px solid ${T.copper}` : "none", outlineOffset: 2, borderRadius: 12, transition: "outline 0.3s ease" } }, renderCard(item))), activeFilter === "ALL" && typeof filterFn !== "function" && hasMore && /* @__PURE__ */ import_react4.default.createElement("div", { ref: loadMoreSentinelRef, style: { padding: "20px 0 8px", textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.4, fontWeight: 600 } }, loadingMore ? "LOADING MORE\u2026" : "SCROLL FOR MORE"))));
   }
   var forumData = {
     categories: [
@@ -54302,10 +54323,17 @@ ${suffix}`;
         }
         let loadedPostIds = [];
         try {
-          const { data: postRows, error: postErr } = await supabase.from("posts").select("*").order("created_at", { ascending: false }).limit(100);
+          const { data: postRows, error: postErr } = await supabase.from("posts").select("*").order("created_at", { ascending: false }).limit(30);
           if (postErr) console.error("[hydrate] posts fetch error", postErr);
           if (Array.isArray(postRows)) {
             loadedPostIds = postRows.map((r) => r.id);
+            if (postRows.length === 30) {
+              const oldest = postRows[postRows.length - 1];
+              if (oldest && oldest.created_at) setFeedCursor(oldest.created_at);
+              setFeedHasMore(true);
+            } else {
+              setFeedHasMore(false);
+            }
             const authorIds = Array.from(new Set(postRows.map((r) => r.user_id).filter(Boolean)));
             const authorsById = {};
             if (profileRow) authorsById[uid] = profileRow;
@@ -54324,76 +54352,75 @@ ${suffix}`;
         } catch (e) {
           console.error("[hydrate] posts fetch failed", e);
         }
-        const postLikeCounts = {};
-        const postCommentCounts = {};
-        const commentLikeCounts = {};
         if (loadedPostIds.length > 0) {
-          try {
-            const { data: likeRows, error: likeErr } = await supabase.from("post_likes").select("post_id, user_id").in("post_id", loadedPostIds);
-            if (likeErr) console.error("[hydrate] post_likes fetch error", likeErr);
-            if (Array.isArray(likeRows)) {
-              const mine = {};
-              likeRows.forEach((r) => {
-                postLikeCounts[r.post_id] = (postLikeCounts[r.post_id] || 0) + 1;
-                if (r.user_id === uid) mine[r.post_id] = true;
-              });
-              setLikedPostIds(mine);
-            }
-          } catch (e) {
-            console.error("[hydrate] post_likes fetch failed", e);
-          }
-          try {
-            const { data: commentRows, error: commentErr } = await supabase.from("post_comments").select("*").in("post_id", loadedPostIds).order("created_at", { ascending: true });
-            if (commentErr) console.error("[hydrate] post_comments fetch error", commentErr);
-            if (Array.isArray(commentRows)) {
-              const commenterIds = Array.from(new Set(commentRows.map((r) => r.user_id)));
-              let profilesById = {};
-              if (commenterIds.length > 0) {
-                try {
-                  const { data: profs } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").in("id", commenterIds);
-                  if (Array.isArray(profs)) profs.forEach((p) => {
-                    profilesById[p.id] = p;
-                  });
-                } catch (e) {
-                }
+          (async () => {
+            const postLikeCounts = {};
+            const postCommentCounts = {};
+            const commentLikeCounts = {};
+            try {
+              const { data: likeRows } = await supabase.from("post_likes").select("post_id, user_id").in("post_id", loadedPostIds);
+              if (Array.isArray(likeRows)) {
+                const mine = {};
+                likeRows.forEach((r) => {
+                  postLikeCounts[r.post_id] = (postLikeCounts[r.post_id] || 0) + 1;
+                  if (r.user_id === uid) mine[r.post_id] = true;
+                });
+                setLikedPostIds(mine);
               }
-              const grouped = {};
-              commentRows.forEach((r) => {
-                if (!grouped[r.post_id]) grouped[r.post_id] = [];
-                postCommentCounts[r.post_id] = (postCommentCounts[r.post_id] || 0) + 1;
-              });
-              const commentIds = commentRows.map((r) => r.id);
-              let mineComments = {};
-              if (commentIds.length > 0) {
-                try {
-                  const { data: cLikeRows, error: cLikeErr } = await supabase.from("post_comment_likes").select("comment_id, user_id").in("comment_id", commentIds);
-                  if (cLikeErr) console.error("[hydrate] post_comment_likes fetch error", cLikeErr);
-                  if (Array.isArray(cLikeRows)) {
-                    cLikeRows.forEach((r) => {
-                      commentLikeCounts[r.comment_id] = (commentLikeCounts[r.comment_id] || 0) + 1;
-                      if (r.user_id === uid) mineComments[r.comment_id] = true;
+            } catch (e) {
+              console.error("[hydrate] post_likes deferred fetch failed", e);
+            }
+            try {
+              const { data: commentRows } = await supabase.from("post_comments").select("*").in("post_id", loadedPostIds).order("created_at", { ascending: true });
+              if (Array.isArray(commentRows)) {
+                const commenterIds = Array.from(new Set(commentRows.map((r) => r.user_id)));
+                let profilesById = {};
+                if (commenterIds.length > 0) {
+                  try {
+                    const { data: profs } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").in("id", commenterIds);
+                    if (Array.isArray(profs)) profs.forEach((p) => {
+                      profilesById[p.id] = p;
                     });
-                    setLikedCommentIds(mineComments);
+                  } catch (e) {
                   }
-                } catch (e) {
-                  console.error("[hydrate] post_comment_likes failed", e);
                 }
+                const grouped = {};
+                commentRows.forEach((r) => {
+                  if (!grouped[r.post_id]) grouped[r.post_id] = [];
+                  postCommentCounts[r.post_id] = (postCommentCounts[r.post_id] || 0) + 1;
+                });
+                const commentIds = commentRows.map((r) => r.id);
+                let mineComments = {};
+                if (commentIds.length > 0) {
+                  try {
+                    const { data: cLikeRows } = await supabase.from("post_comment_likes").select("comment_id, user_id").in("comment_id", commentIds);
+                    if (Array.isArray(cLikeRows)) {
+                      cLikeRows.forEach((r) => {
+                        commentLikeCounts[r.comment_id] = (commentLikeCounts[r.comment_id] || 0) + 1;
+                        if (r.user_id === uid) mineComments[r.comment_id] = true;
+                      });
+                      setLikedCommentIds(mineComments);
+                    }
+                  } catch (e) {
+                    console.error("[hydrate] post_comment_likes deferred failed", e);
+                  }
+                }
+                commentRows.forEach((r) => {
+                  const c = dbRowToComment(r, profilesById[r.user_id]);
+                  if (c) c.likes = commentLikeCounts[r.id] || 0;
+                  grouped[r.post_id].push(c);
+                });
+                setPostComments(grouped);
               }
-              commentRows.forEach((r) => {
-                const c = dbRowToComment(r, profilesById[r.user_id]);
-                if (c) c.likes = commentLikeCounts[r.id] || 0;
-                grouped[r.post_id].push(c);
-              });
-              setPostComments(grouped);
+            } catch (e) {
+              console.error("[hydrate] post_comments deferred fetch failed", e);
             }
-          } catch (e) {
-            console.error("[hydrate] post_comments fetch failed", e);
-          }
-          setFeedItems((prev) => prev.map((p) => ({
-            ...p,
-            likes: postLikeCounts[p.id] != null ? postLikeCounts[p.id] : p.likes || 0,
-            comments: postCommentCounts[p.id] != null ? postCommentCounts[p.id] : p.comments || 0
-          })));
+            setFeedItems((prev) => prev.map((p) => ({
+              ...p,
+              likes: postLikeCounts[p.id] != null ? postLikeCounts[p.id] : p.likes || 0,
+              comments: postCommentCounts[p.id] != null ? postCommentCounts[p.id] : p.comments || 0
+            })));
+          })();
         }
         try {
           const { data: notifRows, error: notifErr } = await supabase.from("notifications").select("*").eq("user_id", uid).order("created_at", { ascending: false }).limit(50);
@@ -54591,6 +54618,8 @@ ${suffix}`;
         if (event === "SIGNED_OUT") {
           hydratedForUidRef.current = null;
           allBuildsLoadedRef.current = false;
+          setFeedCursor(null);
+          setFeedHasMore(false);
           setCurrentProfile(null);
           setUserBuilds([]);
           setAllBuilds([]);
@@ -55263,6 +55292,68 @@ ${suffix}`;
     (0, import_react4.useEffect)(() => {
       feedItemsRef.current = feedItems;
     }, [feedItems]);
+    const [feedCursor, setFeedCursor] = (0, import_react4.useState)(null);
+    const [feedHasMore, setFeedHasMore] = (0, import_react4.useState)(false);
+    const [feedLoadingMore, setFeedLoadingMore] = (0, import_react4.useState)(false);
+    const loadMoreFeed = async () => {
+      if (feedLoadingMore || !feedHasMore || !feedCursor) return;
+      setFeedLoadingMore(true);
+      try {
+        const { data: olderRows, error: olderErr } = await supabase.from("posts").select("*").lt("created_at", feedCursor).order("created_at", { ascending: false }).limit(30);
+        if (olderErr) {
+          console.error("[feed] loadMore error", olderErr);
+          return;
+        }
+        if (!Array.isArray(olderRows) || olderRows.length === 0) {
+          setFeedHasMore(false);
+          return;
+        }
+        const myUid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+        const authorIds = Array.from(new Set(olderRows.map((r) => r.user_id).filter(Boolean)));
+        const authorsById = {};
+        if (currentProfile && myUid) authorsById[myUid] = currentProfile;
+        const otherAuthorIds = authorIds.filter((id) => id !== myUid);
+        if (otherAuthorIds.length > 0) {
+          try {
+            const { data: authorProfs } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").in("id", otherAuthorIds);
+            if (Array.isArray(authorProfs)) authorProfs.forEach((p) => {
+              authorsById[p.id] = p;
+            });
+          } catch (e) {
+          }
+        }
+        const mapped = olderRows.map((r) => dbRowToFeedItem(r, authorsById[r.user_id] || null));
+        setFeedItems((prev) => {
+          const seen = new Set(prev.map((p) => p.id));
+          const additions = mapped.filter((m) => !seen.has(m.id));
+          return [...prev, ...additions];
+        });
+        const oldest = olderRows[olderRows.length - 1];
+        if (oldest && oldest.created_at) setFeedCursor(oldest.created_at);
+        if (olderRows.length < 30) setFeedHasMore(false);
+        const newIds = olderRows.map((r) => r.id);
+        (async () => {
+          try {
+            const { data: likeRows } = await supabase.from("post_likes").select("post_id, user_id").in("post_id", newIds);
+            if (Array.isArray(likeRows)) {
+              const counts = {};
+              const mine = {};
+              likeRows.forEach((r) => {
+                counts[r.post_id] = (counts[r.post_id] || 0) + 1;
+                if (myUid && r.user_id === myUid) mine[r.post_id] = true;
+              });
+              setLikedPostIds((prev) => ({ ...prev, ...mine }));
+              setFeedItems((prev) => prev.map((p) => counts[p.id] != null ? { ...p, likes: counts[p.id] } : p));
+            }
+          } catch (e) {
+          }
+        })();
+      } catch (e) {
+        console.error("[feed] loadMore failed", e);
+      } finally {
+        setFeedLoadingMore(false);
+      }
+    };
     const [likedPostIds, setLikedPostIds] = (0, import_react4.useState)({});
     const [postComments, setPostComments] = (0, import_react4.useState)({});
     const [likedCommentIds, setLikedCommentIds] = (0, import_react4.useState)({});
@@ -57801,7 +57892,10 @@ ${suffix}`;
         onOpenShareIntent: openShareIntent,
         onAwardPoints: awardPoints,
         filterFn,
-        hideFilters
+        hideFilters,
+        onLoadMore: loadMoreFeed,
+        hasMore: feedHasMore,
+        loadingMore: feedLoadingMore
       }
     );
     return /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.charcoal, height: "100vh", maxWidth: 430, margin: "0 auto", position: "relative", fontFamily: sans, color: T.white, display: "flex", flexDirection: "column", overflow: "hidden" } }, isIosNotInstalled && !iosHintDismissed && authState === "app" && !isGuest && /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: `${T.copper}20`, borderBottom: `1px solid ${T.copper}40`, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(Bell, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { flex: 1, fontFamily: serif, fontSize: 11, color: T.warmStone, lineHeight: 1.4 } }, "For push notifications, tap ", /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 11, color: T.copper, style: { verticalAlign: "middle", margin: "0 2px" } }), ' in Safari and "Add to Home Screen".'), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: dismissIosHint, style: { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 12, color: T.tertiary }))), /* @__PURE__ */ import_react4.default.createElement(
