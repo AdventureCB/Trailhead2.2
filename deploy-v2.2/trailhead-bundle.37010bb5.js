@@ -49287,10 +49287,9 @@ ${suffix}`;
       },
       /* @__PURE__ */ import_react4.default.createElement(Users, { size: 13, color: T.white }),
       /* @__PURE__ */ import_react4.default.createElement("span", null, "PLAN A CONVOY FOR THIS TRIP")
-    )))), pins.length > 0 && (canEditInline || pins.some((p) => p && p.note && p.note.trim())) && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 8 } }, "PIN NOTES", canEditInline ? " \u2014 TAP TO EDIT" : ""), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8 } }, pins.map((p, i) => {
+    )))), pins.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 8 } }, isPlan ? "PIN NOTES" : "ROUTE PINS", canEditInline ? " \u2014 TAP TO EDIT" : ""), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8 } }, pins.map((p, i) => {
       if (!p) return null;
       const hasNote = p.note && p.note.trim();
-      if (!canEditInline && !hasNote) return null;
       const isCamp = p.planType === "camp";
       const label = i === 0 && !isCamp ? "Trailhead" : p.label || (i === pins.length - 1 ? "End" : `Pin ${i + 1}`);
       const dotColor = isCamp ? "#5B8C5A" : i === 0 ? T.green : i === pins.length - 1 ? T.red : T.copper;
@@ -49323,7 +49322,7 @@ ${suffix}`;
           onFocus: (e) => e.target.style.borderColor = T.copper,
           onBlurCapture: (e) => e.target.style.borderColor = T.charcoal
         }
-      ) : /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.warmStone, margin: 0, lineHeight: 1.5 } }, p.note)));
+      ) : hasNote ? /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.warmStone, margin: 0, lineHeight: 1.5 } }, p.note) : null));
     }))), photos.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 8 } }, "PHOTOS"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 } }, photos.map((p, i) => {
       const url = typeof p === "string" ? p : p && p.url || "";
       return /* @__PURE__ */ import_react4.default.createElement("div", { key: i, style: { width: "100%", aspectRatio: "1 / 1", borderRadius: 8, overflow: "hidden", border: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("img", { src: url, alt: "", style: { width: "100%", height: "100%", objectFit: "cover", display: "block" } }));
