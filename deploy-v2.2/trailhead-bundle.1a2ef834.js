@@ -54220,9 +54220,12 @@ ${suffix}`;
         console.warn("[guest-hydrate] trip_reports fetch failed", e);
       }
     };
+    const hydratedForUidRef = (0, import_react4.useRef)(null);
     const hydrateUserData = async (session) => {
       if (!session || !session.user || !session.user.id) return;
       const uid = session.user.id;
+      if (hydratedForUidRef.current === uid) return;
+      hydratedForUidRef.current = uid;
       try {
         const { data: profileRow, error: profErr } = await supabase.from("profiles").select("*").eq("id", uid).maybeSingle();
         if (profErr) console.error("[hydrate] profiles fetch error", profErr);
@@ -54593,6 +54596,7 @@ ${suffix}`;
           if (hasHandle) hydrateUserData(session);
         }
         if (event === "SIGNED_OUT") {
+          hydratedForUidRef.current = null;
           setCurrentProfile(null);
           setUserBuilds([]);
           setAllBuilds([]);
