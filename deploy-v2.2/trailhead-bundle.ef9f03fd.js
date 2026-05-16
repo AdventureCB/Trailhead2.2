@@ -55030,12 +55030,9 @@ ${suffix}`;
           arr.splice(insertAt, 0, next);
           return arr;
         }
-        if (planBuilderEndAnchorId) {
-          const anchorIdx = arr.findIndex((p) => p.id === planBuilderEndAnchorId);
-          if (anchorIdx >= 0) {
-            arr.splice(anchorIdx, 0, next);
-            return arr;
-          }
+        if (planBuilderEndAnchorId && arr.some((p) => p.id === planBuilderEndAnchorId)) {
+          arr.unshift(next);
+          return arr;
         }
         arr.push(next);
         return arr;
