@@ -54253,293 +54253,210 @@ ${suffix}`;
       const uid = session.user.id;
       if (hydratedForUidRef.current === uid) return;
       hydratedForUidRef.current = uid;
+      let profileRow = null;
+      let postRows = [];
       try {
-        const { data: profileRow, error: profErr } = await supabase.from("profiles").select("*").eq("id", uid).maybeSingle();
-        if (profErr) console.error("[hydrate] profiles fetch error", profErr);
-        console.log("[hydrate] profile row", profileRow);
-        if (profileRow) setCurrentProfile(profileRow);
-        const { data: ownBuildRows, error: ownBuildErr } = await supabase.from("builds").select("*").eq("user_id", uid).order("created_at", { ascending: false });
-        if (ownBuildErr) console.error("[hydrate] own builds fetch error", ownBuildErr);
-        if (Array.isArray(ownBuildRows)) {
-          const own = ownBuildRows.map((r) => dbRowToLocalBuild(r, profileRow)).filter(Boolean);
-          setUserBuilds(own);
-          setAllBuilds(own);
-          const ownBuildIds = own.map((b) => b.id).filter((id) => typeof id === "string");
-          if (ownBuildIds.length > 0) {
-            supabase.from("build_likes").select("build_id, user_id").in("build_id", ownBuildIds).then(({ data: blRows, error: blErr }) => {
-              if (blErr) {
-                console.error("[hydrate] build_likes fetch error", blErr);
-                return;
-              }
-              if (!Array.isArray(blRows)) return;
-              const counts = {};
+        const [profRes, postsRes] = await Promise.all([
+          supabase.from("profiles").select("*").eq("id", uid).maybeSingle(),
+          supabase.from("posts").select("*").order("created_at", { ascending: false }).limit(30)
+        ]);
+        if (profRes.error) console.error("[hydrate] profiles fetch error", profRes.error);
+        profileRow = profRes.data || null;
+        if (profileRow) {
+          setCurrentProfile(profileRow);
+          if (profileRow.avatar_url) setProfilePic((prev) => prev || profileRow.avatar_url);
+        }
+        if (postsRes.error) console.error("[hydrate] posts fetch error", postsRes.error);
+        postRows = Array.isArray(postsRes.data) ? postsRes.data : [];
+      } catch (e) {
+        console.error("[hydrate] tier1 failed", e);
+      }
+      const loadedPostIds = postRows.map((r) => r.id);
+      if (postRows.length > 0) {
+        const authorIds = Array.from(new Set(postRows.map((r) => r.user_id).filter(Boolean)));
+        const authorsById = {};
+        if (profileRow) authorsById[uid] = profileRow;
+        const otherAuthorIds = authorIds.filter((id) => id !== uid);
+        if (otherAuthorIds.length > 0) {
+          try {
+            const { data: authorProfs } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").in("id", otherAuthorIds);
+            if (Array.isArray(authorProfs)) authorProfs.forEach((p) => {
+              authorsById[p.id] = p;
+            });
+          } catch (e) {
+          }
+        }
+        setFeedItems(postRows.map((r) => dbRowToFeedItem(r, authorsById[r.user_id] || null)));
+        if (postRows.length === 30) {
+          const oldest = postRows[postRows.length - 1];
+          if (oldest && oldest.created_at) setFeedCursor(oldest.created_at);
+          setFeedHasMore(true);
+        } else {
+          setFeedHasMore(false);
+        }
+      }
+      setAppReady(true);
+      loadAllBuildsOnce();
+      supabase.from("builds").select("*").eq("user_id", uid).order("created_at", { ascending: false }).then(({ data: ownBuildRows, error: ownBuildErr }) => {
+        if (ownBuildErr) {
+          console.error("[hydrate] own builds fetch error", ownBuildErr);
+          return;
+        }
+        if (!Array.isArray(ownBuildRows)) return;
+        const own = ownBuildRows.map((r) => dbRowToLocalBuild(r, profileRow)).filter(Boolean);
+        setUserBuilds(own);
+        setAllBuilds((prev) => {
+          const byId = {};
+          own.forEach((b) => {
+            byId[b.id] = b;
+          });
+          prev.forEach((b) => {
+            byId[b.id] = b;
+          });
+          return Object.values(byId);
+        });
+        const ownBuildIds = own.map((b) => b.id).filter((id) => typeof id === "string");
+        if (ownBuildIds.length > 0) {
+          supabase.from("build_likes").select("build_id, user_id").in("build_id", ownBuildIds).then(({ data: blRows, error: blErr }) => {
+            if (blErr || !Array.isArray(blRows)) return;
+            const counts = {}, mine = {};
+            blRows.forEach((r) => {
+              counts[r.build_id] = (counts[r.build_id] || 0) + 1;
+              if (r.user_id === uid) mine[r.build_id] = true;
+            });
+            setBuildLikeCounts((prev) => ({ ...prev, ...counts }));
+            setLikedBuildIds((prev) => ({ ...prev, ...mine }));
+          });
+        }
+      });
+      supabase.from("camping_spots").select("id, name, lat, lng, spot_type, fee, source, source_id, description, photo_url, visibility, user_id").eq("user_id", uid).order("created_at", { ascending: false }).limit(500).then(({ data: csRows, error: csErr }) => {
+        if (csErr) {
+          console.error("[hydrate] camping_spots fetch error", csErr);
+          return;
+        }
+        if (Array.isArray(csRows)) setUserCampingSpots(csRows);
+      });
+      supabase.from("trip_reports").select("id, user_id, slug, name, description, status, kind, visibility, planned_start, planned_end, party_size, checklist, promoted_to_trip_id, start_lat, start_lng, start_label, end_lat, end_lng, route_geom, hero_img, distance_mi, duration_min, elev_gain_ft, max_elev_ft, difficulty, region, state_code, terrains, tags, view_count, like_count, comment_count, published_at, created_at, updated_at").order("created_at", { ascending: false }).limit(500).then(({ data: trRows, error: trErr }) => {
+        if (trErr) {
+          console.error("[hydrate] trip_reports fetch error", trErr);
+          return;
+        }
+        if (!Array.isArray(trRows)) return;
+        setTripReports(trRows);
+        const tripIds = trRows.map((t) => t.id).filter((id) => typeof id === "string");
+        if (tripIds.length === 0) return;
+        supabase.from("trip_report_likes").select("trip_id, user_id").in("trip_id", tripIds).then(({ data: tlRows, error: tlErr }) => {
+          if (tlErr || !Array.isArray(tlRows)) return;
+          const counts = {}, mine = {};
+          tlRows.forEach((r) => {
+            counts[r.trip_id] = (counts[r.trip_id] || 0) + 1;
+            if (r.user_id === uid) mine[r.trip_id] = true;
+          });
+          setTripLikeCounts(counts);
+          setLikedTripIds(mine);
+        });
+      });
+      supabase.from("notifications").select("*").eq("user_id", uid).order("created_at", { ascending: false }).limit(50).then(({ data: notifRows, error: notifErr }) => {
+        if (notifErr) {
+          console.error("[hydrate] notifications fetch error", notifErr);
+          return;
+        }
+        if (Array.isArray(notifRows)) setBellNotifs(notifRows.map(dbNotifToBell).filter(Boolean));
+      });
+      Promise.all([
+        supabase.from("follows").select("following_id").eq("follower_id", uid),
+        supabase.from("follows").select("*", { count: "exact", head: true }).eq("following_id", uid)
+      ]).then(([outRes, fcRes]) => {
+        if (outRes.error) console.error("[hydrate] follows out fetch error", outRes.error);
+        if (fcRes.error) console.error("[hydrate] follower count fetch error", fcRes.error);
+        if (Array.isArray(outRes.data)) {
+          setFollowingIds(new Set(outRes.data.map((r) => r.following_id)));
+          setMyFollowingCount(outRes.data.length);
+        }
+        if (typeof fcRes.count === "number") setMyFollowerCount(fcRes.count);
+      }).catch((e) => console.error("[hydrate] follows fetch failed", e));
+      if (loadedPostIds.length > 0) {
+        (async () => {
+          const postLikeCounts = {};
+          const postCommentCounts = {};
+          const commentLikeCounts = {};
+          try {
+            const { data: likeRows } = await supabase.from("post_likes").select("post_id, user_id").in("post_id", loadedPostIds);
+            if (Array.isArray(likeRows)) {
               const mine = {};
-              blRows.forEach((r) => {
-                counts[r.build_id] = (counts[r.build_id] || 0) + 1;
-                if (r.user_id === uid) mine[r.build_id] = true;
+              likeRows.forEach((r) => {
+                postLikeCounts[r.post_id] = (postLikeCounts[r.post_id] || 0) + 1;
+                if (r.user_id === uid) mine[r.post_id] = true;
               });
-              setBuildLikeCounts((prev) => ({ ...prev, ...counts }));
-              setLikedBuildIds((prev) => ({ ...prev, ...mine }));
-            });
+              setLikedPostIds(mine);
+            }
+          } catch (e) {
+            console.error("[hydrate] post_likes deferred fetch failed", e);
           }
-        }
-        supabase.from("camping_spots").select("id, name, lat, lng, spot_type, fee, source, source_id, description, photo_url, visibility, user_id").eq("user_id", uid).order("created_at", { ascending: false }).limit(500).then(({ data: csRows, error: csErr }) => {
-          if (csErr) {
-            console.error("[hydrate] camping_spots fetch error", csErr);
-            return;
-          }
-          if (Array.isArray(csRows)) setUserCampingSpots(csRows);
-        });
-        supabase.from("trip_reports").select("id, user_id, slug, name, description, status, kind, visibility, planned_start, planned_end, party_size, checklist, promoted_to_trip_id, start_lat, start_lng, start_label, end_lat, end_lng, route_geom, hero_img, distance_mi, duration_min, elev_gain_ft, max_elev_ft, difficulty, region, state_code, terrains, tags, view_count, like_count, comment_count, published_at, created_at, updated_at").order("created_at", { ascending: false }).limit(500).then(({ data: trRows, error: trErr }) => {
-          if (trErr) {
-            console.error("[hydrate] trip_reports fetch error", trErr);
-            return;
-          }
-          if (Array.isArray(trRows)) {
-            setTripReports(trRows);
-            const tripIds = trRows.map((t) => t.id).filter((id) => typeof id === "string");
-            if (tripIds.length > 0) {
-              supabase.from("trip_report_likes").select("trip_id, user_id").in("trip_id", tripIds).then(({ data: tlRows, error: tlErr }) => {
-                if (tlErr) {
-                  console.error("[hydrate] trip_report_likes fetch error", tlErr);
-                  return;
+          try {
+            const { data: commentRows } = await supabase.from("post_comments").select("*").in("post_id", loadedPostIds).order("created_at", { ascending: true });
+            if (Array.isArray(commentRows)) {
+              const commenterIds = Array.from(new Set(commentRows.map((r) => r.user_id)));
+              let profilesById = {};
+              if (commenterIds.length > 0) {
+                try {
+                  const { data: profs } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").in("id", commenterIds);
+                  if (Array.isArray(profs)) profs.forEach((p) => {
+                    profilesById[p.id] = p;
+                  });
+                } catch (e) {
                 }
-                if (!Array.isArray(tlRows)) return;
-                const counts = {};
-                const mine = {};
-                tlRows.forEach((r) => {
-                  counts[r.trip_id] = (counts[r.trip_id] || 0) + 1;
-                  if (r.user_id === uid) mine[r.trip_id] = true;
-                });
-                setTripLikeCounts(counts);
-                setLikedTripIds(mine);
+              }
+              const grouped = {};
+              commentRows.forEach((r) => {
+                if (!grouped[r.post_id]) grouped[r.post_id] = [];
+                postCommentCounts[r.post_id] = (postCommentCounts[r.post_id] || 0) + 1;
               });
-            }
-          }
-        });
-        if (profileRow && profileRow.avatar_url) {
-          console.log("[hydrate] setting profilePic from avatar_url", profileRow.avatar_url);
-          setProfilePic((prev) => prev || profileRow.avatar_url);
-        }
-        let loadedPostIds = [];
-        try {
-          const { data: postRows, error: postErr } = await supabase.from("posts").select("*").order("created_at", { ascending: false }).limit(30);
-          if (postErr) console.error("[hydrate] posts fetch error", postErr);
-          if (Array.isArray(postRows)) {
-            loadedPostIds = postRows.map((r) => r.id);
-            if (postRows.length === 30) {
-              const oldest = postRows[postRows.length - 1];
-              if (oldest && oldest.created_at) setFeedCursor(oldest.created_at);
-              setFeedHasMore(true);
-            } else {
-              setFeedHasMore(false);
-            }
-            const authorIds = Array.from(new Set(postRows.map((r) => r.user_id).filter(Boolean)));
-            const authorsById = {};
-            if (profileRow) authorsById[uid] = profileRow;
-            const otherAuthorIds = authorIds.filter((id) => id !== uid);
-            if (otherAuthorIds.length > 0) {
-              try {
-                const { data: authorProfs } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").in("id", otherAuthorIds);
-                if (Array.isArray(authorProfs)) authorProfs.forEach((p) => {
-                  authorsById[p.id] = p;
-                });
-              } catch (e) {
-              }
-            }
-            setFeedItems(postRows.map((r) => dbRowToFeedItem(r, authorsById[r.user_id] || null)));
-          }
-        } catch (e) {
-          console.error("[hydrate] posts fetch failed", e);
-        }
-        if (loadedPostIds.length > 0) {
-          (async () => {
-            const postLikeCounts = {};
-            const postCommentCounts = {};
-            const commentLikeCounts = {};
-            try {
-              const { data: likeRows } = await supabase.from("post_likes").select("post_id, user_id").in("post_id", loadedPostIds);
-              if (Array.isArray(likeRows)) {
-                const mine = {};
-                likeRows.forEach((r) => {
-                  postLikeCounts[r.post_id] = (postLikeCounts[r.post_id] || 0) + 1;
-                  if (r.user_id === uid) mine[r.post_id] = true;
-                });
-                setLikedPostIds(mine);
-              }
-            } catch (e) {
-              console.error("[hydrate] post_likes deferred fetch failed", e);
-            }
-            try {
-              const { data: commentRows } = await supabase.from("post_comments").select("*").in("post_id", loadedPostIds).order("created_at", { ascending: true });
-              if (Array.isArray(commentRows)) {
-                const commenterIds = Array.from(new Set(commentRows.map((r) => r.user_id)));
-                let profilesById = {};
-                if (commenterIds.length > 0) {
-                  try {
-                    const { data: profs } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").in("id", commenterIds);
-                    if (Array.isArray(profs)) profs.forEach((p) => {
-                      profilesById[p.id] = p;
+              const commentIds = commentRows.map((r) => r.id);
+              let mineComments = {};
+              if (commentIds.length > 0) {
+                try {
+                  const { data: cLikeRows } = await supabase.from("post_comment_likes").select("comment_id, user_id").in("comment_id", commentIds);
+                  if (Array.isArray(cLikeRows)) {
+                    cLikeRows.forEach((r) => {
+                      commentLikeCounts[r.comment_id] = (commentLikeCounts[r.comment_id] || 0) + 1;
+                      if (r.user_id === uid) mineComments[r.comment_id] = true;
                     });
-                  } catch (e) {
+                    setLikedCommentIds(mineComments);
                   }
+                } catch (e) {
+                  console.error("[hydrate] post_comment_likes deferred failed", e);
                 }
-                const grouped = {};
-                commentRows.forEach((r) => {
-                  if (!grouped[r.post_id]) grouped[r.post_id] = [];
-                  postCommentCounts[r.post_id] = (postCommentCounts[r.post_id] || 0) + 1;
-                });
-                const commentIds = commentRows.map((r) => r.id);
-                let mineComments = {};
-                if (commentIds.length > 0) {
-                  try {
-                    const { data: cLikeRows } = await supabase.from("post_comment_likes").select("comment_id, user_id").in("comment_id", commentIds);
-                    if (Array.isArray(cLikeRows)) {
-                      cLikeRows.forEach((r) => {
-                        commentLikeCounts[r.comment_id] = (commentLikeCounts[r.comment_id] || 0) + 1;
-                        if (r.user_id === uid) mineComments[r.comment_id] = true;
-                      });
-                      setLikedCommentIds(mineComments);
-                    }
-                  } catch (e) {
-                    console.error("[hydrate] post_comment_likes deferred failed", e);
-                  }
-                }
-                commentRows.forEach((r) => {
-                  const c = dbRowToComment(r, profilesById[r.user_id]);
-                  if (c) c.likes = commentLikeCounts[r.id] || 0;
-                  grouped[r.post_id].push(c);
-                });
-                setPostComments(grouped);
               }
-            } catch (e) {
-              console.error("[hydrate] post_comments deferred fetch failed", e);
-            }
-            setFeedItems((prev) => prev.map((p) => ({
-              ...p,
-              likes: postLikeCounts[p.id] != null ? postLikeCounts[p.id] : p.likes || 0,
-              comments: postCommentCounts[p.id] != null ? postCommentCounts[p.id] : p.comments || 0
-            })));
-          })();
-        }
-        try {
-          const { data: notifRows, error: notifErr } = await supabase.from("notifications").select("*").eq("user_id", uid).order("created_at", { ascending: false }).limit(50);
-          if (notifErr) console.error("[hydrate] notifications fetch error", notifErr);
-          if (Array.isArray(notifRows)) {
-            setBellNotifs(notifRows.map(dbNotifToBell).filter(Boolean));
-          }
-        } catch (e) {
-          console.error("[hydrate] notifications fetch failed", e);
-        }
-        try {
-          const { data: myParts, error: mpErr } = await supabase.from("dm_participants").select("*").eq("user_id", uid).is("hidden_at", null);
-          if (mpErr) console.error("[hydrate] dm_participants self fetch error", mpErr);
-          const myConvIds = Array.isArray(myParts) ? myParts.map((p) => p.conversation_id) : [];
-          if (myConvIds.length > 0) {
-            const lastReadByConv = {};
-            (myParts || []).forEach((p) => {
-              lastReadByConv[p.conversation_id] = p.last_read_at;
-            });
-            const [{ data: convRows, error: cErr }, { data: partRows, error: pErr }] = await Promise.all([
-              supabase.from("dm_conversations").select("*").in("id", myConvIds).order("updated_at", { ascending: false }),
-              supabase.from("dm_participants").select("*").in("conversation_id", myConvIds)
-            ]);
-            if (cErr) console.error("[hydrate] dm_conversations fetch error", cErr);
-            if (pErr) console.error("[hydrate] dm_participants fetch error", pErr);
-            const allUserIds = Array.from(new Set((partRows || []).map((p) => p.user_id)));
-            const profByUid = {};
-            if (allUserIds.length > 0) {
-              try {
-                const { data: profs } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").in("id", allUserIds);
-                if (Array.isArray(profs)) profs.forEach((p) => {
-                  profByUid[p.id] = p;
-                });
-              } catch (e) {
-              }
-            }
-            const partsByConv = {};
-            (partRows || []).forEach((p) => {
-              if (!partsByConv[p.conversation_id]) partsByConv[p.conversation_id] = [];
-              const prof = profByUid[p.user_id] || {};
-              const name = prof.full_name || "User";
-              partsByConv[p.conversation_id].push({
-                userId: p.user_id,
-                fullName: name,
-                handle: prof.handle || "",
-                avatarUrl: prof.avatar_url || null,
-                initial: name.charAt(0).toUpperCase(),
-                lastReadAt: p.last_read_at || null
+              commentRows.forEach((r) => {
+                const c = dbRowToComment(r, profilesById[r.user_id]);
+                if (c) c.likes = commentLikeCounts[r.id] || 0;
+                grouped[r.post_id].push(c);
               });
-            });
-            let lastMsgByConv = {};
-            let unreadByConv = {};
-            try {
-              const { data: msgRows } = await supabase.from("dm_messages").select("id, conversation_id, sender_id, body, payload, created_at").in("conversation_id", myConvIds).order("created_at", { ascending: false }).limit(myConvIds.length * 50);
-              if (Array.isArray(msgRows)) {
-                msgRows.forEach((m) => {
-                  if (!lastMsgByConv[m.conversation_id]) lastMsgByConv[m.conversation_id] = m;
-                  const lr = lastReadByConv[m.conversation_id];
-                  if (m.sender_id !== uid && (!lr || m.created_at > lr)) {
-                    unreadByConv[m.conversation_id] = (unreadByConv[m.conversation_id] || 0) + 1;
-                  }
-                });
-              }
-            } catch (e) {
-              console.error("[hydrate] dm last-message fetch failed", e);
+              setPostComments(grouped);
             }
-            const summaries = (convRows || []).map((c) => {
-              const participants = partsByConv[c.id] || [];
-              const others = participants.filter((p) => p.userId !== uid);
-              const lastM = lastMsgByConv[c.id];
-              const lastBody = lastM ? lastM.body || (lastM.payload && lastM.payload.kind ? `[${lastM.payload.kind}]` : "") : "";
-              let displayName, displayHandle, displayAvatar, displayInitial;
-              if (c.type === "direct") {
-                const other = others[0] || { fullName: "User", handle: "", avatarUrl: null, initial: "U" };
-                displayName = other.fullName;
-                displayHandle = other.handle;
-                displayAvatar = other.avatarUrl;
-                displayInitial = other.initial;
-              } else {
-                displayName = c.title || others.map((o) => o.fullName).join(", ") || "Group";
-                displayHandle = "";
-                displayAvatar = null;
-                displayInitial = (c.title || others[0] && others[0].fullName || "G").charAt(0).toUpperCase();
-              }
-              return {
-                id: c.id,
-                type: c.type,
-                title: c.title || null,
-                participants,
-                user: displayHandle,
-                // for backward-compat with @user header rendering
-                name: displayName,
-                initial: displayInitial,
-                avatarUrl: displayAvatar,
-                online: false,
-                unread: unreadByConv[c.id] || 0,
-                lastMessage: lastBody,
-                lastTime: lastM ? formatPostTime(new Date(lastM.created_at).getTime()) : "",
-                updatedAt: c.updated_at,
-                messages: [],
-                // lazy — loaded by loadDmMessages on open
-                messagesLoaded: false
-              };
-            });
-            setDmConvos(summaries);
-          } else {
-            setDmConvos([]);
+          } catch (e) {
+            console.error("[hydrate] post_comments deferred fetch failed", e);
           }
-        } catch (e) {
-          console.error("[hydrate] dm conversations failed", e);
-        }
-        try {
-          const convoyPostIds = Array.isArray(loadedPostIds) ? loadedPostIds.filter((pid) => true) : [];
-          if (convoyPostIds.length > 0) {
-            const { data: rsvpRows, error: rsvpErr } = await supabase.from("convoy_rsvps").select("*").in("post_id", convoyPostIds);
-            if (rsvpErr) console.error("[hydrate] convoy_rsvps fetch error", rsvpErr);
-            if (Array.isArray(rsvpRows) && rsvpRows.length > 0) {
-              const responderIds = Array.from(new Set(rsvpRows.map((r) => r.user_id)));
-              const profByUid = {};
+          setFeedItems((prev) => prev.map((p) => ({
+            ...p,
+            likes: postLikeCounts[p.id] != null ? postLikeCounts[p.id] : p.likes || 0,
+            comments: postCommentCounts[p.id] != null ? postCommentCounts[p.id] : p.comments || 0
+          })));
+        })();
+      }
+      if (loadedPostIds.length > 0) {
+        (async () => {
+          try {
+            const { data: rsvpRows, error: rsvpErr } = await supabase.from("convoy_rsvps").select("*").in("post_id", loadedPostIds);
+            if (rsvpErr) {
+              console.error("[hydrate] convoy_rsvps fetch error", rsvpErr);
+              return;
+            }
+            if (!Array.isArray(rsvpRows) || rsvpRows.length === 0) return;
+            const responderIds = Array.from(new Set(rsvpRows.map((r) => r.user_id)));
+            const profByUid = {};
+            if (responderIds.length > 0) {
               try {
                 const { data: profs } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").in("id", responderIds);
                 if (Array.isArray(profs)) profs.forEach((p) => {
@@ -54547,45 +54464,127 @@ ${suffix}`;
                 });
               } catch (e) {
               }
-              const grouped = {};
-              rsvpRows.forEach((r) => {
-                if (!grouped[r.post_id]) grouped[r.post_id] = {};
-                const prof = profByUid[r.user_id];
-                const name = prof && prof.full_name || "User";
-                grouped[r.post_id][r.user_id] = {
-                  status: r.status,
-                  name,
-                  handle: prof && prof.handle || "",
-                  avatarUrl: prof && prof.avatar_url || null,
-                  initial: name.charAt(0).toUpperCase()
-                };
+            }
+            const grouped = {};
+            rsvpRows.forEach((r) => {
+              if (!grouped[r.post_id]) grouped[r.post_id] = {};
+              const prof = profByUid[r.user_id];
+              const name = prof && prof.full_name || "User";
+              grouped[r.post_id][r.user_id] = {
+                status: r.status,
+                name,
+                handle: prof && prof.handle || "",
+                avatarUrl: prof && prof.avatar_url || null,
+                initial: name.charAt(0).toUpperCase()
+              };
+            });
+            setConvoyRsvps(grouped);
+          } catch (e) {
+            console.error("[hydrate] convoy_rsvps failed", e);
+          }
+        })();
+      }
+      (async () => {
+        try {
+          const { data: myParts, error: mpErr } = await supabase.from("dm_participants").select("*").eq("user_id", uid).is("hidden_at", null);
+          if (mpErr) console.error("[hydrate] dm_participants self fetch error", mpErr);
+          const myConvIds = Array.isArray(myParts) ? myParts.map((p) => p.conversation_id) : [];
+          if (myConvIds.length === 0) {
+            setDmConvos([]);
+            return;
+          }
+          const lastReadByConv = {};
+          (myParts || []).forEach((p) => {
+            lastReadByConv[p.conversation_id] = p.last_read_at;
+          });
+          const [convRes, partRes] = await Promise.all([
+            supabase.from("dm_conversations").select("*").in("id", myConvIds).order("updated_at", { ascending: false }),
+            supabase.from("dm_participants").select("*").in("conversation_id", myConvIds)
+          ]);
+          if (convRes.error) console.error("[hydrate] dm_conversations fetch error", convRes.error);
+          if (partRes.error) console.error("[hydrate] dm_participants fetch error", partRes.error);
+          const allUserIds = Array.from(new Set((partRes.data || []).map((p) => p.user_id)));
+          const profByUid = {};
+          if (allUserIds.length > 0) {
+            try {
+              const { data: profs } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").in("id", allUserIds);
+              if (Array.isArray(profs)) profs.forEach((p) => {
+                profByUid[p.id] = p;
               });
-              setConvoyRsvps(grouped);
+            } catch (e) {
             }
           }
-        } catch (e) {
-          console.error("[hydrate] convoy_rsvps failed", e);
-        }
-        try {
-          const [{ data: outRows, error: outErr }, { count: followerCount, error: fcErr }] = await Promise.all([
-            supabase.from("follows").select("following_id").eq("follower_id", uid),
-            supabase.from("follows").select("*", { count: "exact", head: true }).eq("following_id", uid)
-          ]);
-          if (outErr) console.error("[hydrate] follows out fetch error", outErr);
-          if (fcErr) console.error("[hydrate] follower count fetch error", fcErr);
-          if (Array.isArray(outRows)) {
-            setFollowingIds(new Set(outRows.map((r) => r.following_id)));
-            setMyFollowingCount(outRows.length);
+          const partsByConv = {};
+          (partRes.data || []).forEach((p) => {
+            if (!partsByConv[p.conversation_id]) partsByConv[p.conversation_id] = [];
+            const prof = profByUid[p.user_id] || {};
+            const name = prof.full_name || "User";
+            partsByConv[p.conversation_id].push({
+              userId: p.user_id,
+              fullName: name,
+              handle: prof.handle || "",
+              avatarUrl: prof.avatar_url || null,
+              initial: name.charAt(0).toUpperCase(),
+              lastReadAt: p.last_read_at || null
+            });
+          });
+          let lastMsgByConv = {};
+          let unreadByConv = {};
+          try {
+            const { data: msgRows } = await supabase.from("dm_messages").select("id, conversation_id, sender_id, body, payload, created_at").in("conversation_id", myConvIds).order("created_at", { ascending: false }).limit(myConvIds.length * 50);
+            if (Array.isArray(msgRows)) {
+              msgRows.forEach((m) => {
+                if (!lastMsgByConv[m.conversation_id]) lastMsgByConv[m.conversation_id] = m;
+                const lr = lastReadByConv[m.conversation_id];
+                if (m.sender_id !== uid && (!lr || m.created_at > lr)) {
+                  unreadByConv[m.conversation_id] = (unreadByConv[m.conversation_id] || 0) + 1;
+                }
+              });
+            }
+          } catch (e) {
+            console.error("[hydrate] dm last-message fetch failed", e);
           }
-          if (typeof followerCount === "number") setMyFollowerCount(followerCount);
+          const summaries = (convRes.data || []).map((c) => {
+            const participants = partsByConv[c.id] || [];
+            const others = participants.filter((p) => p.userId !== uid);
+            const lastM = lastMsgByConv[c.id];
+            const lastBody = lastM ? lastM.body || (lastM.payload && lastM.payload.kind ? `[${lastM.payload.kind}]` : "") : "";
+            let displayName, displayHandle, displayAvatar, displayInitial;
+            if (c.type === "direct") {
+              const other = others[0] || { fullName: "User", handle: "", avatarUrl: null, initial: "U" };
+              displayName = other.fullName;
+              displayHandle = other.handle;
+              displayAvatar = other.avatarUrl;
+              displayInitial = other.initial;
+            } else {
+              displayName = c.title || others.map((o) => o.fullName).join(", ") || "Group";
+              displayHandle = "";
+              displayAvatar = null;
+              displayInitial = (c.title || others[0] && others[0].fullName || "G").charAt(0).toUpperCase();
+            }
+            return {
+              id: c.id,
+              type: c.type,
+              title: c.title || null,
+              participants,
+              user: displayHandle,
+              name: displayName,
+              initial: displayInitial,
+              avatarUrl: displayAvatar,
+              online: false,
+              unread: unreadByConv[c.id] || 0,
+              lastMessage: lastBody,
+              lastTime: lastM ? formatPostTime(new Date(lastM.created_at).getTime()) : "",
+              updatedAt: c.updated_at,
+              messages: [],
+              messagesLoaded: false
+            };
+          });
+          setDmConvos(summaries);
         } catch (e) {
-          console.error("[hydrate] follows fetch failed", e);
+          console.error("[hydrate] dm conversations failed", e);
         }
-      } catch (e) {
-        console.error("[hydrate] failed", e);
-      } finally {
-        setAppReady(true);
-      }
+      })();
     };
     (0, import_react4.useEffect)(() => {
       let cancelled = false;
