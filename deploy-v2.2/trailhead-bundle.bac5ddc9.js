@@ -47458,17 +47458,27 @@ ${suffix}`;
         canvas.addEventListener("webglcontextlost", onLost);
         canvas.addEventListener("webglcontextrestored", onRestored);
       }
+      let hiddenAt = 0;
       const onVis = () => {
-        if (document.hidden) return;
-        const m = mapInst.current;
-        if (!m) return;
-        try {
-          m.resize();
-        } catch (_) {
+        if (document.hidden) {
+          hiddenAt = Date.now();
+          return;
         }
-        try {
-          m.triggerRepaint();
-        } catch (_) {
+        const hiddenFor = hiddenAt ? Date.now() - hiddenAt : 0;
+        hiddenAt = 0;
+        if (hiddenFor > 1500) {
+          setReinitTick((t) => t + 1);
+        } else {
+          const m = mapInst.current;
+          if (!m) return;
+          try {
+            m.resize();
+          } catch (_) {
+          }
+          try {
+            m.triggerRepaint();
+          } catch (_) {
+          }
         }
       };
       document.addEventListener("visibilitychange", onVis);
