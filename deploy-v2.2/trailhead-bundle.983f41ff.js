@@ -43082,6 +43082,18 @@ ${suffix}`;
       50% { transform: translateY(-10px); }
     }
     .th-marker-bounce { animation: th-marker-bounce 0.6s ease-in-out infinite; }
+    /* Highlight ring for tapped pin notes. Uses outline (no layout impact)
+       + box-shadow halo so the marker pulses in place without disturbing
+       Mapbox's own transform-based positioning. */
+    @keyframes th-marker-halo {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(189, 71, 42, 0.65); }
+      50% { box-shadow: 0 0 0 12px rgba(189, 71, 42, 0); }
+    }
+    .th-marker-highlight {
+      outline: 3px solid #BD472A;
+      outline-offset: 2px;
+      animation: th-marker-halo 1.3s ease-out infinite;
+    }
   `;
     document.head.appendChild(mbStyle);
   }
@@ -47540,25 +47552,17 @@ ${suffix}`;
       if (!ready || !mapInst.current) return;
       if (prevHighlightRef.current !== null) {
         const prev = markersRef.current.find((e) => e.pinIdx === prevHighlightRef.current);
-        if (prev) {
-          prev.el.classList.remove("th-marker-bounce");
-          applyMarkerStyle(prev.el, prev.baseStyle, prev.baseEmoji);
-        }
+        if (prev) prev.el.classList.remove("th-marker-highlight");
       }
       if (typeof highlightedPinIdx === "number" && highlightedPinIdx >= 0) {
         const entry = markersRef.current.find((e) => e.pinIdx === highlightedPinIdx);
         if (entry) {
-          const hi = { width: 28, height: 28, background: T.red, border: `3px solid ${T.white}`, borderRadius: "50%" };
-          applyMarkerStyle(entry.el, hi, entry.baseEmoji);
-          entry.el.classList.add("th-marker-bounce");
+          entry.el.classList.add("th-marker-highlight");
           const ll = entry.marker.getLngLat();
-          mapInst.current.panTo([ll.lng, ll.lat]);
-          setTimeout(() => {
-            try {
-              entry.el.classList.remove("th-marker-bounce");
-            } catch (_) {
-            }
-          }, 2e3);
+          try {
+            mapInst.current.panTo([ll.lng, ll.lat]);
+          } catch (_) {
+          }
         }
         prevHighlightRef.current = highlightedPinIdx;
       } else {
