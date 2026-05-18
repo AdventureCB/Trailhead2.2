@@ -55141,6 +55141,28 @@ ${suffix}`;
     }, [supabaseSession && supabaseSession.user && supabaseSession.user.id]);
     const [isGuest, setIsGuest] = (0, import_react4.useState)(!!initialSharedLink);
     const [showGuestPrompt, setShowGuestPrompt] = (0, import_react4.useState)(false);
+    const [keyboardOpen, setKeyboardOpen] = (0, import_react4.useState)(false);
+    (0, import_react4.useEffect)(() => {
+      if (typeof document === "undefined") return;
+      const isEditableTarget = (el) => !!(el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable));
+      let pending;
+      const recheck = () => setKeyboardOpen(isEditableTarget(document.activeElement));
+      const onFocusIn = () => {
+        clearTimeout(pending);
+        recheck();
+      };
+      const onFocusOut = () => {
+        clearTimeout(pending);
+        pending = setTimeout(recheck, 120);
+      };
+      document.addEventListener("focusin", onFocusIn);
+      document.addEventListener("focusout", onFocusOut);
+      return () => {
+        document.removeEventListener("focusin", onFocusIn);
+        document.removeEventListener("focusout", onFocusOut);
+        clearTimeout(pending);
+      };
+    }, []);
     const requireAuth = (fn) => (...args) => {
       if (isGuest) {
         setShowGuestPrompt(true);
@@ -58161,7 +58183,7 @@ ${suffix}`;
       const ownerName = isReshare ? b.owner || null : null;
       addPost({ id: "feedbuild_" + Date.now(), type: "BUILDS", user: meName, initial: meName.charAt(0).toUpperCase(), time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, subtitle: isReshare ? `Shared @${ownerHandle}'s build` : "Added a new build", vehicle: `${b.year} ${b.make} ${b.model}`, photoUrls: heroImg ? [heroImg] : void 0, image: heroImg, likes: 0, comments: 0, buildData: bd, buildRawId: b.rawId != null ? b.rawId : null, sharedFromOwnerHandle: ownerHandle, sharedFromOwnerName: ownerName, _skipBuildIdCol: isReshare });
       awardPoints(POINTS.feedPost, "Build Shared");
-    }) }), screen === "ranks" && (isGuest ? /* @__PURE__ */ import_react4.default.createElement(GuestGateScreen, { title: "RANKS REQUIRE AN ACCOUNT", subtitle: "Sign in to see the leaderboard and start earning points from your posts, routes and builds.", onSignIn: goToLoginFromGuest }) : /* @__PURE__ */ import_react4.default.createElement(RanksScreen, { myPoints: myTotalPoints, pointsBreakdown })))), screen === "feed" && !isOverlay && !isGuest && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setShowCompose(true), style: { position: "absolute", bottom: 68, right: 16, width: 52, height: 52, borderRadius: "50%", background: T.red, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 4px 20px ${T.red}60`, zIndex: 90 } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 24, color: T.white, strokeWidth: 2 })), /* @__PURE__ */ import_react4.default.createElement(BottomNav, { active: isOverlay ? "" : screen, onNav: handleNav, isGuest }), mapData && /* @__PURE__ */ import_react4.default.createElement(
+    }) }), screen === "ranks" && (isGuest ? /* @__PURE__ */ import_react4.default.createElement(GuestGateScreen, { title: "RANKS REQUIRE AN ACCOUNT", subtitle: "Sign in to see the leaderboard and start earning points from your posts, routes and builds.", onSignIn: goToLoginFromGuest }) : /* @__PURE__ */ import_react4.default.createElement(RanksScreen, { myPoints: myTotalPoints, pointsBreakdown })))), screen === "feed" && !isOverlay && !isGuest && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setShowCompose(true), style: { position: "absolute", bottom: 68, right: 16, width: 52, height: 52, borderRadius: "50%", background: T.red, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 4px 20px ${T.red}60`, zIndex: 90 } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 24, color: T.white, strokeWidth: 2 })), !keyboardOpen && /* @__PURE__ */ import_react4.default.createElement(BottomNav, { active: isOverlay ? "" : screen, onNav: handleNav, isGuest }), mapData && /* @__PURE__ */ import_react4.default.createElement(
       MapOverlay,
       {
         coords: mapData.coords,
