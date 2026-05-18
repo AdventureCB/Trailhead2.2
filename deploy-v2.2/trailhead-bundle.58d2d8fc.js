@@ -53026,11 +53026,12 @@ ${suffix}`;
       if (photos.length < maxPhotos && fileRef.current) fileRef.current.click();
     }, style: { display: "flex", alignItems: "center", justifyContent: "center", gap: 10, background: T.darkCard, border: `1px dashed ${T.charcoal}`, borderRadius: 8, padding: "14px 16px", cursor: photos.length < maxPhotos ? "pointer" : "default", width: "100%", boxSizing: "border-box", opacity: photos.length < maxPhotos ? 1 : 0.5 } }, /* @__PURE__ */ import_react4.default.createElement(Camera, { size: 16, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.tertiary } }, photos.length > 0 ? `${photos.length} media added` : "Add photos / videos"), photos.length < maxPhotos && /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 14, color: T.tertiary, style: { marginLeft: "auto" } })));
   }
-  function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotification, onAddRoute, onOpenDM, onSendDmInvite, userBuilds, currentUserName, currentUserHandle, onSearchUsers, onUploadError, initialConvoy, followingProfiles, onLoadFollowingProfiles }) {
+  function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotification, onAddRoute, onOpenDM, onSendDmInvite, userBuilds, currentUserName, currentUserHandle, onSearchUsers, onUploadError, initialConvoy, followingProfiles, onLoadFollowingProfiles, myTripPlans, currentUserId, onPlanNewRouteForConvoy, onUseExistingPlanForConvoy }) {
     (0, import_react4.useEffect)(() => {
       if (typeof onLoadFollowingProfiles === "function") onLoadFollowingProfiles();
     }, []);
     const [postType, setPostType] = (0, import_react4.useState)(initialConvoy ? "convoy" : null);
+    const [convoyStep, setConvoyStep] = (0, import_react4.useState)(initialConvoy ? "form" : null);
     const [general, setGeneral] = (0, import_react4.useState)({ text: "", photos: [], location: "" });
     const [showLocationInput, setShowLocationInput] = (0, import_react4.useState)(false);
     const [geoLoading, setGeoLoading] = (0, import_react4.useState)(false);
@@ -53409,15 +53410,20 @@ ${suffix}`;
         return /* @__PURE__ */ import_react4.default.createElement("button", { key: t.key, onClick: () => {
           if (t.key === "route") {
             setShowRouteForm(true);
-          } else {
-            setPostType(t.key);
+            return;
           }
+          if (t.key === "convoy") {
+            setPostType("convoy");
+            setConvoyStep("choose");
+            return;
+          }
+          setPostType(t.key);
         }, style: { display: "flex", alignItems: "center", gap: 14, background: T.darkCard, borderRadius: 12, padding: "16px", border: "none", cursor: "pointer", textAlign: "left", width: "100%", boxSizing: "border-box", transition: "background 0.15s" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 44, height: 44, borderRadius: 10, background: `${t.color}15`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(Icon2, { size: 20, color: t.color, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 15, color: T.white, fontWeight: 600, display: "block", marginBottom: 2 } }, t.label), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.4 } }, t.desc)), /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 18, color: T.tertiary }));
       })));
     }
     const currentType = types.find((t) => t.key === postType);
     const TypeIcon = currentType.icon;
-    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 0 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "16px", display: "flex", alignItems: "center", justifyContent: "space-between" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setPostType(null), style: { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" } }, /* @__PURE__ */ import_react4.default.createElement(ChevronLeft, { size: 20, color: T.white })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 28, height: 28, borderRadius: 6, background: `${currentType.color}15`, display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement(TypeIcon, { size: 14, color: currentType.color })), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 600 } }, "New ", currentType.label))), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: handleSubmit, disabled: submitting, style: { background: submitting ? T.charcoal : T.red, padding: "8px 18px", borderRadius: 6, border: "none", cursor: submitting ? "wait" : "pointer", opacity: submitting ? 0.8 : 1, display: "flex", alignItems: "center", gap: 6, transition: "all 0.15s" } }, submitting && /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 12, height: 12, borderRadius: "50%", border: `2px solid ${T.white}40`, borderTopColor: T.white, animation: "th-spin 0.7s linear infinite" } }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, letterSpacing: 0.5 } }, submitting ? "POSTING\u2026" : "POST"), /* @__PURE__ */ import_react4.default.createElement("style", null, `@keyframes th-spin { to { transform: rotate(360deg); } }`))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px", display: "flex", flexDirection: "column", gap: 14 } }, postType === "general" && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "WHAT'S ON YOUR MIND?"), /* @__PURE__ */ import_react4.default.createElement(MentionInput, { multiline: true, value: general.text, onChange: (val) => setGeneral({ ...general, text: val }), placeholder: "Share a trail story, a build update, a question for the community...", style: textareaStyle, onFocus: (e) => e.target.style.borderColor = T.copper, onBlur: (e) => e.target.style.borderColor = T.charcoal })), /* @__PURE__ */ import_react4.default.createElement(PhotoUploader, { photos: general.photos, onChange: (p) => setGeneral({ ...general, photos: p }), onUploadError }), !showLocationInput && !general.location ? /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setShowLocationInput(true), style: { width: "100%", background: T.darkCard, borderRadius: 8, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, border: "none", cursor: "pointer", textAlign: "left" } }, /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 16, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary } }, "Add location (optional)")) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkCard, borderRadius: 8, padding: "12px 14px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 16, color: general.location ? T.copper : T.tertiary }), /* @__PURE__ */ import_react4.default.createElement(
+    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 0 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "16px", display: "flex", alignItems: "center", justifyContent: "space-between" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setPostType(null), style: { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" } }, /* @__PURE__ */ import_react4.default.createElement(ChevronLeft, { size: 20, color: T.white })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 28, height: 28, borderRadius: 6, background: `${currentType.color}15`, display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement(TypeIcon, { size: 14, color: currentType.color })), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 600 } }, "New ", currentType.label))), (postType !== "convoy" || convoyStep === "form") && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: handleSubmit, disabled: submitting, style: { background: submitting ? T.charcoal : T.red, padding: "8px 18px", borderRadius: 6, border: "none", cursor: submitting ? "wait" : "pointer", opacity: submitting ? 0.8 : 1, display: "flex", alignItems: "center", gap: 6, transition: "all 0.15s" } }, submitting && /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 12, height: 12, borderRadius: "50%", border: `2px solid ${T.white}40`, borderTopColor: T.white, animation: "th-spin 0.7s linear infinite" } }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, letterSpacing: 0.5 } }, submitting ? "POSTING\u2026" : "POST"), /* @__PURE__ */ import_react4.default.createElement("style", null, `@keyframes th-spin { to { transform: rotate(360deg); } }`))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px", display: "flex", flexDirection: "column", gap: 14 } }, postType === "general" && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "WHAT'S ON YOUR MIND?"), /* @__PURE__ */ import_react4.default.createElement(MentionInput, { multiline: true, value: general.text, onChange: (val) => setGeneral({ ...general, text: val }), placeholder: "Share a trail story, a build update, a question for the community...", style: textareaStyle, onFocus: (e) => e.target.style.borderColor = T.copper, onBlur: (e) => e.target.style.borderColor = T.charcoal })), /* @__PURE__ */ import_react4.default.createElement(PhotoUploader, { photos: general.photos, onChange: (p) => setGeneral({ ...general, photos: p }), onUploadError }), !showLocationInput && !general.location ? /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setShowLocationInput(true), style: { width: "100%", background: T.darkCard, borderRadius: 8, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, border: "none", cursor: "pointer", textAlign: "left" } }, /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 16, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary } }, "Add location (optional)")) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkCard, borderRadius: 8, padding: "12px 14px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 16, color: general.location ? T.copper : T.tertiary }), /* @__PURE__ */ import_react4.default.createElement(
       "input",
       {
         autoFocus: true,
@@ -53477,7 +53483,68 @@ ${suffix}`;
       },
       /* @__PURE__ */ import_react4.default.createElement(Navigation, { size: 12, color: T.copper }),
       /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600, letterSpacing: 0.5 } }, geoLoading ? "Getting location..." : "Use current location")
-    ), geoMsg && /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 11, color: T.red, margin: "6px 0 0 26px", lineHeight: 1.4 } }, geoMsg))), postType === "convoy" && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "TRIP NAME"), /* @__PURE__ */ import_react4.default.createElement("input", { value: convoy.title, onChange: (e) => setConvoy({ ...convoy, title: e.target.value }), placeholder: "e.g. Alpine Summit Chase", style: inputStyle, onFocus: (e) => e.target.style.borderColor = T.copper, onBlur: (e) => e.target.style.borderColor = T.charcoal })), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "COVER PHOTO / VIDEO"), /* @__PURE__ */ import_react4.default.createElement("input", { ref: convoyPhotoRef, type: "file", accept: "image/*,video/*", multiple: true, onChange: (e) => {
+    ), geoMsg && /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 11, color: T.red, margin: "6px 0 0 26px", lineHeight: 1.4 } }, geoMsg))), postType === "convoy" && convoyStep === "choose" && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "8px 0 0", display: "flex", flexDirection: "column", gap: 14 } }, /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("h2", { style: { fontFamily: sans, fontSize: 18, color: T.white, margin: "0 0 4px", fontWeight: 700 } }, "What route are you doing?"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary, margin: 0 } }, "Convoys are built around a trip plan. Pick how you want to set yours up.")), /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: () => onPlanNewRouteForConvoy && onPlanNewRouteForConvoy(),
+        style: { display: "flex", alignItems: "center", gap: 14, background: T.darkCard, borderRadius: 12, padding: "16px", border: "none", cursor: "pointer", textAlign: "left", width: "100%", boxSizing: "border-box" }
+      },
+      /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 44, height: 44, borderRadius: 10, background: `${T.copper}15`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 20, color: T.copper, strokeWidth: 1.5 })),
+      /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 15, color: T.white, fontWeight: 600, display: "block", marginBottom: 2 } }, "Plan a new route"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.4 } }, "Drop pins on the map. We'll bring you back here when you save.")),
+      /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 18, color: T.tertiary })
+    ), /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: () => setConvoyStep("list"),
+        style: { display: "flex", alignItems: "center", gap: 14, background: T.darkCard, borderRadius: 12, padding: "16px", border: "none", cursor: "pointer", textAlign: "left", width: "100%", boxSizing: "border-box" }
+      },
+      /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 44, height: 44, borderRadius: 10, background: `${T.green}15`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(Route, { size: 20, color: T.green, strokeWidth: 1.5 })),
+      /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 15, color: T.white, fontWeight: 600, display: "block", marginBottom: 2 } }, "Use an existing trip plan"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.4 } }, "Pick from the plans on your profile.")),
+      /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 18, color: T.tertiary })
+    ), /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: () => {
+          setPostType(null);
+          setConvoyStep(null);
+        },
+        style: { background: "none", border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, padding: "10px 0", letterSpacing: 0.5 }
+      },
+      "\u2190 Back to post types"
+    )), postType === "convoy" && convoyStep === "list" && (() => {
+      const myPlans = (myTripPlans || []).filter((p) => currentUserId && p.user_id === currentUserId);
+      return /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "8px 0 0", display: "flex", flexDirection: "column", gap: 12 } }, /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("h2", { style: { fontFamily: sans, fontSize: 18, color: T.white, margin: "0 0 4px", fontWeight: 700 } }, "Pick a trip plan"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary, margin: 0 } }, myPlans.length === 0 ? "You don't have any trip plans yet." : `${myPlans.length} plan${myPlans.length === 1 ? "" : "s"} on your profile.`)), myPlans.length === 0 ? /* @__PURE__ */ import_react4.default.createElement(
+        "button",
+        {
+          onClick: () => onPlanNewRouteForConvoy && onPlanNewRouteForConvoy(),
+          style: { display: "flex", alignItems: "center", gap: 8, background: T.copper, border: "none", cursor: "pointer", padding: "14px", borderRadius: 10, justifyContent: "center", fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 0.6 }
+        },
+        /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 14, color: T.white }),
+        "PLAN ONE NOW"
+      ) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8 } }, myPlans.map((p) => {
+        const dist = p.distance_mi != null ? `${Number(p.distance_mi).toFixed(1)} MI` : null;
+        const elev = p.elev_gain_ft != null ? `+${Number(p.elev_gain_ft).toLocaleString()} FT` : null;
+        const region = [p.region, p.state_code].filter(Boolean).join(", ");
+        return /* @__PURE__ */ import_react4.default.createElement(
+          "button",
+          {
+            key: p.id,
+            onClick: () => onUseExistingPlanForConvoy && onUseExistingPlanForConvoy(p),
+            style: { display: "flex", alignItems: "center", gap: 12, background: T.darkCard, border: `1px solid ${T.charcoal}`, cursor: "pointer", padding: "12px 14px", borderRadius: 10, textAlign: "left", width: "100%", boxSizing: "border-box" }
+          },
+          /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 36, height: 36, borderRadius: 8, background: `${T.copper}20`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(Route, { size: 16, color: T.copper })),
+          /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, p.name || "Untitled plan"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.5 } }, dist && /* @__PURE__ */ import_react4.default.createElement("span", { style: { color: T.copper } }, dist), elev && /* @__PURE__ */ import_react4.default.createElement("span", { style: { color: T.copper } }, elev), region && /* @__PURE__ */ import_react4.default.createElement("span", null, region))),
+          /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 16, color: T.tertiary })
+        );
+      })), /* @__PURE__ */ import_react4.default.createElement(
+        "button",
+        {
+          onClick: () => setConvoyStep("choose"),
+          style: { background: "none", border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, padding: "10px 0", letterSpacing: 0.5, alignSelf: "flex-start" }
+        },
+        "\u2190 Back"
+      ));
+    })(), postType === "convoy" && convoyStep === "form" && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "TRIP NAME"), /* @__PURE__ */ import_react4.default.createElement("input", { value: convoy.title, onChange: (e) => setConvoy({ ...convoy, title: e.target.value }), placeholder: "e.g. Alpine Summit Chase", style: inputStyle, onFocus: (e) => e.target.style.borderColor = T.copper, onBlur: (e) => e.target.style.borderColor = T.charcoal })), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "COVER PHOTO / VIDEO"), /* @__PURE__ */ import_react4.default.createElement("input", { ref: convoyPhotoRef, type: "file", accept: "image/*,video/*", multiple: true, onChange: (e) => {
       const files = Array.from(e.target.files || []);
       e.target.value = "";
       const tooBig = files.filter((f) => f.size > MAX_UPLOAD_BYTES);
@@ -53694,7 +53761,7 @@ ${suffix}`;
         setRecGeoLoading(false);
         setRecGeoMsg("Location not available in this environment. Type your location manually.");
       }
-    }, style: { display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: T.darkCard, border: `1px dashed ${T.charcoal}`, borderRadius: 8, padding: "14px", cursor: "pointer", width: "100%", boxSizing: "border-box" } }, /* @__PURE__ */ import_react4.default.createElement(Navigation, { size: 16, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.copper, fontWeight: 600 } }, recGeoLoading ? "Getting location..." : "Use Current GPS Location")), recGeoMsg && /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 11, color: T.red, margin: "6px 0 0", lineHeight: 1.4 } }, recGeoMsg), /* @__PURE__ */ import_react4.default.createElement(PhotoUploader, { photos: recoveryPhotos, onChange: setRecoveryPhotos, onUploadError })), postType && /* @__PURE__ */ import_react4.default.createElement(
+    }, style: { display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: T.darkCard, border: `1px dashed ${T.charcoal}`, borderRadius: 8, padding: "14px", cursor: "pointer", width: "100%", boxSizing: "border-box" } }, /* @__PURE__ */ import_react4.default.createElement(Navigation, { size: 16, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.copper, fontWeight: 600 } }, recGeoLoading ? "Getting location..." : "Use Current GPS Location")), recGeoMsg && /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 11, color: T.red, margin: "6px 0 0", lineHeight: 1.4 } }, recGeoMsg), /* @__PURE__ */ import_react4.default.createElement(PhotoUploader, { photos: recoveryPhotos, onChange: setRecoveryPhotos, onUploadError })), postType && (postType !== "convoy" || convoyStep === "form") && /* @__PURE__ */ import_react4.default.createElement(
       "button",
       {
         onClick: handleSubmit,
@@ -55661,8 +55728,36 @@ ${suffix}`;
       }
       await updateTripDraft(draftId, updates);
       exitPlanBuilder();
+      if (convoyAfterPlanCommitRef.current) {
+        convoyAfterPlanCommitRef.current = false;
+        const planSnapshot = {
+          id: draftId,
+          name: updates.name || name || "Untitled plan",
+          description: updates.description || description || "",
+          kind: "plan",
+          route_data: updates.route_data,
+          start_lat: updates.start_lat,
+          start_lng: updates.start_lng,
+          start_label: updates.start_label,
+          end_lat: updates.end_lat,
+          end_lng: updates.end_lng,
+          distance_mi: updates.distance_mi,
+          duration_min: updates.duration_min,
+          elev_gain_ft: updates.elev_gain_ft,
+          max_elev_ft: updates.max_elev_ft
+        };
+        startConvoyFromPlan(planSnapshot);
+        return { id: draftId };
+      }
       setDetailTripId(draftId);
       return { id: draftId };
+    };
+    const convoyAfterPlanCommitRef = (0, import_react4.useRef)(false);
+    const enterPlanBuilderForConvoy = () => {
+      convoyAfterPlanCommitRef.current = true;
+      setShowCompose(false);
+      setComposePrefillConvoy(null);
+      enterPlanBuilder();
     };
     const [showTripPinFullscreen, setShowTripPinFullscreen] = (0, import_react4.useState)(false);
     const [pendingThread, setPendingThread] = (0, import_react4.useState)(null);
@@ -58370,7 +58465,7 @@ ${suffix}`;
         recoveryAlerts,
         setRecoveryAlerts
       }
-    ), /* @__PURE__ */ import_react4.default.createElement("div", { className: "th-scroll", style: { flex: 1, overflowY: "auto", minHeight: 0 } }, showCompose ? /* @__PURE__ */ import_react4.default.createElement(ComposeScreen, { userBuilds: myBuildsForLink, currentUserName: currentProfile && currentProfile.full_name || "You", currentUserHandle: currentProfile && currentProfile.handle || "", onSearchUsers: searchUsers, onUploadError: showErrorToast, initialConvoy: composePrefillConvoy, followingProfiles, onLoadFollowingProfiles: loadFollowingProfilesOnce, onClose: () => {
+    ), /* @__PURE__ */ import_react4.default.createElement("div", { className: "th-scroll", style: { flex: 1, overflowY: "auto", minHeight: 0 } }, showCompose ? /* @__PURE__ */ import_react4.default.createElement(ComposeScreen, { key: composePrefillConvoy && composePrefillConvoy.planId ? `pre_${composePrefillConvoy.planId}` : "fresh", userBuilds: myBuildsForLink, currentUserName: currentProfile && currentProfile.full_name || "You", currentUserHandle: currentProfile && currentProfile.handle || "", onSearchUsers: searchUsers, onUploadError: showErrorToast, initialConvoy: composePrefillConvoy, followingProfiles, onLoadFollowingProfiles: loadFollowingProfilesOnce, myTripPlans: allTripPlans, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, onPlanNewRouteForConvoy: requireAuth(enterPlanBuilderForConvoy), onUseExistingPlanForConvoy: requireAuth(startConvoyFromPlan), onClose: () => {
       setShowCompose(false);
       setComposePrefillConvoy(null);
     }, onSubmit: async (newPost) => {
