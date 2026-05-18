@@ -52831,7 +52831,10 @@ ${suffix}`;
       if (photos.length < maxPhotos && fileRef.current) fileRef.current.click();
     }, style: { display: "flex", alignItems: "center", justifyContent: "center", gap: 10, background: T.darkCard, border: `1px dashed ${T.charcoal}`, borderRadius: 8, padding: "14px 16px", cursor: photos.length < maxPhotos ? "pointer" : "default", width: "100%", boxSizing: "border-box", opacity: photos.length < maxPhotos ? 1 : 0.5 } }, /* @__PURE__ */ import_react4.default.createElement(Camera, { size: 16, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.tertiary } }, photos.length > 0 ? `${photos.length} media added` : "Add photos / videos"), photos.length < maxPhotos && /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 14, color: T.tertiary, style: { marginLeft: "auto" } })));
   }
-  function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotification, onAddRoute, onOpenDM, onSendDmInvite, userBuilds, currentUserName, currentUserHandle, onSearchUsers, onUploadError, initialConvoy }) {
+  function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotification, onAddRoute, onOpenDM, onSendDmInvite, userBuilds, currentUserName, currentUserHandle, onSearchUsers, onUploadError, initialConvoy, followingProfiles, onLoadFollowingProfiles }) {
+    (0, import_react4.useEffect)(() => {
+      if (typeof onLoadFollowingProfiles === "function") onLoadFollowingProfiles();
+    }, []);
     const [postType, setPostType] = (0, import_react4.useState)(initialConvoy ? "convoy" : null);
     const [general, setGeneral] = (0, import_react4.useState)({ text: "", photos: [], location: "" });
     const [showLocationInput, setShowLocationInput] = (0, import_react4.useState)(false);
@@ -53313,7 +53316,7 @@ ${suffix}`;
           offroadRanges: Array.isArray(rd.offroadRanges) ? rd.offroadRanges : void 0
         }
       )), chips.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 6, padding: "10px 12px", borderTop: `1px solid ${T.charcoal}` } }, chips.map((c, i) => /* @__PURE__ */ import_react4.default.createElement("span", { key: i, style: { fontFamily: sans, fontSize: 10, color: T.copper, background: `${T.copper}20`, padding: "3px 8px", borderRadius: 4, letterSpacing: 0.6, fontWeight: 700 } }, c)))), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.3, display: "block", marginTop: 6 } }, "From your trip plan. Edit the plan to change the route."));
-    })(), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "MEETING POINT"), convoyPin && !showPinMap ? /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: T.darkCard, borderRadius: 8, border: `1px solid ${T.green}30`, marginBottom: 6 } }, /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 16, color: T.green }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 } }, convoyPin.label || "Meeting Point"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, display: "block" } }, convoyPin.lat.toFixed(5), ", ", convoyPin.lng.toFixed(5))), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
+    })(), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "MEETING POINT"), initialConvoy && initialConvoy.planId && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.3, display: "block", marginTop: -4, marginBottom: 8, lineHeight: 1.4 } }, "Defaults to the trailhead from the planned route. You can edit this without changing the route."), convoyPin && !showPinMap ? /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: T.darkCard, borderRadius: 8, border: `1px solid ${T.green}30`, marginBottom: 6 } }, /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 16, color: T.green }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 } }, convoyPin.label || "Meeting Point"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, display: "block" } }, convoyPin.lat.toFixed(5), ", ", convoyPin.lng.toFixed(5))), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
       convoyPinMapInst.current = null;
       setShowPinMap(true);
     }, style: { background: "none", border: "none", cursor: "pointer", padding: 4 }, title: "Edit pin" }, /* @__PURE__ */ import_react4.default.createElement(PenLine, { size: 14, color: T.copper })), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
@@ -53339,7 +53342,13 @@ ${suffix}`;
     }, style: { padding: "10px 12px", cursor: "pointer", borderBottom: i < convoyPinSuggestions.length - 1 ? `1px solid ${T.charcoal}` : "none", fontFamily: serif, fontSize: 13, color: T.white } }, s.label)))), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
       convoyPinMapInst.current = null;
       setShowPinMap(!showPinMap);
-    }, style: { width: "100%", padding: "10px", borderRadius: 8, background: T.darkCard, border: `1px dashed ${showPinMap ? T.copper : T.charcoal}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement(Map2, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600 } }, showPinMap ? "HIDE MAP" : "DROP PIN ON MAP")), showPinMap && /* @__PURE__ */ import_react4.default.createElement("div", { style: { borderRadius: 10, overflow: "hidden", border: `1px solid ${T.charcoal}`, position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement("div", { ref: convoyPinMapRef, style: { width: "100%", height: 250 } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", bottom: 8, left: 8, right: 8, display: "flex", justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.white, background: `${T.darkBg}CC`, padding: "4px 10px", borderRadius: 6 } }, "Tap map to drop pin"), convoyPin && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setShowPinMap(false), style: { fontFamily: sans, fontSize: 10, fontWeight: 600, color: T.white, background: T.green, padding: "6px 14px", borderRadius: 6, border: "none", cursor: "pointer" } }, "CONFIRM PIN"))), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, "Search for a place or tap the map to set your meeting point"))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "DEPARTURE DATE"), /* @__PURE__ */ import_react4.default.createElement("input", { type: "date", value: convoy.departDate, onChange: (e) => setConvoy({ ...convoy, departDate: e.target.value }), style: { ...inputStyle, colorScheme: "dark" } })), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "DEPARTURE TIME"), /* @__PURE__ */ import_react4.default.createElement("input", { type: "time", value: convoy.departTime, onChange: (e) => setConvoy({ ...convoy, departTime: e.target.value }), style: { ...inputStyle, colorScheme: "dark" } }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "RETURN DATE"), /* @__PURE__ */ import_react4.default.createElement("input", { type: "date", value: convoy.returnDate, onChange: (e) => setConvoy({ ...convoy, returnDate: e.target.value }), style: { ...inputStyle, colorScheme: "dark" } })), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "RETURN TIME"), /* @__PURE__ */ import_react4.default.createElement("input", { type: "time", value: convoy.returnTime, onChange: (e) => setConvoy({ ...convoy, returnTime: e.target.value }), style: { ...inputStyle, colorScheme: "dark" } }))), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "MAX RIGS"), /* @__PURE__ */ import_react4.default.createElement("input", { value: convoy.slots, onChange: (e) => setConvoy({ ...convoy, slots: e.target.value }), placeholder: "e.g. 12", style: inputStyle, onFocus: (e) => e.target.style.borderColor = T.copper, onBlur: (e) => e.target.style.borderColor = T.charcoal })), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "DETAILS"), /* @__PURE__ */ import_react4.default.createElement("textarea", { value: convoy.description, onChange: (e) => setConvoy({ ...convoy, description: e.target.value }), placeholder: "Describe the trip \u2014 terrain difficulty, what to bring, stock-friendly or not...", style: textareaStyle, onFocus: (e) => e.target.style.borderColor = T.copper, onBlur: (e) => e.target.style.borderColor = T.charcoal })), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "INVITE USERS"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement(AtSign, { size: 14, color: T.tertiary, style: { position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" } }), /* @__PURE__ */ import_react4.default.createElement("input", { value: convoyInviteInput, onChange: (e) => setConvoyInviteInput(e.target.value), onKeyDown: (e) => {
+    }, style: { width: "100%", padding: "10px", borderRadius: 8, background: T.darkCard, border: `1px dashed ${showPinMap ? T.copper : T.charcoal}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement(Map2, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600 } }, showPinMap ? "HIDE MAP" : "DROP PIN ON MAP")), showPinMap && /* @__PURE__ */ import_react4.default.createElement("div", { style: { borderRadius: 10, overflow: "hidden", border: `1px solid ${T.charcoal}`, position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement("div", { ref: convoyPinMapRef, style: { width: "100%", height: 250 } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", bottom: 8, left: 8, right: 8, display: "flex", justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.white, background: `${T.darkBg}CC`, padding: "4px 10px", borderRadius: 6 } }, "Tap map to drop pin"), convoyPin && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setShowPinMap(false), style: { fontFamily: sans, fontSize: 10, fontWeight: 600, color: T.white, background: T.green, padding: "6px 14px", borderRadius: 6, border: "none", cursor: "pointer" } }, "CONFIRM PIN"))), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, "Search for a place or tap the map to set your meeting point"))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "DEPARTURE DATE"), /* @__PURE__ */ import_react4.default.createElement("input", { type: "date", value: convoy.departDate, onChange: (e) => setConvoy({ ...convoy, departDate: e.target.value }), style: { ...inputStyle, colorScheme: "dark" } })), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "DEPARTURE TIME"), /* @__PURE__ */ import_react4.default.createElement("input", { type: "time", value: convoy.departTime, onChange: (e) => setConvoy({ ...convoy, departTime: e.target.value }), style: { ...inputStyle, colorScheme: "dark" } }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "RETURN DATE"), /* @__PURE__ */ import_react4.default.createElement("input", { type: "date", value: convoy.returnDate, onChange: (e) => setConvoy({ ...convoy, returnDate: e.target.value }), style: { ...inputStyle, colorScheme: "dark" } })), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "RETURN TIME"), /* @__PURE__ */ import_react4.default.createElement("input", { type: "time", value: convoy.returnTime, onChange: (e) => setConvoy({ ...convoy, returnTime: e.target.value }), style: { ...inputStyle, colorScheme: "dark" } }))), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "MAX RIGS"), /* @__PURE__ */ import_react4.default.createElement("input", { value: convoy.slots, onChange: (e) => setConvoy({ ...convoy, slots: e.target.value }), placeholder: "e.g. 12", style: inputStyle, onFocus: (e) => e.target.style.borderColor = T.copper, onBlur: (e) => e.target.style.borderColor = T.charcoal })), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "DETAILS"), /* @__PURE__ */ import_react4.default.createElement("textarea", { value: convoy.description, onChange: (e) => setConvoy({ ...convoy, description: e.target.value }), placeholder: "Describe the trip \u2014 terrain difficulty, what to bring, stock-friendly or not...", style: textareaStyle, onFocus: (e) => e.target.style.borderColor = T.copper, onBlur: (e) => e.target.style.borderColor = T.charcoal })), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "INVITE USERS"), Array.isArray(followingProfiles) && followingProfiles.length > 0 && convoyInviteInput.trim().length === 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 8 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600, display: "block", marginBottom: 6 } }, "PEOPLE YOU FOLLOW"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { maxHeight: 180, overflowY: "auto", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8 } }, followingProfiles.filter((u) => u.handle).map((u) => {
+      const isInvited = convoyInvites.includes("@" + u.handle);
+      const initial = (u.full_name || u.handle || "U").charAt(0).toUpperCase();
+      return /* @__PURE__ */ import_react4.default.createElement("div", { key: u.id, onClick: () => {
+        setConvoyInvites((prev) => isInvited ? prev.filter((h) => h !== "@" + u.handle) : [...prev, "@" + u.handle]);
+      }, style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", cursor: "pointer", borderBottom: `1px solid ${T.charcoal}40`, transition: "background 0.1s" }, onMouseEnter: (e) => e.currentTarget.style.background = `${T.charcoal}80`, onMouseLeave: (e) => e.currentTarget.style.background = "transparent" }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 28, height: 28, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" } }, u.avatar_url ? /* @__PURE__ */ import_react4.default.createElement("img", { src: u.avatar_url, alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, fontWeight: 700, color: T.white } }, initial)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, display: "block" } }, "@", u.handle), u.full_name && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, u.full_name)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 22, height: 22, borderRadius: "50%", border: `1.5px solid ${isInvited ? T.green : T.tertiary}40`, background: isInvited ? T.green : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, isInvited && /* @__PURE__ */ import_react4.default.createElement(CircleCheckBig, { size: 12, color: T.white })));
+    }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement(AtSign, { size: 14, color: T.tertiary, style: { position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" } }), /* @__PURE__ */ import_react4.default.createElement("input", { value: convoyInviteInput, onChange: (e) => setConvoyInviteInput(e.target.value), onKeyDown: (e) => {
       if (e.key === "Enter" && convoyInviteInput.trim()) {
         const handle = convoyInviteInput.trim().replace(/^@/, "");
         if (handle && !convoyInvites.includes("@" + handle)) {
@@ -53347,7 +53356,7 @@ ${suffix}`;
         }
         setConvoyInviteInput("");
       }
-    }, placeholder: "Search users by handle...", style: { ...inputStyle, paddingLeft: 34 }, onFocus: (e) => e.target.style.borderColor = T.copper, onBlur: (e) => e.target.style.borderColor = T.charcoal }))), convoyInviteInput.trim().length > 0 && (() => {
+    }, placeholder: "Search anyone by handle or name...", style: { ...inputStyle, paddingLeft: 34 }, onFocus: (e) => e.target.style.borderColor = T.copper, onBlur: (e) => e.target.style.borderColor = T.charcoal }))), convoyInviteInput.trim().length > 0 && (() => {
       const matches = (convoyInviteResults || []).filter((u) => u.handle && !convoyInvites.includes("@" + u.handle));
       if (matches.length === 0) return null;
       return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: "100%", left: 0, right: 0, zIndex: 50, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8, marginTop: 4, maxHeight: 200, overflowY: "auto", boxShadow: `0 8px 24px rgba(0,0,0,0.5)` } }, matches.slice(0, 6).map((u) => {
@@ -54658,6 +54667,8 @@ ${suffix}`;
         if (event === "SIGNED_OUT") {
           hydratedForUidRef.current = null;
           allBuildsLoadedRef.current = false;
+          followingProfilesLoadedRef.current = false;
+          setFollowingProfiles([]);
           setFeedCursor(null);
           setFeedHasMore(false);
           setCurrentProfile(null);
@@ -55099,11 +55110,21 @@ ${suffix}`;
     const [showRecovery, setShowRecovery] = (0, import_react4.useState)(false);
     const [showCompose, setShowCompose] = (0, import_react4.useState)(false);
     const [composePrefillConvoy, setComposePrefillConvoy] = (0, import_react4.useState)(null);
-    const startConvoyFromPlan = (trip) => {
+    const startConvoyFromPlan = async (trip) => {
       if (!trip) return;
-      const regionLabel = [trip.region, trip.state_code].filter(Boolean).join(", ");
-      const locationGuess = regionLabel || (trip.start_label && trip.start_label !== "Waypoint" ? trip.start_label : "") || "";
-      const meetingPin = trip.start_lat != null && trip.start_lng != null ? { lat: trip.start_lat, lng: trip.start_lng, label: trip.name || regionLabel || "Trailhead" } : null;
+      const lat = trip.start_lat;
+      const lng = trip.start_lng;
+      let geo = null;
+      if (lat != null && lng != null) {
+        try {
+          geo = await mapboxReverseGeocodeRich(lng, lat);
+        } catch (e) {
+        }
+      }
+      const cityState = geo && geo.region && geo.stateCode ? `${geo.region}, ${geo.stateCode}` : null;
+      const fallbackRegion = [trip.region, trip.state_code].filter(Boolean).join(", ");
+      const locationGuess = cityState || fallbackRegion || geo && geo.label || "";
+      const meetingPin = lat != null && lng != null ? { lat, lng, label: geo && geo.label || trip.name || cityState || "Trailhead" } : null;
       setComposePrefillConvoy({
         title: trip.name || "Convoy",
         location: locationGuess,
@@ -55123,8 +55144,8 @@ ${suffix}`;
           max_elev_ft: trip.max_elev_ft,
           duration_min: trip.duration_min
         },
-        region: trip.region || null,
-        state_code: trip.state_code || null
+        region: geo && geo.region || trip.region || null,
+        state_code: geo && geo.stateCode || trip.state_code || null
       });
       setDetailTripId(null);
       setShowCompose(true);
@@ -56492,6 +56513,29 @@ ${suffix}`;
     const [followingIds, setFollowingIds] = (0, import_react4.useState)(/* @__PURE__ */ new Set());
     const [myFollowerCount, setMyFollowerCount] = (0, import_react4.useState)(0);
     const [myFollowingCount, setMyFollowingCount] = (0, import_react4.useState)(0);
+    const [followingProfiles, setFollowingProfiles] = (0, import_react4.useState)([]);
+    const followingProfilesLoadedRef = (0, import_react4.useRef)(false);
+    const loadFollowingProfilesOnce = async () => {
+      if (followingProfilesLoadedRef.current) return;
+      const ids = Array.from(followingIds || []);
+      if (ids.length === 0) {
+        followingProfilesLoadedRef.current = true;
+        return;
+      }
+      followingProfilesLoadedRef.current = true;
+      try {
+        const { data, error } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").in("id", ids);
+        if (error) {
+          console.error("[following profiles] fetch error", error);
+          followingProfilesLoadedRef.current = false;
+          return;
+        }
+        if (Array.isArray(data)) setFollowingProfiles(data);
+      } catch (e) {
+        console.error("[following profiles] failed", e);
+        followingProfilesLoadedRef.current = false;
+      }
+    };
     const followUser = async (targetUserId, targetDisplayName) => {
       const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
       if (!uid || !targetUserId || targetUserId === uid) return;
@@ -56502,9 +56546,13 @@ ${suffix}`;
         return next;
       });
       setMyFollowingCount((c) => c + 1);
+      setFollowingProfiles((prev) => prev.some((p) => p.id === targetUserId) ? prev : [...prev, { id: targetUserId, full_name: targetDisplayName || "User", handle: "", avatar_url: null }]);
       try {
         const { error } = await supabase.from("follows").insert({ follower_id: uid, following_id: targetUserId });
         if (error) throw error;
+        supabase.from("profiles").select("id, full_name, handle, avatar_url").eq("id", targetUserId).maybeSingle().then(({ data: prof }) => {
+          if (prof) setFollowingProfiles((prev) => prev.map((p) => p.id === targetUserId ? prof : p));
+        });
         const myName = currentProfile && currentProfile.full_name || "Someone";
         supabase.from("notifications").insert({
           user_id: targetUserId,
@@ -56524,6 +56572,7 @@ ${suffix}`;
           return next;
         });
         setMyFollowingCount((c) => Math.max(c - 1, 0));
+        setFollowingProfiles((prev) => prev.filter((p) => p.id !== targetUserId));
       }
     };
     const unfollowUser = async (targetUserId) => {
@@ -56536,6 +56585,7 @@ ${suffix}`;
         return next;
       });
       setMyFollowingCount((c) => Math.max(c - 1, 0));
+      setFollowingProfiles((prev) => prev.filter((p) => p.id !== targetUserId));
       try {
         const { error } = await supabase.from("follows").delete().eq("follower_id", uid).eq("following_id", targetUserId);
         if (error) throw error;
@@ -58003,7 +58053,7 @@ ${suffix}`;
         recoveryAlerts,
         setRecoveryAlerts
       }
-    ), /* @__PURE__ */ import_react4.default.createElement("div", { className: "th-scroll", style: { flex: 1, overflowY: "auto", minHeight: 0 } }, showCompose ? /* @__PURE__ */ import_react4.default.createElement(ComposeScreen, { userBuilds: myBuildsForLink, currentUserName: currentProfile && currentProfile.full_name || "You", currentUserHandle: currentProfile && currentProfile.handle || "", onSearchUsers: searchUsers, onUploadError: showErrorToast, initialConvoy: composePrefillConvoy, onClose: () => {
+    ), /* @__PURE__ */ import_react4.default.createElement("div", { className: "th-scroll", style: { flex: 1, overflowY: "auto", minHeight: 0 } }, showCompose ? /* @__PURE__ */ import_react4.default.createElement(ComposeScreen, { userBuilds: myBuildsForLink, currentUserName: currentProfile && currentProfile.full_name || "You", currentUserHandle: currentProfile && currentProfile.handle || "", onSearchUsers: searchUsers, onUploadError: showErrorToast, initialConvoy: composePrefillConvoy, followingProfiles, onLoadFollowingProfiles: loadFollowingProfilesOnce, onClose: () => {
       setShowCompose(false);
       setComposePrefillConvoy(null);
     }, onSubmit: async (newPost) => {
