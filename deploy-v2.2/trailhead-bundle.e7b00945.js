@@ -47414,6 +47414,28 @@ ${suffix}`;
     const [selectedWaypoint, setSelectedWaypoint] = (0, import_react4.useState)(null);
     const prevHighlightRef = (0, import_react4.useRef)(null);
     const [reinitTick, setReinitTick] = (0, import_react4.useState)(0);
+    const [inView, setInView] = (0, import_react4.useState)(typeof IntersectionObserver === "undefined");
+    (0, import_react4.useEffect)(() => {
+      if (inView) return;
+      const el = mapRef.current;
+      if (!el || typeof IntersectionObserver === "undefined") return;
+      const obs = new IntersectionObserver((entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) {
+            setInView(true);
+            obs.disconnect();
+            return;
+          }
+        }
+      }, { rootMargin: "200px 0px" });
+      obs.observe(el);
+      return () => {
+        try {
+          obs.disconnect();
+        } catch (_) {
+        }
+      };
+    }, [inView]);
     const isReportKind = !Array.isArray(offroadRanges);
     const styleForPin = (pinIdx, isPhoto, isWaypoint, totalPins, isCamp) => {
       if (isCamp) return { width: 24, height: 24, background: "#5B8C5A", border: `2px solid ${T.white}`, borderRadius: "50%" };
@@ -47434,6 +47456,7 @@ ${suffix}`;
       el.textContent = emoji || "";
     };
     (0, import_react4.useEffect)(() => {
+      if (!inView) return;
       if ((!pins || pins.length === 0) && (!points || points.length === 0)) return;
       if (!mapRef.current) return;
       let cancelled = false;
@@ -47582,7 +47605,7 @@ ${suffix}`;
           mapInst.current = null;
         }
       };
-    }, [pins, isFullscreen, reinitTick]);
+    }, [pins, isFullscreen, reinitTick, inView]);
     (0, import_react4.useEffect)(() => {
       if (!ready) return;
       const map = mapInst.current;
