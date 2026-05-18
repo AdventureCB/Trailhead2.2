@@ -48590,21 +48590,28 @@ ${suffix}`;
   }
   function TripReportCreator({ mode = "report", onClose, onCreateDraft, onChooseManual, onChooseLive, onChooseSkip }) {
     const isPlan = mode === "plan";
-    const [step, setStep] = (0, import_react4.useState)(isPlan ? "details" : "disclaimer");
+    const [step, setStep] = (0, import_react4.useState)(isPlan ? "route" : "disclaimer");
     const [agreed, setAgreed] = (0, import_react4.useState)(false);
-    const [name, setName] = (0, import_react4.useState)("");
-    const [description, setDescription] = (0, import_react4.useState)("");
     const [submitting, setSubmitting] = (0, import_react4.useState)(false);
-    const [draftId, setDraftId] = (0, import_react4.useState)(null);
-    const handleCreate = async () => {
-      if (!name.trim() || submitting) return;
+    const ensureDraft = async () => {
+      if (submitting) return null;
       setSubmitting(true);
-      const draft = await onCreateDraft({ name: name.trim(), description: description.trim(), kind: isPlan ? "plan" : "report" });
+      const placeholder = isPlan ? "Untitled plan" : "Untitled trip report";
+      const draft = await onCreateDraft({ name: placeholder, description: "", kind: isPlan ? "plan" : "report" });
       setSubmitting(false);
-      if (draft) {
-        setDraftId(draft.id);
-        setStep("route");
-      }
+      return draft && draft.id ? draft.id : null;
+    };
+    const chooseLive = async () => {
+      const id = await ensureDraft();
+      if (id) onChooseLive && onChooseLive(id);
+    };
+    const chooseManual = async () => {
+      const id = await ensureDraft();
+      if (id) onChooseManual && onChooseManual(id);
+    };
+    const chooseSkip = async () => {
+      const id = await ensureDraft();
+      if (id) onChooseSkip && onChooseSkip(id);
     };
     return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "fixed", top: 0, bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 430, zIndex: 1100, background: T.darkBg, display: "flex", flexDirection: "column" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", background: T.charcoal, borderBottom: `1px solid ${T.darkCard}`, flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: onClose, style: { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center" } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 22, color: T.white, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, fontWeight: 700, color: T.white, letterSpacing: 1 } }, isPlan ? "PLAN A TRIP" : "NEW TRIP REPORT"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { width: 22 } })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, overflowY: "auto", padding: "20px 16px 32px" } }, step === "disclaimer" && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement(Mountain, { size: 48, color: T.copper, strokeWidth: 1.2, style: { display: "block", margin: "12px auto 18px" } }), /* @__PURE__ */ import_react4.default.createElement("h2", { style: { fontFamily: sans, fontSize: 20, color: T.white, margin: "0 0 12px", textAlign: "center", fontWeight: 700, letterSpacing: 0.5 } }, "One quick check"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 14, color: T.warmStone, lineHeight: 1.6, margin: "0 0 16px" } }, "Trip reports are for routes you've ", /* @__PURE__ */ import_react4.default.createElement("em", null, "actually taken"), " or are ", /* @__PURE__ */ import_react4.default.createElement("em", null, "actively taking right now"), ". They become a permanent how-to guide other overlanders use to plan their own trips, so accuracy matters."), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary, lineHeight: 1.6, margin: "0 0 20px" } }, "Planning a future trip? Use ", /* @__PURE__ */ import_react4.default.createElement("span", { style: { color: T.copper, fontWeight: 600 } }, "Adventure Planning \u2192 Route Planner"), " instead."), /* @__PURE__ */ import_react4.default.createElement(
       "button",
@@ -48617,46 +48624,17 @@ ${suffix}`;
     ), /* @__PURE__ */ import_react4.default.createElement(
       "button",
       {
-        onClick: () => agreed && setStep("details"),
+        onClick: () => agreed && setStep("route"),
         disabled: !agreed,
         style: { width: "100%", marginTop: 18, padding: "14px", borderRadius: 10, background: agreed ? T.red : T.charcoal, border: "none", cursor: agreed ? "pointer" : "default", fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 1, opacity: agreed ? 1 : 0.5 }
       },
       "CONTINUE"
-    )), step === "details" && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("h2", { style: { fontFamily: sans, fontSize: 20, color: T.white, margin: "0 0 6px", fontWeight: 700, letterSpacing: 0.5 } }, "Name your trip"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 18px", lineHeight: 1.5 } }, "A descriptive name makes your trip easier to find. Try including the route name and region \u2014 e.g. ", /* @__PURE__ */ import_react4.default.createElement("em", null, '"Engineer Pass, Colorado"'), "."), /* @__PURE__ */ import_react4.default.createElement("label", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 600, display: "block", marginBottom: 6 } }, "TRIP NAME"), /* @__PURE__ */ import_react4.default.createElement(
-      "input",
-      {
-        autoFocus: true,
-        value: name,
-        onChange: (e) => setName(e.target.value.slice(0, 90)),
-        placeholder: "e.g. Engineer Pass, Colorado",
-        style: { width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none", marginBottom: 4 },
-        onFocus: (e) => e.target.style.borderColor = T.copper,
-        onBlur: (e) => e.target.style.borderColor = T.charcoal
-      }
-    ), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, display: "block", marginBottom: 16 } }, name.length, "/90 \xB7 aim for 30-70 characters with the route + region"), /* @__PURE__ */ import_react4.default.createElement("label", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 600, display: "block", marginBottom: 6 } }, "BRIEF DESCRIPTION"), /* @__PURE__ */ import_react4.default.createElement(
-      "textarea",
-      {
-        value: description,
-        onChange: (e) => setDescription(e.target.value.slice(0, 280)),
-        placeholder: "What makes this trip worth taking? Highlights, surface type, time of year, vehicle requirements\u2026",
-        rows: 4,
-        style: { width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", resize: "vertical", lineHeight: 1.5 },
-        onFocus: (e) => e.target.style.borderColor = T.copper,
-        onBlur: (e) => e.target.style.borderColor = T.charcoal
-      }
-    ), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, display: "block", marginTop: 4, marginBottom: 24 } }, description.length, "/280 \xB7 use natural language with key terms (region, surface, season)"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setStep("disclaimer"), style: { flex: 1, padding: "14px", borderRadius: 10, background: T.charcoal, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 12, color: T.tertiary, fontWeight: 700, letterSpacing: 1 } }, "BACK"), /* @__PURE__ */ import_react4.default.createElement(
+    )), step === "route" && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("h2", { style: { fontFamily: sans, fontSize: 20, color: T.white, margin: "0 0 6px", fontWeight: 700, letterSpacing: 0.5 } }, isPlan ? "Sketch your route" : "Add your route"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 18px", lineHeight: 1.5 } }, isPlan ? "Drop pins on the map for the route you intend to take. You can come back to this anytime \u2014 plans default to private." : "Pick how you want to capture the route. You'll name and add details after \u2014 same as a trip plan."), !isPlan && /* @__PURE__ */ import_react4.default.createElement(
       "button",
       {
-        onClick: handleCreate,
-        disabled: !name.trim() || submitting,
-        style: { flex: 2, padding: "14px", borderRadius: 10, background: name.trim() && !submitting ? T.red : T.charcoal, border: "none", cursor: name.trim() && !submitting ? "pointer" : "default", fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 1, opacity: name.trim() && !submitting ? 1 : 0.5 }
-      },
-      submitting ? "CREATING\u2026" : "CREATE DRAFT"
-    ))), step === "route" && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("h2", { style: { fontFamily: sans, fontSize: 20, color: T.white, margin: "0 0 6px", fontWeight: 700, letterSpacing: 0.5 } }, isPlan ? "Sketch your route" : "Add your route"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 18px", lineHeight: 1.5 } }, isPlan ? "Drop pins on the map for the route you intend to take. You can come back to this anytime \u2014 plans default to private." : "Trip reports need a route to publish. Pick how you want to capture it \u2014 you can always come back to this draft later."), !isPlan && /* @__PURE__ */ import_react4.default.createElement(
-      "button",
-      {
-        onClick: () => onChooseLive && onChooseLive(draftId),
-        style: { width: "100%", padding: "16px", borderRadius: 10, background: T.red, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 14, marginBottom: 10, textAlign: "left" }
+        onClick: chooseLive,
+        disabled: submitting,
+        style: { width: "100%", padding: "16px", borderRadius: 10, background: T.red, border: "none", cursor: submitting ? "default" : "pointer", display: "flex", alignItems: "center", gap: 14, marginBottom: 10, textAlign: "left", opacity: submitting ? 0.6 : 1 }
       },
       /* @__PURE__ */ import_react4.default.createElement(Radio, { size: 20, color: T.white }),
       /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, "LIVE TRACKING"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 11, color: `${T.white}CC`, marginTop: 2 } }, "Recording right now \u2014 capture the route as you drive")),
@@ -48664,22 +48642,24 @@ ${suffix}`;
     ), /* @__PURE__ */ import_react4.default.createElement(
       "button",
       {
-        onClick: () => onChooseManual && onChooseManual(draftId),
-        style: { width: "100%", padding: "16px", borderRadius: 10, background: T.copper, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 14, marginBottom: 10, textAlign: "left" }
+        onClick: chooseManual,
+        disabled: submitting,
+        style: { width: "100%", padding: "16px", borderRadius: 10, background: T.copper, border: "none", cursor: submitting ? "default" : "pointer", display: "flex", alignItems: "center", gap: 14, marginBottom: 10, textAlign: "left", opacity: submitting ? 0.6 : 1 }
       },
       /* @__PURE__ */ import_react4.default.createElement(Map2, { size: 20, color: T.white }),
-      /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, "MANUAL ENTRY"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 11, color: `${T.white}DD`, marginTop: 2 } }, isPlan ? "Drop pins on the map to sketch where you want to go" : "Already done \u2014 drop pins on the map for the route you took")),
+      /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, "DROP PINS ON MAP"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 11, color: `${T.white}DD`, marginTop: 2 } }, isPlan ? "Sketch your route on the map" : "Same builder as trip planning \u2014 drop pins along the route you took")),
       /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 18, color: T.white })
     ), /* @__PURE__ */ import_react4.default.createElement(
       "button",
       {
-        onClick: () => onChooseSkip && onChooseSkip(draftId),
-        style: { width: "100%", padding: "16px", borderRadius: 10, background: T.darkCard, border: `1px solid ${T.charcoal}`, cursor: "pointer", display: "flex", alignItems: "center", gap: 14, textAlign: "left" }
+        onClick: chooseSkip,
+        disabled: submitting,
+        style: { width: "100%", padding: "16px", borderRadius: 10, background: T.darkCard, border: `1px solid ${T.charcoal}`, cursor: submitting ? "default" : "pointer", display: "flex", alignItems: "center", gap: 14, textAlign: "left", opacity: submitting ? 0.6 : 1 }
       },
       /* @__PURE__ */ import_react4.default.createElement(Clock, { size: 20, color: T.tertiary }),
-      /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 13, color: T.tertiary, fontWeight: 700, letterSpacing: 0.5 } }, "SKIP FOR NOW"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 11, color: T.tertiary, marginTop: 2 } }, "Save the draft and add the route later (can't publish without one)")),
+      /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 13, color: T.tertiary, fontWeight: 700, letterSpacing: 0.5 } }, "SKIP FOR NOW"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 11, color: T.tertiary, marginTop: 2 } }, "Open a blank draft and add the route later (can't publish without one)")),
       /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 18, color: T.tertiary })
-    ))));
+    ), !isPlan && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setStep("disclaimer"), style: { background: "none", border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, padding: "16px 0 0", letterSpacing: 0.5, display: "block", margin: "0 auto" } }, "\u2190 Back"))));
   }
   function TripPinFullscreen({ initialPins, initialPhotos, onClose, onSave, currentUserId }) {
     const [pins, setPinsRaw] = (0, import_react4.useState)(Array.isArray(initialPins) ? initialPins : []);
@@ -49140,17 +49120,17 @@ ${suffix}`;
     const diffColor = trip.difficulty === "Expert" ? T.red : trip.difficulty === "Hard" ? T.copper : trip.difficulty === "Moderate" ? T.tertiary : T.green;
     return /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => onOpen && onOpen(trip.id), style: { ...cardStyle, overflow: "hidden", cursor: "pointer" } }, trip.hero_img ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", height: 180, background: T.charcoal } }, /* @__PURE__ */ import_react4.default.createElement("img", { src: trip.hero_img, alt: "", style: { width: "100%", height: "100%", objectFit: "cover", display: "block" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, background: "linear-gradient(transparent 40%, rgba(0,0,0,0.85))" } }), trip.difficulty && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: 10, right: 10, background: `${T.darkBg}DD`, padding: "4px 10px", borderRadius: 4, backdropFilter: "blur(6px)" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: diffColor, fontWeight: 700, letterSpacing: 1 } }, trip.difficulty.toUpperCase()))) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { height: 120, background: `linear-gradient(135deg, ${T.charcoal} 0%, ${T.copper}15 100%)`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement(Mountain, { size: 56, color: T.tertiary, strokeWidth: 0.5, style: { opacity: 0.3 } }), trip.difficulty && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: 10, right: 10, background: `${T.darkBg}DD`, padding: "4px 10px", borderRadius: 4 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: diffColor, fontWeight: 700, letterSpacing: 1 } }, trip.difficulty.toUpperCase()))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "12px 14px" } }, trip.kind === "plan" && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px", background: `${T.copper}20`, color: T.copper, borderRadius: 4, fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 1 } }, /* @__PURE__ */ import_react4.default.createElement(Route, { size: 10, color: T.copper }), "PLAN"), trip.visibility === "private" && /* @__PURE__ */ import_react4.default.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px", background: `${T.tertiary}25`, color: T.tertiary, borderRadius: 4, fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 1 } }, /* @__PURE__ */ import_react4.default.createElement(Lock, { size: 10, color: T.tertiary }), "PRIVATE"), trip.status === "draft" && /* @__PURE__ */ import_react4.default.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px", background: `${T.tertiary}25`, color: T.tertiary, borderRadius: 4, fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 1 } }, "DRAFT"), trip.planned_start && /* @__PURE__ */ import_react4.default.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px", background: T.charcoal, color: T.white, borderRadius: 4, fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 0.6 } }, /* @__PURE__ */ import_react4.default.createElement(Clock, { size: 10, color: T.copper }), trip.planned_start, trip.planned_end && trip.planned_end !== trip.planned_start ? ` \u2192 ${trip.planned_end}` : "")), /* @__PURE__ */ import_react4.default.createElement("h3", { style: { fontFamily: sans, fontSize: 15, color: T.white, margin: "0 0 4px", fontWeight: 700, lineHeight: 1.3 } }, trip.name), trip.description && /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 10px", lineHeight: 1.5, overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } }, trip.description), stats.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 8 } }, stats.map((s, i) => /* @__PURE__ */ import_react4.default.createElement("span", { key: i, style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600, letterSpacing: 0.4 } }, s))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, paddingTop: 8, borderTop: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 22, height: 22, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 } }, author && author.avatar_url ? /* @__PURE__ */ import_react4.default.createElement("img", { src: author.avatar_url, alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, fontWeight: 700, color: T.white } }, initial)), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 500 } }, authorName), location2 && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, "\xB7"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary, display: "flex", alignItems: "center", gap: 3 } }, /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 11, color: T.tertiary }), location2)), trip.published_at && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, marginLeft: "auto" } }, formatPostTime(new Date(trip.published_at).getTime())))));
   }
-  function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onEdit, onUpdate, onDelete, onEditPlanRoute, onLoadRouteData, onBumpView, isLiked, likeCount, onToggleLike, onShareToFeed, onStartDirections, onStartNav, onPlanConvoy }) {
+  function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onEdit, onUpdate, onDelete, onEditPlanRoute, onLoadRouteData, onBumpView, isLiked, likeCount, onToggleLike, onShareToFeed, onStartDirections, onStartNav, onPlanConvoy, initialEditMode }) {
     if (!trip) return null;
     const isPlan = trip.kind === "plan";
     const isOwner = !!(currentUserId && trip.user_id === currentUserId);
-    const [editingMode, setEditingMode] = (0, import_react4.useState)(false);
+    const [editingMode, setEditingMode] = (0, import_react4.useState)(!!initialEditMode);
     const [heroFullscreen, setHeroFullscreen] = (0, import_react4.useState)(false);
     const [confirmDelete, setConfirmDelete] = (0, import_react4.useState)(false);
     const [highlightedPinIdx, setHighlightedPinIdx] = (0, import_react4.useState)(null);
     const togglePinHighlight = (idx) => setHighlightedPinIdx((prev) => prev === idx ? null : idx);
     (0, import_react4.useEffect)(() => {
-      setEditingMode(false);
+      setEditingMode(!!initialEditMode);
       setHeroFullscreen(false);
       setConfirmDelete(false);
       setHighlightedPinIdx(null);
@@ -55757,6 +55737,11 @@ ${suffix}`;
     const [pendingTripDraftId, setPendingTripDraftId] = (0, import_react4.useState)(null);
     const [editingTripId, setEditingTripId] = (0, import_react4.useState)(null);
     const [detailTripId, setDetailTripId] = (0, import_react4.useState)(null);
+    const [detailTripInitialEdit, setDetailTripInitialEdit] = (0, import_react4.useState)(false);
+    const openTripDetailForEdit = (id) => {
+      setDetailTripInitialEdit(true);
+      setDetailTripId(id);
+    };
     const [detailConvoyId, setDetailConvoyId] = (0, import_react4.useState)(null);
     const [tripCreatorMode, setTripCreatorMode] = (0, import_react4.useState)(null);
     const setShowTripCreator = (v) => setTripCreatorMode(v ? "report" : null);
@@ -58787,7 +58772,7 @@ ${suffix}`;
             const id = pendingTripDraftId;
             setShowTripPinFullscreen(false);
             setPendingTripDraftId(null);
-            if (id) setEditingTripId(id);
+            if (id) openTripDetailForEdit(id);
           },
           onSave: (routeData) => {
             const startPin = routeData.pins && routeData.pins[0] || routeData.points && routeData.points[0] || null;
@@ -58814,7 +58799,7 @@ ${suffix}`;
             updateTripDraft(id, updates);
             setShowTripPinFullscreen(false);
             setPendingTripDraftId(null);
-            setEditingTripId(id);
+            openTripDetailForEdit(id);
           }
         }
       );
@@ -58865,15 +58850,21 @@ ${suffix}`;
           trip,
           author,
           currentUserId: myUid,
-          onBack: () => setDetailTripId(null),
+          initialEditMode: detailTripInitialEdit,
+          onBack: () => {
+            setDetailTripId(null);
+            setDetailTripInitialEdit(false);
+          },
           onEdit: (id) => {
             setDetailTripId(null);
+            setDetailTripInitialEdit(false);
             setEditingTripId(id);
           },
           onUpdate: requireAuth(updateTripDraft),
           onDelete: requireAuth(async (id) => {
             await deleteTripDraft(id);
             setDetailTripId(null);
+            setDetailTripInitialEdit(false);
           }),
           onEditPlanRoute: (t) => {
             if (!t) return;
@@ -59057,7 +59048,7 @@ ${suffix}`;
         },
         onChooseSkip: (draftId) => {
           setShowTripCreator(false);
-          if (draftId) setEditingTripId(draftId);
+          if (draftId) openTripDetailForEdit(draftId);
         }
       }
     ), showRecorder && /* @__PURE__ */ import_react4.default.createElement(
@@ -59142,7 +59133,7 @@ ${suffix}`;
             const draftIdForEditor = pendingTripDraftId;
             setPendingTripDraftId(null);
             setShowRecorder(false);
-            setEditingTripId(draftIdForEditor);
+            openTripDetailForEdit(draftIdForEditor);
             return;
           }
           setUserRoutes((prev) => [{
