@@ -43948,7 +43948,7 @@ ${suffix}`;
       submitting ? "OPENING\u2026" : selectedList.length === 0 ? "PICK SOMEONE" : selectedList.length === 1 ? `SEND TO ${selectedList[0].full_name || "@" + selectedList[0].handle}` : `SEND TO ${selectedList.length} PEOPLE`
     ))));
   }
-  function usePlanBuilderLayer(mapRef, ready, points, onMarkerTap, endAnchorId) {
+  function usePlanBuilderLayer(mapRef, ready, points, onMarkerTap, endAnchorId, accent) {
     const markersRef = (0, import_react4.useRef)([]);
     const handlerRef = (0, import_react4.useRef)(onMarkerTap);
     (0, import_react4.useEffect)(() => {
@@ -43957,6 +43957,7 @@ ${suffix}`;
     const OFFROAD_THRESHOLD_M = 50;
     const segmentCacheRef = (0, import_react4.useRef)({});
     const [segmentTick, setSegmentTick] = (0, import_react4.useState)(0);
+    const accentColor = accent || T.copper;
     const segmentKey = (from, to) => `${from.lng.toFixed(5)},${from.lat.toFixed(5)}|${to.lng.toFixed(5)},${to.lat.toFixed(5)}`;
     const segments = (0, import_react4.useMemo)(() => {
       const valid = (points || []).filter((p) => p && p.lat != null && p.lng != null);
@@ -43982,7 +43983,7 @@ ${suffix}`;
             type: "line",
             source: "plan-builder-line-routed",
             layout: { "line-cap": "round", "line-join": "round" },
-            paint: { "line-color": T.copper, "line-width": 3, "line-opacity": 0.9, "line-dasharray": [2, 2] }
+            paint: { "line-color": accentColor, "line-width": 3, "line-opacity": 0.9, "line-dasharray": [2, 2] }
           });
           map.addLayer({
             id: "plan-builder-line-offroad",
@@ -43991,6 +43992,10 @@ ${suffix}`;
             layout: { "line-cap": "round", "line-join": "round" },
             paint: { "line-color": T.red, "line-width": 3, "line-opacity": 0.95, "line-dasharray": [1, 1.4] }
           });
+        }
+        try {
+          map.setPaintProperty("plan-builder-line-routed", "line-color", accentColor);
+        } catch (_) {
         }
         const routed = [];
         const offroad = [];
@@ -44024,7 +44029,7 @@ ${suffix}`;
       };
       if (map.isStyleLoaded()) ensure();
       else map.once("load", ensure);
-    }, [mapRef, ready, segments]);
+    }, [mapRef, ready, segments, accentColor]);
     (0, import_react4.useEffect)(() => {
       const valid = (points || []).filter((p) => p && p.lat != null && p.lng != null);
       if (valid.length < 2) return;
@@ -44078,7 +44083,7 @@ ${suffix}`;
         if (!p || p.lat == null || p.lng == null) return;
         const isCamp = p.type === "camp";
         const isEndAnchor = endAnchorId && p.id === endAnchorId;
-        const baseColor = isCamp ? "#5B8C5A" : T.copper;
+        const baseColor = isCamp ? "#5B8C5A" : accentColor;
         const bg = isEndAnchor ? T.white : baseColor;
         const fg = isEndAnchor ? baseColor : T.white;
         const stroke = isEndAnchor ? baseColor : T.white;
@@ -44103,7 +44108,7 @@ ${suffix}`;
         });
         markersRef.current = [];
       };
-    }, [mapRef, ready, points, endAnchorId]);
+    }, [mapRef, ready, points, endAnchorId, accentColor]);
   }
   function campingSpotsToGeoJSON(rows) {
     return {
@@ -50004,7 +50009,7 @@ ${suffix}`;
     });
     const [selectedPlanPointId, setSelectedPlanPointId] = (0, import_react4.useState)(null);
     const [planInsertTarget, setPlanInsertTarget] = (0, import_react4.useState)(null);
-    usePlanBuilderLayer(mapInst, mapReady, planBuilder && planBuilder.points || [], (id) => setSelectedPlanPointId(id), planBuilder && planBuilder.endAnchorId || null);
+    usePlanBuilderLayer(mapInst, mapReady, planBuilder && planBuilder.points || [], (id) => setSelectedPlanPointId(id), planBuilder && planBuilder.endAnchorId || null, planBuilder && planBuilder.accent || null);
     (0, import_react4.useEffect)(() => {
       if (!pendingSpotNav || !mapReady) return;
       const spot = (campingSpots || []).find((s) => s.id === pendingSpotNav);
@@ -50966,11 +50971,14 @@ ${suffix}`;
       const pt = (planBuilder.points || []).find((p) => p.id === selectedPlanPointId);
       if (!pt) return null;
       const idx = planBuilder.points.findIndex((p) => p.id === selectedPlanPointId);
-      return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 10, background: `${T.darkCard}F8`, border: `1px solid ${pt.type === "camp" ? "#5B8C5A" : T.copper}80`, borderRadius: 10, padding: 14, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 26, height: 26, borderRadius: "50%", background: pt.type === "camp" ? "#5B8C5A" : T.copper, color: T.white, border: `2px solid ${T.white}`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: sans, fontSize: 12, fontWeight: 700 } }, idx + 1), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 1 } }, pt.type === "camp" ? "CAMP" : "WAYPOINT"), pt.sourceName && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, marginLeft: 4 } }, "\xB7 ", pt.sourceName), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setSelectedPlanPointId(null), style: { background: "none", border: "none", cursor: "pointer", padding: 2, color: T.tertiary, marginLeft: "auto" } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 14 }))), pt.sourceType !== "spot" && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 8, padding: 3, marginBottom: 10 } }, /* @__PURE__ */ import_react4.default.createElement(
+      const accent = planBuilder.accent || T.copper;
+      const wpColor = pt.type === "camp" ? "#5B8C5A" : accent;
+      const ptPhotos = Array.isArray(pt.photos) ? pt.photos : [];
+      return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 10, background: `${T.darkCard}F8`, border: `1px solid ${wpColor}80`, borderRadius: 10, padding: 14, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 26, height: 26, borderRadius: "50%", background: wpColor, color: T.white, border: `2px solid ${T.white}`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: sans, fontSize: 12, fontWeight: 700 } }, idx + 1), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 1 } }, pt.type === "camp" ? "CAMP" : "WAYPOINT"), pt.sourceName && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, marginLeft: 4 } }, "\xB7 ", pt.sourceName), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setSelectedPlanPointId(null), style: { background: "none", border: "none", cursor: "pointer", padding: 2, color: T.tertiary, marginLeft: "auto" } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 14 }))), pt.sourceType !== "spot" && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 8, padding: 3, marginBottom: 10 } }, /* @__PURE__ */ import_react4.default.createElement(
         "button",
         {
           onClick: () => planBuilder.update(pt.id, { type: "waypoint" }),
-          style: { flex: 1, padding: "7px 8px", borderRadius: 6, background: pt.type === "waypoint" ? T.copper : "transparent", border: "none", cursor: "pointer", fontFamily: sans, fontSize: 10, color: pt.type === "waypoint" ? T.white : T.tertiary, fontWeight: 700, letterSpacing: 0.6, display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }
+          style: { flex: 1, padding: "7px 8px", borderRadius: 6, background: pt.type === "waypoint" ? accent : "transparent", border: "none", cursor: "pointer", fontFamily: sans, fontSize: 10, color: pt.type === "waypoint" ? T.white : T.tertiary, fontWeight: 700, letterSpacing: 0.6, display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }
         },
         /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 11 }),
         "WAYPOINT"
@@ -50992,14 +51000,60 @@ ${suffix}`;
           rows: 3,
           style: { width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", resize: "vertical", lineHeight: 1.5, marginBottom: 10 }
         }
-      ), /* @__PURE__ */ import_react4.default.createElement(
+      ), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 10 } }, /* @__PURE__ */ import_react4.default.createElement(
+        "input",
+        {
+          type: "file",
+          accept: "image/*,video/*",
+          multiple: true,
+          id: `plan-pt-photos-${pt.id}`,
+          style: { display: "none" },
+          onChange: (e) => {
+            const files = Array.from(e.target.files || []);
+            e.target.value = "";
+            if (files.length === 0) return;
+            const readers = files.map((file) => new Promise((resolve) => {
+              if (file.size > MAX_UPLOAD_BYTES) {
+                resolve(null);
+                return;
+              }
+              const reader = new FileReader();
+              reader.onload = (ev) => resolve({ url: ev.target.result, name: file.name, type: file.type.startsWith("video/") ? "video" : "image" });
+              reader.readAsDataURL(file);
+            }));
+            Promise.all(readers).then((items) => {
+              const cleaned = items.filter(Boolean);
+              if (cleaned.length === 0) return;
+              planBuilder.update(pt.id, { photos: [...ptPhotos, ...cleaned] });
+            });
+          }
+        }
+      ), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } }, ptPhotos.map((ph, pi) => {
+        const url = typeof ph === "string" ? ph : ph && ph.url || "";
+        return /* @__PURE__ */ import_react4.default.createElement("div", { key: pi, style: { position: "relative", width: 64, height: 64, borderRadius: 6, overflow: "hidden", border: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("img", { src: url, alt: "", style: { width: "100%", height: "100%", objectFit: "cover", display: "block" } }), /* @__PURE__ */ import_react4.default.createElement(
+          "button",
+          {
+            onClick: () => planBuilder.update(pt.id, { photos: ptPhotos.filter((_, i) => i !== pi) }),
+            style: { position: "absolute", top: 2, right: 2, width: 18, height: 18, borderRadius: "50%", background: "rgba(0,0,0,0.7)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }
+          },
+          /* @__PURE__ */ import_react4.default.createElement(X, { size: 10, color: T.white })
+        ));
+      }), /* @__PURE__ */ import_react4.default.createElement(
+        "label",
+        {
+          htmlFor: `plan-pt-photos-${pt.id}`,
+          style: { width: 64, height: 64, borderRadius: 6, background: T.darkBg, border: `1px dashed ${accent}60`, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2 }
+        },
+        /* @__PURE__ */ import_react4.default.createElement(Camera, { size: 16, color: accent }),
+        /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 8, color: accent, fontWeight: 700, letterSpacing: 0.5 } }, "ADD")
+      ))), /* @__PURE__ */ import_react4.default.createElement(
         "button",
         {
           onClick: () => {
             if (planBuilder.endAnchorId === pt.id) planBuilder.clearEndAnchor();
             else planBuilder.setEndAnchor(pt.id);
           },
-          style: { width: "100%", padding: "10px", borderRadius: 8, background: T.darkBg, border: `1px solid ${planBuilder.endAnchorId === pt.id ? T.copper : T.charcoal}`, color: planBuilder.endAnchorId === pt.id ? T.copper : T.tertiary, cursor: "pointer", fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, marginBottom: 10 }
+          style: { width: "100%", padding: "10px", borderRadius: 8, background: T.darkBg, border: `1px solid ${planBuilder.endAnchorId === pt.id ? accent : T.charcoal}`, color: planBuilder.endAnchorId === pt.id ? accent : T.tertiary, cursor: "pointer", fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, marginBottom: 10 }
         },
         planBuilder.endAnchorId === pt.id ? "\u2713 ANCHORED AS END (TAP TO RELEASE)" : "ANCHOR AS END OF TRIP"
       ), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement(
@@ -55827,15 +55881,29 @@ ${suffix}`;
         if (!draft) return null;
         draftId = draft.id;
       }
-      const pins = planBuilderPoints.map((p) => ({
-        lat: p.lat,
-        lng: p.lng,
-        label: p.label || (p.type === "camp" ? "Camp" : "Waypoint"),
-        note: p.note || void 0,
-        planType: p.type,
-        sourceId: p.sourceId || void 0,
-        sourceType: p.sourceType || void 0
+      const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+      const uploadedPhotosPerPoint = await Promise.all(planBuilderPoints.map((p) => {
+        const photos = Array.isArray(p.photos) ? p.photos : [];
+        if (photos.length === 0 || !uid) return Promise.resolve(photos);
+        return uploadPostPhotoList(photos, uid).catch(() => photos);
       }));
+      const pins = planBuilderPoints.map((p, i) => {
+        const photos = uploadedPhotosPerPoint[i] || [];
+        return {
+          lat: p.lat,
+          lng: p.lng,
+          label: p.label || (p.type === "camp" ? "Camp" : "Waypoint"),
+          note: p.note || void 0,
+          planType: p.type,
+          sourceId: p.sourceId || void 0,
+          sourceType: p.sourceType || void 0,
+          // photo (singular) is the first photo — RouteMapPreview reads
+          // this to render the camera-emoji marker. photos (plural)
+          // carries the rest so the per-pin detail can show all of them.
+          photo: photos[0] && (typeof photos[0] === "string" ? photos[0] : photos[0].url) || void 0,
+          photos: photos.length > 0 ? photos : void 0
+        };
+      });
       const OFFROAD_THRESHOLD_M = 50;
       const densePoints = [];
       const offroadRanges = [];
@@ -55978,7 +56046,11 @@ ${suffix}`;
         note: p.note || "",
         label: p.label || "",
         sourceId: p.sourceId || void 0,
-        sourceType: p.sourceType || void 0
+        sourceType: p.sourceType || void 0,
+        // Round-trip any existing pin photos so editing doesn't drop
+        // them. Falls back to the singular .photo field for older
+        // pins that pre-date the photos[] array.
+        photos: Array.isArray(p.photos) && p.photos.length > 0 ? p.photos : p.photo ? [{ url: p.photo }] : []
       })) : [];
       setPlanBuilderPoints(seed);
       setPlanBuilderEndAnchorId(null);
@@ -58733,7 +58805,7 @@ ${suffix}`;
     }, onGoToPost: (id) => {
       setProfileStack([]);
       setScreen("feed");
-    }, myPoints: myTotalPoints }) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, isGuest && /* @__PURE__ */ import_react4.default.createElement(GuestBanner, { onSignIn: () => setShowGuestPrompt(true) }), screen === "feed" && renderFeedScopedTo({ hideFilters: false }), screen === "forum" && /* @__PURE__ */ import_react4.default.createElement(ForumScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), pendingThread, onPendingHandled: () => setPendingThread(null), onAddNotification: requireAuth(addNotification), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onOpenShareCompose: openShareCompose, onOpenShareIntent: openShareIntent, onAddFeedPost: requireAuth((post2) => addPost(post2)), userThreads: forumUserThreads, setUserThreads: requireAuth(setForumUserThreads), userReplies: forumUserReplies, setUserReplies: requireAuth(setForumUserReplies), likedForumItems: forumLikedItems, setLikedForumItems: requireAuth(setForumLikedItems), forumLikeCounts, setForumLikeCounts: requireAuth(setForumLikeCounts), forumViewCounts, setForumViewCounts, onAwardPoints: awardPoints }), screen === "routes" && /* @__PURE__ */ import_react4.default.createElement(RoutesScreen, { campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, onOpenShareIntent: openShareIntent, tripAuthors, onLoadRouteData: loadTripRouteData, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, tripReports: allTripReports, showTripReports, setShowTripReports, tripPlans: allTripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot: requireAuth(addCampingSpot), onUpdateCampingSpot: requireAuth(updateCampingSpot), onDeleteCampingSpot: requireAuth(deleteCampingSpot), onLoadCampingSpotPhotos: loadCampingSpotPhotos, onLoadCampingSpotElevation: loadCampingSpotElevation, spotAuthors, onViewUser: openUserProfile, onStartNav: (route) => setActiveNavRoute(route), onOpenTripDetail: (slug) => setPendingTripNav(slug), onOpenTripPlanDraft: (id) => setDetailTripId(id), onNewTripReport: () => setTripCreatorMode("report"), onNewTripPlan: () => requireAuth(() => enterPlanBuilder())(), pendingSpotNav, onConsumePendingSpotNav: () => setPendingSpotNav(null), pendingHQOpen, onConsumePendingHQOpen: () => setPendingHQOpen(false), pendingPlanNav, onConsumePendingPlanNav: () => setPendingPlanNav(null), onShareCampingSpotToFeed: requireAuth(shareCampingSpotToFeed), onShareHQToFeed: requireAuth(shareHQToFeed), onShareTripToFeed: requireAuth(shareTripToFeed), onShareTripPlanToFeed: requireAuth(shareTripPlanToFeed), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onShowToast: showErrorToast, onOpenShareCompose: openShareCompose, planBuilder: { active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, editingId: planBuilderEditingId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen } }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, onLoadAllBuilds: loadAllBuildsOnce, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onOpenShareCompose: openShareCompose, onOpenShareIntent: openShareIntent, onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onPostBuildToFeed: requireAuth((b, opts) => {
+    }, myPoints: myTotalPoints }) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, isGuest && /* @__PURE__ */ import_react4.default.createElement(GuestBanner, { onSignIn: () => setShowGuestPrompt(true) }), screen === "feed" && renderFeedScopedTo({ hideFilters: false }), screen === "forum" && /* @__PURE__ */ import_react4.default.createElement(ForumScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), pendingThread, onPendingHandled: () => setPendingThread(null), onAddNotification: requireAuth(addNotification), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onOpenShareCompose: openShareCompose, onOpenShareIntent: openShareIntent, onAddFeedPost: requireAuth((post2) => addPost(post2)), userThreads: forumUserThreads, setUserThreads: requireAuth(setForumUserThreads), userReplies: forumUserReplies, setUserReplies: requireAuth(setForumUserReplies), likedForumItems: forumLikedItems, setLikedForumItems: requireAuth(setForumLikedItems), forumLikeCounts, setForumLikeCounts: requireAuth(setForumLikeCounts), forumViewCounts, setForumViewCounts, onAwardPoints: awardPoints }), screen === "routes" && /* @__PURE__ */ import_react4.default.createElement(RoutesScreen, { campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, onOpenShareIntent: openShareIntent, tripAuthors, onLoadRouteData: loadTripRouteData, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, tripReports: allTripReports, showTripReports, setShowTripReports, tripPlans: allTripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot: requireAuth(addCampingSpot), onUpdateCampingSpot: requireAuth(updateCampingSpot), onDeleteCampingSpot: requireAuth(deleteCampingSpot), onLoadCampingSpotPhotos: loadCampingSpotPhotos, onLoadCampingSpotElevation: loadCampingSpotElevation, spotAuthors, onViewUser: openUserProfile, onStartNav: (route) => setActiveNavRoute(route), onOpenTripDetail: (slug) => setPendingTripNav(slug), onOpenTripPlanDraft: (id) => setDetailTripId(id), onNewTripReport: () => setTripCreatorMode("report"), onNewTripPlan: () => requireAuth(() => enterPlanBuilder())(), pendingSpotNav, onConsumePendingSpotNav: () => setPendingSpotNav(null), pendingHQOpen, onConsumePendingHQOpen: () => setPendingHQOpen(false), pendingPlanNav, onConsumePendingPlanNav: () => setPendingPlanNav(null), onShareCampingSpotToFeed: requireAuth(shareCampingSpotToFeed), onShareHQToFeed: requireAuth(shareHQToFeed), onShareTripToFeed: requireAuth(shareTripToFeed), onShareTripPlanToFeed: requireAuth(shareTripPlanToFeed), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onShowToast: showErrorToast, onOpenShareCompose: openShareCompose, planBuilder: { active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, editingId: planBuilderEditingId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen, accent: planBuilderEditingId && (tripReports || []).find((t) => t.id === planBuilderEditingId && t.kind === "report") ? T.red : T.copper } }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, onLoadAllBuilds: loadAllBuildsOnce, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onOpenShareCompose: openShareCompose, onOpenShareIntent: openShareIntent, onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onPostBuildToFeed: requireAuth((b, opts) => {
       const rawBd = b.buildData;
       const bd = scrubLocalPhotosFromBuildData(rawBd);
       const isLocalUrl = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:"));
@@ -58906,7 +58978,8 @@ ${suffix}`;
               label: p.label || "",
               sourceId: p.sourceId || void 0,
               sourceType: p.sourceType || void 0,
-              sourceName: p.label || void 0
+              sourceName: p.label || void 0,
+              photos: Array.isArray(p.photos) && p.photos.length > 0 ? p.photos : p.photo ? [{ url: p.photo }] : []
             }));
             setPlanBuilderActive(true);
             setPlanBuilderPoints(seedPoints.map((p) => ({ id: "pp_seed_" + Math.random().toString(36).slice(2), ...p })));
