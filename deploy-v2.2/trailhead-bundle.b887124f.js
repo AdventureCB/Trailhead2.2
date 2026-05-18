@@ -44449,6 +44449,46 @@ ${suffix}`;
       else map.once("load", ensure);
     }, [mapRef, ready, visible]);
   }
+  function useWakeLock(active) {
+    (0, import_react4.useEffect)(() => {
+      if (!active || typeof navigator === "undefined" || !navigator.wakeLock) return;
+      let lock = null;
+      let cancelled = false;
+      const acquire = async () => {
+        try {
+          const next = await navigator.wakeLock.request("screen");
+          if (cancelled) {
+            try {
+              next.release();
+            } catch (_) {
+            }
+            return;
+          }
+          lock = next;
+          lock.addEventListener("release", () => {
+            lock = null;
+          });
+        } catch (e) {
+        }
+      };
+      const onVis = () => {
+        if (!document.hidden && !lock) acquire();
+      };
+      document.addEventListener("visibilitychange", onVis);
+      acquire();
+      return () => {
+        cancelled = true;
+        document.removeEventListener("visibilitychange", onVis);
+        if (lock) {
+          try {
+            lock.release();
+          } catch (_) {
+          }
+          lock = null;
+        }
+      };
+    }, [active]);
+  }
   function MapLayerToggle({ showCamping, setShowCamping, showPublicLands, setShowPublicLands, showTripReports, setShowTripReports, showTripPlans, setShowTripPlans, showSatellite, setShowSatellite }) {
     const [open, setOpen] = (0, import_react4.useState)(false);
     const activeCount = (showCamping ? 1 : 0) + (showPublicLands ? 1 : 0) + (showTripReports ? 1 : 0) + (showTripPlans ? 1 : 0) + (showSatellite ? 1 : 0);
@@ -46808,6 +46848,7 @@ ${suffix}`;
     const [recording, setRecording] = (0, import_react4.useState)(false);
     const [paused, setPaused] = (0, import_react4.useState)(false);
     const [trackPoints, setTrackPoints] = (0, import_react4.useState)([]);
+    useWakeLock(recording && !paused);
     const [elapsed, setElapsed] = (0, import_react4.useState)(0);
     const [stats, setStats] = (0, import_react4.useState)({ speed: 0, maxSpeed: 0, elevation: 0, elevGain: 0, distance: 0 });
     const [showDetails, setShowDetails] = (0, import_react4.useState)(false);
@@ -47598,6 +47639,7 @@ ${suffix}`;
     const [phase, setPhase] = (0, import_react4.useState)("preview");
     const [paused, setPaused] = (0, import_react4.useState)(false);
     const [muted, setMuted] = (0, import_react4.useState)(false);
+    useWakeLock(phase === "active" && !paused);
     const [mapReady, setMapReady] = (0, import_react4.useState)(false);
     const [routeLoaded, setRouteLoaded] = (0, import_react4.useState)(false);
     const [rerouting, setRerouting] = (0, import_react4.useState)(false);
