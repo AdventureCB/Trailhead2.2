@@ -55757,6 +55757,7 @@ ${suffix}`;
       convoyAfterPlanCommitRef.current = true;
       setShowCompose(false);
       setComposePrefillConvoy(null);
+      setScreen("routes");
       enterPlanBuilder();
     };
     const [showTripPinFullscreen, setShowTripPinFullscreen] = (0, import_react4.useState)(false);
