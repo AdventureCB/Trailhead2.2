@@ -55916,21 +55916,23 @@ ${suffix}`;
         distance_mi: totalMeters > 0 ? Number((totalMeters / 1609.344).toFixed(2)) : null,
         duration_min: totalSeconds > 0 ? Math.round(totalSeconds / 60) : null,
         elev_gain_ft: elevGainFt,
-        max_elev_ft: maxElevFt,
-        // Plans go straight to 'published' on commit. They have no
-        // separate review step like trip reports do, and the RLS for
-        // public plans requires status='published' alongside
-        // visibility='public' before non-owners can see them on the map.
-        // Owners stay seeing the plan regardless via the auth.uid()
-        // branch in the SELECT policy.
-        status: "published"
+        max_elev_ft: maxElevFt
       };
+      const editingExistingReport = planBuilderEditingId && reportEditAfterCommitRef.current === planBuilderEditingId;
+      if (!editingExistingReport) {
+        updates.status = "published";
+      }
       if (planBuilderPoints.length > 1) {
         updates.end_lat = last.lat;
         updates.end_lng = last.lng;
       }
       await updateTripDraft(draftId, updates);
       exitPlanBuilder();
+      if (reportEditAfterCommitRef.current && reportEditAfterCommitRef.current === draftId) {
+        reportEditAfterCommitRef.current = null;
+        openTripDetailForEdit(draftId);
+        return { id: draftId };
+      }
       if (convoyAfterPlanCommitRef.current) {
         convoyAfterPlanCommitRef.current = false;
         const planSnapshot = {
@@ -55962,6 +55964,26 @@ ${suffix}`;
       setComposePrefillConvoy(null);
       setScreen("routes");
       enterPlanBuilder();
+    };
+    const reportEditAfterCommitRef = (0, import_react4.useRef)(null);
+    const enterPlanBuilderForReport = (reportId, existingPins) => {
+      if (!reportId) return;
+      reportEditAfterCommitRef.current = reportId;
+      setPlanBuilderEditingId(reportId);
+      const seed = Array.isArray(existingPins) && existingPins.length > 0 ? existingPins.map((p) => ({
+        id: "pp_seed_" + Math.random().toString(36).slice(2),
+        lat: p.lat,
+        lng: p.lng,
+        type: p.planType === "camp" ? "camp" : "waypoint",
+        note: p.note || "",
+        label: p.label || "",
+        sourceId: p.sourceId || void 0,
+        sourceType: p.sourceType || void 0
+      })) : [];
+      setPlanBuilderPoints(seed);
+      setPlanBuilderEndAnchorId(null);
+      setPlanBuilderActive(true);
+      setScreen("routes");
     };
     const [showTripPinFullscreen, setShowTripPinFullscreen] = (0, import_react4.useState)(false);
     const [pendingThread, setPendingThread] = (0, import_react4.useState)(null);
@@ -58868,8 +58890,14 @@ ${suffix}`;
           }),
           onEditPlanRoute: (t) => {
             if (!t) return;
+            setDetailTripId(null);
+            setDetailTripInitialEdit(false);
             const rd = t.route_data || {};
             const pins = Array.isArray(rd.pins) ? rd.pins : [];
+            if (t.kind === "report") {
+              enterPlanBuilderForReport(t.id, pins);
+              return;
+            }
             const seedPoints = pins.map((p) => ({
               lat: p.lat,
               lng: p.lng,
@@ -58880,7 +58908,6 @@ ${suffix}`;
               sourceType: p.sourceType || void 0,
               sourceName: p.label || void 0
             }));
-            setDetailTripId(null);
             setPlanBuilderActive(true);
             setPlanBuilderPoints(seedPoints.map((p) => ({ id: "pp_seed_" + Math.random().toString(36).slice(2), ...p })));
             setPlanBuilderEndAnchorId(null);
@@ -59038,8 +59065,10 @@ ${suffix}`;
         onCreateDraft: requireAuth(createTripDraft),
         onChooseManual: (draftId) => {
           setShowTripCreator(false);
-          setPendingTripDraftId(draftId);
-          setShowTripPinFullscreen(true);
+          const trip = tripReports.find((t) => t.id === draftId);
+          const rd = trip && trip.route_data || {};
+          const seedPins = Array.isArray(rd.pins) ? rd.pins : [];
+          enterPlanBuilderForReport(draftId, seedPins);
         },
         onChooseLive: (draftId) => {
           setShowTripCreator(false);
