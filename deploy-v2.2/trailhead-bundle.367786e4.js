@@ -47460,6 +47460,17 @@ ${suffix}`;
       if ((!pins || pins.length === 0) && (!points || points.length === 0)) return;
       if (!mapRef.current) return;
       let cancelled = false;
+      let rafId = null;
+      let timerId = null;
+      const waitForPaint = () => new Promise((resolve) => {
+        if (typeof requestAnimationFrame !== "undefined") {
+          rafId = requestAnimationFrame(() => {
+            rafId = requestAnimationFrame(resolve);
+          });
+        } else {
+          timerId = setTimeout(resolve, 16);
+        }
+      });
       const norm = (p) => {
         if (p && typeof p === "object" && !Array.isArray(p) && p.lat != null && p.lng != null) return p;
         if (Array.isArray(p) && p.length >= 2 && isFinite(p[0]) && isFinite(p[1])) return { lng: p[0], lat: p[1] };
@@ -47472,6 +47483,8 @@ ${suffix}`;
         } catch (e) {
           return;
         }
+        if (cancelled) return;
+        await waitForPaint();
         if (cancelled || !mapRef.current || mapInst.current) return;
         const normPoints = (points || []).map(norm).filter(Boolean);
         const normPins = (pins || []).map(norm).filter(Boolean);
@@ -47590,6 +47603,18 @@ ${suffix}`;
       init();
       return () => {
         cancelled = true;
+        if (rafId !== null && typeof cancelAnimationFrame !== "undefined") {
+          try {
+            cancelAnimationFrame(rafId);
+          } catch (_) {
+          }
+        }
+        if (timerId !== null) {
+          try {
+            clearTimeout(timerId);
+          } catch (_) {
+          }
+        }
         markersRef.current.forEach((e) => {
           try {
             e.marker.remove();
@@ -55034,6 +55059,14 @@ ${suffix}`;
         }
       }
       setAppReady(true);
+      try {
+        const idle = typeof window !== "undefined" && window.requestIdleCallback ? window.requestIdleCallback : (cb) => setTimeout(cb, 200);
+        idle(() => {
+          loadMapbox().catch(() => {
+          });
+        });
+      } catch (_) {
+      }
       loadAllBuildsOnce();
       supabase.from("builds").select("*").eq("user_id", uid).order("created_at", { ascending: false }).then(({ data: ownBuildRows, error: ownBuildErr }) => {
         if (ownBuildErr) {
