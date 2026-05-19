@@ -51470,13 +51470,25 @@ ${suffix}`;
       }
     ));
   }
-  function BuildCommentsSection({ buildId, comments, currentUserId, currentUserName, currentUserHandle, currentUserAvatar, onLoad, onAdd, onDelete, onViewUser, isGuest, onGuestTap }) {
+  function BuildCommentsSection({ buildId, comments, likedCommentIds, commentLikeCounts, onToggleLike, currentUserId, currentUserName, currentUserHandle, currentUserAvatar, onLoad, onAdd, onDelete, onViewUser, isGuest, onGuestTap }) {
     const [draft, setDraft] = (0, import_react4.useState)("");
     const [sending, setSending] = (0, import_react4.useState)(false);
+    const [replyingTo, setReplyingTo] = (0, import_react4.useState)(null);
+    const [replyDraft, setReplyDraft] = (0, import_react4.useState)("");
+    const [replySending, setReplySending] = (0, import_react4.useState)(false);
     (0, import_react4.useEffect)(() => {
       if (buildId && onLoad) onLoad(buildId);
     }, [buildId]);
-    const submit = async () => {
+    const { tops, repliesByParent } = comments.reduce((acc, c) => {
+      if (c.parentId) {
+        const bucket = acc.repliesByParent[c.parentId] || (acc.repliesByParent[c.parentId] = []);
+        bucket.push(c);
+      } else {
+        acc.tops.push(c);
+      }
+      return acc;
+    }, { tops: [], repliesByParent: {} });
+    const submitTop = async () => {
       if (isGuest) {
         onGuestTap && onGuestTap();
         return;
@@ -51485,22 +51497,90 @@ ${suffix}`;
       if (!text || sending) return;
       setSending(true);
       try {
-        await onAdd(buildId, text);
+        await onAdd(buildId, text, null);
         setDraft("");
       } finally {
         setSending(false);
       }
     };
-    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "20px 16px 0" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 12 } }, /* @__PURE__ */ import_react4.default.createElement(MessageCircle, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600 } }, "COMMENTS"), comments.length > 0 && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.5, fontWeight: 700 } }, "\xB7 ", comments.length)), comments.length === 0 ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "12px 0", fontFamily: serif, fontSize: 13, color: T.tertiary } }, "Be the first to comment on this build.") : /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 } }, comments.map((c) => {
+    const submitReply = async (parentId) => {
+      if (isGuest) {
+        onGuestTap && onGuestTap();
+        return;
+      }
+      const text = replyDraft.trim();
+      if (!text || replySending) return;
+      setReplySending(true);
+      try {
+        await onAdd(buildId, text, parentId);
+        setReplyDraft("");
+        setReplyingTo(null);
+      } finally {
+        setReplySending(false);
+      }
+    };
+    const renderComment = (c, isReply) => {
       const isMine = c.userId && currentUserId && c.userId === currentUserId;
-      return /* @__PURE__ */ import_react4.default.createElement("div", { key: c.id, style: { display: "flex", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => onViewUser && onViewUser(c.userId || c.handle), style: { width: 32, height: 32, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0, cursor: "pointer" } }, c.avatarUrl ? /* @__PURE__ */ import_react4.default.createElement("img", { src: txImg(c.avatarUrl, 96), alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700 } }, c.initial)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 2 } }, /* @__PURE__ */ import_react4.default.createElement("span", { onClick: () => onViewUser && onViewUser(c.userId || c.handle), style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, cursor: "pointer" } }, c.user), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, formatPostTime(c.time)), isMine && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => onDelete && onDelete(buildId, c.id), style: { marginLeft: "auto", background: "transparent", border: "none", color: T.tertiary, cursor: "pointer", padding: 2 }, "aria-label": "Delete" }, /* @__PURE__ */ import_react4.default.createElement(Trash2, { size: 12 }))), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.white, margin: 0, lineHeight: 1.5, wordBreak: "break-word" } }, c.text)));
-    })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 10, alignItems: "flex-start", paddingTop: 12, borderTop: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 32, height: 32, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 } }, currentUserAvatar ? /* @__PURE__ */ import_react4.default.createElement("img", { src: txImg(currentUserAvatar, 96), alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700 } }, (currentUserName || "U").charAt(0).toUpperCase())), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, display: "flex", gap: 8, alignItems: "center" } }, /* @__PURE__ */ import_react4.default.createElement(
+      const liked = !!(likedCommentIds && likedCommentIds[c.id]);
+      const likeCount = commentLikeCounts && commentLikeCounts[c.id] || 0;
+      return /* @__PURE__ */ import_react4.default.createElement("div", { key: c.id, style: { display: "flex", gap: 10, marginLeft: isReply ? 40 : 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => onViewUser && onViewUser(c.userId || c.handle), style: { width: isReply ? 26 : 32, height: isReply ? 26 : 32, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0, cursor: "pointer" } }, c.avatarUrl ? /* @__PURE__ */ import_react4.default.createElement("img", { src: txImg(c.avatarUrl, 96), alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: isReply ? 11 : 12, color: T.white, fontWeight: 700 } }, c.initial)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 2 } }, /* @__PURE__ */ import_react4.default.createElement("span", { onClick: () => onViewUser && onViewUser(c.userId || c.handle), style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, cursor: "pointer" } }, c.user), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, formatPostTime(c.time)), isMine && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => onDelete && onDelete(buildId, c.id), style: { marginLeft: "auto", background: "transparent", border: "none", color: T.tertiary, cursor: "pointer", padding: 2 }, "aria-label": "Delete" }, /* @__PURE__ */ import_react4.default.createElement(Trash2, { size: 12 }))), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.white, margin: 0, lineHeight: 1.5, wordBreak: "break-word" } }, c.text), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 14, marginTop: 6 } }, /* @__PURE__ */ import_react4.default.createElement(
+        "button",
+        {
+          onClick: () => {
+            if (isGuest) {
+              onGuestTap && onGuestTap();
+              return;
+            }
+            onToggleLike && onToggleLike(c.id);
+          },
+          style: { background: "transparent", border: "none", padding: 0, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 },
+          "aria-label": liked ? "Unlike" : "Like"
+        },
+        /* @__PURE__ */ import_react4.default.createElement(Heart, { size: 13, color: liked ? T.red : T.tertiary, fill: liked ? T.red : "none" }),
+        likeCount > 0 && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: liked ? T.red : T.tertiary, fontWeight: 600 } }, likeCount)
+      ), !isReply && /* @__PURE__ */ import_react4.default.createElement(
+        "button",
+        {
+          onClick: () => {
+            if (isGuest) {
+              onGuestTap && onGuestTap();
+              return;
+            }
+            setReplyingTo(replyingTo === c.id ? null : c.id);
+            setReplyDraft("");
+          },
+          style: { background: "transparent", border: "none", padding: 0, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 600 }
+        },
+        replyingTo === c.id ? "CANCEL" : "REPLY"
+      )), !isReply && replyingTo === c.id && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center", marginTop: 8 } }, /* @__PURE__ */ import_react4.default.createElement(
+        "input",
+        {
+          autoFocus: true,
+          value: replyDraft,
+          onChange: (e) => setReplyDraft(e.target.value),
+          onKeyDown: (e) => {
+            if (e.key === "Enter") submitReply(c.id);
+          },
+          placeholder: `Reply to ${c.user}\u2026`,
+          style: { flex: 1, padding: "8px 10px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 12, outline: "none" }
+        }
+      ), /* @__PURE__ */ import_react4.default.createElement(
+        "button",
+        {
+          onClick: () => submitReply(c.id),
+          disabled: replySending || !replyDraft.trim(),
+          style: { padding: "8px 12px", borderRadius: 8, background: replyDraft.trim() ? T.red : T.charcoal, border: "none", color: T.white, cursor: replyDraft.trim() && !replySending ? "pointer" : "default", fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, opacity: replySending ? 0.7 : 1 }
+        },
+        "REPLY"
+      ))));
+    };
+    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "20px 16px 0" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 12 } }, /* @__PURE__ */ import_react4.default.createElement(MessageCircle, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600 } }, "COMMENTS"), comments.length > 0 && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.5, fontWeight: 700 } }, "\xB7 ", comments.length)), tops.length === 0 ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "12px 0", fontFamily: serif, fontSize: 13, color: T.tertiary } }, "Be the first to comment on this build.") : /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 16, marginBottom: 14 } }, tops.map((c) => /* @__PURE__ */ import_react4.default.createElement("div", { key: c.id, style: { display: "flex", flexDirection: "column", gap: 12 } }, renderComment(c, false), (repliesByParent[c.id] || []).map((r) => renderComment(r, true))))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 10, alignItems: "flex-start", paddingTop: 12, borderTop: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 32, height: 32, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 } }, currentUserAvatar ? /* @__PURE__ */ import_react4.default.createElement("img", { src: txImg(currentUserAvatar, 96), alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700 } }, (currentUserName || "U").charAt(0).toUpperCase())), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, display: "flex", gap: 8, alignItems: "center" } }, /* @__PURE__ */ import_react4.default.createElement(
       "input",
       {
         value: draft,
         onChange: (e) => setDraft(e.target.value),
         onKeyDown: (e) => {
-          if (e.key === "Enter") submit();
+          if (e.key === "Enter") submitTop();
         },
         placeholder: isGuest ? "Sign in to comment\u2026" : "Add a comment\u2026",
         style: { flex: 1, padding: "10px 12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none" }
@@ -51508,14 +51588,14 @@ ${suffix}`;
     ), /* @__PURE__ */ import_react4.default.createElement(
       "button",
       {
-        onClick: submit,
+        onClick: submitTop,
         disabled: sending || !draft.trim(),
         style: { padding: "10px 14px", borderRadius: 8, background: draft.trim() ? T.red : T.charcoal, border: "none", color: T.white, cursor: draft.trim() && !sending ? "pointer" : "default", fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 1, opacity: sending ? 0.7 : 1 }
       },
       "POST"
     ))));
   }
-  function BuildsScreen({ onViewUser, userBuilds, allBuilds: allBuildsProp, onLoadAllBuilds, currentUserId, followingIds, onAddBuild, onUpdateBuild, onPostBuildToFeed, onOpenDM, onOpenShareCompose, onOpenShareIntent, userRoutes, pendingBuildNav, onConsumePendingBuildNav, isGuest, onGuestTap, likedBuildIds, buildLikeCounts, onToggleBuildLike, buildComments, onLoadBuildComments, onAddBuildComment, onDeleteBuildComment, currentUserName, currentUserHandle, currentUserAvatar }) {
+  function BuildsScreen({ onViewUser, userBuilds, allBuilds: allBuildsProp, onLoadAllBuilds, currentUserId, followingIds, onAddBuild, onUpdateBuild, onDeleteBuild, onPostBuildToFeed, onOpenDM, onOpenShareCompose, onOpenShareIntent, userRoutes, pendingBuildNav, onConsumePendingBuildNav, isGuest, onGuestTap, likedBuildIds, buildLikeCounts, onToggleBuildLike, buildComments, onLoadBuildComments, onAddBuildComment, onDeleteBuildComment, likedBuildCommentIds, buildCommentLikeCounts, onToggleBuildCommentLike, currentUserName, currentUserHandle, currentUserAvatar }) {
     (0, import_react4.useEffect)(() => {
       if (typeof onLoadAllBuilds === "function") onLoadAllBuilds();
     }, []);
@@ -51636,7 +51716,8 @@ ${suffix}`;
               onAddBuild && onAddBuild(data);
             }
             closeForm();
-          }
+          },
+          onDelete: isEdit && onDeleteBuild ? () => onDeleteBuild(editingBuild.id) : null
         }
       ));
     }
@@ -51689,12 +51770,12 @@ ${suffix}`;
             style: { display: "flex", alignItems: "center", gap: 12, padding: 14, cursor: "pointer" }
           },
           /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 42, height: 42, borderRadius: 8, background: T.charcoal, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(Icon2, { size: 18, color: T.red })),
-          /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, fontWeight: 400, display: "block", marginBottom: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, descriptor || "Installed"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 15, color: T.white, fontWeight: 700, letterSpacing: 1 } }, row.label.toUpperCase())),
+          /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, fontWeight: 600, letterSpacing: 1.5, display: "block", marginBottom: 2 } }, row.label.toUpperCase()), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 15, color: T.white, fontWeight: 700, letterSpacing: 0.5, display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, descriptor || "Installed")),
           isOpen ? /* @__PURE__ */ import_react4.default.createElement(ChevronDown, { size: 18, color: T.tertiary }) : /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 18, color: T.tertiary })
-        ), isOpen && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 14px 14px", borderTop: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 13, color: T.white, paddingTop: 12, lineHeight: 1.55, wordBreak: "break-word" } }, m.value), hasPhoto && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" } }, m.photo.map((p, pi) => /* @__PURE__ */ import_react4.default.createElement("img", { key: pi, src: txImg(p.url, 256), alt: "", onClick: () => {
+        ), isOpen && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 14px 14px", borderTop: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 13, color: T.white, paddingTop: 12, lineHeight: 1.55, wordBreak: "break-word" } }, m.value), hasPhoto && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap", justifyContent: "center" } }, m.photo.map((p, pi) => /* @__PURE__ */ import_react4.default.createElement("img", { key: pi, src: txImg(p.url, 700), alt: "", onClick: () => {
           setCarouselImages(m.photo.map((x) => x.url));
           setCarouselIndex(pi);
-        }, style: { width: 72, height: 72, borderRadius: 6, objectFit: "cover", cursor: "pointer" } }))), m.link && /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginTop: 10 } }, /* @__PURE__ */ import_react4.default.createElement("a", { href: ensureUrl(m.link), target: "_blank", rel: "noopener noreferrer", style: { fontFamily: sans, fontSize: 11, color: T.copper, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 5 } }, /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 11 }), " View Product"))));
+        }, style: { width: 280, height: 280, maxWidth: "100%", borderRadius: 10, objectFit: "cover", cursor: "pointer", display: "block" } }))), m.link && /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginTop: 10 } }, /* @__PURE__ */ import_react4.default.createElement("a", { href: ensureUrl(m.link), target: "_blank", rel: "noopener noreferrer", style: { fontFamily: sans, fontSize: 11, color: T.copper, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 5 } }, /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 11 }), " View Product"))));
       }))), detailBuild.hasCamper && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "18px 16px 0" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 12 } }, "CAMPER SETUP"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { ...cardStyle, padding: 14, display: "flex", alignItems: "flex-start", gap: 12 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 38, height: 38, borderRadius: 8, background: `${T.copper}25`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(House, { size: 17, color: T.copper })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.2, display: "block", marginBottom: 2 } }, "CAMPER"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, letterSpacing: 0.3 } }, detailBuild.camperMake, " ", detailBuild.camperModel), bd && bd.camperPhoto && bd.camperPhoto.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" } }, bd.camperPhoto.map((p, pi) => /* @__PURE__ */ import_react4.default.createElement("img", { key: pi, src: p.url, alt: "", onClick: () => openGalleryCarousel(detailBuild, 0), style: { width: 60, height: 60, borderRadius: 6, objectFit: "cover", cursor: "pointer" } }))), bd && bd.camperLink && /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginTop: 6 } }, /* @__PURE__ */ import_react4.default.createElement("a", { href: ensureUrl(bd.camperLink), target: "_blank", rel: "noopener noreferrer", style: { fontFamily: sans, fontSize: 10, color: T.copper, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 } }, /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 10 }), " View Product"))))), (() => {
         if (!bd) return null;
         const galleryImgs = collectBuildImagesGallery(bd);
@@ -51705,6 +51786,9 @@ ${suffix}`;
         {
           buildId: detailBuild.rawId,
           comments: buildComments && detailBuild.rawId && buildComments[detailBuild.rawId] || [],
+          likedCommentIds: likedBuildCommentIds,
+          commentLikeCounts: buildCommentLikeCounts,
+          onToggleLike: onToggleBuildCommentLike,
           currentUserId,
           currentUserName,
           currentUserHandle,
@@ -52366,7 +52450,8 @@ ${suffix}`;
     "Isuzu": ["Trooper", "Rodeo", "VehiCROSS"],
     "Mitsubishi": ["Montero", "Pajero", "Delica", "Triton"]
   };
-  function AddBuildForm({ onClose, onSave, initialData }) {
+  function AddBuildForm({ onClose, onSave, onDelete, initialData }) {
+    const [confirmingDelete, setConfirmingDelete] = (0, import_react4.useState)(false);
     const d = initialData || {};
     const emptyMod = () => ({ value: "", photo: [], link: "" });
     const initModList = (m) => {
@@ -52572,7 +52657,35 @@ ${suffix}`;
         style: { width: "100%", padding: "16px", borderRadius: 10, background: !make || !model || !year ? T.charcoal : T.red, border: "none", cursor: !make || !model || !year ? "default" : "pointer", fontFamily: sans, fontSize: 14, color: !make || !model || !year ? T.tertiary : T.white, fontWeight: 700, letterSpacing: 1, marginTop: 8, opacity: !make || !model || !year ? 0.5 : 1, transition: "all 0.2s" }
       },
       "PREVIEW BUILD"
-    ), (!make || !model || !year) && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, textAlign: "center", display: "block", marginTop: 8 } }, "Year, make, and model are required"));
+    ), onDelete && /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginTop: 20, paddingTop: 20, borderTop: `1px solid ${T.charcoal}` } }, !confirmingDelete ? /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        type: "button",
+        onClick: () => setConfirmingDelete(true),
+        style: { width: "100%", padding: "12px", borderRadius: 8, background: "transparent", border: `1px solid ${T.red}60`, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.red, fontWeight: 700, letterSpacing: 1.5, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }
+      },
+      /* @__PURE__ */ import_react4.default.createElement(Trash2, { size: 13 }),
+      " DELETE BUILD"
+    ) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: `${T.red}12`, border: `1px solid ${T.red}40`, borderRadius: 8, padding: 14 } }, /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.white, margin: "0 0 12px", lineHeight: 1.45 } }, "Delete this build permanently? Its photos, mods, and comments will be removed."), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        type: "button",
+        onClick: () => setConfirmingDelete(false),
+        style: { flex: 1, padding: "10px", borderRadius: 8, background: T.charcoal, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 1 }
+      },
+      "CANCEL"
+    ), /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        type: "button",
+        onClick: () => {
+          onDelete();
+          onClose();
+        },
+        style: { flex: 1, padding: "10px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 1 }
+      },
+      "DELETE"
+    )))), (!make || !model || !year) && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, textAlign: "center", display: "block", marginTop: 8 } }, "Year, make, and model are required"));
     const displayName = buildName || `${year} ${make} ${model}`;
     const categorySources = {
       suspension,
@@ -52766,7 +52879,8 @@ ${suffix}`;
               onAddBuild && onAddBuild(data);
             }
             closeForm();
-          }
+          },
+          onDelete: isEdit && onDeleteBuild ? () => onDeleteBuild(editingBuild.id) : null
         }
       ));
     }
@@ -55066,7 +55180,8 @@ ${suffix}`;
       text: row.body || "",
       time: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
       likes: row.like_count || 0,
-      userId: row.user_id
+      userId: row.user_id,
+      parentId: row.parent_id || null
     };
   }
   async function uploadDmAttachmentList(list, uid) {
@@ -55769,6 +55884,16 @@ ${suffix}`;
         if (!row || !row.build_id) return;
         if (row.user_id === uid) return;
         setBuildComments((prev) => ({ ...prev, [row.build_id]: (prev[row.build_id] || []).filter((c) => c.id !== row.id) }));
+      }).on("postgres_changes", { event: "INSERT", schema: "public", table: "build_comment_likes" }, (payload) => {
+        const row = payload.new;
+        if (!row || !row.comment_id) return;
+        if (row.user_id === uid) return;
+        setBuildCommentLikeCounts((prev) => ({ ...prev, [row.comment_id]: (prev[row.comment_id] || 0) + 1 }));
+      }).on("postgres_changes", { event: "DELETE", schema: "public", table: "build_comment_likes" }, (payload) => {
+        const row = payload.old;
+        if (!row || !row.comment_id) return;
+        if (row.user_id === uid) return;
+        setBuildCommentLikeCounts((prev) => ({ ...prev, [row.comment_id]: Math.max((prev[row.comment_id] || 0) - 1, 0) }));
       }).on("postgres_changes", { event: "INSERT", schema: "public", table: "builds" }, async (payload) => {
         const row = payload.new;
         if (!row || !row.id) return;
@@ -56541,6 +56666,8 @@ ${suffix}`;
     const [postComments, setPostComments] = (0, import_react4.useState)({});
     const [buildComments, setBuildComments] = (0, import_react4.useState)({});
     const buildCommentsLoadedRef = (0, import_react4.useRef)({});
+    const [likedBuildCommentIds, setLikedBuildCommentIds] = (0, import_react4.useState)({});
+    const [buildCommentLikeCounts, setBuildCommentLikeCounts] = (0, import_react4.useState)({});
     const [likedCommentIds, setLikedCommentIds] = (0, import_react4.useState)({});
     const [forumUserThreads, setForumUserThreads] = (0, import_react4.useState)({});
     const [forumUserReplies, setForumUserReplies] = (0, import_react4.useState)({});
@@ -58956,19 +59083,34 @@ ${suffix}`;
         }
         const mapped = list.map((r) => dbRowToComment(r, profilesById[r.user_id])).filter(Boolean);
         setBuildComments((prev) => ({ ...prev, [buildId]: mapped }));
+        const commentIds = list.map((r) => r.id);
+        if (commentIds.length > 0) {
+          const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+          const { data: allLikes } = await supabase.from("build_comment_likes").select("comment_id, user_id").in("comment_id", commentIds);
+          const counts = {};
+          const mine = {};
+          (allLikes || []).forEach((l) => {
+            counts[l.comment_id] = (counts[l.comment_id] || 0) + 1;
+            if (uid && l.user_id === uid) mine[l.comment_id] = true;
+          });
+          setBuildCommentLikeCounts((prev) => ({ ...prev, ...counts }));
+          setLikedBuildCommentIds((prev) => ({ ...prev, ...mine }));
+        }
       } catch (e) {
         console.error("[build_comments] load failed", e);
         delete buildCommentsLoadedRef.current[buildId];
       }
     };
-    const addBuildComment = async (buildId, text) => {
+    const addBuildComment = async (buildId, text, parentId) => {
       const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
       if (!uid) return null;
       if (typeof buildId !== "string" || buildId.length < 20) return null;
       const trimmed = (text || "").trim();
       if (!trimmed) return null;
       try {
-        const { data: inserted, error } = await supabase.from("build_comments").insert({ build_id: buildId, user_id: uid, body: trimmed }).select().single();
+        const insertRow = { build_id: buildId, user_id: uid, body: trimmed };
+        if (typeof parentId === "string" && parentId.length >= 20) insertRow.parent_id = parentId;
+        const { data: inserted, error } = await supabase.from("build_comments").insert(insertRow).select().single();
         if (error || !inserted) {
           console.error("[build_comments] insert error", error);
           return null;
@@ -58976,16 +59118,26 @@ ${suffix}`;
         const clientComment = dbRowToComment(inserted, currentProfile);
         setBuildComments((prev) => ({ ...prev, [buildId]: [...prev[buildId] || [], clientComment] }));
         const build = (allBuilds || []).find((b) => b.rawId === buildId) || (userBuilds || []).find((b) => b.id === buildId);
-        const ownerId = build && build.userId;
-        if (ownerId && ownerId !== uid) {
+        let notifyUserId = null;
+        let notifyText = "commented on your build";
+        if (parentId) {
+          const parentComment = (buildComments[buildId] || []).find((c) => c.id === parentId);
+          if (parentComment && parentComment.userId) {
+            notifyUserId = parentComment.userId;
+            notifyText = "replied to your comment";
+          }
+        } else if (build && build.userId) {
+          notifyUserId = build.userId;
+        }
+        if (notifyUserId && notifyUserId !== uid) {
           const myName = currentProfile && currentProfile.full_name || "Someone";
           supabase.from("notifications").insert({
-            user_id: ownerId,
-            type: "comment",
+            user_id: notifyUserId,
+            type: parentId ? "reply" : "comment",
             actor_id: uid,
             actor_name: myName,
-            text: "commented on your build",
-            target: build.name || "",
+            text: notifyText,
+            target: build && build.name || "",
             build_id: buildId
           }).then(({ error: ne }) => {
             if (ne) console.error("[notif] build comment insert", ne);
@@ -58995,6 +59147,37 @@ ${suffix}`;
       } catch (e) {
         console.error("[build_comments] addBuildComment failed", e);
         return null;
+      }
+    };
+    const toggleBuildCommentLike = async (commentId) => {
+      const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+      if (!uid) return;
+      if (typeof commentId !== "string" || commentId.length < 20) return;
+      const wasLiked = !!likedBuildCommentIds[commentId];
+      setLikedBuildCommentIds((prev) => {
+        const next = { ...prev };
+        if (wasLiked) delete next[commentId];
+        else next[commentId] = true;
+        return next;
+      });
+      setBuildCommentLikeCounts((prev) => ({ ...prev, [commentId]: Math.max((prev[commentId] || 0) + (wasLiked ? -1 : 1), 0) }));
+      try {
+        if (wasLiked) {
+          const { error } = await supabase.from("build_comment_likes").delete().eq("comment_id", commentId).eq("user_id", uid);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase.from("build_comment_likes").insert({ comment_id: commentId, user_id: uid });
+          if (error) throw error;
+        }
+      } catch (e) {
+        console.error("[build_comment_likes] toggle failed", e);
+        setLikedBuildCommentIds((prev) => {
+          const next = { ...prev };
+          if (wasLiked) next[commentId] = true;
+          else delete next[commentId];
+          return next;
+        });
+        setBuildCommentLikeCounts((prev) => ({ ...prev, [commentId]: Math.max((prev[commentId] || 0) + (wasLiked ? 1 : -1), 0) }));
       }
     };
     const deleteBuildComment = async (buildId, commentId) => {
@@ -59288,7 +59471,7 @@ ${suffix}`;
     }, onGoToPost: (id) => {
       setProfileStack([]);
       setScreen("feed");
-    }, myPoints: myTotalPoints }) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, isGuest && /* @__PURE__ */ import_react4.default.createElement(GuestBanner, { onSignIn: () => setShowGuestPrompt(true) }), screen === "feed" && renderFeedScopedTo({ hideFilters: false }), screen === "forum" && /* @__PURE__ */ import_react4.default.createElement(ForumScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), pendingThread, onPendingHandled: () => setPendingThread(null), onAddNotification: requireAuth(addNotification), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onOpenShareCompose: openShareCompose, onOpenShareIntent: openShareIntent, onAddFeedPost: requireAuth((post2) => addPost(post2)), userThreads: forumUserThreads, setUserThreads: requireAuth(setForumUserThreads), userReplies: forumUserReplies, setUserReplies: requireAuth(setForumUserReplies), likedForumItems: forumLikedItems, setLikedForumItems: requireAuth(setForumLikedItems), forumLikeCounts, setForumLikeCounts: requireAuth(setForumLikeCounts), forumViewCounts, setForumViewCounts, onAwardPoints: awardPoints }), screen === "routes" && /* @__PURE__ */ import_react4.default.createElement(RoutesScreen, { campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, onOpenShareIntent: openShareIntent, tripAuthors, onLoadRouteData: loadTripRouteData, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, tripReports: allTripReports, showTripReports, setShowTripReports, tripPlans: allTripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot: requireAuth(addCampingSpot), onUpdateCampingSpot: requireAuth(updateCampingSpot), onDeleteCampingSpot: requireAuth(deleteCampingSpot), onLoadCampingSpotPhotos: loadCampingSpotPhotos, onLoadCampingSpotElevation: loadCampingSpotElevation, spotAuthors, onViewUser: openUserProfile, onStartNav: (route) => setActiveNavRoute(route), onOpenTripDetail: (slug) => setPendingTripNav(slug), onOpenTripPlanDraft: (id) => setDetailTripId(id), onNewTripReport: () => setTripCreatorMode("report"), onNewTripPlan: () => requireAuth(() => enterPlanBuilder())(), pendingSpotNav, onConsumePendingSpotNav: () => setPendingSpotNav(null), pendingHQOpen, onConsumePendingHQOpen: () => setPendingHQOpen(false), pendingPlanNav, onConsumePendingPlanNav: () => setPendingPlanNav(null), onShareCampingSpotToFeed: requireAuth(shareCampingSpotToFeed), onShareHQToFeed: requireAuth(shareHQToFeed), onShareTripToFeed: requireAuth(shareTripToFeed), onShareTripPlanToFeed: requireAuth(shareTripPlanToFeed), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onShowToast: showErrorToast, onOpenShareCompose: openShareCompose, planBuilder: { active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, editingId: planBuilderEditingId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen, accent: planBuilderEditingId && (tripReports || []).find((t) => t.id === planBuilderEditingId && t.kind === "report") ? T.purple : T.copper } }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, onLoadAllBuilds: loadAllBuildsOnce, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onOpenShareCompose: openShareCompose, onOpenShareIntent: openShareIntent, onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onPostBuildToFeed: requireAuth((b, opts) => {
+    }, myPoints: myTotalPoints }) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, isGuest && /* @__PURE__ */ import_react4.default.createElement(GuestBanner, { onSignIn: () => setShowGuestPrompt(true) }), screen === "feed" && renderFeedScopedTo({ hideFilters: false }), screen === "forum" && /* @__PURE__ */ import_react4.default.createElement(ForumScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), pendingThread, onPendingHandled: () => setPendingThread(null), onAddNotification: requireAuth(addNotification), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onOpenShareCompose: openShareCompose, onOpenShareIntent: openShareIntent, onAddFeedPost: requireAuth((post2) => addPost(post2)), userThreads: forumUserThreads, setUserThreads: requireAuth(setForumUserThreads), userReplies: forumUserReplies, setUserReplies: requireAuth(setForumUserReplies), likedForumItems: forumLikedItems, setLikedForumItems: requireAuth(setForumLikedItems), forumLikeCounts, setForumLikeCounts: requireAuth(setForumLikeCounts), forumViewCounts, setForumViewCounts, onAwardPoints: awardPoints }), screen === "routes" && /* @__PURE__ */ import_react4.default.createElement(RoutesScreen, { campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, onOpenShareIntent: openShareIntent, tripAuthors, onLoadRouteData: loadTripRouteData, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, tripReports: allTripReports, showTripReports, setShowTripReports, tripPlans: allTripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot: requireAuth(addCampingSpot), onUpdateCampingSpot: requireAuth(updateCampingSpot), onDeleteCampingSpot: requireAuth(deleteCampingSpot), onLoadCampingSpotPhotos: loadCampingSpotPhotos, onLoadCampingSpotElevation: loadCampingSpotElevation, spotAuthors, onViewUser: openUserProfile, onStartNav: (route) => setActiveNavRoute(route), onOpenTripDetail: (slug) => setPendingTripNav(slug), onOpenTripPlanDraft: (id) => setDetailTripId(id), onNewTripReport: () => setTripCreatorMode("report"), onNewTripPlan: () => requireAuth(() => enterPlanBuilder())(), pendingSpotNav, onConsumePendingSpotNav: () => setPendingSpotNav(null), pendingHQOpen, onConsumePendingHQOpen: () => setPendingHQOpen(false), pendingPlanNav, onConsumePendingPlanNav: () => setPendingPlanNav(null), onShareCampingSpotToFeed: requireAuth(shareCampingSpotToFeed), onShareHQToFeed: requireAuth(shareHQToFeed), onShareTripToFeed: requireAuth(shareTripToFeed), onShareTripPlanToFeed: requireAuth(shareTripPlanToFeed), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onShowToast: showErrorToast, onOpenShareCompose: openShareCompose, planBuilder: { active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, editingId: planBuilderEditingId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen, accent: planBuilderEditingId && (tripReports || []).find((t) => t.id === planBuilderEditingId && t.kind === "report") ? T.purple : T.copper } }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, onLoadAllBuilds: loadAllBuildsOnce, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onOpenShareCompose: openShareCompose, onOpenShareIntent: openShareIntent, onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onDeleteBuild: requireAuth(deleteBuild), onPostBuildToFeed: requireAuth((b, opts) => {
       const rawBd = b.buildData;
       const bd = scrubLocalPhotosFromBuildData(rawBd);
       const isLocalUrl = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:"));
@@ -59302,7 +59485,7 @@ ${suffix}`;
       const ownerName = isReshare ? b.owner || null : null;
       addPost({ id: "feedbuild_" + Date.now(), type: "BUILDS", user: meName, initial: meName.charAt(0).toUpperCase(), time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, subtitle: isReshare ? `Shared @${ownerHandle}'s build` : "Added a new build", vehicle: `${b.year} ${b.make} ${b.model}`, photoUrls: heroImg ? [heroImg] : void 0, image: heroImg, likes: 0, comments: 0, buildData: bd, buildRawId: b.rawId != null ? b.rawId : null, sharedFromOwnerHandle: ownerHandle, sharedFromOwnerName: ownerName, _skipBuildIdCol: isReshare });
       awardPoints(POINTS.feedPost, "Build Shared");
-    }), buildComments, onLoadBuildComments: loadBuildComments, onAddBuildComment: requireAuth(addBuildComment), onDeleteBuildComment: deleteBuildComment, currentUserName: currentProfile && currentProfile.full_name || "", currentUserHandle: currentProfile && currentProfile.handle ? "@" + currentProfile.handle : "", currentUserAvatar: currentProfile && currentProfile.avatar_url || null }), screen === "ranks" && (isGuest ? /* @__PURE__ */ import_react4.default.createElement(GuestGateScreen, { title: "RANKS REQUIRE AN ACCOUNT", subtitle: "Sign in to see the leaderboard and start earning points from your posts, routes and builds.", onSignIn: goToLoginFromGuest }) : /* @__PURE__ */ import_react4.default.createElement(RanksScreen, { myPoints: myTotalPoints, pointsBreakdown })))), screen === "feed" && !isOverlay && !isGuest && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setShowCompose(true), style: { position: "absolute", bottom: 88, right: 16, width: 52, height: 52, borderRadius: "50%", background: T.red, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 4px 20px ${T.red}60`, zIndex: 90 } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 24, color: T.white, strokeWidth: 2 })), !keyboardOpen && /* @__PURE__ */ import_react4.default.createElement(BottomNav, { active: isOverlay ? "" : screen, onNav: handleNav, isGuest }), mapData && /* @__PURE__ */ import_react4.default.createElement(
+    }), buildComments, onLoadBuildComments: loadBuildComments, onAddBuildComment: requireAuth(addBuildComment), onDeleteBuildComment: deleteBuildComment, likedBuildCommentIds, buildCommentLikeCounts, onToggleBuildCommentLike: requireAuth(toggleBuildCommentLike), currentUserName: currentProfile && currentProfile.full_name || "", currentUserHandle: currentProfile && currentProfile.handle ? "@" + currentProfile.handle : "", currentUserAvatar: currentProfile && currentProfile.avatar_url || null }), screen === "ranks" && (isGuest ? /* @__PURE__ */ import_react4.default.createElement(GuestGateScreen, { title: "RANKS REQUIRE AN ACCOUNT", subtitle: "Sign in to see the leaderboard and start earning points from your posts, routes and builds.", onSignIn: goToLoginFromGuest }) : /* @__PURE__ */ import_react4.default.createElement(RanksScreen, { myPoints: myTotalPoints, pointsBreakdown })))), screen === "feed" && !isOverlay && !isGuest && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setShowCompose(true), style: { position: "absolute", bottom: 88, right: 16, width: 52, height: 52, borderRadius: "50%", background: T.red, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 4px 20px ${T.red}60`, zIndex: 90 } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 24, color: T.white, strokeWidth: 2 })), !keyboardOpen && /* @__PURE__ */ import_react4.default.createElement(BottomNav, { active: isOverlay ? "" : screen, onNav: handleNav, isGuest }), mapData && /* @__PURE__ */ import_react4.default.createElement(
       MapOverlay,
       {
         coords: mapData.coords,
