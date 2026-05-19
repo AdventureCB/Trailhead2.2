@@ -43998,8 +43998,12 @@ ${suffix}`;
           return { url: `${origin}/hq`, title: LPO_HQ && LPO_HQ.name || "Lone Peak HQ", label: "HEADQUARTERS", accent: T.red };
         case "build":
           return { url: `${origin}/builds/${data.id}`, title: data.name || (data.year && data.make ? `${data.year} ${data.make} ${data.model || ""}`.trim() : "Build"), label: "BUILD", accent: T.copper };
-        case "forum":
-          return { url: `${origin}/forum/${data.id || data.threadId}`, title: data.title || "Thread", label: "FORUM THREAD", accent: T.copper };
+        case "forum": {
+          const subSlug = data.subSlug || forumSlugify(data.forumSub || "");
+          const threadSlug = data.slug || (data.title ? slugifyForumTitle(data.title) : null);
+          const url = subSlug && threadSlug ? `${origin}/forum/${subSlug}/${threadSlug}` : `${origin}/forum/${data.id || data.threadId}`;
+          return { url, title: data.title || "Thread", label: "FORUM THREAD", accent: T.copper };
+        }
         case "route":
           return { url: `${origin}/post/${data.id}`, title: data.title || "Route", label: "ROUTE", accent: T.copper };
         case "post":
@@ -46227,6 +46231,51 @@ ${suffix}`;
       }
       onPendingHandled && onPendingHandled();
     }, [pendingThread, threadsBySub]);
+    const forumUrlBootstrapped = (0, import_react4.useRef)(false);
+    (0, import_react4.useEffect)(() => {
+      try {
+        if (view === "thread" && selectedThread && selectedSub) {
+          const subSlug = forumSlugify(selectedSub.name);
+          const threadSlug = selectedThread.slug || slugifyForumTitle(selectedThread.title || "");
+          const target = `/forum/${subSlug}/${threadSlug}`;
+          if (window.location.pathname !== target) {
+            if (forumUrlBootstrapped.current) window.history.pushState({ forumSlug: threadSlug }, "", target);
+            else window.history.replaceState({ forumSlug: threadSlug }, "", target);
+          }
+          forumUrlBootstrapped.current = true;
+        } else if (forumUrlBootstrapped.current) {
+          if (window.location.pathname !== "/") window.history.pushState(null, "", "/");
+        }
+      } catch (e) {
+      }
+    }, [view, selectedThread, selectedSub]);
+    (0, import_react4.useEffect)(() => {
+      const onPop = () => {
+        const path = window.location.pathname || "";
+        const m = path.match(/^\/forum\/([^/]+)\/([^/]+)\/?$/);
+        if (m) {
+          const subInfo = FORUM_SUB_BY_SLUG[m[1]];
+          if (subInfo) {
+            const sub = forumData.categories.flatMap((c) => c.subs.map((s) => ({ s, c }))).find(({ s }) => s.name === subInfo.name);
+            if (sub) {
+              const list = (threadsBySub || {})[subInfo.name] || [];
+              const t = list.find((x) => x.slug === m[2]);
+              if (t) {
+                setSelectedCat(sub.c);
+                setSelectedSub(sub.s);
+                setSelectedThread(t);
+                setView("thread");
+                if (onLoadForumReplies) onLoadForumReplies(t.id);
+                return;
+              }
+            }
+          }
+        }
+        if (view === "thread") setView(selectedSub ? "threads" : "categories");
+      };
+      window.addEventListener("popstate", onPop);
+      return () => window.removeEventListener("popstate", onPop);
+    }, [view, selectedSub, threadsBySub]);
     const [editingThreadId, setEditingThreadId] = (0, import_react4.useState)(null);
     const [editTitle, setEditTitle] = (0, import_react4.useState)("");
     const [editBody, setEditBody] = (0, import_react4.useState)("");
@@ -46715,7 +46764,7 @@ ${suffix}`;
         const replyTargetIdx = typeof rootParentIdx === "number" ? rootParentIdx : idx;
         return /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, marginTop: 6 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => toggleForumLike(key, post2.likes || 0), style: { display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px 4px 0" } }, /* @__PURE__ */ import_react4.default.createElement(Heart, { size: 12, color: liked ? T.red : T.tertiary, strokeWidth: 1.5, fill: liked ? T.red : "none" }), likes > 0 && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: liked ? T.red : T.tertiary } }, likes)), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
           setReplyToReply({ author: post2.author, idx: replyTargetIdx });
-        }, style: { display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px" } }, /* @__PURE__ */ import_react4.default.createElement(MessageCircle, { size: 12, color: T.tertiary, strokeWidth: 1.5 }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, "Reply")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => onOpenShareIntent && onOpenShareIntent({ kind: "forum", data: { id: selectedThread.id, threadId: selectedThread.id, title: selectedThread.title, body: post2.body, author: post2.author, forumCat: selectedCat?.name || "", forumSub: selectedSub?.name || "", image: selectedThread.photos && selectedThread.photos[0] || null } }), style: { display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px" } }, /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 12, color: T.tertiary, strokeWidth: 1.5 })));
+        }, style: { display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px" } }, /* @__PURE__ */ import_react4.default.createElement(MessageCircle, { size: 12, color: T.tertiary, strokeWidth: 1.5 }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, "Reply")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => onOpenShareIntent && onOpenShareIntent({ kind: "forum", data: { id: selectedThread.id, threadId: selectedThread.id, title: selectedThread.title, body: post2.body, author: post2.author, forumCat: selectedCat?.name || "", forumSub: selectedSub?.name || "", subSlug: forumSlugify(selectedSub?.name || ""), slug: selectedThread.slug, image: selectedThread.photos && selectedThread.photos[0] || null } }), style: { display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px" } }, /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 12, color: T.tertiary, strokeWidth: 1.5 })));
       };
       const threadLiked = likedForumItems[threadLikeKey];
       const threadLikes = getForumLikes(threadLikeKey, selectedThread.likes || 0);
@@ -46759,7 +46808,7 @@ ${suffix}`;
         setEditTitle(selectedThread.title);
         setEditBody(selectedThread.body || "");
         setEditPhotos(selectedThread.photos ? selectedThread.photos.map((u, i) => ({ url: u.url || u, id: i, type: u.type || "image", caption: u.caption || "" })) : []);
-      }, style: { background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex" } }, /* @__PURE__ */ import_react4.default.createElement(PenLine, { size: 16, color: T.tertiary, strokeWidth: 1.5 }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { margin: "0 16px 4px", padding: "0 0 8px" } }, selectedThread.pinned && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.copper, background: `${T.copper}20`, padding: "2px 6px", borderRadius: 3, letterSpacing: 1, marginBottom: 8, display: "inline-block" } }, "PINNED"), /* @__PURE__ */ import_react4.default.createElement("h2", { style: { fontFamily: sans, fontSize: 20, color: T.white, fontWeight: 700, margin: 0, lineHeight: 1.25 } }, selectedThread.title))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { margin: "0 16px 12px", background: T.darkCard, borderRadius: 12, padding: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 12 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 32, height: 32, borderRadius: "50%", background: T.charcoal, display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, fontWeight: 700, color: T.copper } }, selectedThread.initial)), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 } }, "@", selectedThread.author), /* @__PURE__ */ import_react4.default.createElement(RankBadgeWithName, { points: getPoints(selectedThread.author), size: 10 })), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, display: "block" } }, formatPostTime(selectedThread.time), selectedThread.editedAt ? " \xB7 edited" : ""))), selectedThread.body && /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 14, color: T.warmStone, lineHeight: 1.6, margin: 0 }, dangerouslySetInnerHTML: { __html: `${thRbCSS}<div class="th-rb">${selectedThread.body}</div>` } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginTop: 14, paddingTop: 12, borderTop: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => toggleForumLike(threadLikeKey, selectedThread.likes || 0), style: { display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 8px 4px 0" } }, /* @__PURE__ */ import_react4.default.createElement(Heart, { size: 14, color: threadLiked ? T.red : T.tertiary, strokeWidth: 1.5, fill: threadLiked ? T.red : "none" }), threadLikes > 0 && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: threadLiked ? T.red : T.tertiary } }, threadLikes)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, /* @__PURE__ */ import_react4.default.createElement(MessageCircle, { size: 14, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, allPosts.length, " replies")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, /* @__PURE__ */ import_react4.default.createElement(Eye, { size: 14, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, getViewCount(selectedThread), " views")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => onOpenShareIntent && onOpenShareIntent({ kind: "forum", data: { id: selectedThread.id, threadId: selectedThread.id, title: selectedThread.title, body: selectedThread.body, author: selectedThread.author, forumCat: selectedCat?.name || "", forumSub: selectedSub?.name || "", image: selectedThread.photos && selectedThread.photos[0] || null } }), style: { display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px", marginLeft: "auto" } }, /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 14, color: T.tertiary, strokeWidth: 1.5 })))), allPosts.length > 0 && (() => {
+      }, style: { background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex" } }, /* @__PURE__ */ import_react4.default.createElement(PenLine, { size: 16, color: T.tertiary, strokeWidth: 1.5 }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { margin: "0 16px 4px", padding: "0 0 8px" } }, selectedThread.pinned && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.copper, background: `${T.copper}20`, padding: "2px 6px", borderRadius: 3, letterSpacing: 1, marginBottom: 8, display: "inline-block" } }, "PINNED"), /* @__PURE__ */ import_react4.default.createElement("h2", { style: { fontFamily: sans, fontSize: 20, color: T.white, fontWeight: 700, margin: 0, lineHeight: 1.25 } }, selectedThread.title))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { margin: "0 16px 12px", background: T.darkCard, borderRadius: 12, padding: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 12 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 32, height: 32, borderRadius: "50%", background: T.charcoal, display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, fontWeight: 700, color: T.copper } }, selectedThread.initial)), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 } }, "@", selectedThread.author), /* @__PURE__ */ import_react4.default.createElement(RankBadgeWithName, { points: getPoints(selectedThread.author), size: 10 })), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, display: "block" } }, formatPostTime(selectedThread.time), selectedThread.editedAt ? " \xB7 edited" : ""))), selectedThread.body && /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 14, color: T.warmStone, lineHeight: 1.6, margin: 0 }, dangerouslySetInnerHTML: { __html: `${thRbCSS}<div class="th-rb">${selectedThread.body}</div>` } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginTop: 14, paddingTop: 12, borderTop: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => toggleForumLike(threadLikeKey, selectedThread.likes || 0), style: { display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 8px 4px 0" } }, /* @__PURE__ */ import_react4.default.createElement(Heart, { size: 14, color: threadLiked ? T.red : T.tertiary, strokeWidth: 1.5, fill: threadLiked ? T.red : "none" }), threadLikes > 0 && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: threadLiked ? T.red : T.tertiary } }, threadLikes)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, /* @__PURE__ */ import_react4.default.createElement(MessageCircle, { size: 14, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, allPosts.length, " replies")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, /* @__PURE__ */ import_react4.default.createElement(Eye, { size: 14, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, getViewCount(selectedThread), " views")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => onOpenShareIntent && onOpenShareIntent({ kind: "forum", data: { id: selectedThread.id, threadId: selectedThread.id, title: selectedThread.title, body: selectedThread.body, author: selectedThread.author, forumCat: selectedCat?.name || "", forumSub: selectedSub?.name || "", subSlug: forumSlugify(selectedSub?.name || ""), slug: selectedThread.slug, image: selectedThread.photos && selectedThread.photos[0] || null } }), style: { display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px", marginLeft: "auto" } }, /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 14, color: T.tertiary, strokeWidth: 1.5 })))), allPosts.length > 0 && (() => {
         const topLevel = [];
         const subReplies = {};
         allPosts.forEach((post2, i) => {
@@ -55031,6 +55080,10 @@ ${suffix}`;
         }
         return { kind: "hq" };
       }
+      const forumMatch = path.match(/^\/forum\/([^/]+)\/([^/]+)\/?$/);
+      if (forumMatch) {
+        return { kind: "forum-thread", subSlug: decodeURIComponent(forumMatch[1]), threadSlug: decodeURIComponent(forumMatch[2]) };
+      }
     } catch (e) {
     }
     return null;
@@ -55483,6 +55536,34 @@ ${suffix}`;
         return true;
       } catch (e) {
         console.error("[shared-link] spot fast-load failed", e);
+      }
+      return false;
+    };
+    const loadForumThreadBySlugFast = async (threadSlug) => {
+      if (!threadSlug || typeof threadSlug !== "string") return false;
+      try {
+        const { data: row, error } = await supabase.from("forum_threads").select("*").eq("slug", threadSlug).maybeSingle();
+        if (error || !row) return false;
+        let prof = null;
+        if (row.user_id) {
+          try {
+            const { data } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").eq("id", row.user_id).maybeSingle();
+            prof = data;
+          } catch (e) {
+          }
+        }
+        const local = dbRowToForumThread(row, prof);
+        if (local) {
+          setForumThreads((prev) => prev.some((t) => t.id === local.id) ? prev : [local, ...prev]);
+          if (prof) setForumAuthors((prev) => ({ ...prev, [prof.id]: prof }));
+        }
+        try {
+          loadForumReplies(row.id);
+        } catch (e) {
+        }
+        return true;
+      } catch (e) {
+        console.error("[shared-link] forum fast-load failed", e);
       }
       return false;
     };
@@ -55962,6 +56043,7 @@ ${suffix}`;
           else if (linkKind === "trip" || linkKind === "plan") fastLoad = loadTripBySlugFast(initialSharedLink.slug);
           else if (linkKind === "spot") fastLoad = loadSpotByIdFast(initialSharedLink.id);
           else if (linkKind === "build") fastLoad = loadBuildById(initialSharedLink.id);
+          else if (linkKind === "forum-thread") fastLoad = loadForumThreadBySlugFast(initialSharedLink.threadSlug);
           fastLoad.finally(() => setAppReady(true));
           if (session) {
             const hasHandle = !!(session.user && session.user.user_metadata && session.user.user_metadata.handle);
@@ -56541,6 +56623,7 @@ ${suffix}`;
       if (!initialSharedLink) return "feed";
       if (initialSharedLink.kind === "spot" || initialSharedLink.kind === "hq") return "routes";
       if (initialSharedLink.kind === "build") return "builds";
+      if (initialSharedLink.kind === "forum-thread") return "forum";
       return "feed";
     });
     const [profileStack, setProfileStack] = (0, import_react4.useState)([]);
@@ -56862,6 +56945,9 @@ ${suffix}`;
     };
     const [showTripPinFullscreen, setShowTripPinFullscreen] = (0, import_react4.useState)(false);
     const [pendingThread, setPendingThread] = (0, import_react4.useState)(null);
+    const [pendingForumNav, setPendingForumNav] = (0, import_react4.useState)(
+      initialSharedLink && initialSharedLink.kind === "forum-thread" ? { subSlug: initialSharedLink.subSlug, threadSlug: initialSharedLink.threadSlug } : null
+    );
     const [pendingBuildNav, setPendingBuildNav] = (0, import_react4.useState)(
       initialSharedLink && initialSharedLink.kind === "build" ? { rawId: initialSharedLink.id, name: "" } : null
     );
@@ -57076,6 +57162,18 @@ ${suffix}`;
       setDetailTripId(trip.id);
       setPendingTripNav(null);
     }, [pendingTripNav, allTripReports, allTripPlans]);
+    (0, import_react4.useEffect)(() => {
+      if (!pendingForumNav) return;
+      const subInfo = FORUM_SUB_BY_SLUG[pendingForumNav.subSlug];
+      if (!subInfo) {
+        setPendingForumNav(null);
+        return;
+      }
+      const thread = (forumThreads || []).find((t) => t.slug === pendingForumNav.threadSlug);
+      if (!thread) return;
+      setPendingThread({ threadId: thread.id, catName: subInfo.catName, subName: subInfo.name });
+      setPendingForumNav(null);
+    }, [pendingForumNav, forumThreads]);
     const tripDetailUrlBootstrapped = (0, import_react4.useRef)(false);
     const findTripForDetail = (id) => (allTripReports || []).find((t) => t.id === id) || (allTripPlans || []).find((t) => t.id === id);
     const slugPathFor = (trip) => trip && trip.slug ? `${trip.kind === "plan" ? "/plans" : "/trips"}/${trip.slug}` : null;

@@ -277,10 +277,59 @@ async function resolveEntity(type, id) {
       imageAlt: imageAlt || `${cleanTitle}${isRoute ? " route" : ""} on Trailhead`,
     };
   }
-  // Forum threads aren't persisted server-side (per the architecture
-  // overview — ForumScreen state is local). Without a DB lookup we
-  // can't enrich the preview, so return the brand default which still
-  // gets a Trailhead-tagged card instead of a bare URL.
+  // Forum threads — slug-based URLs hit type === "forum-thread" and look
+  // up by slug. Legacy /forum/:id (timestamp-id from the pre-DB era) falls
+  // through to the brand default since those threads no longer exist.
+  if (type === "forum-thread") {
+    const row = await supabaseFetch(
+      "forum_threads",
+      `slug=eq.${encodeURIComponent(id)}&select=id,title,body,photos,category_slug,subcategory_slug,view_count,created_at,user_id&limit=1`
+    );
+    if (!row) {
+      return {
+        title: "Forum Thread · Trailhead",
+        description: "Join the conversation on the Trailhead community forum.",
+        image: null,
+        imageAlt: "",
+      };
+    }
+    // Hero image — first photo if available. Body is stored as HTML; strip
+    // tags + collapse whitespace for the meta description (160 chars).
+    const heroPhoto = Array.isArray(row.photos) && row.photos[0] ? row.photos[0] : null;
+    const heroUrl = heroPhoto ? (typeof heroPhoto === "string" ? heroPhoto : heroPhoto.url) : null;
+    const heroAlt = heroPhoto && typeof heroPhoto.alt === "string" ? heroPhoto.alt : "";
+    const plainBody = (row.body || "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const description = (plainBody || `Discussion on the Trailhead community forum.`).slice(0, 200);
+    // Lift author handle for JSON-LD if available — single round trip.
+    let authorName = null;
+    if (row.user_id) {
+      const prof = await supabaseFetch(
+        "profiles",
+        `id=eq.${encodeURIComponent(row.user_id)}&select=full_name,handle&limit=1`
+      );
+      if (prof) authorName = prof.full_name || prof.handle || null;
+    }
+    return {
+      title: `${row.title} · Trailhead Forum`,
+      description,
+      image: heroUrl,
+      imageAlt: heroAlt || `${row.title} discussion on Trailhead Forum`,
+      // Carry extra fields so the caller can emit JSON-LD.
+      jsonLd: {
+        kind: "DiscussionForumPosting",
+        title: row.title,
+        body: plainBody,
+        createdAt: row.created_at,
+        author: authorName,
+        url: null, // filled in by caller
+      },
+    };
+  }
+  // Legacy /forum/:id (timestamp ids from the in-memory era) — no DB row
+  // exists. Return the brand default to keep cards from breaking.
   if (type === "forum") {
     return {
       title: "Forum Thread · Trailhead",
@@ -331,6 +380,10 @@ module.exports = async function handler(req, res) {
   const host = req.headers["x-forwarded-host"] || req.headers.host || "";
   const type = (req.query && req.query.type) || "";
   const id = (req.query && req.query.id) || "";
+  // Forum threads are routed with sub + slug query params (see vercel.json).
+  // Resolve by slug; the sub segment is used to reconstruct the canonical URL.
+  const sub = (req.query && req.query.sub) || "";
+  const slug = (req.query && req.query.slug) || "";
   // Reconstruct the user-facing URL for the canonical og:url tag.
   const prettyPath =
     type === "trip" ? `/trips/${id}` :
@@ -338,13 +391,16 @@ module.exports = async function handler(req, res) {
     type === "spot" ? `/spots/${id}` :
     type === "build" ? `/builds/${id}` :
     type === "post" || type === "route" ? `/post/${id}` :
+    type === "forum-thread" ? `/forum/${sub}/${slug}` :
     type === "forum" ? `/forum/${id}` :
     type === "hq" ? `/hq` : "/";
   const canonicalUrl = `${proto}://${host}${prettyPath}`;
 
   let meta = DEFAULT_META;
   if (type) {
-    const data = await resolveEntity(type, id);
+    // For forum threads the lookup key is the slug, not id.
+    const lookupId = type === "forum-thread" ? slug : id;
+    const data = await resolveEntity(type, lookupId);
     if (data) meta = data;
   }
 
@@ -356,11 +412,32 @@ module.exports = async function handler(req, res) {
     url: canonicalUrl,
   });
 
+  // Emit JSON-LD structured data when the resolver returned it. Lets Google
+  // index forum threads as DiscussionForumPosting (rich result eligible).
+  let jsonLdTag = "";
+  if (meta.jsonLd && meta.jsonLd.kind === "DiscussionForumPosting") {
+    const ld = {
+      "@context": "https://schema.org",
+      "@type": "DiscussionForumPosting",
+      headline: meta.jsonLd.title,
+      articleBody: (meta.jsonLd.body || "").slice(0, 5000),
+      datePublished: meta.jsonLd.createdAt || undefined,
+      url: canonicalUrl,
+      author: meta.jsonLd.author ? { "@type": "Person", name: meta.jsonLd.author } : undefined,
+      publisher: { "@type": "Organization", name: "Trailhead", url: `${proto}://${host}/` },
+    };
+    // Strip undefined values so the JSON serializes cleanly.
+    const clean = Object.fromEntries(Object.entries(ld).filter(([, v]) => v !== undefined));
+    // Closing-script-tag escape per Google's recommendation for inline JSON-LD.
+    const serialized = JSON.stringify(clean).replace(/</g, "\\u003c");
+    jsonLdTag = `<script type="application/ld+json">${serialized}</script>`;
+  }
+
   let html = SPA_HTML;
   // Replace the existing <title> with our entity-specific one so browser
   // tabs / search results show a meaningful name even before the SPA mounts.
   html = html.replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(meta.title)}</title>`);
-  html = html.replace("</head>", `${tags}\n</head>`);
+  html = html.replace("</head>", `${tags}${jsonLdTag ? "\n" + jsonLdTag : ""}\n</head>`);
 
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   // Short edge cache so updated entities propagate within minutes.

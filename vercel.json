@@ -8,6 +8,7 @@
     { "source": "/spots/:id", "destination": "/api/preview?type=spot&id=:id" },
     { "source": "/builds/:id", "destination": "/api/preview?type=build&id=:id" },
     { "source": "/post/:id", "destination": "/api/preview?type=post&id=:id" },
+    { "source": "/forum/:sub/:slug", "destination": "/api/preview?type=forum-thread&sub=:sub&slug=:slug" },
     { "source": "/forum/:id", "destination": "/api/preview?type=forum&id=:id" },
     { "source": "/hq", "destination": "/api/preview?type=hq" },
     { "source": "/(.*)", "destination": "/index.html" }
