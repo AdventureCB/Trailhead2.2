@@ -45378,6 +45378,20 @@ ${suffix}`;
     const likedComments = likedCommentIds || {};
     const [openComments, setOpenComments] = (0, import_react4.useState)(null);
     const [highlightedPostId, setHighlightedPostId] = (0, import_react4.useState)(null);
+    const rescrolledAfterHydrateRef = (0, import_react4.useRef)(false);
+    (0, import_react4.useEffect)(() => {
+      if (!highlightedPostId) {
+        rescrolledAfterHydrateRef.current = false;
+        return;
+      }
+      if (rescrolledAfterHydrateRef.current) return;
+      if (feedItems.length <= 1) return;
+      rescrolledAfterHydrateRef.current = true;
+      setTimeout(() => {
+        const el = document.getElementById("feed-post-" + highlightedPostId);
+        if (el && el.scrollIntoView) el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 80);
+    }, [feedItems, highlightedPostId]);
     const [postMenuOpen, setPostMenuOpen] = (0, import_react4.useState)(null);
     const [editingFeedPost, setEditingFeedPost] = (0, import_react4.useState)(null);
     const [editFeedText, setEditFeedText] = (0, import_react4.useState)("");
@@ -59509,8 +59523,8 @@ ${suffix}`;
         savedRoutes,
         onSaveRoute: requireAuth((route) => setSavedRoutes((prev) => prev.some((r) => r.id === route.id || r.name === route.name) ? prev : [route, ...prev])),
         onUnsaveRoute: requireAuth((routeId) => setSavedRoutes((prev) => prev.filter((r) => r.id !== routeId && r.name !== routeId))),
-        onStartNav: (route) => setActiveNavRoute(route),
-        onStartDirections: startDirectionsTo,
+        onStartNav: requireAuth((route) => setActiveNavRoute(route)),
+        onStartDirections: requireAuth(startDirectionsTo),
         onOpenShareIntent: openShareIntent,
         onAwardPoints: awardPoints,
         filterFn,
@@ -59809,8 +59823,8 @@ ${suffix}`;
           likeCount: tripLikeCounts && tripLikeCounts[trip.id] || 0,
           onToggleLike: requireAuth(toggleTripLike),
           onShareToFeed: requireAuth((t) => openShareIntent({ kind: t.kind === "plan" ? "plan" : "trip", data: t })),
-          onStartDirections: startDirectionsTo,
-          onStartNav: (route) => setActiveNavRoute(route),
+          onStartDirections: requireAuth(startDirectionsTo),
+          onStartNav: requireAuth((route) => setActiveNavRoute(route)),
           onPlanConvoy: requireAuth(startConvoyFromPlan)
         }
       ));
@@ -59846,8 +59860,8 @@ ${suffix}`;
           onToggleCommentLike: requireAuth(toggleCommentLike),
           onLoadTripRouteData: loadTripRouteData,
           onShareIntent: openShareIntent,
-          onStartDirections: startDirectionsTo,
-          onStartNav: (route) => setActiveNavRoute(route),
+          onStartDirections: requireAuth(startDirectionsTo),
+          onStartNav: requireAuth((route) => setActiveNavRoute(route)),
           onOpenTripDetail: (slug) => {
             setDetailConvoyId(null);
             setPendingTripNav(slug);
