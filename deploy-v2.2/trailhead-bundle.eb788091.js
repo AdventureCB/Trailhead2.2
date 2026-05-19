@@ -56457,7 +56457,7 @@ ${suffix}`;
     };
     const [screen, setScreen] = (0, import_react4.useState)(() => {
       if (!initialSharedLink) return "feed";
-      if (initialSharedLink.kind === "trip" || initialSharedLink.kind === "spot" || initialSharedLink.kind === "hq" || initialSharedLink.kind === "plan") return "routes";
+      if (initialSharedLink.kind === "spot" || initialSharedLink.kind === "hq") return "routes";
       if (initialSharedLink.kind === "build") return "builds";
       return "feed";
     });
