@@ -55389,7 +55389,11 @@ ${suffix}`;
         }
         const item = dbRowToFeedItem(row, prof);
         if (item) {
-          setFeedItems([item]);
+          setFeedItems((prev) => {
+            const existing = prev || [];
+            if (existing.some((p) => p.id === item.id)) return existing;
+            return [item, ...existing];
+          });
           return true;
         }
       } catch (e) {
@@ -59392,6 +59396,10 @@ ${suffix}`;
       setShowCompose(false);
     };
     const handleNav = (key) => {
+      if (isGuest && key !== "feed" && key !== "builds" && key !== "forum") {
+        setShowGuestPrompt(true);
+        return;
+      }
       setProfileStack([]);
       setShowRecovery(false);
       setShowCompose(false);
