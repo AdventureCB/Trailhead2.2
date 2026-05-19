@@ -54124,17 +54124,6 @@ ${suffix}`;
           likes: 0,
           comments: 0
         };
-        onAddRecoveryAlert && onAddRecoveryAlert({
-          id: "rec_" + Date.now(),
-          title: recovery.title,
-          location: recovery.location || "Unknown",
-          coords: recovery.coords || "\u2014",
-          urgency: recovery.urgency,
-          time: Date.now(),
-          vehicle: recovery.vehicle || "",
-          detail: recovery.description || "",
-          author: meHandle || meName
-        });
         onAddNotification && onAddNotification({
           type: "recovery",
           user: "KyleLPO",
@@ -54573,20 +54562,22 @@ ${suffix}`;
       /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 1 } }, submitting ? "POSTING\u2026" : "POST")
     )));
   }
-  function RecoveryScreen({ onOpenMap, onOpenDM }) {
+  function RecoveryScreen({ onOpenMap, onOpenDM, recoveryItems, onRequestHelp }) {
     const [filter, setFilter] = (0, import_react4.useState)("ALL");
-    const allAlerts = [
-      { title: "Winch Support Required", location: "Black Bear Pass, CO", coords: "37.8106\xB0 N, 107.6992\xB0 W", urgency: "HIGH", time: "2m ago", vehicle: "Jeep Gladiator on 37s", detail: "High-centered on a shelf. Front locker acting up. Need a heavy rig with at least 12k winch to assist.", responses: 3, author: "DesertRat_4x4" },
-      { title: "Tow Needed \u2014 Broken Axle", location: "Rubicon Trail, CA", coords: "38.9764\xB0 N, 120.1572\xB0 W", urgency: "HIGH", time: "25m ago", vehicle: "2018 Wrangler JL", detail: "Front axle snapped at the birfield. Cannot move under own power. Closest trailhead is 6 miles out.", responses: 7, author: "StockHero" },
-      { title: "Flat Tire Assist", location: "Moab, UT", coords: "38.5733\xB0 N, 109.5498\xB0 W", urgency: "LOW", time: "1h ago", vehicle: "Toyota 4Runner", detail: "Spare is wrong size. Need 285/70R17 or close. Parked safely off-trail.", responses: 1, author: "DirtRoadDave" },
-      { title: "Overheated Radiator \u2014 Stranded", location: "Johnson Valley, CA", coords: "34.3525\xB0 N, 116.4572\xB0 W", urgency: "HIGH", time: "3h ago", vehicle: "2016 Toyota Tacoma", detail: "Radiator hose blew on the lakebed. No cell service. Spotted via InReach.", responses: 5, author: "FoxFanatic" },
-      { title: "Lost on Trail \u2014 Need GPS Guidance", location: "Uwharrie NF, NC", coords: "35.3894\xB0 N, 80.0674\xB0 W", urgency: "LOW", time: "5h ago", vehicle: "Ford Bronco", detail: "Took a wrong fork and can't find the main trail. No injuries, plenty of fuel.", responses: 12, author: "LiftKing" },
-      { title: "Stuck in Deep Mud", location: "North Fork Crossing, OR", coords: "45.8923\xB0 N, 121.3482\xB0 W", urgency: "RESOLVED", time: "8h ago", vehicle: "Jeep Gladiator on 37s", detail: "Winch overheating. Vehicle recovered by @Peak_Finder.", responses: 24, author: "BajaBound" }
-    ];
+    const allAlerts = recoveryItems || [];
     const filters = ["ALL", "HIGH", "LOW", "RESOLVED"];
-    const filtered = filter === "ALL" ? allAlerts : allAlerts.filter((a) => a.urgency === filter);
+    const filtered = filter === "ALL" ? allAlerts.filter((a) => a.urgency !== "RESOLVED") : allAlerts.filter((a) => a.urgency === filter);
+    const activeCount = allAlerts.filter((a) => a.urgency !== "RESOLVED").length;
     const urgencyColor = (u) => u === "HIGH" ? T.red : u === "RESOLVED" ? T.green : T.copper;
-    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 0 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "16px", display: "flex", alignItems: "center", justifyContent: "space-between" } }, /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("h2", { style: { fontFamily: sans, fontSize: 20, color: T.white, margin: "0 0 4px", fontWeight: 700 } }, "Recovery Board"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary } }, allAlerts.filter((a) => a.urgency !== "RESOLVED").length, " active requests nearby")), /* @__PURE__ */ import_react4.default.createElement("button", { style: { background: T.red, padding: "10px 16px", borderRadius: 8, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ import_react4.default.createElement(TriangleAlert, { size: 14, color: T.white }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, letterSpacing: 0.5 } }, "REQUEST HELP"))), /* @__PURE__ */ import_react4.default.createElement("div", { className: "th-hscroll", style: { display: "flex", gap: 8, padding: "0 16px 14px", overflowX: "auto" } }, filters.map((f) => /* @__PURE__ */ import_react4.default.createElement("button", { key: f, onClick: () => setFilter(f), style: pill(filter === f) }, f))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px", display: "flex", flexDirection: "column", gap: 8 } }, filtered.map((a, i) => /* @__PURE__ */ import_react4.default.createElement("div", { key: i, style: { ...cardStyle, overflow: "hidden" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: `${urgencyColor(a.urgency)}12`, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.white, background: urgencyColor(a.urgency), padding: "2px 7px", borderRadius: 3, letterSpacing: 1, fontWeight: 600 } }, a.urgency), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, formatPostTime(a.time))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, /* @__PURE__ */ import_react4.default.createElement(Users, { size: 12, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, a.responses, " responding"))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: 16 } }, /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: sans, fontSize: 15, color: T.white, margin: "0 0 4px", fontWeight: 600 } }, a.title), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "0 0 10px", lineHeight: 1.5 } }, a.detail), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 12 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 12, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, a.location)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, /* @__PURE__ */ import_react4.default.createElement(Navigation, { size: 12, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 11, color: T.tertiary } }, a.coords)), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, a.vehicle)), a.urgency !== "RESOLVED" ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => onOpenDM && onOpenDM(a.author, "I'm responding to your recovery request \u2014 on my way to help!", { title: `\u{1F6A8} Recovery: ${a.title}`, user: a.author, initial: a.author.charAt(0).toUpperCase(), type: "recovery", location: a.location, urgency: a.urgency }), style: { background: T.red, color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 600, padding: "9px 18px", borderRadius: 6, border: "none", cursor: "pointer", letterSpacing: 0.5 } }, "RESPOND"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => onOpenMap && onOpenMap(a.coords, a.location, a.title, { author: a.author, alertId: "ra_" + i, title: a.title }), style: { background: "none", color: T.tertiary, fontFamily: sans, fontSize: 11, padding: "9px 18px", borderRadius: 6, border: `1px solid ${T.charcoal}`, cursor: "pointer", letterSpacing: 0.5 } }, "VIEW ON MAP")) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ import_react4.default.createElement(CircleCheckBig, { size: 14, color: T.green }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.green, fontWeight: 600, letterSpacing: 0.5 } }, "RESOLVED")))))));
+    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 0 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "16px", display: "flex", alignItems: "center", justifyContent: "space-between" } }, /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("h2", { style: { fontFamily: sans, fontSize: 20, color: T.white, margin: "0 0 4px", fontWeight: 700 } }, "Recovery Board"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary } }, activeCount === 0 ? "No active requests right now" : `${activeCount} active request${activeCount === 1 ? "" : "s"}`)), /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: () => onRequestHelp && onRequestHelp(),
+        style: { background: T.red, padding: "10px 16px", borderRadius: 8, border: "none", cursor: onRequestHelp ? "pointer" : "default", display: "flex", alignItems: "center", gap: 6, opacity: onRequestHelp ? 1 : 0.5 }
+      },
+      /* @__PURE__ */ import_react4.default.createElement(TriangleAlert, { size: 14, color: T.white }),
+      /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, letterSpacing: 0.5 } }, "REQUEST HELP")
+    )), /* @__PURE__ */ import_react4.default.createElement("div", { className: "th-hscroll", style: { display: "flex", gap: 8, padding: "0 16px 14px", overflowX: "auto" } }, filters.map((f) => /* @__PURE__ */ import_react4.default.createElement("button", { key: f, onClick: () => setFilter(f), style: pill(filter === f) }, f))), filtered.length === 0 ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "48px 24px", textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement(TriangleAlert, { size: 36, color: T.tertiary, strokeWidth: 0.8, style: { opacity: 0.3, marginBottom: 12 } }), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: sans, fontSize: 14, color: T.tertiary, margin: 0 } }, filter === "ALL" ? "No active recovery requests right now." : `No ${filter.toLowerCase()} requests.`)) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px", display: "flex", flexDirection: "column", gap: 8 } }, filtered.map((a) => /* @__PURE__ */ import_react4.default.createElement("div", { key: a.id, style: { ...cardStyle, overflow: "hidden" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: `${urgencyColor(a.urgency)}12`, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.white, background: urgencyColor(a.urgency), padding: "2px 7px", borderRadius: 3, letterSpacing: 1, fontWeight: 600 } }, a.urgency), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, formatPostTime(a.time)))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: 16 } }, /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: sans, fontSize: 15, color: T.white, margin: "0 0 4px", fontWeight: 600 } }, a.title), a.detail && /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "0 0 10px", lineHeight: 1.5 } }, a.detail), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 12 } }, a.location && a.location !== "Unknown" && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 12, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, a.location)), a.coords && a.coords !== "\u2014" && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, /* @__PURE__ */ import_react4.default.createElement(Navigation, { size: 12, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 11, color: T.tertiary } }, a.coords)), a.vehicle && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, a.vehicle)), a.urgency !== "RESOLVED" ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => onOpenDM && onOpenDM(a.userId || a.author, "I'm responding to your recovery request \u2014 on my way to help!", { title: `\u{1F6A8} Recovery: ${a.title}`, user: a.author, initial: (a.author || "U").charAt(0).toUpperCase(), type: "recovery", location: a.location, urgency: a.urgency }), style: { background: T.red, color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 600, padding: "9px 18px", borderRadius: 6, border: "none", cursor: "pointer", letterSpacing: 0.5 } }, "RESPOND"), a.coords && a.coords !== "\u2014" && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => onOpenMap && onOpenMap(a.coords, a.location, a.title, { author: a.author, alertId: a.id, title: a.title }), style: { background: "none", color: T.tertiary, fontFamily: sans, fontSize: 11, padding: "9px 18px", borderRadius: 6, border: `1px solid ${T.charcoal}`, cursor: "pointer", letterSpacing: 0.5 } }, "VIEW ON MAP")) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ import_react4.default.createElement(CircleCheckBig, { size: 14, color: T.green }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.green, fontWeight: 600, letterSpacing: 0.5 } }, "RESOLVED")))))));
   }
   function DMScreen({ onClose, onViewUser, initialConvId, initialMessage, initialSharedPost, conversations, currentUserId, onSendMessage, onMarkRead, onLoadMessages, onSearchUsers, onCreateGroup, onOpenPost, onRsvpConvoy, convoyRsvps, onLeaveConversation, onUploadError, onlineUserIds, dmMessageReactions, onSetDmMessageReaction, onActiveConvChange }) {
     const [view, setView] = (0, import_react4.useState)(initialConvId ? "chat" : "inbox");
@@ -57330,11 +57321,34 @@ ${suffix}`;
     const [dmSharedPost, setDmSharedPost] = (0, import_react4.useState)(null);
     const [bellNotifs, setBellNotifs] = (0, import_react4.useState)([]);
     const [convoyRsvps, setConvoyRsvps] = (0, import_react4.useState)({});
-    const [recoveryAlerts, setRecoveryAlerts] = (0, import_react4.useState)([
-      { id: "r1", title: "Winch Support Required", location: "Black Bear Pass, CO", coords: "37.8106\xB0 N, 107.6992\xB0 W", urgency: "HIGH", time: "2m ago", vehicle: "Jeep Gladiator on 37s", detail: "High-centered on a shelf. Front locker acting up.", author: "DesertRat_4x4" },
-      { id: "r2", title: "Tow Needed \u2014 Broken Axle", location: "Rubicon Trail, CA", coords: "38.9764\xB0 N, 120.1572\xB0 W", urgency: "HIGH", time: "25m ago", vehicle: "2018 Wrangler JL", detail: "Front axle snapped at the birfield. Cannot move under own power.", author: "StockHero" },
-      { id: "r3", title: "Flat Tire Assist", location: "Moab, UT", coords: "38.5733\xB0 N, 109.5498\xB0 W", urgency: "LOW", time: "1h ago", vehicle: "Toyota 4Runner", detail: "Spare is wrong size. Need 285/70R17 or close.", author: "DirtRoadDave" }
-    ]);
+    const [dismissedRecoveryIds, setDismissedRecoveryIds] = (0, import_react4.useState)({});
+    const recoveryAlerts = (0, import_react4.useMemo)(() => {
+      return (feedItems || []).filter((p) => p && p.type === "RECOVERY" && p.urgency !== "RESOLVED" && !dismissedRecoveryIds[p.id]).map((p) => ({
+        id: p.id,
+        title: p.title || "Recovery Request",
+        location: p.location || "Unknown",
+        coords: p.coords || "\u2014",
+        urgency: p.urgency || "LOW",
+        time: p.time,
+        vehicle: p.vehicle || "",
+        detail: p.body || "",
+        author: p.handle || p.user || "User",
+        userId: p.userId || null,
+        photoUrls: p.photoUrls || null
+      }));
+    }, [feedItems, dismissedRecoveryIds]);
+    const setRecoveryAlerts = (updater) => {
+      if (typeof updater !== "function") return;
+      const kept = updater(recoveryAlerts);
+      const keptIds = new Set((kept || []).map((a) => a && a.id).filter(Boolean));
+      setDismissedRecoveryIds((prev) => {
+        const next = { ...prev };
+        recoveryAlerts.forEach((a) => {
+          if (a && a.id && !keptIds.has(a.id)) next[a.id] = true;
+        });
+        return next;
+      });
+    };
     const addNotification = (notif) => {
       setBellNotifs((prev) => [{ id: "bn_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6), time: Date.now(), ...notif }, ...prev]);
     };
@@ -58120,8 +58134,7 @@ ${suffix}`;
         setTimeout(() => awardPoints(POINTS.dailyLogin, "Daily Login"), 1500);
       }
     }, [authState]);
-    const addRecoveryAlert = (alert) => {
-      setRecoveryAlerts((prev) => [alert, ...prev]);
+    const addRecoveryAlert = () => {
     };
     const [dmKey, setDmKey] = (0, import_react4.useState)(0);
     const openDM = async (userOrId, prefillMsg, sharedPost) => {
@@ -59739,7 +59752,18 @@ ${suffix}`;
     }, onAddRecoveryAlert: addRecoveryAlert, onAddNotification: addNotification, onAddRoute: (r) => {
       setUserRoutes((prev) => [r, ...prev]);
       awardPoints(POINTS.routeLogged, "Route Logged");
-    }, onOpenDM: openDM, onSendDmInvite: sendDmInvite }) : showRecovery ? /* @__PURE__ */ import_react4.default.createElement(RecoveryScreen, { onOpenMap: openMap, onOpenDM: openDM }) : isProfile ? isOtherProfile ? /* @__PURE__ */ import_react4.default.createElement(OtherProfileScreen, { userId: profileStack[1], onBack: goBack, onMessage: (user) => openDM(user), currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, onFollow: requireAuth(followUser), onUnfollow: requireAuth(unfollowUser), fetchFollowCounts, renderFeedScopedTo, onViewBuild: handleViewBuild, allBuilds, onLoadAllBuilds: loadAllBuildsOnce, onlineUserIds, allTripPlans, onOpenTripPlan: (id) => setDetailTripId(id) }) : /* @__PURE__ */ import_react4.default.createElement(ProfileScreen, { currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, convoyRsvps, followerCount: myFollowerCount, followingCount: myFollowingCount, onSubscribePush: subscribeToPush, onUnsubscribePush: unsubscribeFromPush, renderFeedScopedTo, onViewBuild: handleViewBuild, savedRoutes, onUnsaveRoute: requireAuth((routeId) => setSavedRoutes((prev) => prev.filter((r) => r.id !== routeId && r.name !== routeId))), onStartNav: (route) => setActiveNavRoute(route), myTripPlans: allTripPlans, onOpenTripPlan: (id) => setDetailTripId(id), onNewTripPlan: () => requireAuth(() => enterPlanBuilder())(), initialUserName: currentProfile && currentProfile.full_name || supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name || null, initialUserHandle: currentProfile && currentProfile.handle || supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle || null, initialUserBio: currentProfile ? currentProfile.bio : null, initialIsPublic: currentProfile ? currentProfile.is_public : null, onSaveProfile: saveProfile, onViewUser: openUserProfile, onLogout: async () => {
+    }, onOpenDM: openDM, onSendDmInvite: sendDmInvite }) : showRecovery ? /* @__PURE__ */ import_react4.default.createElement(
+      RecoveryScreen,
+      {
+        onOpenMap: openMap,
+        onOpenDM: openDM,
+        recoveryItems: recoveryAlerts,
+        onRequestHelp: requireAuth(() => {
+          setShowRecovery(false);
+          setShowCompose(true);
+        })
+      }
+    ) : isProfile ? isOtherProfile ? /* @__PURE__ */ import_react4.default.createElement(OtherProfileScreen, { userId: profileStack[1], onBack: goBack, onMessage: (user) => openDM(user), currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, onFollow: requireAuth(followUser), onUnfollow: requireAuth(unfollowUser), fetchFollowCounts, renderFeedScopedTo, onViewBuild: handleViewBuild, allBuilds, onLoadAllBuilds: loadAllBuildsOnce, onlineUserIds, allTripPlans, onOpenTripPlan: (id) => setDetailTripId(id) }) : /* @__PURE__ */ import_react4.default.createElement(ProfileScreen, { currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, convoyRsvps, followerCount: myFollowerCount, followingCount: myFollowingCount, onSubscribePush: subscribeToPush, onUnsubscribePush: unsubscribeFromPush, renderFeedScopedTo, onViewBuild: handleViewBuild, savedRoutes, onUnsaveRoute: requireAuth((routeId) => setSavedRoutes((prev) => prev.filter((r) => r.id !== routeId && r.name !== routeId))), onStartNav: (route) => setActiveNavRoute(route), myTripPlans: allTripPlans, onOpenTripPlan: (id) => setDetailTripId(id), onNewTripPlan: () => requireAuth(() => enterPlanBuilder())(), initialUserName: currentProfile && currentProfile.full_name || supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name || null, initialUserHandle: currentProfile && currentProfile.handle || supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle || null, initialUserBio: currentProfile ? currentProfile.bio : null, initialIsPublic: currentProfile ? currentProfile.is_public : null, onSaveProfile: saveProfile, onViewUser: openUserProfile, onLogout: async () => {
       try {
         await supabase.auth.signOut();
       } catch (e) {
