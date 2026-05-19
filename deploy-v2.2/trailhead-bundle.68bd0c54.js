@@ -51657,6 +51657,15 @@ ${suffix}`;
       if (rawId != null && typeof onLoadBuildById === "function") onLoadBuildById(rawId);
       if (typeof onLoadAllBuilds === "function") onLoadAllBuilds();
     }, [pendingBuildNav, allBuildsProp]);
+    (0, import_react4.useEffect)(() => {
+      if (detailBuildId == null) return;
+      if (typeof onLoadBuildById !== "function") return;
+      const detail = allBuilds.find((b) => b.id === detailBuildId);
+      if (!detail) return;
+      const bd = detail.buildData;
+      const isSlim = !bd || typeof bd === "object" && Object.keys(bd).length === 0;
+      if (isSlim) onLoadBuildById(detailBuildId);
+    }, [detailBuildId, allBuildsProp]);
     const filters = [
       { key: "all", label: "ALL BUILDS", icon: Globe },
       { key: "mine", label: "MY BUILDS", icon: Wrench },
@@ -57925,7 +57934,7 @@ ${suffix}`;
       if (allBuildsLoadedRef.current) return;
       allBuildsLoadedRef.current = true;
       try {
-        const { data: buildRows, error: buildErr } = await supabase.from("builds").select("*").order("created_at", { ascending: false }).limit(150);
+        const { data: buildRows, error: buildErr } = await supabase.from("builds").select("id, user_id, name, year, make, model, trim, hero_img, created_at").order("created_at", { ascending: false }).limit(150);
         if (buildErr) {
           console.error("[builds] gallery load error", buildErr);
           allBuildsLoadedRef.current = false;
@@ -57980,16 +57989,17 @@ ${suffix}`;
         allBuildsLoadedRef.current = false;
       }
     };
-    const loadBuildByIdRef = (0, import_react4.useRef)({});
+    const loadBuildByIdInflightRef = (0, import_react4.useRef)({});
+    const loadBuildByIdFullRef = (0, import_react4.useRef)({});
     const loadBuildById = async (rawId) => {
       if (!rawId || typeof rawId !== "string") return;
-      if (loadBuildByIdRef.current[rawId]) return;
-      loadBuildByIdRef.current[rawId] = true;
+      if (loadBuildByIdFullRef.current[rawId]) return;
+      if (loadBuildByIdInflightRef.current[rawId]) return;
+      loadBuildByIdInflightRef.current[rawId] = true;
       try {
         const { data: row, error } = await supabase.from("builds").select("*").eq("id", rawId).maybeSingle();
         if (error) {
           console.error("[builds] loadBuildById error", error);
-          delete loadBuildByIdRef.current[rawId];
           return;
         }
         if (!row) {
@@ -58005,12 +58015,17 @@ ${suffix}`;
         const local = dbRowToLocalBuild(row, prof);
         if (!local) return;
         setAllBuilds((prev) => {
-          if (prev.some((b) => b.id === local.id)) return prev;
-          return [local, ...prev];
+          const idx = prev.findIndex((b) => b.id === local.id);
+          if (idx < 0) return [local, ...prev];
+          const next = prev.slice();
+          next[idx] = local;
+          return next;
         });
+        loadBuildByIdFullRef.current[rawId] = true;
       } catch (e) {
         console.error("[builds] loadBuildById failed", e);
-        delete loadBuildByIdRef.current[rawId];
+      } finally {
+        delete loadBuildByIdInflightRef.current[rawId];
       }
     };
     const addBuild = async (data) => {
