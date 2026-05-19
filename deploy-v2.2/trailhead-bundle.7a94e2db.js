@@ -55396,6 +55396,44 @@ ${suffix}`;
       }
     });
     const [currentProfile, setCurrentProfile] = (0, import_react4.useState)(null);
+    const loadTripBySlugFast = async (slug) => {
+      if (!slug || typeof slug !== "string") return false;
+      try {
+        const { data: row, error } = await supabase.from("trip_reports").select("id,user_id,name,slug,description,hero_img,start_lat,start_lng,end_lat,end_lng,route_geom,kind,visibility,status,distance_mi,elev_gain_ft,max_elev_ft,duration_min,region,state_code,terrains,tags,difficulty,planned_start,planned_end,party_size,view_count,created_at,updated_at").eq("slug", slug).maybeSingle();
+        if (error || !row) return false;
+        setTripReports((prev) => prev.some((t) => t.id === row.id) ? prev : [row, ...prev]);
+        if (row.user_id) {
+          try {
+            const { data: prof } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").eq("id", row.user_id).maybeSingle();
+            if (prof) setTripAuthors((prev) => ({ ...prev, [row.user_id]: prof }));
+          } catch (e) {
+          }
+        }
+        return true;
+      } catch (e) {
+        console.error("[shared-link] trip fast-load failed", e);
+      }
+      return false;
+    };
+    const loadSpotByIdFast = async (id) => {
+      if (!id || typeof id !== "string") return false;
+      try {
+        const { data: row, error } = await supabase.from("camping_spots").select("*").eq("id", id).eq("visibility", "public").maybeSingle();
+        if (error || !row) return false;
+        setUserCampingSpots((prev) => prev.some((s) => s.id === row.id) ? prev : [...prev, row]);
+        if (row.user_id) {
+          try {
+            const { data: prof } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").eq("id", row.user_id).maybeSingle();
+            if (prof) setSpotAuthors((prev) => ({ ...prev, [row.user_id]: prof }));
+          } catch (e) {
+          }
+        }
+        return true;
+      } catch (e) {
+        console.error("[shared-link] spot fast-load failed", e);
+      }
+      return false;
+    };
     const loadSharedPostFast = async (postId) => {
       if (!postId || typeof postId !== "string") return false;
       try {
@@ -55467,7 +55505,10 @@ ${suffix}`;
       }
       try {
         const { data: tripRows } = await supabase.from("trip_reports").select("id,user_id,name,slug,description,hero_img,start_lat,start_lng,end_lat,end_lng,route_geom,kind,visibility,status,distance_mi,elev_gain_ft,max_elev_ft,duration_min,region,state_code,terrains,tags,difficulty,planned_start,planned_end,party_size,view_count,created_at,updated_at").eq("status", "published").order("created_at", { ascending: false }).limit(100);
-        if (Array.isArray(tripRows)) setTripReports(tripRows);
+        if (Array.isArray(tripRows)) {
+          const ids = new Set(tripRows.map((r) => r.id));
+          setTripReports((prev) => [...tripRows, ...(prev || []).filter((t) => !ids.has(t.id))]);
+        }
       } catch (e) {
         console.warn("[guest-hydrate] trip_reports fetch failed", e);
       }
@@ -55589,7 +55630,10 @@ ${suffix}`;
           console.error("[hydrate] camping_spots fetch error", csErr);
           return;
         }
-        if (Array.isArray(csRows)) setUserCampingSpots(csRows);
+        if (Array.isArray(csRows)) {
+          const ids = new Set(csRows.map((r) => r.id));
+          setUserCampingSpots((prev) => [...csRows, ...(prev || []).filter((s) => !ids.has(s.id))]);
+        }
       });
       supabase.from("trip_reports").select("id, user_id, slug, name, description, status, kind, visibility, planned_start, planned_end, party_size, checklist, promoted_to_trip_id, start_lat, start_lng, start_label, end_lat, end_lng, route_geom, hero_img, distance_mi, duration_min, elev_gain_ft, max_elev_ft, difficulty, region, state_code, terrains, tags, view_count, like_count, comment_count, published_at, created_at, updated_at").order("created_at", { ascending: false }).limit(500).then(({ data: trRows, error: trErr }) => {
         if (trErr) {
@@ -55597,7 +55641,8 @@ ${suffix}`;
           return;
         }
         if (!Array.isArray(trRows)) return;
-        setTripReports(trRows);
+        const ids = new Set(trRows.map((r) => r.id));
+        setTripReports((prev) => [...trRows, ...(prev || []).filter((t) => !ids.has(t.id))]);
         const tripIds = trRows.map((t) => t.id).filter((id) => typeof id === "string");
         if (tripIds.length === 0) return;
         supabase.from("trip_report_likes").select("trip_id, user_id").in("trip_id", tripIds).then(({ data: tlRows, error: tlErr }) => {
@@ -55848,14 +55893,19 @@ ${suffix}`;
         const session = data && data.session;
         setSupabaseSession(session || null);
         setSessionHydrated(true);
-        const isPostDeepLink = !!(initialSharedLink && initialSharedLink.kind === "post" && initialSharedLink.id);
+        const linkKind = initialSharedLink && initialSharedLink.kind;
         if (session && !initialSharedLink) {
           const hasHandle = !!(session.user && session.user.user_metadata && session.user.user_metadata.handle);
           setAuthState(hasHandle ? "app" : "onboarding");
           if (hasHandle) hydrateUserData(session);
           else setAppReady(true);
-        } else if (isPostDeepLink) {
-          loadSharedPostFast(initialSharedLink.id).finally(() => setAppReady(true));
+        } else if (initialSharedLink) {
+          let fastLoad = Promise.resolve();
+          if (linkKind === "post") fastLoad = loadSharedPostFast(initialSharedLink.id);
+          else if (linkKind === "trip" || linkKind === "plan") fastLoad = loadTripBySlugFast(initialSharedLink.slug);
+          else if (linkKind === "spot") fastLoad = loadSpotByIdFast(initialSharedLink.id);
+          else if (linkKind === "build") fastLoad = loadBuildById(initialSharedLink.id);
+          fastLoad.finally(() => setAppReady(true));
           if (session) {
             const hasHandle = !!(session.user && session.user.user_metadata && session.user.user_metadata.handle);
             if (hasHandle) hydrateUserData(session);
