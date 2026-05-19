@@ -55375,6 +55375,29 @@ ${suffix}`;
       }
     });
     const [currentProfile, setCurrentProfile] = (0, import_react4.useState)(null);
+    const loadSharedPostFast = async (postId) => {
+      if (!postId || typeof postId !== "string") return false;
+      try {
+        const { data: row, error } = await supabase.from("posts").select("*").eq("id", postId).maybeSingle();
+        if (error || !row) return false;
+        let prof = null;
+        if (row.user_id) {
+          try {
+            const { data } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").eq("id", row.user_id).maybeSingle();
+            prof = data;
+          } catch (e) {
+          }
+        }
+        const item = dbRowToFeedItem(row, prof);
+        if (item) {
+          setFeedItems([item]);
+          return true;
+        }
+      } catch (e) {
+        console.error("[shared-post] fast-load failed", e);
+      }
+      return false;
+    };
     const hydrateGuestData = async () => {
       try {
         const { data: postRows, error: postErr } = await supabase.from("posts").select("*").order("created_at", { ascending: false }).limit(100);
@@ -55391,7 +55414,9 @@ ${suffix}`;
             } catch (e) {
             }
           }
-          setFeedItems(postRows.map((r) => dbRowToFeedItem(r, authorsById[r.user_id] || null)));
+          const fresh = postRows.map((r) => dbRowToFeedItem(r, authorsById[r.user_id] || null));
+          const freshIds = new Set(fresh.map((p) => p.id));
+          setFeedItems((prev) => [...fresh, ...(prev || []).filter((p) => !freshIds.has(p.id))]);
         }
       } catch (e) {
         console.warn("[guest-hydrate] posts fetch failed", e);
@@ -55466,7 +55491,8 @@ ${suffix}`;
           }
         }
         const mappedItems = postRows.map((r) => dbRowToFeedItem(r, authorsById[r.user_id] || null));
-        setFeedItems(mappedItems);
+        const mappedIds = new Set(mappedItems.map((p) => p.id));
+        setFeedItems((prev) => [...mappedItems, ...(prev || []).filter((p) => !mappedIds.has(p.id))]);
         if (postRows.length === 30) {
           const oldest = postRows[postRows.length - 1];
           if (oldest && oldest.created_at) setFeedCursor(oldest.created_at);
@@ -55797,11 +55823,21 @@ ${suffix}`;
         const session = data && data.session;
         setSupabaseSession(session || null);
         setSessionHydrated(true);
+        const isPostDeepLink = !!(initialSharedLink && initialSharedLink.kind === "post" && initialSharedLink.id);
         if (session && !initialSharedLink) {
           const hasHandle = !!(session.user && session.user.user_metadata && session.user.user_metadata.handle);
           setAuthState(hasHandle ? "app" : "onboarding");
           if (hasHandle) hydrateUserData(session);
           else setAppReady(true);
+        } else if (isPostDeepLink) {
+          loadSharedPostFast(initialSharedLink.id).finally(() => setAppReady(true));
+          if (session) {
+            const hasHandle = !!(session.user && session.user.user_metadata && session.user.user_metadata.handle);
+            if (hasHandle) hydrateUserData(session);
+            else setAppReady(true);
+          } else {
+            hydrateGuestData();
+          }
         } else {
           hydrateGuestData().finally(() => setAppReady(true));
         }
