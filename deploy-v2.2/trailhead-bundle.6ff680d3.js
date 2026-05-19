@@ -50072,12 +50072,51 @@ ${suffix}`;
     const [highlightedPinIdx, setHighlightedPinIdx] = (0, import_react4.useState)(null);
     const togglePinHighlight = (idx) => setHighlightedPinIdx((prev) => prev === idx ? null : idx);
     const allComments = postComments && postComments[item.id] ? postComments[item.id] : [];
+    const { tops: topComments, repliesByParent } = allComments.reduce((acc, c) => {
+      if (c.parentId) {
+        const bucket = acc.repliesByParent[c.parentId] || (acc.repliesByParent[c.parentId] = []);
+        bucket.push(c);
+      } else {
+        acc.tops.push(c);
+      }
+      return acc;
+    }, { tops: [], repliesByParent: {} });
     const [commentText, setCommentText] = (0, import_react4.useState)("");
+    const [replyingTo, setReplyingTo] = (0, import_react4.useState)(null);
+    const [replyDraft, setReplyDraft] = (0, import_react4.useState)("");
     const submitComment = () => {
       const text = commentText.trim();
       if (!text || !onAddComment) return;
       onAddComment(item.id, text);
       setCommentText("");
+    };
+    const submitReply = (parentId) => {
+      const text = replyDraft.trim();
+      if (!text || !onAddComment) return;
+      onAddComment(item.id, text, parentId);
+      setReplyDraft("");
+      setReplyingTo(null);
+    };
+    const renderConvoyComment = (c, isReply) => {
+      const cmtLiked = !!(c && c.id && likedCommentIds && likedCommentIds[c.id]);
+      const cmtLikeCount = c.likes || 0;
+      const isMine = currentUserId && c.userId === currentUserId;
+      return /* @__PURE__ */ import_react4.default.createElement("div", { key: c.id, style: { ...cardStyle, padding: 10, display: "flex", gap: 8, marginLeft: isReply ? 32 : 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => onViewUser && onViewUser(c.userId || c.handle), style: { width: isReply ? 26 : 30, height: isReply ? 26 : 30, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden", marginTop: 2, cursor: "pointer" } }, c.avatarUrl ? /* @__PURE__ */ import_react4.default.createElement("img", { src: txImg(c.avatarUrl, 96), alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, fontWeight: 700, color: T.white } }, c.initial)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ import_react4.default.createElement("span", { onClick: () => onViewUser && onViewUser(c.handle || c.userId), style: { fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, cursor: "pointer" } }, "@", c.handle || c.user), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary } }, formatPostTime(c.time))), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.warmStone, margin: "2px 0 0", lineHeight: 1.5 } }, c.text), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 14, marginTop: 4 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => onToggleCommentLike && onToggleCommentLike(item.id, c.id), style: { display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: 0 } }, /* @__PURE__ */ import_react4.default.createElement(Heart, { size: 12, color: cmtLiked ? T.red : T.tertiary, strokeWidth: 1.5, fill: cmtLiked ? T.red : "none" }), cmtLikeCount > 0 && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: cmtLiked ? T.red : T.tertiary } }, cmtLikeCount)), !isReply && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
+        setReplyingTo(replyingTo === c.id ? null : c.id);
+        setReplyDraft("");
+      }, style: { background: "none", border: "none", cursor: "pointer", padding: 0, fontFamily: sans, fontSize: 10, color: T.tertiary, fontWeight: 600, letterSpacing: 0.5 } }, replyingTo === c.id ? "CANCEL" : "REPLY"), isMine && onDeleteComment && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => onDeleteComment(item.id, c.id), style: { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", gap: 3 } }, /* @__PURE__ */ import_react4.default.createElement(Trash2, { size: 11, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, "Delete"))), !isReply && replyingTo === c.id && currentUserId && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, alignItems: "center", marginTop: 8 } }, /* @__PURE__ */ import_react4.default.createElement(
+        "input",
+        {
+          autoFocus: true,
+          value: replyDraft,
+          onChange: (e) => setReplyDraft(e.target.value),
+          onKeyDown: (e) => {
+            if (e.key === "Enter") submitReply(c.id);
+          },
+          placeholder: `Reply to ${c.user}\u2026`,
+          style: { flex: 1, padding: "7px 10px", borderRadius: 8, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 12, outline: "none" }
+        }
+      ), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => submitReply(c.id), disabled: !replyDraft.trim(), style: { padding: "7px 12px", borderRadius: 8, background: replyDraft.trim() ? T.red : T.charcoal, border: "none", color: T.white, cursor: replyDraft.trim() ? "pointer" : "default", fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1 } }, "REPLY"))));
     };
     const handleRsvp = (status) => {
       onRsvpConvoy && onRsvpConvoy(item.id, status);
@@ -50157,12 +50196,7 @@ ${suffix}`;
       const pillColor = r.status === "going" ? T.green : r.status === "maybe" ? T.copper : T.tertiary;
       const pillLabel = r.status === "going" ? "GOING" : r.status === "maybe" ? "MAYBE" : "CAN'T";
       return /* @__PURE__ */ import_react4.default.createElement("div", { key: uid, onClick: () => onViewUser && onViewUser(uid), style: { display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: T.darkCard, borderRadius: 6, cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 28, height: 28, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" } }, r.avatarUrl ? /* @__PURE__ */ import_react4.default.createElement("img", { src: txImg(r.avatarUrl, 96), alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, fontWeight: 700, color: T.white } }, r.initial)), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, flex: 1 } }, r.name), r.handle && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, "@", r.handle), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, color: pillColor, background: `${pillColor}20`, padding: "3px 8px", borderRadius: 4 } }, pillLabel));
-    }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 10 } }, "COMMENTS (", allComments.length, ")"), allComments.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 } }, allComments.map((c, ci) => {
-      const cmtLiked = !!(c && c.id && likedCommentIds && likedCommentIds[c.id]);
-      const cmtLikeCount = c.likes || 0;
-      const isMine = currentUserId && c.userId === currentUserId;
-      return /* @__PURE__ */ import_react4.default.createElement("div", { key: c.id || ci, style: { ...cardStyle, padding: 10, display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 30, height: 30, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden", marginTop: 2 } }, c.avatarUrl ? /* @__PURE__ */ import_react4.default.createElement("img", { src: txImg(c.avatarUrl, 96), alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, fontWeight: 700, color: T.white } }, c.initial)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ import_react4.default.createElement("span", { onClick: () => onViewUser && onViewUser(c.handle || c.userId), style: { fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, cursor: "pointer" } }, "@", c.handle || c.user), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary } }, formatPostTime(c.time))), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.warmStone, margin: "2px 0 0", lineHeight: 1.5 } }, c.text), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12, marginTop: 4 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => onToggleCommentLike && onToggleCommentLike(item.id, c), style: { display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: 0 } }, /* @__PURE__ */ import_react4.default.createElement(Heart, { size: 12, color: cmtLiked ? T.red : T.tertiary, strokeWidth: 1.5, fill: cmtLiked ? T.red : "none" }), cmtLikeCount > 0 && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: cmtLiked ? T.red : T.tertiary } }, cmtLikeCount)), isMine && onDeleteComment && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => onDeleteComment(item.id, c.id), style: { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", gap: 3 } }, /* @__PURE__ */ import_react4.default.createElement(Trash2, { size: 11, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, "Delete")))));
-    })), currentUserId ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 30, height: 30, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" } }, currentUserAvatar ? /* @__PURE__ */ import_react4.default.createElement("img", { src: txImg(currentUserAvatar, 96), alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, fontWeight: 700, color: T.white } }, (currentUserName || "U").charAt(0).toUpperCase())), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, display: "flex", alignItems: "center", background: T.darkCard, borderRadius: 20, padding: "8px 12px", border: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement(
+    }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 10 } }, "COMMENTS (", allComments.length, ")"), topComments.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 10, marginBottom: 12 } }, topComments.map((c) => /* @__PURE__ */ import_react4.default.createElement("div", { key: c.id, style: { display: "flex", flexDirection: "column", gap: 8 } }, renderConvoyComment(c, false), (repliesByParent[c.id] || []).map((r) => renderConvoyComment(r, true))))), currentUserId ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 30, height: 30, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" } }, currentUserAvatar ? /* @__PURE__ */ import_react4.default.createElement("img", { src: txImg(currentUserAvatar, 96), alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, fontWeight: 700, color: T.white } }, (currentUserName || "U").charAt(0).toUpperCase())), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, display: "flex", alignItems: "center", background: T.darkCard, borderRadius: 20, padding: "8px 12px", border: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement(
       "input",
       {
         value: commentText,
@@ -59320,14 +59354,16 @@ ${suffix}`;
         setDmMessageReactions((prev) => ({ ...prev, [messageId]: before }));
       }
     };
-    const addComment = async (postId, text) => {
+    const addComment = async (postId, text, parentId) => {
       const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
       if (!uid) return null;
       if (typeof postId !== "string" || postId.length < 20) return null;
       const trimmed = (text || "").trim();
       if (!trimmed) return null;
       try {
-        const { data: inserted, error } = await supabase.from("post_comments").insert({ post_id: postId, user_id: uid, body: trimmed }).select().single();
+        const insertRow = { post_id: postId, user_id: uid, body: trimmed };
+        if (typeof parentId === "string" && parentId.length >= 20) insertRow.parent_id = parentId;
+        const { data: inserted, error } = await supabase.from("post_comments").insert(insertRow).select().single();
         if (error || !inserted) {
           console.error("[post_comments] insert error", error);
           return null;
