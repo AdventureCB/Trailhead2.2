@@ -59529,7 +59529,10 @@ ${suffix}`;
         recoveryAlerts,
         setRecoveryAlerts
       }
-    ), /* @__PURE__ */ import_react4.default.createElement("div", { className: "th-scroll", style: { flex: 1, overflowY: "auto", minHeight: 0 } }, showCompose ? /* @__PURE__ */ import_react4.default.createElement(ComposeScreen, { key: composePrefillConvoy && composePrefillConvoy.planId ? `pre_${composePrefillConvoy.planId}` : "fresh", userBuilds: myBuildsForLink, currentUserName: currentProfile && currentProfile.full_name || "You", currentUserHandle: currentProfile && currentProfile.handle || "", onSearchUsers: searchUsers, onUploadError: showErrorToast, initialConvoy: composePrefillConvoy, followingProfiles, onLoadFollowingProfiles: loadFollowingProfilesOnce, myTripPlans: allTripPlans, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, onPlanNewRouteForConvoy: requireAuth(enterPlanBuilderForConvoy), onUseExistingPlanForConvoy: requireAuth(startConvoyFromPlan), onPlanNewRoute: requireAuth(() => enterPlanBuilder()), onNewTripReport: requireAuth(() => setTripCreatorMode("report")), onClose: () => {
+    ), /* @__PURE__ */ import_react4.default.createElement("div", { className: "th-scroll", style: { flex: 1, overflowY: "auto", minHeight: 0 } }, showCompose ? /* @__PURE__ */ import_react4.default.createElement(ComposeScreen, { key: composePrefillConvoy && composePrefillConvoy.planId ? `pre_${composePrefillConvoy.planId}` : "fresh", userBuilds: myBuildsForLink, currentUserName: currentProfile && currentProfile.full_name || "You", currentUserHandle: currentProfile && currentProfile.handle || "", onSearchUsers: searchUsers, onUploadError: showErrorToast, initialConvoy: composePrefillConvoy, followingProfiles, onLoadFollowingProfiles: loadFollowingProfilesOnce, myTripPlans: allTripPlans, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, onPlanNewRouteForConvoy: requireAuth(enterPlanBuilderForConvoy), onUseExistingPlanForConvoy: requireAuth(startConvoyFromPlan), onPlanNewRoute: requireAuth(() => {
+      setScreen("routes");
+      enterPlanBuilder();
+    }), onNewTripReport: requireAuth(() => setTripCreatorMode("report")), onClose: () => {
       setShowCompose(false);
       setComposePrefillConvoy(null);
     }, onSubmit: async (newPost) => {
