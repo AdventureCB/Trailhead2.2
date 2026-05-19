@@ -21690,28 +21690,15 @@
   ];
   var CircleCheckBig = createLucideIcon("circle-check-big", __iconNode14);
 
-  // node_modules/lucide-react/dist/esm/icons/circle-dashed.mjs
-  var __iconNode15 = [
-    ["path", { d: "M10.1 2.182a10 10 0 0 1 3.8 0", key: "5ilxe3" }],
-    ["path", { d: "M13.9 21.818a10 10 0 0 1-3.8 0", key: "11zvb9" }],
-    ["path", { d: "M17.609 3.721a10 10 0 0 1 2.69 2.7", key: "1iw5b2" }],
-    ["path", { d: "M2.182 13.9a10 10 0 0 1 0-3.8", key: "c0bmvh" }],
-    ["path", { d: "M20.279 17.609a10 10 0 0 1-2.7 2.69", key: "1ruxm7" }],
-    ["path", { d: "M21.818 10.1a10 10 0 0 1 0 3.8", key: "qkgqxc" }],
-    ["path", { d: "M3.721 6.391a10 10 0 0 1 2.7-2.69", key: "1mcia2" }],
-    ["path", { d: "M6.391 20.279a10 10 0 0 1-2.69-2.7", key: "1fvljs" }]
-  ];
-  var CircleDashed = createLucideIcon("circle-dashed", __iconNode15);
-
   // node_modules/lucide-react/dist/esm/icons/clock.mjs
-  var __iconNode16 = [
+  var __iconNode15 = [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["path", { d: "M12 6v6l4 2", key: "mmk7yg" }]
   ];
-  var Clock = createLucideIcon("clock", __iconNode16);
+  var Clock = createLucideIcon("clock", __iconNode15);
 
   // node_modules/lucide-react/dist/esm/icons/cog.mjs
-  var __iconNode17 = [
+  var __iconNode16 = [
     ["path", { d: "M11 10.27 7 3.34", key: "16pf9h" }],
     ["path", { d: "m11 13.73-4 6.93", key: "794ttg" }],
     ["path", { d: "M12 22v-2", key: "1osdcq" }],
@@ -21727,10 +21714,10 @@
     ["circle", { cx: "12", cy: "12", r: "2", key: "1c9p78" }],
     ["circle", { cx: "12", cy: "12", r: "8", key: "46899m" }]
   ];
-  var Cog = createLucideIcon("cog", __iconNode17);
+  var Cog = createLucideIcon("cog", __iconNode16);
 
   // node_modules/lucide-react/dist/esm/icons/compass.mjs
-  var __iconNode18 = [
+  var __iconNode17 = [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     [
       "path",
@@ -21740,40 +21727,33 @@
       }
     ]
   ];
-  var Compass = createLucideIcon("compass", __iconNode18);
-
-  // node_modules/lucide-react/dist/esm/icons/disc.mjs
-  var __iconNode19 = [
-    ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
-    ["circle", { cx: "12", cy: "12", r: "2", key: "1c9p78" }]
-  ];
-  var Disc = createLucideIcon("disc", __iconNode19);
+  var Compass = createLucideIcon("compass", __iconNode17);
 
   // node_modules/lucide-react/dist/esm/icons/dollar-sign.mjs
-  var __iconNode20 = [
+  var __iconNode18 = [
     ["line", { x1: "12", x2: "12", y1: "2", y2: "22", key: "7eqyqh" }],
     ["path", { d: "M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6", key: "1b0p4s" }]
   ];
-  var DollarSign = createLucideIcon("dollar-sign", __iconNode20);
+  var DollarSign = createLucideIcon("dollar-sign", __iconNode18);
 
   // node_modules/lucide-react/dist/esm/icons/ellipsis.mjs
-  var __iconNode21 = [
+  var __iconNode19 = [
     ["circle", { cx: "12", cy: "12", r: "1", key: "41hilf" }],
     ["circle", { cx: "19", cy: "12", r: "1", key: "1wjl8i" }],
     ["circle", { cx: "5", cy: "12", r: "1", key: "1pcz8c" }]
   ];
-  var Ellipsis = createLucideIcon("ellipsis", __iconNode21);
+  var Ellipsis = createLucideIcon("ellipsis", __iconNode19);
 
   // node_modules/lucide-react/dist/esm/icons/external-link.mjs
-  var __iconNode22 = [
+  var __iconNode20 = [
     ["path", { d: "M15 3h6v6", key: "1q9fwt" }],
     ["path", { d: "M10 14 21 3", key: "gplh6r" }],
     ["path", { d: "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6", key: "a6xqqp" }]
   ];
-  var ExternalLink = createLucideIcon("external-link", __iconNode22);
+  var ExternalLink = createLucideIcon("external-link", __iconNode20);
 
   // node_modules/lucide-react/dist/esm/icons/eye-off.mjs
-  var __iconNode23 = [
+  var __iconNode21 = [
     [
       "path",
       {
@@ -21791,10 +21771,10 @@
     ],
     ["path", { d: "m2 2 20 20", key: "1ooewy" }]
   ];
-  var EyeOff = createLucideIcon("eye-off", __iconNode23);
+  var EyeOff = createLucideIcon("eye-off", __iconNode21);
 
   // node_modules/lucide-react/dist/esm/icons/eye.mjs
-  var __iconNode24 = [
+  var __iconNode22 = [
     [
       "path",
       {
@@ -21804,10 +21784,10 @@
     ],
     ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
   ];
-  var Eye = createLucideIcon("eye", __iconNode24);
+  var Eye = createLucideIcon("eye", __iconNode22);
 
   // node_modules/lucide-react/dist/esm/icons/flame.mjs
-  var __iconNode25 = [
+  var __iconNode23 = [
     [
       "path",
       {
@@ -21816,18 +21796,18 @@
       }
     ]
   ];
-  var Flame = createLucideIcon("flame", __iconNode25);
+  var Flame = createLucideIcon("flame", __iconNode23);
 
   // node_modules/lucide-react/dist/esm/icons/globe.mjs
-  var __iconNode26 = [
+  var __iconNode24 = [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["path", { d: "M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20", key: "13o1zl" }],
     ["path", { d: "M2 12h20", key: "9i4pu4" }]
   ];
-  var Globe = createLucideIcon("globe", __iconNode26);
+  var Globe = createLucideIcon("globe", __iconNode24);
 
   // node_modules/lucide-react/dist/esm/icons/heart.mjs
-  var __iconNode27 = [
+  var __iconNode25 = [
     [
       "path",
       {
@@ -21836,10 +21816,10 @@
       }
     ]
   ];
-  var Heart = createLucideIcon("heart", __iconNode27);
+  var Heart = createLucideIcon("heart", __iconNode25);
 
   // node_modules/lucide-react/dist/esm/icons/house.mjs
-  var __iconNode28 = [
+  var __iconNode26 = [
     ["path", { d: "M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8", key: "5wwlr5" }],
     [
       "path",
@@ -21849,18 +21829,18 @@
       }
     ]
   ];
-  var House = createLucideIcon("house", __iconNode28);
+  var House = createLucideIcon("house", __iconNode26);
 
   // node_modules/lucide-react/dist/esm/icons/image.mjs
-  var __iconNode29 = [
+  var __iconNode27 = [
     ["rect", { width: "18", height: "18", x: "3", y: "3", rx: "2", ry: "2", key: "1m3agn" }],
     ["circle", { cx: "9", cy: "9", r: "2", key: "af1f0g" }],
     ["path", { d: "m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21", key: "1xmnt7" }]
   ];
-  var Image = createLucideIcon("image", __iconNode29);
+  var Image = createLucideIcon("image", __iconNode27);
 
   // node_modules/lucide-react/dist/esm/icons/layers.mjs
-  var __iconNode30 = [
+  var __iconNode28 = [
     [
       "path",
       {
@@ -21883,32 +21863,32 @@
       }
     ]
   ];
-  var Layers = createLucideIcon("layers", __iconNode30);
+  var Layers = createLucideIcon("layers", __iconNode28);
 
   // node_modules/lucide-react/dist/esm/icons/link-2.mjs
-  var __iconNode31 = [
+  var __iconNode29 = [
     ["path", { d: "M9 17H7A5 5 0 0 1 7 7h2", key: "8i5ue5" }],
     ["path", { d: "M15 7h2a5 5 0 1 1 0 10h-2", key: "1b9ql8" }],
     ["line", { x1: "8", x2: "16", y1: "12", y2: "12", key: "1jonct" }]
   ];
-  var Link2 = createLucideIcon("link-2", __iconNode31);
+  var Link2 = createLucideIcon("link-2", __iconNode29);
 
   // node_modules/lucide-react/dist/esm/icons/lock.mjs
-  var __iconNode32 = [
+  var __iconNode30 = [
     ["rect", { width: "18", height: "11", x: "3", y: "11", rx: "2", ry: "2", key: "1w4ew1" }],
     ["path", { d: "M7 11V7a5 5 0 0 1 10 0v4", key: "fwvmzm" }]
   ];
-  var Lock = createLucideIcon("lock", __iconNode32);
+  var Lock = createLucideIcon("lock", __iconNode30);
 
   // node_modules/lucide-react/dist/esm/icons/mail.mjs
-  var __iconNode33 = [
+  var __iconNode31 = [
     ["path", { d: "m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7", key: "132q7q" }],
     ["rect", { x: "2", y: "4", width: "20", height: "16", rx: "2", key: "izxlao" }]
   ];
-  var Mail = createLucideIcon("mail", __iconNode33);
+  var Mail = createLucideIcon("mail", __iconNode31);
 
   // node_modules/lucide-react/dist/esm/icons/map-pin.mjs
-  var __iconNode34 = [
+  var __iconNode32 = [
     [
       "path",
       {
@@ -21918,10 +21898,10 @@
     ],
     ["circle", { cx: "12", cy: "10", r: "3", key: "ilqhr7" }]
   ];
-  var MapPin = createLucideIcon("map-pin", __iconNode34);
+  var MapPin = createLucideIcon("map-pin", __iconNode32);
 
   // node_modules/lucide-react/dist/esm/icons/map.mjs
-  var __iconNode35 = [
+  var __iconNode33 = [
     [
       "path",
       {
@@ -21932,19 +21912,19 @@
     ["path", { d: "M15 5.764v15", key: "1pn4in" }],
     ["path", { d: "M9 3.236v15", key: "1uimfh" }]
   ];
-  var Map2 = createLucideIcon("map", __iconNode35);
+  var Map2 = createLucideIcon("map", __iconNode33);
 
   // node_modules/lucide-react/dist/esm/icons/maximize-2.mjs
-  var __iconNode36 = [
+  var __iconNode34 = [
     ["path", { d: "M15 3h6v6", key: "1q9fwt" }],
     ["path", { d: "m21 3-7 7", key: "1l2asr" }],
     ["path", { d: "m3 21 7-7", key: "tjx5ai" }],
     ["path", { d: "M9 21H3v-6", key: "wtvkvv" }]
   ];
-  var Maximize2 = createLucideIcon("maximize-2", __iconNode36);
+  var Maximize2 = createLucideIcon("maximize-2", __iconNode34);
 
   // node_modules/lucide-react/dist/esm/icons/message-circle.mjs
-  var __iconNode37 = [
+  var __iconNode35 = [
     [
       "path",
       {
@@ -21953,37 +21933,29 @@
       }
     ]
   ];
-  var MessageCircle = createLucideIcon("message-circle", __iconNode37);
+  var MessageCircle = createLucideIcon("message-circle", __iconNode35);
 
   // node_modules/lucide-react/dist/esm/icons/minimize-2.mjs
-  var __iconNode38 = [
+  var __iconNode36 = [
     ["path", { d: "m14 10 7-7", key: "oa77jy" }],
     ["path", { d: "M20 10h-6V4", key: "mjg0md" }],
     ["path", { d: "m3 21 7-7", key: "tjx5ai" }],
     ["path", { d: "M4 14h6v6", key: "rmj7iw" }]
   ];
-  var Minimize2 = createLucideIcon("minimize-2", __iconNode38);
+  var Minimize2 = createLucideIcon("minimize-2", __iconNode36);
 
   // node_modules/lucide-react/dist/esm/icons/mountain.mjs
-  var __iconNode39 = [["path", { d: "m8 3 4 8 5-5 5 15H2L8 3z", key: "otkl63" }]];
-  var Mountain = createLucideIcon("mountain", __iconNode39);
-
-  // node_modules/lucide-react/dist/esm/icons/move-vertical.mjs
-  var __iconNode40 = [
-    ["path", { d: "M12 2v20", key: "t6zp3m" }],
-    ["path", { d: "m8 18 4 4 4-4", key: "bh5tu3" }],
-    ["path", { d: "m8 6 4-4 4 4", key: "ybng9g" }]
-  ];
-  var MoveVertical = createLucideIcon("move-vertical", __iconNode40);
+  var __iconNode37 = [["path", { d: "m8 3 4 8 5-5 5 15H2L8 3z", key: "otkl63" }]];
+  var Mountain = createLucideIcon("mountain", __iconNode37);
 
   // node_modules/lucide-react/dist/esm/icons/navigation.mjs
-  var __iconNode41 = [
+  var __iconNode38 = [
     ["polygon", { points: "3 11 22 2 13 21 11 13 3 11", key: "1ltx0t" }]
   ];
-  var Navigation = createLucideIcon("navigation", __iconNode41);
+  var Navigation = createLucideIcon("navigation", __iconNode38);
 
   // node_modules/lucide-react/dist/esm/icons/pen-line.mjs
-  var __iconNode42 = [
+  var __iconNode39 = [
     ["path", { d: "M13 21h8", key: "1jsn5i" }],
     [
       "path",
@@ -21993,10 +21965,10 @@
       }
     ]
   ];
-  var PenLine = createLucideIcon("pen-line", __iconNode42);
+  var PenLine = createLucideIcon("pen-line", __iconNode39);
 
   // node_modules/lucide-react/dist/esm/icons/play.mjs
-  var __iconNode43 = [
+  var __iconNode40 = [
     [
       "path",
       {
@@ -22005,42 +21977,42 @@
       }
     ]
   ];
-  var Play = createLucideIcon("play", __iconNode43);
+  var Play = createLucideIcon("play", __iconNode40);
 
   // node_modules/lucide-react/dist/esm/icons/plus.mjs
-  var __iconNode44 = [
+  var __iconNode41 = [
     ["path", { d: "M5 12h14", key: "1ays0h" }],
     ["path", { d: "M12 5v14", key: "s699le" }]
   ];
-  var Plus = createLucideIcon("plus", __iconNode44);
+  var Plus = createLucideIcon("plus", __iconNode41);
 
   // node_modules/lucide-react/dist/esm/icons/radio.mjs
-  var __iconNode45 = [
+  var __iconNode42 = [
     ["path", { d: "M16.247 7.761a6 6 0 0 1 0 8.478", key: "1fwjs5" }],
     ["path", { d: "M19.075 4.933a10 10 0 0 1 0 14.134", key: "ehdyv1" }],
     ["path", { d: "M4.925 19.067a10 10 0 0 1 0-14.134", key: "1q22gi" }],
     ["path", { d: "M7.753 16.239a6 6 0 0 1 0-8.478", key: "r2q7qm" }],
     ["circle", { cx: "12", cy: "12", r: "2", key: "1c9p78" }]
   ];
-  var Radio = createLucideIcon("radio", __iconNode45);
+  var Radio = createLucideIcon("radio", __iconNode42);
 
   // node_modules/lucide-react/dist/esm/icons/route.mjs
-  var __iconNode46 = [
+  var __iconNode43 = [
     ["circle", { cx: "6", cy: "19", r: "3", key: "1kj8tv" }],
     ["path", { d: "M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15", key: "1d8sl" }],
     ["circle", { cx: "18", cy: "5", r: "3", key: "gq8acd" }]
   ];
-  var Route = createLucideIcon("route", __iconNode46);
+  var Route = createLucideIcon("route", __iconNode43);
 
   // node_modules/lucide-react/dist/esm/icons/search.mjs
-  var __iconNode47 = [
+  var __iconNode44 = [
     ["path", { d: "m21 21-4.34-4.34", key: "14j7rj" }],
     ["circle", { cx: "11", cy: "11", r: "8", key: "4ej97u" }]
   ];
-  var Search = createLucideIcon("search", __iconNode47);
+  var Search = createLucideIcon("search", __iconNode44);
 
   // node_modules/lucide-react/dist/esm/icons/send.mjs
-  var __iconNode48 = [
+  var __iconNode45 = [
     [
       "path",
       {
@@ -22050,10 +22022,10 @@
     ],
     ["path", { d: "m21.854 2.147-10.94 10.939", key: "12cjpa" }]
   ];
-  var Send = createLucideIcon("send", __iconNode48);
+  var Send = createLucideIcon("send", __iconNode45);
 
   // node_modules/lucide-react/dist/esm/icons/settings.mjs
-  var __iconNode49 = [
+  var __iconNode46 = [
     [
       "path",
       {
@@ -22063,20 +22035,20 @@
     ],
     ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
   ];
-  var Settings = createLucideIcon("settings", __iconNode49);
+  var Settings = createLucideIcon("settings", __iconNode46);
 
   // node_modules/lucide-react/dist/esm/icons/share-2.mjs
-  var __iconNode50 = [
+  var __iconNode47 = [
     ["circle", { cx: "18", cy: "5", r: "3", key: "gq8acd" }],
     ["circle", { cx: "6", cy: "12", r: "3", key: "w7nqdw" }],
     ["circle", { cx: "18", cy: "19", r: "3", key: "1xt0gg" }],
     ["line", { x1: "8.59", x2: "15.42", y1: "13.51", y2: "17.49", key: "47mynk" }],
     ["line", { x1: "15.41", x2: "8.59", y1: "6.51", y2: "10.49", key: "1n3mei" }]
   ];
-  var Share2 = createLucideIcon("share-2", __iconNode50);
+  var Share2 = createLucideIcon("share-2", __iconNode47);
 
   // node_modules/lucide-react/dist/esm/icons/shield-check.mjs
-  var __iconNode51 = [
+  var __iconNode48 = [
     [
       "path",
       {
@@ -22086,10 +22058,10 @@
     ],
     ["path", { d: "m9 12 2 2 4-4", key: "dzmm74" }]
   ];
-  var ShieldCheck = createLucideIcon("shield-check", __iconNode51);
+  var ShieldCheck = createLucideIcon("shield-check", __iconNode48);
 
   // node_modules/lucide-react/dist/esm/icons/shield.mjs
-  var __iconNode52 = [
+  var __iconNode49 = [
     [
       "path",
       {
@@ -22098,25 +22070,25 @@
       }
     ]
   ];
-  var Shield = createLucideIcon("shield", __iconNode52);
+  var Shield = createLucideIcon("shield", __iconNode49);
 
   // node_modules/lucide-react/dist/esm/icons/smartphone.mjs
-  var __iconNode53 = [
+  var __iconNode50 = [
     ["rect", { width: "14", height: "20", x: "5", y: "2", rx: "2", ry: "2", key: "1yt0o3" }],
     ["path", { d: "M12 18h.01", key: "mhygvu" }]
   ];
-  var Smartphone = createLucideIcon("smartphone", __iconNode53);
+  var Smartphone = createLucideIcon("smartphone", __iconNode50);
 
   // node_modules/lucide-react/dist/esm/icons/square-plus.mjs
-  var __iconNode54 = [
+  var __iconNode51 = [
     ["rect", { width: "18", height: "18", x: "3", y: "3", rx: "2", key: "afitv7" }],
     ["path", { d: "M8 12h8", key: "1wcyev" }],
     ["path", { d: "M12 8v8", key: "napkw2" }]
   ];
-  var SquarePlus = createLucideIcon("square-plus", __iconNode54);
+  var SquarePlus = createLucideIcon("square-plus", __iconNode51);
 
   // node_modules/lucide-react/dist/esm/icons/star.mjs
-  var __iconNode55 = [
+  var __iconNode52 = [
     [
       "path",
       {
@@ -22125,44 +22097,44 @@
       }
     ]
   ];
-  var Star = createLucideIcon("star", __iconNode55);
+  var Star = createLucideIcon("star", __iconNode52);
 
   // node_modules/lucide-react/dist/esm/icons/target.mjs
-  var __iconNode56 = [
+  var __iconNode53 = [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["circle", { cx: "12", cy: "12", r: "6", key: "1vlfrh" }],
     ["circle", { cx: "12", cy: "12", r: "2", key: "1c9p78" }]
   ];
-  var Target = createLucideIcon("target", __iconNode56);
+  var Target = createLucideIcon("target", __iconNode53);
 
   // node_modules/lucide-react/dist/esm/icons/tent.mjs
-  var __iconNode57 = [
+  var __iconNode54 = [
     ["path", { d: "M3.5 21 14 3", key: "1szst5" }],
     ["path", { d: "M20.5 21 10 3", key: "1310c3" }],
     ["path", { d: "M15.5 21 12 15l-3.5 6", key: "1ddtfw" }],
     ["path", { d: "M2 21h20", key: "1nyx9w" }]
   ];
-  var Tent = createLucideIcon("tent", __iconNode57);
+  var Tent = createLucideIcon("tent", __iconNode54);
 
   // node_modules/lucide-react/dist/esm/icons/trash-2.mjs
-  var __iconNode58 = [
+  var __iconNode55 = [
     ["path", { d: "M10 11v6", key: "nco0om" }],
     ["path", { d: "M14 11v6", key: "outv1u" }],
     ["path", { d: "M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6", key: "miytrc" }],
     ["path", { d: "M3 6h18", key: "d0wm0j" }],
     ["path", { d: "M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2", key: "e791ji" }]
   ];
-  var Trash2 = createLucideIcon("trash-2", __iconNode58);
+  var Trash2 = createLucideIcon("trash-2", __iconNode55);
 
   // node_modules/lucide-react/dist/esm/icons/trending-up.mjs
-  var __iconNode59 = [
+  var __iconNode56 = [
     ["path", { d: "M16 7h6v6", key: "box55l" }],
     ["path", { d: "m22 7-8.5 8.5-5-5L2 17", key: "1t1m79" }]
   ];
-  var TrendingUp = createLucideIcon("trending-up", __iconNode59);
+  var TrendingUp = createLucideIcon("trending-up", __iconNode56);
 
   // node_modules/lucide-react/dist/esm/icons/triangle-alert.mjs
-  var __iconNode60 = [
+  var __iconNode57 = [
     [
       "path",
       {
@@ -22173,10 +22145,10 @@
     ["path", { d: "M12 9v4", key: "juzpu7" }],
     ["path", { d: "M12 17h.01", key: "p32p05" }]
   ];
-  var TriangleAlert = createLucideIcon("triangle-alert", __iconNode60);
+  var TriangleAlert = createLucideIcon("triangle-alert", __iconNode57);
 
   // node_modules/lucide-react/dist/esm/icons/trophy.mjs
-  var __iconNode61 = [
+  var __iconNode58 = [
     ["path", { d: "M10 14.66v1.626a2 2 0 0 1-.976 1.696A5 5 0 0 0 7 21.978", key: "1n3hpd" }],
     ["path", { d: "M14 14.66v1.626a2 2 0 0 0 .976 1.696A5 5 0 0 1 17 21.978", key: "rfe1zi" }],
     ["path", { d: "M18 9h1.5a1 1 0 0 0 0-5H18", key: "7xy6bh" }],
@@ -22184,36 +22156,36 @@
     ["path", { d: "M6 9a6 6 0 0 0 12 0V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1z", key: "1mhfuq" }],
     ["path", { d: "M6 9H4.5a1 1 0 0 1 0-5H6", key: "tex48p" }]
   ];
-  var Trophy = createLucideIcon("trophy", __iconNode61);
+  var Trophy = createLucideIcon("trophy", __iconNode58);
 
   // node_modules/lucide-react/dist/esm/icons/user-check.mjs
-  var __iconNode62 = [
+  var __iconNode59 = [
     ["path", { d: "m16 11 2 2 4-4", key: "9rsbq5" }],
     ["path", { d: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2", key: "1yyitq" }],
     ["circle", { cx: "9", cy: "7", r: "4", key: "nufk8" }]
   ];
-  var UserCheck = createLucideIcon("user-check", __iconNode62);
+  var UserCheck = createLucideIcon("user-check", __iconNode59);
 
   // node_modules/lucide-react/dist/esm/icons/user-plus.mjs
-  var __iconNode63 = [
+  var __iconNode60 = [
     ["path", { d: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2", key: "1yyitq" }],
     ["circle", { cx: "9", cy: "7", r: "4", key: "nufk8" }],
     ["line", { x1: "19", x2: "19", y1: "8", y2: "14", key: "1bvyxn" }],
     ["line", { x1: "22", x2: "16", y1: "11", y2: "11", key: "1shjgl" }]
   ];
-  var UserPlus = createLucideIcon("user-plus", __iconNode63);
+  var UserPlus = createLucideIcon("user-plus", __iconNode60);
 
   // node_modules/lucide-react/dist/esm/icons/users.mjs
-  var __iconNode64 = [
+  var __iconNode61 = [
     ["path", { d: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2", key: "1yyitq" }],
     ["path", { d: "M16 3.128a4 4 0 0 1 0 7.744", key: "16gr8j" }],
     ["path", { d: "M22 21v-2a4 4 0 0 0-3-3.87", key: "kshegd" }],
     ["circle", { cx: "9", cy: "7", r: "4", key: "nufk8" }]
   ];
-  var Users = createLucideIcon("users", __iconNode64);
+  var Users = createLucideIcon("users", __iconNode61);
 
   // node_modules/lucide-react/dist/esm/icons/video.mjs
-  var __iconNode65 = [
+  var __iconNode62 = [
     [
       "path",
       {
@@ -22223,10 +22195,10 @@
     ],
     ["rect", { x: "2", y: "6", width: "14", height: "12", rx: "2", key: "158x01" }]
   ];
-  var Video = createLucideIcon("video", __iconNode65);
+  var Video = createLucideIcon("video", __iconNode62);
 
   // node_modules/lucide-react/dist/esm/icons/wrench.mjs
-  var __iconNode66 = [
+  var __iconNode63 = [
     [
       "path",
       {
@@ -22235,17 +22207,17 @@
       }
     ]
   ];
-  var Wrench = createLucideIcon("wrench", __iconNode66);
+  var Wrench = createLucideIcon("wrench", __iconNode63);
 
   // node_modules/lucide-react/dist/esm/icons/x.mjs
-  var __iconNode67 = [
+  var __iconNode64 = [
     ["path", { d: "M18 6 6 18", key: "1bl5f8" }],
     ["path", { d: "m6 6 12 12", key: "d8bk6v" }]
   ];
-  var X = createLucideIcon("x", __iconNode67);
+  var X = createLucideIcon("x", __iconNode64);
 
   // node_modules/lucide-react/dist/esm/icons/zap.mjs
-  var __iconNode68 = [
+  var __iconNode65 = [
     [
       "path",
       {
@@ -22254,7 +22226,7 @@
       }
     ]
   ];
-  var Zap = createLucideIcon("zap", __iconNode68);
+  var Zap = createLucideIcon("zap", __iconNode65);
 
   // node_modules/tslib/tslib.es6.mjs
   function __rest(s, e) {
@@ -43186,10 +43158,14 @@ ${suffix}`;
   `;
     document.head.appendChild(mbStyle);
   }
+  var makeImgIcon = (src, alt) => ({ size = 24 }) => /* @__PURE__ */ import_react4.default.createElement("img", { src, alt, style: { width: size, height: size, objectFit: "contain", display: "block" }, draggable: false });
+  var ShockIcon = makeImgIcon("./icons/coilover.png", "Suspension");
+  var TireIcon = makeImgIcon("./icons/tire.png", "Tires");
+  var WheelIcon = makeImgIcon("./icons/wheel.png", "Wheels");
   var BUILD_MOD_CATEGORIES = [
-    { key: "suspension", label: "Suspension", icon: MoveVertical },
-    { key: "tires", label: "Tires", icon: CircleDashed },
-    { key: "wheels", label: "Wheels", icon: Disc },
+    { key: "suspension", label: "Suspension", icon: ShockIcon },
+    { key: "tires", label: "Tires", icon: TireIcon },
+    { key: "wheels", label: "Wheels", icon: WheelIcon },
     { key: "transmission", label: "Transmission / Gearing", icon: Cog },
     { key: "bumpers", label: "Bumpers", icon: Shield },
     { key: "armor", label: "Armor", icon: ShieldCheck },
@@ -51735,20 +51711,14 @@ ${suffix}`;
         const entries = bd ? toModList(bd[c.key]) : [];
         return entries.map((mod, i) => ({ ...c, mod, idx: i, rowKey: `${c.key}_${i}`, label: `${c.label}${i > 0 ? ` #${i + 1}` : ""}` })).filter((r) => r.mod && r.mod.value);
       });
-      return /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 0 16px" } }, carouselImages && /* @__PURE__ */ import_react4.default.createElement(ImageCarousel, { images: carouselImages, startIndex: carouselIndex, onClose: () => setCarouselImages(null) }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", height: 280, background: heroImage ? T.darkBg : gradient, overflow: "hidden" } }, heroImage ? /* @__PURE__ */ import_react4.default.createElement("img", { src: txImg(heroImage, 900), alt: "", onClick: () => openGalleryCarousel(detailBuild, 0), style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", cursor: "pointer" } }) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Wrench, { size: 120, color: T.tertiary, strokeWidth: 0.15, style: { opacity: 0.08 } })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, background: "linear-gradient(transparent 35%, rgba(0,0,0,0.85))" } }), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setDetailBuildId(null), style: { position: "absolute", top: 14, left: 14, width: 36, height: 36, borderRadius: 10, background: `${T.darkBg}CC`, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)" } }, /* @__PURE__ */ import_react4.default.createElement(ChevronLeft, { size: 20, color: T.white })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: 14, right: 14, display: "flex", gap: 8 } }, detailBuild.isMine && detailBuild.rawId && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: (e) => {
-        e.stopPropagation();
+      return /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 0 16px" } }, carouselImages && /* @__PURE__ */ import_react4.default.createElement(ImageCarousel, { images: carouselImages, startIndex: carouselIndex, onClose: () => setCarouselImages(null) }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", height: 280, background: heroImage ? T.darkBg : gradient, overflow: "hidden" } }, heroImage ? /* @__PURE__ */ import_react4.default.createElement("img", { src: txImg(heroImage, 900), alt: "", onClick: () => openGalleryCarousel(detailBuild, 0), style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", cursor: "pointer" } }) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Wrench, { size: 120, color: T.tertiary, strokeWidth: 0.15, style: { opacity: 0.08 } })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, background: "linear-gradient(transparent 35%, rgba(0,0,0,0.85))" } }), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setDetailBuildId(null), style: { position: "absolute", top: 14, left: 14, width: 36, height: 36, borderRadius: 10, background: `${T.darkBg}CC`, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)" } }, /* @__PURE__ */ import_react4.default.createElement(ChevronLeft, { size: 20, color: T.white })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: 14, right: 14, display: "flex", gap: 8 } }, detailBuild.isMine && detailBuild.rawId && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
+        const src = (userBuilds || []).find((ub) => ub.id === detailBuild.rawId) || { id: detailBuild.rawId, buildData: detailBuild.buildData };
+        setEditingBuild(src);
         try {
-          const src = (userBuilds || []).find((ub) => ub.id === detailBuild.rawId) || { id: detailBuild.rawId, buildData: detailBuild.buildData };
-          console.log("[builds] edit tap", { rawId: detailBuild.rawId, userBuildsLen: (userBuilds || []).length, srcKeys: Object.keys(src || {}) });
-          setEditingBuild(src);
-          try {
-            window.scrollTo(0, 0);
-          } catch (e2) {
-          }
-        } catch (err) {
-          console.error("[builds] edit tap threw", err);
+          window.scrollTo(0, 0);
+        } catch (e) {
         }
-      }, style: { width: 36, height: 36, borderRadius: 10, background: `${T.copper}40`, border: `1px solid ${T.copper}60`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)", touchAction: "manipulation", WebkitTapHighlightColor: "transparent" } }, /* @__PURE__ */ import_react4.default.createElement(PenLine, { size: 15, color: T.white })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { height: 36, padding: "0 12px", borderRadius: 10, background: `${T.darkBg}CC`, display: "flex", alignItems: "center", gap: 5, backdropFilter: "blur(6px)" } }, /* @__PURE__ */ import_react4.default.createElement(Heart, { size: 14, color: T.red, fill: liked ? T.red : "none" }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 } }, getBuildLikes(detailBuild)))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 16, right: 16, bottom: 16 } }, detailBuild.tags && detailBuild.tags.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" } }, detailBuild.tags.map((tag, j) => /* @__PURE__ */ import_react4.default.createElement("span", { key: j, style: { fontFamily: sans, fontSize: 9, color: T.warmBg, background: `${T.darkBg}99`, padding: "4px 10px", borderRadius: 20, letterSpacing: 1, border: `1px solid ${T.charcoal}` } }, tag))), /* @__PURE__ */ import_react4.default.createElement("h1", { style: { fontFamily: sans, fontSize: 32, color: T.white, margin: "0 0 4px", fontWeight: 800, letterSpacing: 1, lineHeight: 1.05 } }, detailBuild.name), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 2 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary } }, detailBuild.year, " ", detailBuild.make, " ", detailBuild.model), /* @__PURE__ */ import_react4.default.createElement("span", { style: { color: T.tertiary } }, "\xB7"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => onViewUser && onViewUser(detailBuild.handle.replace("@", "")), style: { background: "none", border: "none", cursor: "pointer", padding: 0, fontFamily: sans, fontSize: 12, color: T.copper } }, detailBuild.handle)))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "14px 16px 0", position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement(
+      }, style: { width: 36, height: 36, borderRadius: 10, background: `${T.copper}40`, border: `1px solid ${T.copper}60`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)" } }, /* @__PURE__ */ import_react4.default.createElement(PenLine, { size: 15, color: T.white })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { height: 36, padding: "0 12px", borderRadius: 10, background: `${T.darkBg}CC`, display: "flex", alignItems: "center", gap: 5, backdropFilter: "blur(6px)" } }, /* @__PURE__ */ import_react4.default.createElement(Heart, { size: 14, color: T.red, fill: liked ? T.red : "none" }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 } }, getBuildLikes(detailBuild)))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", left: 16, right: 16, bottom: 16 } }, detailBuild.tags && detailBuild.tags.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" } }, detailBuild.tags.map((tag, j) => /* @__PURE__ */ import_react4.default.createElement("span", { key: j, style: { fontFamily: sans, fontSize: 9, color: T.warmBg, background: `${T.darkBg}99`, padding: "4px 10px", borderRadius: 20, letterSpacing: 1, border: `1px solid ${T.charcoal}` } }, tag))), /* @__PURE__ */ import_react4.default.createElement("h1", { style: { fontFamily: sans, fontSize: 32, color: T.white, margin: "0 0 4px", fontWeight: 800, letterSpacing: 1, lineHeight: 1.05 } }, detailBuild.name), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 2 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary } }, detailBuild.year, " ", detailBuild.make, " ", detailBuild.model), /* @__PURE__ */ import_react4.default.createElement("span", { style: { color: T.tertiary } }, "\xB7"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => onViewUser && onViewUser(detailBuild.handle.replace("@", "")), style: { background: "none", border: "none", cursor: "pointer", padding: 0, fontFamily: sans, fontSize: 12, color: T.copper } }, detailBuild.handle)))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "14px 16px 0", position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement(
         "button",
         {
           onClick: () => toggleLikeBuild(detailBuild.id),
@@ -60248,11 +60218,9 @@ lucide-react/dist/esm/icons/chevron-left.mjs:
 lucide-react/dist/esm/icons/chevron-right.mjs:
 lucide-react/dist/esm/icons/chevron-up.mjs:
 lucide-react/dist/esm/icons/circle-check-big.mjs:
-lucide-react/dist/esm/icons/circle-dashed.mjs:
 lucide-react/dist/esm/icons/clock.mjs:
 lucide-react/dist/esm/icons/cog.mjs:
 lucide-react/dist/esm/icons/compass.mjs:
-lucide-react/dist/esm/icons/disc.mjs:
 lucide-react/dist/esm/icons/dollar-sign.mjs:
 lucide-react/dist/esm/icons/ellipsis.mjs:
 lucide-react/dist/esm/icons/external-link.mjs:
@@ -60273,7 +60241,6 @@ lucide-react/dist/esm/icons/maximize-2.mjs:
 lucide-react/dist/esm/icons/message-circle.mjs:
 lucide-react/dist/esm/icons/minimize-2.mjs:
 lucide-react/dist/esm/icons/mountain.mjs:
-lucide-react/dist/esm/icons/move-vertical.mjs:
 lucide-react/dist/esm/icons/navigation.mjs:
 lucide-react/dist/esm/icons/pen-line.mjs:
 lucide-react/dist/esm/icons/play.mjs:
