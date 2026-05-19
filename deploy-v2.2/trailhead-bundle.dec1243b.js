@@ -45299,7 +45299,7 @@ ${suffix}`;
     { name: "Eagle Rim Loop", difficulty: "Moderate", distance: "42.5 MI", region: "Southwest & Desert" },
     { name: "Shadow Peak Traverse", difficulty: "Hard", distance: "38.0 MI", region: "Rockies & High Plains" }
   ];
-  function GlobalSearch({ onClose, onViewUser, onOpenThread, onNavigate, forumUserReplies, forumViewCounts }) {
+  function GlobalSearch({ onClose, onViewUser, onOpenThread, onNavigate, forumThreadsBySub, forumUserReplies, forumViewCounts }) {
     const [query, setQuery] = (0, import_react4.useState)("");
     const [activeTab, setActiveTab] = (0, import_react4.useState)("ALL");
     const inputRef = (0, import_react4.useRef)(null);
@@ -45312,8 +45312,9 @@ ${suffix}`;
       const results = [];
       forumData.categories.forEach((cat) => {
         cat.subs.forEach((sub) => {
-          (forumData.threads[sub.name] || []).forEach((t) => {
-            if (t.title.toLowerCase().includes(q) || t.body && t.body.toLowerCase().includes(q) || t.author.toLowerCase().includes(q)) {
+          ((forumThreadsBySub || {})[sub.name] || []).forEach((t) => {
+            const author = (t.author || t.user || "").toLowerCase();
+            if ((t.title || "").toLowerCase().includes(q) || t.body && t.body.toLowerCase().includes(q) || author.includes(q)) {
               results.push({ ...t, catName: cat.name, subName: sub.name, cat, sub });
             }
           });
@@ -46067,163 +46068,80 @@ ${suffix}`;
         { name: "Group Buys", threads: 42 },
         { name: "Free / Trade", threads: 28 }
       ] }
-    ],
-    threads: {
-      "Suspension & Lift": [
-        {
-          id: 1,
-          title: "Best budget lift kit for 3rd Gen Tacoma?",
-          replies: 47,
-          views: "2.1K",
-          author: "TrailBoss_88",
-          initial: "T",
-          time: "2h ago",
-          pinned: true,
-          body: "Looking at Icon, Bilstein, or OME for my 2020 Tacoma. Budget is around $1,500. Primarily doing fire roads and moderate trails in the PNW. What would you all recommend?",
-          posts: [
-            { author: "SuspensionGuru", initial: "S", time: "1h ago", body: "Icon Stage 2 is hard to beat at that price. I ran it on my 3rd gen for 2 years before upgrading to King coilovers. Great ride quality on and off road.", likes: 24 },
-            { author: "KyleLPO", initial: "K", time: "45m ago", body: "I went Icon Stage 3 on my Tundra and it's been bulletproof. For a Tacoma at $1,500, the Icon Stage 2 or Bilstein 5100s are your best bet. Bilstein if you want set-and-forget, Icon if you want adjustability.", likes: 31 },
-            { author: "DirtRoadDave", initial: "D", time: "30m ago", body: "OME is solid but rides a bit stiff when unloaded. If you're not carrying a lot of weight, go Bilstein 5100 and save the extra for tires.", likes: 12 }
-          ]
-        },
-        {
-          id: 2,
-          title: '2" vs 3" lift \u2014 real-world pros and cons',
-          replies: 89,
-          views: "5.8K",
-          author: "LiftKing",
-          initial: "L",
-          time: "6h ago",
-          pinned: false,
-          body: 'I keep going back and forth. Running 33s now, want to fit 35s. Is 3" worth the extra cost and potential CV angle issues?',
-          posts: [
-            { author: "AxleWise", initial: "A", time: "5h ago", body: `3" is the sweet spot for 35s but you'll want to address the CV angles. Budget for diff drop or SPC UCAs at minimum.`, likes: 18 }
-          ]
-        },
-        {
-          id: 3,
-          title: "Icon Stage 3 long-term review \u2014 40K miles",
-          replies: 34,
-          views: "3.2K",
-          author: "KyleLPO",
-          initial: "K",
-          time: "1d ago",
-          pinned: false,
-          body: "Just hit 40K on my Icon Stage 3 setup. Here's everything I've learned about maintenance, revalving, and what to expect long-term.",
-          posts: []
-        },
-        {
-          id: 4,
-          title: "Fox 2.5 Factory Race Series install tips",
-          replies: 56,
-          views: "4.1K",
-          author: "FoxFanatic",
-          initial: "F",
-          time: "2d ago",
-          pinned: false,
-          body: "Just finished installing Fox 2.5 Factory Race on my 4Runner. Sharing some tips that would have saved me hours.",
-          posts: []
-        }
-      ],
-      "Electrical & Wiring": [
-        {
-          id: 5,
-          title: "How to properly wire auxiliary batteries for dual setups",
-          replies: 124,
-          views: "8.4K",
-          author: "VoltWrangler",
-          initial: "V",
-          time: "6h ago",
-          pinned: true,
-          body: "Complete guide to dual battery setups \u2014 isolators, wiring gauges, fusing, and what NOT to do. Learned some hard lessons.",
-          posts: [
-            { author: "WattMaster", initial: "W", time: "4h ago", body: "This is the guide I wish I had 2 years ago. One thing to add \u2014 always fuse both sides of your isolator, not just the main feed.", likes: 42 }
-          ]
-        },
-        {
-          id: 6,
-          title: "Solar panel setup for roof-top tent camping",
-          replies: 67,
-          views: "4.9K",
-          author: "SolarTrail",
-          initial: "S",
-          time: "1d ago",
-          pinned: false,
-          body: "Running a 200W panel with Victron MPPT into a 100Ah lithium. Here's my complete setup and wiring diagram.",
-          posts: []
-        }
-      ],
-      "Convoy Planning": [
-        {
-          id: 7,
-          title: "Planning a Baja convoy \u2014 Feb 2027",
-          replies: 31,
-          views: "890",
-          author: "BajaBound",
-          initial: "B",
-          time: "1d ago",
-          pinned: true,
-          body: "Looking for 6-8 rigs for a 2-week Baja trip. Starting in San Diego, heading down to Cabo via the pacific coast. Experience level: intermediate+",
-          posts: [
-            { author: "DesertRat_4x4", initial: "D", time: "18h ago", body: "I'm in! Running a Bronco Sasquatch with full armor. Done the Baja loop twice before. What's the planned route?", likes: 8 },
-            { author: "BajaVet", initial: "B", time: "12h ago", body: "Count me in. I'd recommend hitting Mike's Sky Rancho on the way down. Best tacos you'll ever have.", likes: 15 }
-          ]
-        }
-      ],
-      "Parts For Sale": [
-        {
-          id: 8,
-          title: "Selling: ARB bumper for 200 Series LC \u2014 $800",
-          replies: 12,
-          views: "340",
-          author: "GearDump",
-          initial: "G",
-          time: "5h ago",
-          pinned: false,
-          body: "ARB Deluxe front bumper for 200 Series Land Cruiser. Excellent condition, includes fog light mounts. Pickup in Denver or ship at buyer's expense.",
-          posts: []
-        },
-        {
-          id: 9,
-          title: "CBI rear bumper + swing-out for Tundra \u2014 $1,200",
-          replies: 8,
-          views: "210",
-          author: "KyleLPO",
-          initial: "K",
-          time: "2d ago",
-          pinned: false,
-          body: "Upgraded to a custom setup. CBI T-bar rear with dual swing-outs. Fits 2014-2021 Tundra. Includes jerry can mount and tire carrier.",
-          posts: []
-        }
-      ],
-      "Trip Reports": [
-        {
-          id: 10,
-          title: "Rubicon Trail in a stock 4Runner \u2014 full report",
-          replies: 98,
-          views: "7.2K",
-          author: "StockHero",
-          initial: "S",
-          time: "3d ago",
-          pinned: true,
-          body: "They said it couldn't be done. It can, but I don't recommend it. Here's my full trip report with photos, damage assessment, and lessons learned.",
-          posts: [
-            { author: "RubiVet", initial: "R", time: "2d ago", body: "Impressive that you made it through! The Sluice alone would have me sweating in a stock rig. How'd you handle the approach angle on the big rocks?", likes: 22 }
-          ]
-        }
-      ]
-    }
+    ]
+    // Threads are persisted to public.forum_threads now (no seed). Live data
+    // is hydrated at root and passed down via the `threadsBySub` prop.
   };
+  function forumSlugify(name) {
+    return (name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  }
+  function slugifyForumTitle(title) {
+    return forumSlugify(title).slice(0, 80) || "thread";
+  }
+  var FORUM_CAT_BY_SLUG = {};
+  var FORUM_SUB_BY_SLUG = {};
   forumData.categories.forEach((cat) => {
+    const catSlug = forumSlugify(cat.name);
+    FORUM_CAT_BY_SLUG[catSlug] = { name: cat.name, slug: catSlug, color: cat.color, icon: cat.icon };
     cat.subs.forEach((sub) => {
-      if (!forumData.threads[sub.name]) {
-        forumData.threads[sub.name] = [
-          { id: Math.random(), title: `Welcome to ${sub.name}`, replies: 3, views: "120", author: "Admin", initial: "A", time: "1w ago", pinned: true, body: `This is the ${sub.name} subcategory under ${cat.name}. Start a thread to share your knowledge!`, posts: [] }
-        ];
-      }
+      const subSlug = forumSlugify(sub.name);
+      FORUM_SUB_BY_SLUG[subSlug] = { name: sub.name, slug: subSlug, catName: cat.name, catSlug };
     });
   });
-  function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpenDM, onOpenShareCompose, onOpenShareIntent, onAddFeedPost, userThreads, setUserThreads, userReplies, setUserReplies, likedForumItems, setLikedForumItems, forumLikeCounts, setForumLikeCounts, forumViewCounts, setForumViewCounts, onAwardPoints, isGuest, onGuestTap, currentUserId }) {
+  function dbRowToForumThread(row, profile) {
+    if (!row) return null;
+    const name = profile && profile.full_name || "User";
+    const handle = profile && profile.handle || "";
+    const subInfo = FORUM_SUB_BY_SLUG[row.subcategory_slug] || null;
+    const catInfo = FORUM_CAT_BY_SLUG[row.category_slug] || null;
+    return {
+      id: row.id,
+      title: row.title || "",
+      slug: row.slug,
+      body: row.body || null,
+      photos: Array.isArray(row.photos) ? row.photos : [],
+      pinned: !!row.pinned,
+      views: row.view_count || 0,
+      replies: 0,
+      // live count comes from repliesByThread length
+      time: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+      editedAt: row.updated_at && row.created_at && row.updated_at !== row.created_at ? new Date(row.updated_at).getTime() : null,
+      posts: [],
+      // legacy field — replies live in repliesByThread
+      user: name,
+      handle,
+      initial: (name || "U").charAt(0).toUpperCase(),
+      avatarUrl: profile && profile.avatar_url || null,
+      userId: row.user_id,
+      author: name,
+      // legacy alias used by existing ForumScreen code
+      categorySlug: row.category_slug,
+      subcategorySlug: row.subcategory_slug,
+      subName: subInfo ? subInfo.name : "",
+      catName: catInfo ? catInfo.name : ""
+    };
+  }
+  function dbRowToForumReply(row, profile) {
+    if (!row) return null;
+    const name = profile && profile.full_name || "User";
+    const handle = profile && profile.handle || "";
+    return {
+      id: row.id,
+      threadId: row.thread_id,
+      body: row.body || "",
+      photos: Array.isArray(row.photos) ? row.photos : [],
+      parentId: row.parent_id || null,
+      time: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+      author: name,
+      initial: (name || "U").charAt(0).toUpperCase(),
+      avatarUrl: profile && profile.avatar_url || null,
+      userId: row.user_id,
+      handle,
+      likes: 0
+      // not persisted yet — next pass
+    };
+  }
+  function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpenDM, onOpenShareCompose, onOpenShareIntent, onAddFeedPost, threadsBySub, repliesByThread, onAddForumThread, onUpdateForumThread, onDeleteForumThread, onAddForumReply, onDeleteForumReply, onLoadForumReplies, likedForumItems, setLikedForumItems, forumLikeCounts, setForumLikeCounts, forumViewCounts, setForumViewCounts, onAwardPoints, isGuest, onGuestTap, currentUserId, currentUserName, currentUserHandle, currentUserAvatar }) {
     const commitForumPhotos = async (photos) => {
       if (!Array.isArray(photos) || photos.length === 0) return [];
       if (!currentUserId) {
@@ -46276,11 +46194,7 @@ ${suffix}`;
     };
     const [replyToReply, setReplyToReply] = (0, import_react4.useState)(null);
     const [forumShareMenu, setForumShareMenu] = (0, import_react4.useState)(null);
-    const getReplyCount = (thread) => {
-      const seedCount = (thread.posts || []).length + (thread.replies || 0);
-      const userCount = (userReplies[thread.id] || []).length;
-      return seedCount + userCount;
-    };
+    const getReplyCount = (thread) => ((repliesByThread || {})[thread.id] || []).length;
     const getViewCount = (thread) => {
       const base = typeof thread.views === "string" ? parseFloat(thread.views.replace(/[^0-9.]/g, "")) * (thread.views.includes("K") ? 1e3 : 1) : thread.views || 0;
       const extra = forumViewCounts[thread.id] || 0;
@@ -46297,13 +46211,14 @@ ${suffix}`;
         if (cat.name !== catName) continue;
         for (const sub of cat.subs) {
           if (sub.name !== subName) continue;
-          const allThreads = [...forumData.threads[sub.name] || [], ...userThreads[sub.name] || []];
+          const allThreads = (threadsBySub || {})[sub.name] || [];
           const thread = allThreads.find((t) => t.id === threadId);
           if (thread) {
             setSelectedCat(cat);
             setSelectedSub(sub);
             setSelectedThread(thread);
             setView("thread");
+            if (onLoadForumReplies) onLoadForumReplies(thread.id);
             trackView(thread.id);
             onPendingHandled && onPendingHandled();
             return;
@@ -46311,7 +46226,7 @@ ${suffix}`;
         }
       }
       onPendingHandled && onPendingHandled();
-    }, [pendingThread]);
+    }, [pendingThread, threadsBySub]);
     const [editingThreadId, setEditingThreadId] = (0, import_react4.useState)(null);
     const [editTitle, setEditTitle] = (0, import_react4.useState)("");
     const [editBody, setEditBody] = (0, import_react4.useState)("");
@@ -46371,7 +46286,7 @@ ${suffix}`;
       const results = [];
       forumData.categories.forEach((cat) => {
         cat.subs.forEach((sub) => {
-          (forumData.threads[sub.name] || []).forEach((t) => {
+          ((threadsBySub || {})[sub.name] || []).forEach((t) => {
             results.push({ ...t, catName: cat.name, subName: sub.name, cat, sub });
           });
         });
@@ -46381,10 +46296,11 @@ ${suffix}`;
     const searchResults = searchQuery.trim().length > 0 ? (() => {
       const q = searchQuery.trim().toLowerCase();
       return allThreadsFlat.filter((t) => {
-        if (t.title.toLowerCase().includes(q)) return true;
+        if ((t.title || "").toLowerCase().includes(q)) return true;
         if (t.body && t.body.toLowerCase().includes(q)) return true;
-        if (t.author.toLowerCase().includes(q)) return true;
-        if (t.posts && t.posts.some((p) => p.author.toLowerCase().includes(q) || p.body.toLowerCase().includes(q))) return true;
+        if ((t.author || t.user || "").toLowerCase().includes(q)) return true;
+        const replies = (repliesByThread || {})[t.id] || [];
+        if (replies.some((r) => (r.author || "").toLowerCase().includes(q) || (r.body || "").toLowerCase().includes(q))) return true;
         return false;
       });
     })() : [];
@@ -46399,6 +46315,7 @@ ${suffix}`;
     const openThread = (thread) => {
       setSelectedThread(thread);
       setView("thread");
+      if (onLoadForumReplies) onLoadForumReplies(thread.id);
       trackView(thread.id);
     };
     const openNewThreadFromHome = () => {
@@ -46441,54 +46358,49 @@ ${suffix}`;
       const submitThread = async () => {
         if (!ntTitle.trim()) return;
         if (ntFromHome && (!ntPickCat || !ntPickSub)) return;
-        const subName = (activeSub || {}).name;
+        if (!onAddForumThread) return;
+        const cat = activeCat || ntPickCat;
+        const sub = activeSub || ntPickSub;
+        const subName = sub.name;
+        const catName = cat.name;
         const photoPayload = await commitForumPhotos(ntPhotos);
-        const newThread = {
-          id: Date.now(),
-          title: ntTitle.trim(),
-          body: (() => {
-            const html = ntBodyRef.current ? ntBodyRef.current.innerHTML : ntBody;
-            console.log("[TRAILHEAD DEBUG] Submitting body HTML:", html);
-            return html && html.replace(/<[^>]+>/g, "").trim() ? html : null;
-          })(),
-          replies: 0,
-          views: "0",
-          author: "KyleLPO",
-          initial: "K",
-          time: Date.now(),
-          pinned: false,
-          posts: [],
-          ...photoPayload.length > 0 ? { photos: photoPayload } : {}
-        };
-        setUserThreads((prev) => ({
-          ...prev,
-          [subName]: [newThread, ...prev[subName] || []]
-        }));
+        const titleText = ntTitle.trim();
+        const bodyHtml = (() => {
+          const html = ntBodyRef.current ? ntBodyRef.current.innerHTML : ntBody;
+          return html && html.replace(/<[^>]+>/g, "").trim() ? html : null;
+        })();
+        const created = await onAddForumThread({
+          title: titleText,
+          body: bodyHtml,
+          photos: photoPayload,
+          categoryName: catName,
+          subcategoryName: subName
+        });
+        if (!created) return;
         if (ntShareToFeed && onAddFeedPost) {
-          const catName = (activeCat || ntPickCat || {}).name || "";
           onAddFeedPost({
             id: Date.now() + 1,
             type: "FORUM",
-            user: "KyleLPO",
-            initial: "K",
-            title: newThread.title,
+            user: currentUserName || "You",
+            initial: (currentUserName || "Y").charAt(0).toUpperCase(),
+            title: created.title,
             body: null,
-            ...newThread.photos && newThread.photos.length > 0 ? { image: newThread.photos[0].url || newThread.photos[0] } : {},
+            ...created.photos && created.photos.length > 0 ? { image: created.photos[0].url || created.photos[0] } : {},
             time: Date.now(),
             likes: 0,
             comments: 0,
             replies: 0,
             views: "0",
-            threadId: newThread.id,
+            threadId: created.id,
             forumCat: catName,
             forumSub: subName
           });
         }
         const plainBody = ntBody.replace(/<[^>]+>/g, " ");
-        const mentions = extractMentions(ntTitle + " " + plainBody);
+        const mentions = extractMentions(titleText + " " + plainBody);
         mentions.forEach((handle) => {
-          if (handle !== "KyleLPO") {
-            onAddNotification && onAddNotification({ type: "mention", user: "KyleLPO", text: "mentioned you in a forum thread", target: ntTitle.trim(), icon: AtSign, iconColor: T.copper });
+          if (handle !== currentUserHandle) {
+            onAddNotification && onAddNotification({ type: "mention", user: currentUserName || "You", text: "mentioned you in a forum thread", target: titleText, icon: AtSign, iconColor: T.copper });
           }
         });
         onAwardPoints && onAwardPoints(25, "Forum Thread");
@@ -46499,8 +46411,8 @@ ${suffix}`;
         setNtPhotos([]);
         setNtShareToFeed(true);
         if (ntFromHome) {
-          setSelectedCat(activeCat);
-          setSelectedSub(activeSub);
+          setSelectedCat(cat);
+          setSelectedSub(sub);
           setView("threads");
         } else {
           setView("threads");
@@ -46699,7 +46611,7 @@ ${suffix}`;
     }
     if (view === "thread" && selectedThread) {
       const threadLikeKey = "thread_" + selectedThread.id;
-      const allPosts = [...selectedThread.posts || [], ...userReplies[selectedThread.id] || []];
+      const allPosts = (repliesByThread || {})[selectedThread.id] || [];
       const toggleForumLike = (key, baseLikes) => {
         const wasLiked = likedForumItems[key];
         setLikedForumItems((prev) => ({ ...prev, [key]: !wasLiked }));
@@ -46726,8 +46638,8 @@ ${suffix}`;
         const feedPost = {
           id: "forum_share_" + Date.now(),
           type: "FORUM",
-          user: "KyleLPO",
-          initial: "K",
+          user: currentUserName || "You",
+          initial: (currentUserName || "Y").charAt(0).toUpperCase(),
           time: Date.now(),
           title,
           body: null,
@@ -46768,25 +46680,25 @@ ${suffix}`;
           return;
         }
         if (!forumReplyText.trim() && replyPhotos.length === 0) return;
+        if (!onAddForumReply) return;
         const photoPayload = await commitForumPhotos(replyPhotos);
-        const newReply = {
-          author: "KyleLPO",
-          initial: "K",
-          body: (replyToReply ? `@${replyToReply.author} ` : "") + forumReplyText.trim(),
-          time: Date.now(),
-          likes: 0,
-          ...photoPayload.length > 0 ? { photos: photoPayload } : {},
-          ...replyToReply ? { replyTo: replyToReply.author, parentIdx: replyToReply.idx } : {}
-        };
-        setUserReplies((prev) => ({
-          ...prev,
-          [selectedThread.id]: [...prev[selectedThread.id] || [], newReply]
-        }));
+        let parentReplyId = null;
+        if (replyToReply && typeof replyToReply.idx === "number") {
+          const parentReply = allPosts[replyToReply.idx];
+          if (parentReply && parentReply.id) parentReplyId = parentReply.id;
+        }
+        const body = (replyToReply ? `@${replyToReply.author} ` : "") + forumReplyText.trim();
+        const created = await onAddForumReply(selectedThread.id, {
+          body,
+          photos: photoPayload,
+          parentId: parentReplyId
+        });
+        if (!created) return;
         const mentions = extractMentions(forumReplyText);
         if (replyToReply && !mentions.includes(replyToReply.author)) mentions.push(replyToReply.author);
         mentions.forEach((handle) => {
-          if (handle !== "KyleLPO") {
-            onAddNotification && onAddNotification({ type: "mention", user: "KyleLPO", text: "mentioned you in a forum reply", target: selectedThread.title, icon: AtSign, iconColor: T.copper });
+          if (handle !== currentUserHandle) {
+            onAddNotification && onAddNotification({ type: "mention", user: currentUserName || "You", text: "mentioned you in a forum reply", target: selectedThread.title, icon: AtSign, iconColor: T.copper });
           }
         });
         onAwardPoints && onAwardPoints(10, "Forum Reply");
@@ -46808,7 +46720,7 @@ ${suffix}`;
       const threadLiked = likedForumItems[threadLikeKey];
       const threadLikes = getForumLikes(threadLikeKey, selectedThread.likes || 0);
       const threadShareOpen = forumShareMenu === threadLikeKey;
-      const isOwnThread = selectedThread.author === "KyleLPO";
+      const isOwnThread = !!(currentUserId && selectedThread.userId && currentUserId === selectedThread.userId);
       const thRbCSS = `<style>
 .th-rb h1{display:block;font-size:26px;font-weight:700;color:#fff;margin:14px 0 8px;font-family:Trebuchet MS,Gill Sans,sans-serif;line-height:1.2}
 .th-rb h2{display:block;font-size:21px;font-weight:700;color:#fff;margin:12px 0 6px;font-family:Trebuchet MS,Gill Sans,sans-serif;line-height:1.3}
@@ -46894,14 +46806,13 @@ ${suffix}`;
         const newBody = editBodyRef.current ? editBodyRef.current.innerHTML : editBody;
         const cleanBody = newBody && newBody.replace(/<[^>]+>/g, "").trim() ? newBody : null;
         const newPhotos = await commitForumPhotos(editPhotos);
-        const subName = selectedSub?.name;
-        if (subName) {
-          setUserThreads((prev) => {
-            const threads = prev[subName] || [];
-            return { ...prev, [subName]: threads.map((t) => t.id === selectedThread.id ? { ...t, title: editTitle.trim(), body: cleanBody, photos: newPhotos.length > 0 ? newPhotos : void 0, editedAt: Date.now() } : t) };
-          });
-        }
-        setSelectedThread({ ...selectedThread, title: editTitle.trim(), body: cleanBody, photos: newPhotos.length > 0 ? newPhotos : void 0, editedAt: Date.now() });
+        const updates = {
+          title: editTitle.trim(),
+          body: cleanBody,
+          photos: newPhotos.length > 0 ? newPhotos : []
+        };
+        if (onUpdateForumThread) await onUpdateForumThread(selectedThread.id, updates);
+        setSelectedThread({ ...selectedThread, ...updates, photos: newPhotos.length > 0 ? newPhotos : void 0, editedAt: Date.now() });
         setEditingThreadId(null);
         setEditLinkInput(false);
       }, style: { padding: "8px 18px", borderRadius: 8, background: editTitle.trim() ? T.red : T.charcoal, border: "none", cursor: editTitle.trim() ? "pointer" : "default", opacity: editTitle.trim() ? 1 : 0.5 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, "SAVE"))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, overflowY: "auto", padding: "16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "TITLE *"), /* @__PURE__ */ import_react4.default.createElement("input", { value: editTitle, onChange: (e) => setEditTitle(e.target.value), style: { width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none", boxSizing: "border-box" } })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "BODY"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 2, padding: "6px 8px", background: T.charcoal, borderRadius: "8px 8px 0 0", border: `1px solid ${T.charcoal}`, borderBottom: "none" } }, [
@@ -47073,7 +46984,7 @@ ${suffix}`;
                 `)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "HERO IMAGE"), /* @__PURE__ */ import_react4.default.createElement(PhotoUploader, { photos: editPhotos, onChange: setEditPhotos })))));
     }
     if (view === "threads" && selectedSub && selectedCat) {
-      const threads = [...userThreads[selectedSub.name] || [], ...forumData.threads[selectedSub.name] || []].slice().sort((a, b) => {
+      const threads = ((threadsBySub || {})[selectedSub.name] || []).slice().sort((a, b) => {
         const pa = a.pinned ? 0 : 1;
         const pb = b.pinned ? 0 : 1;
         if (pa !== pb) return pa - pb;
@@ -47083,15 +46994,12 @@ ${suffix}`;
     }
     if (view === "subcategories" && selectedCat) {
       return /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 0 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "14px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: goBack, style: { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" } }, /* @__PURE__ */ import_react4.default.createElement(ChevronLeft, { size: 20, color: T.white, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700 } }, selectedCat.name)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 2 } }, selectedCat.subs.map((sub, i) => {
-        const threadCount = (forumData.threads[sub.name] || []).length;
+        const threadCount = ((threadsBySub || {})[sub.name] || []).length;
         return /* @__PURE__ */ import_react4.default.createElement("div", { key: sub.name, onClick: () => openSubcategory(sub), style: { background: T.darkCard, padding: "16px", cursor: "pointer", borderRadius: i === 0 ? "8px 8px 0 0" : i === selectedCat.subs.length - 1 ? "0 0 8px 8px" : 0, borderBottom: i < selectedCat.subs.length - 1 ? `1px solid ${T.charcoal}` : "none", display: "flex", alignItems: "center", justifyContent: "space-between" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 36, height: 36, borderRadius: 8, background: `${selectedCat.color}15`, display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement(MessageCircle, { size: 16, color: selectedCat.color })), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 600, display: "block" } }, sub.name), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, sub.threads, " threads"))), /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 16, color: T.tertiary }));
       }))));
     }
     const totalThreads = (cat) => cat.subs.reduce((sum, s) => sum + s.threads, 0);
-    const recentThreadsPool = [
-      ...Object.values(forumData.threads).flat(),
-      ...Object.values(userThreads || {}).flat()
-    ];
+    const recentThreadsPool = Object.values(threadsBySub || {}).flat();
     const recentThreads = recentThreadsPool.slice().sort((a, b) => threadAgeMin(a.time) - threadAgeMin(b.time)).slice(0, 5);
     return /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 0 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, display: "flex", alignItems: "center", background: T.darkCard, borderRadius: 8, padding: "10px 14px", border: searchActive ? `1px solid ${T.copper}` : `1px solid transparent` } }, /* @__PURE__ */ import_react4.default.createElement(Search, { size: 16, color: searchActive ? T.copper : T.tertiary }), /* @__PURE__ */ import_react4.default.createElement(
       "input",
@@ -47120,13 +47028,13 @@ ${suffix}`;
     }))) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 10 } }, "CATEGORIES"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, forumData.categories.map((cat) => /* @__PURE__ */ import_react4.default.createElement("div", { key: cat.name, onClick: () => openCategory(cat), style: { background: T.darkCard, borderRadius: 8, padding: "14px", cursor: "pointer", borderLeft: `3px solid ${cat.color}` } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, display: "block", marginBottom: 4 } }, cat.name), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 11, color: T.tertiary } }, totalThreads(cat), " threads"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, display: "block", marginTop: 2 } }, cat.subs.length, " subcategories"))))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 10 } }, "RECENT THREADS"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 2 } }, recentThreads.map((t, i) => /* @__PURE__ */ import_react4.default.createElement("div", { key: t.id, onClick: () => {
       for (const cat of forumData.categories) {
         for (const sub of cat.subs) {
-          const seedHit = (forumData.threads[sub.name] || []).find((th) => th.id === t.id);
-          const userHit = (userThreads[sub.name] || []).find((th) => th.id === t.id);
-          if (seedHit || userHit) {
+          const hit = ((threadsBySub || {})[sub.name] || []).find((th) => th.id === t.id);
+          if (hit) {
             setSelectedCat(cat);
             setSelectedSub(sub);
             setSelectedThread(t);
             setView("thread");
+            if (onLoadForumReplies) onLoadForumReplies(t.id);
             trackView(t.id);
             return;
           }
@@ -55655,6 +55563,10 @@ ${suffix}`;
       } catch (e) {
         console.warn("[guest-hydrate] trip_reports fetch failed", e);
       }
+      try {
+        await hydrateForumThreads();
+      } catch (e) {
+      }
     };
     const hydratedForUidRef = (0, import_react4.useRef)(null);
     const hydrateUserData = async (session) => {
@@ -55664,6 +55576,10 @@ ${suffix}`;
       hydratedForUidRef.current = uid;
       try {
         loadAllBuildsOnce();
+      } catch (e) {
+      }
+      try {
+        hydrateForumThreads();
       } catch (e) {
       }
       let profileRow = null;
@@ -56243,6 +56159,61 @@ ${suffix}`;
         const row = payload.old;
         if (!row || !row.id) return;
         setTripReports((prev) => prev.filter((t) => t.id !== row.id));
+      }).on("postgres_changes", { event: "INSERT", schema: "public", table: "forum_threads" }, async (payload) => {
+        const row = payload.new;
+        if (!row || !row.id) return;
+        if (row.user_id === uid) return;
+        let prof = forumAuthors[row.user_id] || null;
+        if (!prof) {
+          try {
+            const { data } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").eq("id", row.user_id).single();
+            prof = data || null;
+            if (prof) setForumAuthors((prev) => ({ ...prev, [prof.id]: prof }));
+          } catch (e) {
+          }
+        }
+        const local = dbRowToForumThread(row, prof);
+        if (local) setForumThreads((prev) => prev.some((t) => t.id === local.id) ? prev : [local, ...prev]);
+      }).on("postgres_changes", { event: "UPDATE", schema: "public", table: "forum_threads" }, (payload) => {
+        const row = payload.new;
+        if (!row || !row.id) return;
+        const prof = forumAuthors[row.user_id] || (row.user_id === uid ? currentProfile : null);
+        const local = dbRowToForumThread(row, prof);
+        if (local) setForumThreads((prev) => prev.map((t) => t.id === local.id ? { ...t, ...local } : t));
+      }).on("postgres_changes", { event: "DELETE", schema: "public", table: "forum_threads" }, (payload) => {
+        const row = payload.old;
+        if (!row || !row.id) return;
+        setForumThreads((prev) => prev.filter((t) => t.id !== row.id));
+        setForumReplies((prev) => {
+          const next = { ...prev };
+          delete next[row.id];
+          return next;
+        });
+      }).on("postgres_changes", { event: "INSERT", schema: "public", table: "forum_replies" }, async (payload) => {
+        const row = payload.new;
+        if (!row || !row.thread_id) return;
+        if (row.user_id === uid) return;
+        let prof = forumAuthors[row.user_id] || null;
+        if (!prof) {
+          try {
+            const { data } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").eq("id", row.user_id).single();
+            prof = data || null;
+            if (prof) setForumAuthors((prev) => ({ ...prev, [prof.id]: prof }));
+          } catch (e) {
+          }
+        }
+        const local = dbRowToForumReply(row, prof);
+        if (local) {
+          setForumReplies((prev) => {
+            const list = prev[row.thread_id] || [];
+            if (list.some((r) => r.id === local.id)) return prev;
+            return { ...prev, [row.thread_id]: [...list, local] };
+          });
+        }
+      }).on("postgres_changes", { event: "DELETE", schema: "public", table: "forum_replies" }, (payload) => {
+        const row = payload.old;
+        if (!row || !row.thread_id) return;
+        setForumReplies((prev) => ({ ...prev, [row.thread_id]: (prev[row.thread_id] || []).filter((r) => r.id !== row.id) }));
       }).on("postgres_changes", { event: "INSERT", schema: "public", table: "camping_spots" }, (payload) => {
         const row = payload.new;
         if (!row || !row.id) return;
@@ -56981,8 +56952,10 @@ ${suffix}`;
     const [likedBuildCommentIds, setLikedBuildCommentIds] = (0, import_react4.useState)({});
     const [buildCommentLikeCounts, setBuildCommentLikeCounts] = (0, import_react4.useState)({});
     const [likedCommentIds, setLikedCommentIds] = (0, import_react4.useState)({});
-    const [forumUserThreads, setForumUserThreads] = (0, import_react4.useState)({});
-    const [forumUserReplies, setForumUserReplies] = (0, import_react4.useState)({});
+    const [forumThreads, setForumThreads] = (0, import_react4.useState)([]);
+    const [forumReplies, setForumReplies] = (0, import_react4.useState)({});
+    const [forumAuthors, setForumAuthors] = (0, import_react4.useState)({});
+    const forumRepliesLoadedRef = (0, import_react4.useRef)({});
     const [forumLikedItems, setForumLikedItems] = (0, import_react4.useState)({});
     const [forumLikeCounts, setForumLikeCounts] = (0, import_react4.useState)({});
     const [forumViewCounts, setForumViewCounts] = (0, import_react4.useState)({});
@@ -57086,6 +57059,16 @@ ${suffix}`;
       const planRows = (tripReports || []).filter((t) => t.kind === "plan");
       return mergeTripSlices(planRows, viewportTripPlans);
     }, [tripReports, viewportTripPlans]);
+    const forumThreadsBySub = (0, import_react4.useMemo)(() => {
+      const out = {};
+      (forumThreads || []).forEach((t) => {
+        const k = t.subName || "";
+        if (!k) return;
+        if (!out[k]) out[k] = [];
+        out[k].push(t);
+      });
+      return out;
+    }, [forumThreads]);
     (0, import_react4.useEffect)(() => {
       if (!pendingTripNav) return;
       const trip = (allTripReports || []).find((t) => t.slug === pendingTripNav) || (allTripPlans || []).find((t) => t.slug === pendingTripNav);
@@ -59574,6 +59557,173 @@ ${suffix}`;
         setBuildComments((prev) => ({ ...prev, [buildId]: prevList }));
       }
     };
+    const hydrateForumThreads = async () => {
+      try {
+        const { data: rows, error } = await supabase.from("forum_threads").select("*").order("created_at", { ascending: false }).limit(500);
+        if (error) throw error;
+        if (!Array.isArray(rows) || rows.length === 0) return;
+        const authorIds = Array.from(new Set(rows.map((r) => r.user_id).filter(Boolean)));
+        const authorsById = {};
+        if (authorIds.length > 0) {
+          try {
+            const { data: profs } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").in("id", authorIds);
+            if (Array.isArray(profs)) profs.forEach((p) => {
+              authorsById[p.id] = p;
+            });
+          } catch (e) {
+          }
+        }
+        const translated = rows.map((r) => dbRowToForumThread(r, authorsById[r.user_id] || null)).filter(Boolean);
+        setForumThreads(translated);
+        setForumAuthors((prev) => ({ ...prev, ...authorsById }));
+      } catch (e) {
+        console.warn("[forum_threads] hydrate failed", e);
+      }
+    };
+    const loadForumReplies = async (threadId) => {
+      if (!threadId || typeof threadId !== "string") return;
+      if (forumRepliesLoadedRef.current[threadId]) return;
+      forumRepliesLoadedRef.current[threadId] = true;
+      try {
+        const { data: rows, error } = await supabase.from("forum_replies").select("*").eq("thread_id", threadId).order("created_at", { ascending: true });
+        if (error) throw error;
+        if (!Array.isArray(rows)) return;
+        const authorIds = Array.from(new Set(rows.map((r) => r.user_id).filter(Boolean)));
+        const profilesById = {};
+        if (authorIds.length > 0) {
+          try {
+            const { data: profs } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").in("id", authorIds);
+            if (Array.isArray(profs)) profs.forEach((p) => {
+              profilesById[p.id] = p;
+            });
+          } catch (e) {
+          }
+        }
+        const list = rows.map((r) => dbRowToForumReply(r, profilesById[r.user_id])).filter(Boolean);
+        setForumReplies((prev) => ({ ...prev, [threadId]: list }));
+        setForumAuthors((prev) => ({ ...prev, ...profilesById }));
+      } catch (e) {
+        console.warn("[forum_replies] load failed", e);
+        forumRepliesLoadedRef.current[threadId] = false;
+      }
+    };
+    const addForumThread = async ({ title, body, photos, categoryName, subcategoryName }) => {
+      const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+      if (!uid) return null;
+      if (!title || !title.trim()) return null;
+      const trimmed = title.trim();
+      const categorySlug = forumSlugify(categoryName || "");
+      const subcategorySlug = forumSlugify(subcategoryName || "");
+      if (!categorySlug || !subcategorySlug) return null;
+      const baseSlug = slugifyForumTitle(trimmed);
+      let inserted = null;
+      let lastError = null;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const candidateSlug = attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`;
+        const { data, error } = await supabase.from("forum_threads").insert({
+          user_id: uid,
+          category_slug: categorySlug,
+          subcategory_slug: subcategorySlug,
+          title: trimmed,
+          slug: candidateSlug,
+          body: body || null,
+          photos: Array.isArray(photos) ? photos : []
+        }).select().single();
+        if (!error) {
+          inserted = data;
+          break;
+        }
+        if (error.code !== "23505") {
+          lastError = error;
+          break;
+        }
+        lastError = error;
+      }
+      if (!inserted) {
+        console.error("[forum_threads] insert failed", lastError);
+        return null;
+      }
+      const prof = currentProfile || { id: uid, full_name: currentProfile && currentProfile.full_name || "You", handle: currentProfile && currentProfile.handle || "", avatar_url: profilePic || null };
+      const local = dbRowToForumThread(inserted, prof);
+      setForumThreads((prev) => [local, ...prev]);
+      return local;
+    };
+    const updateForumThread = async (threadId, updates) => {
+      const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+      if (!uid || !threadId) return null;
+      const patch = {};
+      if (typeof updates.title === "string") patch.title = updates.title;
+      if (updates.body !== void 0) patch.body = updates.body;
+      if (Array.isArray(updates.photos)) patch.photos = updates.photos;
+      if (typeof updates.pinned === "boolean") patch.pinned = updates.pinned;
+      patch.updated_at = (/* @__PURE__ */ new Date()).toISOString();
+      try {
+        const { data, error } = await supabase.from("forum_threads").update(patch).eq("id", threadId).eq("user_id", uid).select().single();
+        if (error) throw error;
+        const prof = forumAuthors[data.user_id] || (data.user_id === uid ? currentProfile : null);
+        const local = dbRowToForumThread(data, prof);
+        setForumThreads((prev) => prev.map((t) => t.id === local.id ? { ...t, ...local } : t));
+        return local;
+      } catch (e) {
+        console.error("[forum_threads] updateForumThread failed", e);
+        return null;
+      }
+    };
+    const deleteForumThread = async (threadId) => {
+      const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+      if (!uid || !threadId) return;
+      const prevList = forumThreads;
+      const prevReplies = forumReplies;
+      setForumThreads((prev) => prev.filter((t) => t.id !== threadId));
+      setForumReplies((prev) => {
+        const next = { ...prev };
+        delete next[threadId];
+        return next;
+      });
+      try {
+        const { error } = await supabase.from("forum_threads").delete().eq("id", threadId).eq("user_id", uid);
+        if (error) throw error;
+      } catch (e) {
+        console.error("[forum_threads] deleteForumThread failed", e);
+        setForumThreads(prevList);
+        setForumReplies(prevReplies);
+      }
+    };
+    const addForumReply = async (threadId, { body, photos, parentId }) => {
+      const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+      if (!uid || !threadId || !body || !body.trim()) return null;
+      const insertRow = {
+        thread_id: threadId,
+        user_id: uid,
+        body: body.trim(),
+        photos: Array.isArray(photos) ? photos : []
+      };
+      if (typeof parentId === "string" && parentId.length >= 20) insertRow.parent_id = parentId;
+      try {
+        const { data, error } = await supabase.from("forum_replies").insert(insertRow).select().single();
+        if (error) throw error;
+        const prof = currentProfile || { id: uid, full_name: "You", handle: "", avatar_url: profilePic || null };
+        const local = dbRowToForumReply(data, prof);
+        setForumReplies((prev) => ({ ...prev, [threadId]: [...prev[threadId] || [], local] }));
+        return local;
+      } catch (e) {
+        console.error("[forum_replies] addForumReply failed", e);
+        return null;
+      }
+    };
+    const deleteForumReply = async (threadId, replyId) => {
+      const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+      if (!uid || !replyId) return;
+      const prevList = forumReplies[threadId] || [];
+      setForumReplies((prev) => ({ ...prev, [threadId]: (prev[threadId] || []).filter((r) => r.id !== replyId) }));
+      try {
+        const { error } = await supabase.from("forum_replies").delete().eq("id", replyId).eq("user_id", uid);
+        if (error) throw error;
+      } catch (e) {
+        console.error("[forum_replies] deleteForumReply failed", e);
+        setForumReplies((prev) => ({ ...prev, [threadId]: prevList }));
+      }
+    };
     const toggleCommentLike = async (postId, commentId) => {
       const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
       if (!uid) return;
@@ -59745,7 +59895,7 @@ ${suffix}`;
         onDeletePost: requireAuth((id) => deletePost(id)),
         onEditPost: requireAuth((id, newText) => updatePost(id, { title: newText })),
         onAddNotification: requireAuth(addNotification),
-        forumUserReplies,
+        forumUserReplies: forumReplies,
         forumViewCounts,
         savedRoutes,
         onSaveRoute: requireAuth((route) => setSavedRoutes((prev) => prev.some((r) => r.id === route.id || r.name === route.name) ? prev : [route, ...prev])),
@@ -59871,7 +60021,7 @@ ${suffix}`;
     }, onGoToPost: (id) => {
       setProfileStack([]);
       setScreen("feed");
-    }, myPoints: myTotalPoints }) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, isGuest && screen !== "routes" && /* @__PURE__ */ import_react4.default.createElement(GuestBanner, { onSignIn: () => setShowGuestPrompt(true) }), screen === "feed" && renderFeedScopedTo({ hideFilters: false }), screen === "forum" && /* @__PURE__ */ import_react4.default.createElement(ForumScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, pendingThread, onPendingHandled: () => setPendingThread(null), onAddNotification: requireAuth(addNotification), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onOpenShareCompose: openShareCompose, onOpenShareIntent: openShareIntent, onAddFeedPost: requireAuth((post2) => addPost(post2)), userThreads: forumUserThreads, setUserThreads: requireAuth(setForumUserThreads), userReplies: forumUserReplies, setUserReplies: requireAuth(setForumUserReplies), likedForumItems: forumLikedItems, setLikedForumItems: requireAuth(setForumLikedItems), forumLikeCounts, setForumLikeCounts: requireAuth(setForumLikeCounts), forumViewCounts, setForumViewCounts, onAwardPoints: awardPoints }), screen === "routes" && /* @__PURE__ */ import_react4.default.createElement(RoutesScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, onOpenShareIntent: openShareIntent, tripAuthors, onLoadRouteData: loadTripRouteData, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, tripReports: allTripReports, showTripReports, setShowTripReports, tripPlans: allTripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot: requireAuth(addCampingSpot), onUpdateCampingSpot: requireAuth(updateCampingSpot), onDeleteCampingSpot: requireAuth(deleteCampingSpot), onLoadCampingSpotPhotos: loadCampingSpotPhotos, onLoadCampingSpotElevation: loadCampingSpotElevation, spotAuthors, onViewUser: openUserProfile, onStartNav: (route) => setActiveNavRoute(route), onOpenTripDetail: (slug) => setPendingTripNav(slug), onOpenTripPlanDraft: (id) => setDetailTripId(id), onNewTripReport: () => setTripCreatorMode("report"), onNewTripPlan: () => requireAuth(() => enterPlanBuilder())(), pendingSpotNav, onConsumePendingSpotNav: () => setPendingSpotNav(null), pendingHQOpen, onConsumePendingHQOpen: () => setPendingHQOpen(false), pendingPlanNav, onConsumePendingPlanNav: () => setPendingPlanNav(null), onShareCampingSpotToFeed: requireAuth(shareCampingSpotToFeed), onShareHQToFeed: requireAuth(shareHQToFeed), onShareTripToFeed: requireAuth(shareTripToFeed), onShareTripPlanToFeed: requireAuth(shareTripPlanToFeed), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onShowToast: showErrorToast, onOpenShareCompose: openShareCompose, planBuilder: { active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, editingId: planBuilderEditingId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen, accent: planBuilderEditingId && (tripReports || []).find((t) => t.id === planBuilderEditingId && t.kind === "report") ? T.purple : T.copper } }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, onLoadAllBuilds: loadAllBuildsOnce, onLoadBuildById: loadBuildById, allBuildsLoaded, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onOpenShareCompose: openShareCompose, onOpenShareIntent: openShareIntent, onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onDeleteBuild: requireAuth(deleteBuild), onPostBuildToFeed: requireAuth((b, opts) => {
+    }, myPoints: myTotalPoints }) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, isGuest && screen !== "routes" && /* @__PURE__ */ import_react4.default.createElement(GuestBanner, { onSignIn: () => setShowGuestPrompt(true) }), screen === "feed" && renderFeedScopedTo({ hideFilters: false }), screen === "forum" && /* @__PURE__ */ import_react4.default.createElement(ForumScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, currentUserName: currentProfile && currentProfile.full_name || "You", currentUserHandle: currentProfile && currentProfile.handle || "", currentUserAvatar: profilePic || currentProfile && currentProfile.avatar_url || null, pendingThread, onPendingHandled: () => setPendingThread(null), onAddNotification: requireAuth(addNotification), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onOpenShareCompose: openShareCompose, onOpenShareIntent: openShareIntent, onAddFeedPost: requireAuth((post2) => addPost(post2)), threadsBySub: forumThreadsBySub, repliesByThread: forumReplies, onAddForumThread: requireAuth(addForumThread), onUpdateForumThread: requireAuth(updateForumThread), onDeleteForumThread: requireAuth(deleteForumThread), onAddForumReply: requireAuth(addForumReply), onDeleteForumReply: requireAuth(deleteForumReply), onLoadForumReplies: loadForumReplies, likedForumItems: forumLikedItems, setLikedForumItems: requireAuth(setForumLikedItems), forumLikeCounts, setForumLikeCounts: requireAuth(setForumLikeCounts), forumViewCounts, setForumViewCounts, onAwardPoints: awardPoints }), screen === "routes" && /* @__PURE__ */ import_react4.default.createElement(RoutesScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, onOpenShareIntent: openShareIntent, tripAuthors, onLoadRouteData: loadTripRouteData, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, tripReports: allTripReports, showTripReports, setShowTripReports, tripPlans: allTripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot: requireAuth(addCampingSpot), onUpdateCampingSpot: requireAuth(updateCampingSpot), onDeleteCampingSpot: requireAuth(deleteCampingSpot), onLoadCampingSpotPhotos: loadCampingSpotPhotos, onLoadCampingSpotElevation: loadCampingSpotElevation, spotAuthors, onViewUser: openUserProfile, onStartNav: (route) => setActiveNavRoute(route), onOpenTripDetail: (slug) => setPendingTripNav(slug), onOpenTripPlanDraft: (id) => setDetailTripId(id), onNewTripReport: () => setTripCreatorMode("report"), onNewTripPlan: () => requireAuth(() => enterPlanBuilder())(), pendingSpotNav, onConsumePendingSpotNav: () => setPendingSpotNav(null), pendingHQOpen, onConsumePendingHQOpen: () => setPendingHQOpen(false), pendingPlanNav, onConsumePendingPlanNav: () => setPendingPlanNav(null), onShareCampingSpotToFeed: requireAuth(shareCampingSpotToFeed), onShareHQToFeed: requireAuth(shareHQToFeed), onShareTripToFeed: requireAuth(shareTripToFeed), onShareTripPlanToFeed: requireAuth(shareTripPlanToFeed), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onShowToast: showErrorToast, onOpenShareCompose: openShareCompose, planBuilder: { active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, editingId: planBuilderEditingId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen, accent: planBuilderEditingId && (tripReports || []).find((t) => t.id === planBuilderEditingId && t.kind === "report") ? T.purple : T.copper } }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, onLoadAllBuilds: loadAllBuildsOnce, onLoadBuildById: loadBuildById, allBuildsLoaded, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onOpenShareCompose: openShareCompose, onOpenShareIntent: openShareIntent, onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onDeleteBuild: requireAuth(deleteBuild), onPostBuildToFeed: requireAuth((b, opts) => {
       const rawBd = b.buildData;
       const bd = scrubLocalPhotosFromBuildData(rawBd);
       const isLocalUrl = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:"));
@@ -60486,7 +60636,8 @@ ${suffix}`;
           setShowGlobalSearch(false);
           setScreen(s);
         },
-        forumUserReplies,
+        forumThreadsBySub,
+        forumUserReplies: forumReplies,
         forumViewCounts
       }
     ), showDM && /* @__PURE__ */ import_react4.default.createElement(
