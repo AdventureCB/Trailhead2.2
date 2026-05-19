@@ -43272,6 +43272,53 @@ ${suffix}`;
     // dynamically restyle.
     prev.src === next.src && prev.width === next.width && prev.accent === next.accent && prev.alt === next.alt && prev.fallbackIcon === next.fallbackIcon
   ));
+  function FeedPhotoCarousel({ photos, height = 220, onOpenLightbox, accent }) {
+    const scrollRef = (0, import_react4.useRef)(null);
+    const [idx, setIdx] = (0, import_react4.useState)(0);
+    const onScroll = () => {
+      const el = scrollRef.current;
+      if (!el) return;
+      const slideW = el.clientWidth || 1;
+      const next = Math.round(el.scrollLeft / slideW);
+      if (next !== idx) setIdx(next);
+    };
+    const lightboxImages = (photos || []).filter((p) => !(typeof p === "object" && p && p.type === "video")).map((p) => typeof p === "string" ? p : p.url);
+    const showDots = (photos || []).length > 1;
+    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement(
+      "div",
+      {
+        ref: scrollRef,
+        onScroll,
+        className: "th-hscroll",
+        style: { display: "flex", overflowX: "auto", scrollSnapType: "x mandatory", WebkitOverflowScrolling: "touch", touchAction: "pan-x pan-y" }
+      },
+      (photos || []).map((p, i) => {
+        const url = typeof p === "string" ? p : p && p.url;
+        const isVid = typeof p === "object" && p && p.type === "video";
+        return /* @__PURE__ */ import_react4.default.createElement("div", { key: i, style: { flex: "0 0 100%", scrollSnapAlign: "start", scrollSnapStop: "always", height } }, isVid ? /* @__PURE__ */ import_react4.default.createElement("video", { src: url + "#t=0.001", preload: "metadata", playsInline: true, onLoadedMetadata: (e) => {
+          try {
+            e.currentTarget.currentTime = 1e-3;
+          } catch (err) {
+          }
+        }, controls: true, style: { width: "100%", height: "100%", objectFit: "contain", display: "block", background: "#000" } }) : /* @__PURE__ */ import_react4.default.createElement(
+          LoadingImage,
+          {
+            src: url,
+            alt: imgAlt(p),
+            accent,
+            width: 480,
+            onClick: () => {
+              if (!onOpenLightbox || lightboxImages.length === 0) return;
+              const tapped = url;
+              const lbIdx = Math.max(0, lightboxImages.indexOf(tapped));
+              onOpenLightbox(lightboxImages, lbIdx);
+            },
+            style: { width: "100%", height: "100%", cursor: onOpenLightbox ? "pointer" : "default" }
+          }
+        ));
+      })
+    ), showDots && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", bottom: 10, right: 10, background: `${T.darkBg}CC`, padding: "4px 10px", borderRadius: 12, display: "flex", alignItems: "center", gap: 4, pointerEvents: "none" } }, /* @__PURE__ */ import_react4.default.createElement(Camera, { size: 11, color: T.warmBg || T.white }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.warmBg || T.white } }, idx + 1, " / ", photos.length)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", bottom: 10, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 5, pointerEvents: "none" } }, photos.map((_, i) => /* @__PURE__ */ import_react4.default.createElement("div", { key: i, style: { width: 6, height: 6, borderRadius: "50%", background: T.white, opacity: i === idx ? 0.95 : 0.4, transition: "opacity 0.15s" } })))));
+  }
   if (!document.querySelector("style[data-trailhead-scroll]")) {
     const scrollStyle = document.createElement("style");
     scrollStyle.setAttribute("data-trailhead-scroll", "1");
@@ -45929,17 +45976,7 @@ ${suffix}`;
           if (vid > 0 && img > 0) return `Shared ${pluralize(img, "photo")} & ${pluralize(vid, "video")}`;
           if (vid > 0) return `Shared ${pluralize(vid, "video")}`;
           return `Shared ${pluralize(item.photoCount, "photo")}`;
-        })())), ownPostMenu(item)), feedEditBar(item), feedDeleteConfirm(item), item.photoUrls && item.photoUrls.length > 0 ? (() => {
-          const firstP = item.photoUrls[0];
-          const firstUrl = typeof firstP === "string" ? firstP : firstP.url;
-          const firstIsVid = typeof firstP === "object" && firstP.type === "video";
-          return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative" } }, firstIsVid ? /* @__PURE__ */ import_react4.default.createElement("video", { src: firstUrl + "#t=0.001", preload: "metadata", playsInline: true, onLoadedMetadata: (e) => {
-            try {
-              e.currentTarget.currentTime = 1e-3;
-            } catch (err) {
-            }
-          }, controls: true, style: { width: "100%", maxHeight: 300, objectFit: "contain", display: "block", background: "#000" } }) : /* @__PURE__ */ import_react4.default.createElement(LoadingImage, { src: firstUrl, alt: imgAlt(firstP), width: 480, onClick: () => openCarousel(item.photoUrls.filter((x) => typeof x === "string" || x.type !== "video").map((x) => typeof x === "string" ? x : x.url), 0), style: { width: "100%", height: 220, cursor: "pointer" } }), item.photoCount > 1 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", bottom: 10, right: 10, background: `${T.darkBg}CC`, padding: "4px 10px", borderRadius: 12, display: "flex", alignItems: "center", gap: 4 } }, /* @__PURE__ */ import_react4.default.createElement(Camera, { size: 11, color: T.warmBg }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.warmBg } }, "1 / ", item.photoCount)));
-        })() : /* @__PURE__ */ import_react4.default.createElement("div", { style: { height: 220, background: `linear-gradient(135deg, ${T.charcoal} 0%, ${T.copper}15 100%)`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement(Camera, { size: 48, color: T.tertiary, strokeWidth: 0.5, style: { opacity: 0.25 } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", bottom: 10, right: 10, background: `${T.darkBg}CC`, padding: "4px 10px", borderRadius: 12, display: "flex", alignItems: "center", gap: 4 } }, /* @__PURE__ */ import_react4.default.createElement(Camera, { size: 11, color: T.warmBg }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.warmBg } }, "1 / ", item.photoCount))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "12px 16px" } }, item.title && /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 14, color: T.white, margin: "0 0 6px", lineHeight: 1.5 } }, item.title), item.location && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5, marginBottom: 4 } }, /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 11, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, item.location))), actionBar(item));
+        })())), ownPostMenu(item)), feedEditBar(item), feedDeleteConfirm(item), item.photoUrls && item.photoUrls.length > 0 ? /* @__PURE__ */ import_react4.default.createElement(FeedPhotoCarousel, { photos: item.photoUrls, height: 220, onOpenLightbox: openCarousel }) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { height: 220, background: `linear-gradient(135deg, ${T.charcoal} 0%, ${T.copper}15 100%)`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement(Camera, { size: 48, color: T.tertiary, strokeWidth: 0.5, style: { opacity: 0.25 } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", bottom: 10, right: 10, background: `${T.darkBg}CC`, padding: "4px 10px", borderRadius: 12, display: "flex", alignItems: "center", gap: 4 } }, /* @__PURE__ */ import_react4.default.createElement(Camera, { size: 11, color: T.warmBg }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.warmBg } }, "1 / ", item.photoCount))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "12px 16px" } }, item.title && /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 14, color: T.white, margin: "0 0 6px", lineHeight: 1.5 } }, item.title), item.location && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5, marginBottom: 4 } }, /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 11, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, item.location))), actionBar(item));
       }
       if (item.type === "FORUM") {
         const snippet = item.body && item.body.length > 120 ? item.body.slice(0, 120) + "..." : item.body;
