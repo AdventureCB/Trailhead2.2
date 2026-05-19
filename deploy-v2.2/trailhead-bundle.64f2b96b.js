@@ -45392,7 +45392,6 @@ ${suffix}`;
           const el = document.getElementById("feed-post-" + match.id);
           if (el && el.scrollIntoView) el.scrollIntoView({ behavior: "smooth", block: "start" });
         }, 80);
-        setTimeout(() => setHighlightedPostId(null), 2600);
         onConsumePendingPostNav && onConsumePendingPostNav();
         return;
       }
