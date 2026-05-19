@@ -53780,7 +53780,7 @@ ${suffix}`;
       if (photos.length < maxPhotos && fileRef.current) fileRef.current.click();
     }, style: { display: "flex", alignItems: "center", justifyContent: "center", gap: 10, background: T.darkCard, border: `1px dashed ${T.charcoal}`, borderRadius: 8, padding: "14px 16px", cursor: photos.length < maxPhotos ? "pointer" : "default", width: "100%", boxSizing: "border-box", opacity: photos.length < maxPhotos ? 1 : 0.5 } }, /* @__PURE__ */ import_react4.default.createElement(Camera, { size: 16, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.tertiary } }, photos.length > 0 ? `${photos.length} media added` : "Add photos / videos"), photos.length < maxPhotos && /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 14, color: T.tertiary, style: { marginLeft: "auto" } })));
   }
-  function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotification, onAddRoute, onOpenDM, onSendDmInvite, userBuilds, currentUserName, currentUserHandle, onSearchUsers, onUploadError, initialConvoy, followingProfiles, onLoadFollowingProfiles, myTripPlans, currentUserId, onPlanNewRouteForConvoy, onUseExistingPlanForConvoy }) {
+  function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotification, onAddRoute, onOpenDM, onSendDmInvite, userBuilds, currentUserName, currentUserHandle, onSearchUsers, onUploadError, initialConvoy, followingProfiles, onLoadFollowingProfiles, myTripPlans, currentUserId, onPlanNewRouteForConvoy, onUseExistingPlanForConvoy, onPlanNewRoute, onNewTripReport }) {
     (0, import_react4.useEffect)(() => {
       if (typeof onLoadFollowingProfiles === "function") onLoadFollowingProfiles();
     }, []);
@@ -53790,7 +53790,7 @@ ${suffix}`;
     const [showLocationInput, setShowLocationInput] = (0, import_react4.useState)(false);
     const [geoLoading, setGeoLoading] = (0, import_react4.useState)(false);
     const [geoMsg, setGeoMsg] = (0, import_react4.useState)("");
-    const [showRouteForm, setShowRouteForm] = (0, import_react4.useState)(false);
+    const [showRoutePicker, setShowRoutePicker] = (0, import_react4.useState)(false);
     const [route, setRoute] = (0, import_react4.useState)({ name: "", distance: "", time: "", elevation: "", difficulty: "Moderate", description: "", photos: [] });
     const [convoy, setConvoy] = (0, import_react4.useState)(() => ({
       title: initialConvoy && initialConvoy.title || "",
@@ -54098,72 +54098,41 @@ ${suffix}`;
     const [recoveryPhotos, setRecoveryPhotos] = (0, import_react4.useState)([]);
     const [recGeoLoading, setRecGeoLoading] = (0, import_react4.useState)(false);
     const [recGeoMsg, setRecGeoMsg] = (0, import_react4.useState)("");
-    if (showRouteForm) {
-      return /* @__PURE__ */ import_react4.default.createElement(
-        RouteDetailsForm,
+    if (showRoutePicker) {
+      return /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkBg, minHeight: "100vh", paddingBottom: 80 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px", borderBottom: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setShowRoutePicker(false), style: { background: "none", border: "none", color: T.tertiary, fontFamily: sans, fontSize: 12, fontWeight: 600, letterSpacing: 1, cursor: "pointer" } }, "\u2190 BACK"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, letterSpacing: 1 } }, "ROUTE"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 50 } })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "16px", display: "flex", flexDirection: "column", gap: 14 } }, /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("h2", { style: { fontFamily: sans, fontSize: 18, color: T.white, margin: "0 0 4px", fontWeight: 700 } }, "What are you sharing?"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary, margin: 0 } }, "Plan an upcoming trip or share a completed one with the community.")), /* @__PURE__ */ import_react4.default.createElement(
+        "button",
         {
-          isManual: true,
-          userBuilds,
-          onBack: () => setShowRouteForm(false),
-          onPublish: (routeData) => {
-            const id = "user_" + Date.now();
-            const newPost = {
-              id,
-              type: "ROUTES",
-              user: "KyleLPO",
-              initial: "K",
-              time: Date.now(),
-              title: routeData.name,
-              body: routeData.desc || null,
-              distance: routeData.distance ? routeData.distance + " MI" : "\u2014",
-              duration: routeData.time || "\u2014",
-              badge: null,
-              verified: 0,
-              likes: 0,
-              comments: 0,
-              difficulty: routeData.difficulty || "Moderate",
-              elevation: routeData.elevGain ? "+" + Number(routeData.elevGain).toLocaleString() + " FT" : "\u2014",
-              location: routeData.location || "",
-              terrains: routeData.terrains || [],
-              tags: routeData.tags || [],
-              photos: routeData.photos || [],
-              pins: routeData.pins || [],
-              points: routeData.points || []
-            };
-            if (routeData.shareToFeed) {
-              onSubmit && onSubmit(newPost);
-            }
-            onAddRoute && onAddRoute({
-              id,
-              name: routeData.name,
-              desc: routeData.desc || "",
-              difficulty: routeData.difficulty || "Moderate",
-              distance: routeData.distance ? routeData.distance + " MI" : "\u2014",
-              time: routeData.time || "\u2014",
-              elevation: routeData.elevGain ? "+" + Number(routeData.elevGain).toLocaleString() + " FT" : "\u2014",
-              location: routeData.location || "",
-              terrains: routeData.terrains || [],
-              tags: routeData.tags || [],
-              pins: routeData.pins || [],
-              points: routeData.points || [],
-              photos: routeData.photos || [],
-              rating: null,
-              reviews: 0,
-              author: "KyleLPO",
-              createdAt: Date.now()
-            });
-            setShowRouteForm(false);
+          onClick: () => {
+            setShowRoutePicker(false);
             onClose && onClose();
-          }
-        }
-      );
+            onPlanNewRoute && onPlanNewRoute();
+          },
+          style: { display: "flex", alignItems: "center", gap: 14, background: T.darkCard, borderRadius: 12, padding: "16px", border: "none", cursor: "pointer", textAlign: "left", width: "100%", boxSizing: "border-box" }
+        },
+        /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 44, height: 44, borderRadius: 10, background: `${T.copper}15`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(MapPin, { size: 20, color: T.copper, strokeWidth: 1.5 })),
+        /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 15, color: T.white, fontWeight: 600, display: "block", marginBottom: 2 } }, "Plan a Trip"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.4 } }, "Drop pins on the map to map out a future trip. Save and share when ready.")),
+        /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 18, color: T.tertiary })
+      ), /* @__PURE__ */ import_react4.default.createElement(
+        "button",
+        {
+          onClick: () => {
+            setShowRoutePicker(false);
+            onClose && onClose();
+            onNewTripReport && onNewTripReport();
+          },
+          style: { display: "flex", alignItems: "center", gap: 14, background: T.darkCard, borderRadius: 12, padding: "16px", border: "none", cursor: "pointer", textAlign: "left", width: "100%", boxSizing: "border-box" }
+        },
+        /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 44, height: 44, borderRadius: 10, background: `${"#8B6FAF"}15`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(Mountain, { size: 20, color: "#8B6FAF", strokeWidth: 1.5 })),
+        /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 15, color: T.white, fontWeight: 600, display: "block", marginBottom: 2 } }, "Trip Report"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.4 } }, "Share a completed trip with photos, route, and notes.")),
+        /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 18, color: T.tertiary })
+      )));
     }
     if (!postType) {
       return /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 0 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "20px 16px 8px" } }, /* @__PURE__ */ import_react4.default.createElement("h2", { style: { fontFamily: sans, fontSize: 20, color: T.white, margin: "0 0 4px", fontWeight: 700 } }, "Create Post"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary, margin: 0 } }, "What would you like to share?")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "8px 16px", display: "flex", flexDirection: "column", gap: 8 } }, types.map((t) => {
         const Icon2 = t.icon;
         return /* @__PURE__ */ import_react4.default.createElement("button", { key: t.key, onClick: () => {
           if (t.key === "route") {
-            setShowRouteForm(true);
+            setShowRoutePicker(true);
             return;
           }
           if (t.key === "convoy") {
@@ -59560,7 +59529,7 @@ ${suffix}`;
         recoveryAlerts,
         setRecoveryAlerts
       }
-    ), /* @__PURE__ */ import_react4.default.createElement("div", { className: "th-scroll", style: { flex: 1, overflowY: "auto", minHeight: 0 } }, showCompose ? /* @__PURE__ */ import_react4.default.createElement(ComposeScreen, { key: composePrefillConvoy && composePrefillConvoy.planId ? `pre_${composePrefillConvoy.planId}` : "fresh", userBuilds: myBuildsForLink, currentUserName: currentProfile && currentProfile.full_name || "You", currentUserHandle: currentProfile && currentProfile.handle || "", onSearchUsers: searchUsers, onUploadError: showErrorToast, initialConvoy: composePrefillConvoy, followingProfiles, onLoadFollowingProfiles: loadFollowingProfilesOnce, myTripPlans: allTripPlans, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, onPlanNewRouteForConvoy: requireAuth(enterPlanBuilderForConvoy), onUseExistingPlanForConvoy: requireAuth(startConvoyFromPlan), onClose: () => {
+    ), /* @__PURE__ */ import_react4.default.createElement("div", { className: "th-scroll", style: { flex: 1, overflowY: "auto", minHeight: 0 } }, showCompose ? /* @__PURE__ */ import_react4.default.createElement(ComposeScreen, { key: composePrefillConvoy && composePrefillConvoy.planId ? `pre_${composePrefillConvoy.planId}` : "fresh", userBuilds: myBuildsForLink, currentUserName: currentProfile && currentProfile.full_name || "You", currentUserHandle: currentProfile && currentProfile.handle || "", onSearchUsers: searchUsers, onUploadError: showErrorToast, initialConvoy: composePrefillConvoy, followingProfiles, onLoadFollowingProfiles: loadFollowingProfilesOnce, myTripPlans: allTripPlans, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, onPlanNewRouteForConvoy: requireAuth(enterPlanBuilderForConvoy), onUseExistingPlanForConvoy: requireAuth(startConvoyFromPlan), onPlanNewRoute: requireAuth(() => enterPlanBuilder()), onNewTripReport: requireAuth(() => setTripCreatorMode("report")), onClose: () => {
       setShowCompose(false);
       setComposePrefillConvoy(null);
     }, onSubmit: async (newPost) => {
