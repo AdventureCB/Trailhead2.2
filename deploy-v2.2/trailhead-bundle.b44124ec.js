@@ -51571,7 +51571,7 @@ ${suffix}`;
       "POST"
     ))));
   }
-  function BuildsScreen({ onViewUser, userBuilds, allBuilds: allBuildsProp, onLoadAllBuilds, currentUserId, followingIds, onAddBuild, onUpdateBuild, onDeleteBuild, onPostBuildToFeed, onOpenDM, onOpenShareCompose, onOpenShareIntent, userRoutes, pendingBuildNav, onConsumePendingBuildNav, isGuest, onGuestTap, likedBuildIds, buildLikeCounts, onToggleBuildLike, buildComments, onLoadBuildComments, onAddBuildComment, onDeleteBuildComment, likedBuildCommentIds, buildCommentLikeCounts, onToggleBuildCommentLike, currentUserName, currentUserHandle, currentUserAvatar }) {
+  function BuildsScreen({ onViewUser, userBuilds, allBuilds: allBuildsProp, onLoadAllBuilds, onLoadBuildById, currentUserId, followingIds, onAddBuild, onUpdateBuild, onDeleteBuild, onPostBuildToFeed, onOpenDM, onOpenShareCompose, onOpenShareIntent, userRoutes, pendingBuildNav, onConsumePendingBuildNav, isGuest, onGuestTap, likedBuildIds, buildLikeCounts, onToggleBuildLike, buildComments, onLoadBuildComments, onAddBuildComment, onDeleteBuildComment, likedBuildCommentIds, buildCommentLikeCounts, onToggleBuildCommentLike, currentUserName, currentUserHandle, currentUserAvatar }) {
     (0, import_react4.useEffect)(() => {
       if (typeof onLoadAllBuilds === "function") onLoadAllBuilds();
     }, []);
@@ -51654,6 +51654,7 @@ ${suffix}`;
         onConsumePendingBuildNav && onConsumePendingBuildNav();
         return;
       }
+      if (rawId != null && typeof onLoadBuildById === "function") onLoadBuildById(rawId);
       if (typeof onLoadAllBuilds === "function") onLoadAllBuilds();
     }, [pendingBuildNav, allBuildsProp]);
     const filters = [
@@ -57979,6 +57980,39 @@ ${suffix}`;
         allBuildsLoadedRef.current = false;
       }
     };
+    const loadBuildByIdRef = (0, import_react4.useRef)({});
+    const loadBuildById = async (rawId) => {
+      if (!rawId || typeof rawId !== "string") return;
+      if (loadBuildByIdRef.current[rawId]) return;
+      loadBuildByIdRef.current[rawId] = true;
+      try {
+        const { data: row, error } = await supabase.from("builds").select("*").eq("id", rawId).maybeSingle();
+        if (error) {
+          console.error("[builds] loadBuildById error", error);
+          delete loadBuildByIdRef.current[rawId];
+          return;
+        }
+        if (!row) {
+          console.warn("[builds] loadBuildById not found", rawId);
+          return;
+        }
+        let prof = null;
+        try {
+          const { data } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").eq("id", row.user_id).maybeSingle();
+          prof = data;
+        } catch (e) {
+        }
+        const local = dbRowToLocalBuild(row, prof);
+        if (!local) return;
+        setAllBuilds((prev) => {
+          if (prev.some((b) => b.id === local.id)) return prev;
+          return [local, ...prev];
+        });
+      } catch (e) {
+        console.error("[builds] loadBuildById failed", e);
+        delete loadBuildByIdRef.current[rawId];
+      }
+    };
     const addBuild = async (data) => {
       const displayName = data.buildName || `${data.year} ${data.make} ${data.model}`;
       let newBuild = null;
@@ -59474,7 +59508,7 @@ ${suffix}`;
     }, onGoToPost: (id) => {
       setProfileStack([]);
       setScreen("feed");
-    }, myPoints: myTotalPoints }) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, isGuest && /* @__PURE__ */ import_react4.default.createElement(GuestBanner, { onSignIn: () => setShowGuestPrompt(true) }), screen === "feed" && renderFeedScopedTo({ hideFilters: false }), screen === "forum" && /* @__PURE__ */ import_react4.default.createElement(ForumScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), pendingThread, onPendingHandled: () => setPendingThread(null), onAddNotification: requireAuth(addNotification), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onOpenShareCompose: openShareCompose, onOpenShareIntent: openShareIntent, onAddFeedPost: requireAuth((post2) => addPost(post2)), userThreads: forumUserThreads, setUserThreads: requireAuth(setForumUserThreads), userReplies: forumUserReplies, setUserReplies: requireAuth(setForumUserReplies), likedForumItems: forumLikedItems, setLikedForumItems: requireAuth(setForumLikedItems), forumLikeCounts, setForumLikeCounts: requireAuth(setForumLikeCounts), forumViewCounts, setForumViewCounts, onAwardPoints: awardPoints }), screen === "routes" && /* @__PURE__ */ import_react4.default.createElement(RoutesScreen, { campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, onOpenShareIntent: openShareIntent, tripAuthors, onLoadRouteData: loadTripRouteData, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, tripReports: allTripReports, showTripReports, setShowTripReports, tripPlans: allTripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot: requireAuth(addCampingSpot), onUpdateCampingSpot: requireAuth(updateCampingSpot), onDeleteCampingSpot: requireAuth(deleteCampingSpot), onLoadCampingSpotPhotos: loadCampingSpotPhotos, onLoadCampingSpotElevation: loadCampingSpotElevation, spotAuthors, onViewUser: openUserProfile, onStartNav: (route) => setActiveNavRoute(route), onOpenTripDetail: (slug) => setPendingTripNav(slug), onOpenTripPlanDraft: (id) => setDetailTripId(id), onNewTripReport: () => setTripCreatorMode("report"), onNewTripPlan: () => requireAuth(() => enterPlanBuilder())(), pendingSpotNav, onConsumePendingSpotNav: () => setPendingSpotNav(null), pendingHQOpen, onConsumePendingHQOpen: () => setPendingHQOpen(false), pendingPlanNav, onConsumePendingPlanNav: () => setPendingPlanNav(null), onShareCampingSpotToFeed: requireAuth(shareCampingSpotToFeed), onShareHQToFeed: requireAuth(shareHQToFeed), onShareTripToFeed: requireAuth(shareTripToFeed), onShareTripPlanToFeed: requireAuth(shareTripPlanToFeed), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onShowToast: showErrorToast, onOpenShareCompose: openShareCompose, planBuilder: { active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, editingId: planBuilderEditingId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen, accent: planBuilderEditingId && (tripReports || []).find((t) => t.id === planBuilderEditingId && t.kind === "report") ? T.purple : T.copper } }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, onLoadAllBuilds: loadAllBuildsOnce, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onOpenShareCompose: openShareCompose, onOpenShareIntent: openShareIntent, onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onDeleteBuild: requireAuth(deleteBuild), onPostBuildToFeed: requireAuth((b, opts) => {
+    }, myPoints: myTotalPoints }) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, isGuest && /* @__PURE__ */ import_react4.default.createElement(GuestBanner, { onSignIn: () => setShowGuestPrompt(true) }), screen === "feed" && renderFeedScopedTo({ hideFilters: false }), screen === "forum" && /* @__PURE__ */ import_react4.default.createElement(ForumScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), pendingThread, onPendingHandled: () => setPendingThread(null), onAddNotification: requireAuth(addNotification), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onOpenShareCompose: openShareCompose, onOpenShareIntent: openShareIntent, onAddFeedPost: requireAuth((post2) => addPost(post2)), userThreads: forumUserThreads, setUserThreads: requireAuth(setForumUserThreads), userReplies: forumUserReplies, setUserReplies: requireAuth(setForumUserReplies), likedForumItems: forumLikedItems, setLikedForumItems: requireAuth(setForumLikedItems), forumLikeCounts, setForumLikeCounts: requireAuth(setForumLikeCounts), forumViewCounts, setForumViewCounts, onAwardPoints: awardPoints }), screen === "routes" && /* @__PURE__ */ import_react4.default.createElement(RoutesScreen, { campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, onOpenShareIntent: openShareIntent, tripAuthors, onLoadRouteData: loadTripRouteData, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, tripReports: allTripReports, showTripReports, setShowTripReports, tripPlans: allTripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot: requireAuth(addCampingSpot), onUpdateCampingSpot: requireAuth(updateCampingSpot), onDeleteCampingSpot: requireAuth(deleteCampingSpot), onLoadCampingSpotPhotos: loadCampingSpotPhotos, onLoadCampingSpotElevation: loadCampingSpotElevation, spotAuthors, onViewUser: openUserProfile, onStartNav: (route) => setActiveNavRoute(route), onOpenTripDetail: (slug) => setPendingTripNav(slug), onOpenTripPlanDraft: (id) => setDetailTripId(id), onNewTripReport: () => setTripCreatorMode("report"), onNewTripPlan: () => requireAuth(() => enterPlanBuilder())(), pendingSpotNav, onConsumePendingSpotNav: () => setPendingSpotNav(null), pendingHQOpen, onConsumePendingHQOpen: () => setPendingHQOpen(false), pendingPlanNav, onConsumePendingPlanNav: () => setPendingPlanNav(null), onShareCampingSpotToFeed: requireAuth(shareCampingSpotToFeed), onShareHQToFeed: requireAuth(shareHQToFeed), onShareTripToFeed: requireAuth(shareTripToFeed), onShareTripPlanToFeed: requireAuth(shareTripPlanToFeed), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onShowToast: showErrorToast, onOpenShareCompose: openShareCompose, planBuilder: { active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, editingId: planBuilderEditingId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen, accent: planBuilderEditingId && (tripReports || []).find((t) => t.id === planBuilderEditingId && t.kind === "report") ? T.purple : T.copper } }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, onLoadAllBuilds: loadAllBuildsOnce, onLoadBuildById: loadBuildById, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onOpenShareCompose: openShareCompose, onOpenShareIntent: openShareIntent, onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onDeleteBuild: requireAuth(deleteBuild), onPostBuildToFeed: requireAuth((b, opts) => {
       const rawBd = b.buildData;
       const bd = scrubLocalPhotosFromBuildData(rawBd);
       const isLocalUrl = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:"));
