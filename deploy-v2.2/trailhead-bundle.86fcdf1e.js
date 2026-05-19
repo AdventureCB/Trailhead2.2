@@ -51575,7 +51575,7 @@ ${suffix}`;
     (0, import_react4.useEffect)(() => {
       if (typeof onLoadAllBuilds === "function") onLoadAllBuilds();
     }, []);
-    const [filter, setFilter] = (0, import_react4.useState)("all");
+    const [filter, setFilter] = (0, import_react4.useState)(currentUserId ? "mine" : "all");
     const [search, setSearch] = (0, import_react4.useState)("");
     const [detailBuildId, setDetailBuildId] = (0, import_react4.useState)(null);
     const [editingBuild, setEditingBuild] = (0, import_react4.useState)(null);
@@ -51649,9 +51649,12 @@ ${suffix}`;
         const lc = String(name).toLowerCase();
         match = allBuilds.find((b) => (b.name || "").toLowerCase() === lc);
       }
-      if (match) setDetailBuildId(match.id);
-      else console.warn("[builds] pendingBuildNav not found", { rawId, name, localCount: allBuilds.length });
-      onConsumePendingBuildNav && onConsumePendingBuildNav();
+      if (match) {
+        setDetailBuildId(match.id);
+        onConsumePendingBuildNav && onConsumePendingBuildNav();
+        return;
+      }
+      if (typeof onLoadAllBuilds === "function") onLoadAllBuilds();
     }, [pendingBuildNav, allBuildsProp]);
     const filters = [
       { key: "all", label: "ALL BUILDS", icon: Globe },
@@ -51673,6 +51676,9 @@ ${suffix}`;
       `linear-gradient(135deg, ${T.charcoal} 0%, ${T.tertiary}25 100%)`,
       `linear-gradient(135deg, ${T.charcoal} 0%, ${T.green}20 100%)`
     ];
+    if (pendingBuildNav && detailBuildId == null) {
+      return /* @__PURE__ */ import_react4.default.createElement("div", { style: { minHeight: 360, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, gap: 12 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 32, height: 32, borderRadius: "50%", border: `2px solid ${T.copper}30`, borderTopColor: T.copper, animation: "th-spin 0.8s linear infinite" } }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary, letterSpacing: 1.5, fontWeight: 600 } }, "LOADING BUILD\u2026"));
+    }
     if (showAddBuildForm || editingBuild) {
       const isEdit = !!editingBuild;
       const closeForm = () => {
@@ -55409,13 +55415,30 @@ ${suffix}`;
           } catch (e) {
           }
         }
-        setFeedItems(postRows.map((r) => dbRowToFeedItem(r, authorsById[r.user_id] || null)));
+        const mappedItems = postRows.map((r) => dbRowToFeedItem(r, authorsById[r.user_id] || null));
+        setFeedItems(mappedItems);
         if (postRows.length === 30) {
           const oldest = postRows[postRows.length - 1];
           if (oldest && oldest.created_at) setFeedCursor(oldest.created_at);
           setFeedHasMore(true);
         } else {
           setFeedHasMore(false);
+        }
+        try {
+          const seen = /* @__PURE__ */ new Set();
+          mappedItems.forEach((item) => {
+            const photo = item && Array.isArray(item.photoUrls) && item.photoUrls[0];
+            if (!photo) return;
+            const raw = typeof photo === "string" ? photo : photo && photo.url;
+            if (!raw || typeof raw !== "string" || raw.startsWith("data:") || raw.startsWith("blob:")) return;
+            const url = txImg(raw, 480);
+            if (seen.has(url)) return;
+            seen.add(url);
+            const img = new window.Image();
+            img.decoding = "async";
+            img.src = url;
+          });
+        } catch (e) {
         }
       }
       setAppReady(true);
@@ -57901,7 +57924,7 @@ ${suffix}`;
       if (allBuildsLoadedRef.current) return;
       allBuildsLoadedRef.current = true;
       try {
-        const { data: buildRows, error: buildErr } = await supabase.from("builds").select("*").order("created_at", { ascending: false }).limit(500);
+        const { data: buildRows, error: buildErr } = await supabase.from("builds").select("*").order("created_at", { ascending: false }).limit(150);
         if (buildErr) {
           console.error("[builds] gallery load error", buildErr);
           allBuildsLoadedRef.current = false;
