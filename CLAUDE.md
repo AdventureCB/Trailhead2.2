@@ -40,6 +40,8 @@ Live at: **https://trailhead.lonepeakoverland.com** (Vercel, deployed via GitHub
 | `build_likes` | Likes on builds (heart in builds gallery / detail) | `build_id` → `builds(id)` CASCADE, `user_id` → `auth.users(id)` CASCADE; composite PK |
 | `dm_message_likes` | iMessage-style emoji reactions on DM messages. `emoji` column holds the picked emoji | `message_id` → `dm_messages(id)` CASCADE, `user_id` → `auth.users(id)` CASCADE; composite PK |
 | `camping_spots` | Public dataset of camping locations rendered on routes maps. Seeded with OSM + Recreation.gov via `supabase/seed/seed-camping-spots.js`; users can also add their own (`source = 'user'`). `unique(source, source_id)` makes seed re-runs idempotent | `user_id` → `auth.users(id)` SET NULL |
+| `build_comments` | Comments on builds (rendered on build detail page). Same shape as `post_comments` (id/body/created_at) plus `parent_id` (self-FK) for forum-style threading (one level deep). RLS allows public SELECT, INSERT/DELETE on own rows. Realtime publication; replica identity full. Composite index on `(build_id, created_at ASC)` for lazy fetch on detail-page open | `build_id` → `builds(id)` CASCADE, `user_id` → `auth.users(id)` CASCADE, `parent_id` → `build_comments(id)` CASCADE |
+| `build_comment_likes` | Likes on build comments. Heart toggle next to each comment. RLS allows public SELECT, INSERT/DELETE on own rows. Realtime publication; replica identity full | `comment_id` → `build_comments(id)` CASCADE, `user_id` → `auth.users(id)` CASCADE; composite PK |
 | `trip_reports` | Community trip-report posts with `status ∈ {draft, published}`. Drafts are owner-only; published reports are publicly readable (RLS). `slug` is unique + URL-safe (auto-generated from `name`, `-2`/`-3` suffix on collision). `route_data` jsonb holds pins/points/photos with per-pin notes; top-level `start_lat/lng/label`, `distance_mi`, `duration_min`, `elev_gain_ft`, `max_elev_ft`, `region`, `state_code`, `terrains[]`, `tags[]` are surfaced as queryable columns for cards + SEO + filtering. Realtime publication; replica identity full | `user_id` → `auth.users(id)` CASCADE |
 
 **Row Level Security (RLS):** Enabled on all tables. Public posts readable by anyone, mutations restricted to authenticated owner.
@@ -305,6 +307,21 @@ cd /Users/cainen/Documents/Claude/Projects/Trailhead && supabase functions deplo
 
 `--no-verify-jwt` is required because the Postgres triggers call the function without an auth header. Secrets (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`) are already set in Supabase — only re-set them if the VAPID key pair is rotated.
 
+### Auto-generated image alt text — `generate-alt-text`
+
+The `generate-alt-text` Edge Function lives at `supabase/functions/generate-alt-text/index.ts`. Called by the client from `attachAltTextToPhotos` (sibling of `uploadPostPhotoList`) right after the photo upload resolves a public storage URL. Sends the URL to Anthropic's Claude Haiku 4.5 vision API; returns a one-sentence descriptive alt text that gets persisted on the photo object as `{url, alt}`. Runs every photo in a batch in parallel — a 5-photo upload waits ~1 round trip, not 5.
+
+Photos persist as `{url, alt}` jsonb objects in `posts.data.photoUrls`, `builds.build_data.mainPhotos[]` / per-mod `.photo[]`, `trip_reports.route_data.photos[]` / per-pin `.photo[]`, and `camping_spots.photos[]`. Legacy uploads (before May 2026) stay as bare URL strings; the `imgAlt(p)` helper returns "" for those so renders don't blow up. `uploadPostPhotoList` upgrades string entries to `{url, alt}` objects on the fly when alt text comes back.
+
+OG preview cards (`api/preview.js`) lift photo alt out of the matching photo object by URL (`findPhotoAlt(photos, url)`) and emit it as `og:image:alt` + `twitter:image:alt`. Falls back to a descriptive default keyed off entity name when no per-photo alt exists.
+
+Secrets: `ANTHROPIC_API_KEY` (set via `supabase secrets set ANTHROPIC_API_KEY=sk-ant-…`). Optional `MODEL_OVERRIDE` to swap to a different Claude model. Deploy via:
+```bash
+cd /Users/cainen/Documents/Claude/Projects/Trailhead && supabase functions deploy generate-alt-text --no-verify-jwt
+```
+
+Cost at current scale: ~$0.0001–0.0003 per image (Claude Haiku 4.5 vision). 1k uploads/month ≈ $0.10–0.30; revisit if it ever scales past 50k/month.
+
 ## Design System
 
 Defined in code as the `T` object (line ~6):
@@ -376,10 +393,13 @@ Seven tiers from Scout (0pts) to Legend (100k+ pts). Points awarded for posting,
 ## SQL Already Applied
 
 The following have been run in the Supabase SQL Editor across prior sessions:
-- Tables: profiles, posts, post_likes, post_comments, post_comment_likes, notifications, builds, follows, convoy_rsvps, dm_conversations, dm_participants, dm_messages, push_subscriptions, build_likes, dm_message_likes, camping_spots, trip_reports, trip_report_likes
+- Tables: profiles, posts, post_likes, post_comments, post_comment_likes, notifications, builds, follows, convoy_rsvps, dm_conversations, dm_participants, dm_messages, push_subscriptions, build_likes, dm_message_likes, camping_spots, trip_reports, trip_report_likes, build_comments, build_comment_likes
 - RLS policies on all tables
-- Realtime publication on posts, post_likes, post_comments, post_comment_likes, notifications, profiles, follows, convoy_rsvps, dm_conversations, dm_participants, dm_messages, build_likes, dm_message_likes, camping_spots, trip_reports, trip_report_likes
-- REPLICA IDENTITY FULL on post_likes, post_comments, post_comment_likes, follows, convoy_rsvps, dm_*, build_likes, dm_message_likes, camping_spots, trip_reports, trip_report_likes
+- Realtime publication on posts, post_likes, post_comments, post_comment_likes, notifications, profiles, follows, convoy_rsvps, dm_conversations, dm_participants, dm_messages, build_likes, dm_message_likes, camping_spots, trip_reports, trip_report_likes, build_comments, build_comment_likes
+- REPLICA IDENTITY FULL on post_likes, post_comments, post_comment_likes, follows, convoy_rsvps, dm_*, build_likes, dm_message_likes, camping_spots, trip_reports, trip_report_likes, build_comments, build_comment_likes
+- `notifications.build_id uuid REFERENCES builds(id) ON DELETE CASCADE` (added May 2026 for build-comment deep-linking; bell click routes to BuildsScreen when build_id is set)
+- **Slim-fetch + lazy hydrate** for builds gallery: `loadAllBuildsOnce` now SELECTs only `id, user_id, name, year, make, model, trim, hero_img, created_at` (skipping the heavy `build_data` jsonb that was timing out at 57014). The user's own builds keep using `select("*")` (small set, eq user_id). Detail page lazy-fetches `build_data` via `loadBuildById` when it opens against a slim row. `loadBuildById` setAllBuilds REPLACES the slim entry with the fully-hydrated version. Same pattern can be applied to any large jsonb-heavy table.
+- `build_comments.parent_id uuid REFERENCES build_comments(id) ON DELETE CASCADE` (added May 2026 for forum-style threaded replies; nesting capped at depth 1 in UI)
 - ON DELETE CASCADE on all user_id FKs, SET NULL on notifications.actor_id and camping_spots.user_id
 - CHECK constraint on posts.type including POST, PHOTOS, ROUTES, BUILDS, CONVOYS
 - `is_dm_participant(conv_id, uid)` SECURITY DEFINER helper used by all dm_* policies

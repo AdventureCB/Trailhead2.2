@@ -129,21 +129,31 @@ async function supabaseFetch(table, queryStr) {
   }
 }
 
+// Looks up an alt-text string on a photo object that matches the given
+// URL. Photos are stored as `{url, alt}` objects (post-May-2026 uploads)
+// or bare URL strings (legacy). Returns "" when no alt is available so
+// the caller can OR it into a fallback.
+function findPhotoAlt(photos, url) {
+  if (!Array.isArray(photos) || !url) return "";
+  for (const p of photos) {
+    if (!p || typeof p !== "object") continue;
+    if (p.url === url && typeof p.alt === "string" && p.alt) return p.alt;
+  }
+  return "";
+}
+
 async function resolveEntity(type, id) {
   if (!type) return null;
   if (type === "trip" || type === "plan") {
     const want = type === "plan" ? "plan" : "report";
     const row = await supabaseFetch(
       "trip_reports",
-      `slug=eq.${encodeURIComponent(id)}&select=name,slug,description,hero_img,start_lat,start_lng,kind,distance_mi,route_geom&limit=1`
+      `slug=eq.${encodeURIComponent(id)}&select=name,slug,description,hero_img,start_lat,start_lng,kind,distance_mi,route_geom,route_data&limit=1`
     );
     if (!row) return null;
     if (row.kind && row.kind !== want) return null;
     const isReport = row.kind !== "plan";
     const accent = isReport ? "8b6faf" : "BD472A";
-    // Prefer the full-route polyline preview when route_geom is present
-    // (almost always — backfilled on every published row). Fall back to
-    // a single zoomed-in start pin if not.
     const routeMap = Array.isArray(row.route_geom) && row.route_geom.length >= 2
       ? staticMapWithPath(row.route_geom, accent, accent)
       : null;
@@ -151,42 +161,59 @@ async function resolveEntity(type, id) {
       ? staticMap(row.start_lng, row.start_lat, accent, isReport ? "circle" : "marker", 14)
       : null;
     const stat = row.distance_mi != null ? ` · ${Number(row.distance_mi).toFixed(1)} mi` : "";
+    const image = routeMap || row.hero_img || pinMap;
+    // For photo heroes, lift the matching photo's alt. For map-image
+    // heroes (route polylines / pin maps) describe the route itself.
+    let imageAlt = "";
+    if (image && image === row.hero_img) {
+      const photos = row.route_data && Array.isArray(row.route_data.photos) ? row.route_data.photos : [];
+      imageAlt = findPhotoAlt(photos, row.hero_img);
+    }
+    if (!imageAlt) {
+      imageAlt = `${row.name} ${isReport ? "trip report" : "trip plan"} route map on Trailhead`;
+    }
     return {
       title: `${row.name}${isReport ? " · Trip Report" : " · Trip Plan"}`,
       description:
         row.description ||
         `${isReport ? "Overlanding trip report" : "Planned overlanding trip"}${stat} on Trailhead.`,
-      // Route polyline first — it's what makes Trailhead distinctive
-      // and matches the user's intent ("show the entire route"). Hero
-      // photo is a fallback for trips where route_geom is missing.
-      image: routeMap || row.hero_img || pinMap,
+      image,
+      imageAlt,
     };
   }
   if (type === "spot") {
     const row = await supabaseFetch(
       "camping_spots",
-      `id=eq.${encodeURIComponent(id)}&visibility=eq.public&select=name,description,lat,lng,spot_type&limit=1`
+      `id=eq.${encodeURIComponent(id)}&visibility=eq.public&select=name,description,lat,lng,spot_type,photos&limit=1`
     );
     if (!row) return null;
+    // Spot OG image is currently always a Mapbox static map (no photo
+    // hero). Describe the location for accessibility.
+    const firstPhotoAlt = row.photos && row.photos[0] && typeof row.photos[0].alt === "string" ? row.photos[0].alt : "";
     return {
       title: `${row.name} · Camping Spot`,
       description:
         row.description ||
         `Camping spot on Trailhead${row.spot_type && row.spot_type !== "unknown" ? ` · ${row.spot_type}` : ""}.`,
       image: row.lng != null && row.lat != null ? staticMap(row.lng, row.lat, "5B8C5A", "circle") : null,
+      imageAlt: firstPhotoAlt || `${row.name} camping spot location map`,
     };
   }
   if (type === "build") {
     const row = await supabaseFetch(
       "builds",
-      `id=eq.${encodeURIComponent(id)}&select=name,year,make,model,image&limit=1`
+      `id=eq.${encodeURIComponent(id)}&select=name,year,make,model,hero_img,build_data&limit=1`
     );
     if (!row) return null;
     const sub = [row.year, row.make, row.model].filter(Boolean).join(" ");
+    const image = row.hero_img || null;
+    const mainPhotos = row.build_data && Array.isArray(row.build_data.mainPhotos) ? row.build_data.mainPhotos : [];
+    const heroAlt = findPhotoAlt(mainPhotos, image);
     return {
       title: `${row.name || sub || "Build"} · Trailhead`,
       description: sub ? `${sub} · Overlanding build on Trailhead.` : "Overlanding build on Trailhead.",
-      image: row.image || null,
+      image,
+      imageAlt: heroAlt || `${row.name || sub} overlanding build photo`,
     };
   }
   if (type === "hq") {
@@ -194,6 +221,7 @@ async function resolveEntity(type, id) {
       title: LPO_HQ.name,
       description: `${LPO_HQ.address} · The home base of the Lone Peak Overland community.`,
       image: staticMap(LPO_HQ.lng, LPO_HQ.lat, "BD472A", "star"),
+      imageAlt: `${LPO_HQ.name} location map in ${LPO_HQ.address}`,
     };
   }
   // Generic feed posts (and route posts which share the /post/:id URL).
@@ -210,6 +238,12 @@ async function resolveEntity(type, id) {
     if (!image && Array.isArray(row.photo_urls) && row.photo_urls.length > 0) {
       // First photo URL — already filtered in feedItemToDbRow to skip videos.
       image = row.photo_urls[0];
+    }
+    // Lift alt text from the matching photo in data.photoUrls (newer
+    // posts) or fall back to the post title.
+    let imageAlt = "";
+    if (image && row.data && Array.isArray(row.data.photoUrls)) {
+      imageAlt = findPhotoAlt(row.data.photoUrls, image);
     }
     // ROUTES posts carry pin coords in data.pins or data.points. If we
     // don't have a hero photo, try to render the route polyline so the
@@ -240,6 +274,7 @@ async function resolveEntity(type, id) {
       title: `${cleanTitle}${isRoute ? " · Route" : ""}`,
       description: desc,
       image,
+      imageAlt: imageAlt || `${cleanTitle}${isRoute ? " route" : ""} on Trailhead`,
     };
   }
   // Forum threads aren't persisted server-side (per the architecture
@@ -251,6 +286,7 @@ async function resolveEntity(type, id) {
       title: "Forum Thread · Trailhead",
       description: "Join the conversation on the Trailhead community forum.",
       image: null,
+      imageAlt: "",
     };
   }
   return null;
@@ -263,10 +299,11 @@ const DEFAULT_META = {
   image: null,
 };
 
-function metaTagsFor({ title, description, image, url }) {
+function metaTagsFor({ title, description, image, imageAlt, url }) {
   const t = escapeHtml(title);
   const d = escapeHtml(description);
   const i = image ? escapeHtml(image) : "";
+  const a = imageAlt ? escapeHtml(imageAlt) : "";
   const u = escapeHtml(url);
   return [
     `<meta property="og:type" content="article">`,
@@ -275,12 +312,14 @@ function metaTagsFor({ title, description, image, url }) {
     `<meta property="og:description" content="${d}">`,
     `<meta property="og:url" content="${u}">`,
     i ? `<meta property="og:image" content="${i}">` : "",
+    i && a ? `<meta property="og:image:alt" content="${a}">` : "",
     i ? `<meta property="og:image:width" content="1200">` : "",
     i ? `<meta property="og:image:height" content="630">` : "",
     `<meta name="twitter:card" content="${i ? "summary_large_image" : "summary"}">`,
     `<meta name="twitter:title" content="${t}">`,
     `<meta name="twitter:description" content="${d}">`,
     i ? `<meta name="twitter:image" content="${i}">` : "",
+    i && a ? `<meta name="twitter:image:alt" content="${a}">` : "",
     `<meta name="description" content="${d}">`,
   ]
     .filter(Boolean)
@@ -313,6 +352,7 @@ module.exports = async function handler(req, res) {
     title: meta.title,
     description: meta.description,
     image: meta.image,
+    imageAlt: meta.imageAlt || "",
     url: canonicalUrl,
   });
 
