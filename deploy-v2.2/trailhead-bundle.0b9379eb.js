@@ -44305,7 +44305,7 @@ ${suffix}`;
       }))
     };
   }
-  function useCampingSpotsLayer(mapRef, ready, rows, visible, onSelect, refreshKey) {
+  function useCampingSpotsLayer(mapRef, ready, rows, visible, onSelect, refreshKey, selectedSpotId) {
     const handlerRef = (0, import_react4.useRef)(onSelect);
     (0, import_react4.useEffect)(() => {
       handlerRef.current = onSelect;
@@ -44365,6 +44365,20 @@ ${suffix}`;
               "text-allow-overlap": true
             },
             paint: { "text-color": T.white }
+          });
+          map.addLayer({
+            id: "camping-spots-halo",
+            type: "circle",
+            source: "camping-spots",
+            filter: ["==", ["get", "id"], "__none__"],
+            paint: {
+              "circle-color": T.copper,
+              "circle-opacity": 0,
+              "circle-radius": 14,
+              "circle-stroke-color": T.copper,
+              "circle-stroke-width": 3,
+              "circle-stroke-opacity": 0.95
+            }
           });
           map.addLayer({
             id: "camping-spots-points",
@@ -44432,10 +44446,19 @@ ${suffix}`;
         const src = map.getSource("camping-spots");
         if (src) src.setData(campingSpotsToGeoJSON(rows));
         const vis = visible ? "visible" : "none";
-        ["camping-spots-clusters", "camping-spots-cluster-count", "camping-spots-points"].forEach((id) => {
+        ["camping-spots-clusters", "camping-spots-cluster-count", "camping-spots-halo", "camping-spots-points"].forEach((id) => {
           if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", vis);
         });
-        ["camping-spots-clusters", "camping-spots-cluster-count", "camping-spots-points"].forEach((id) => {
+        if (map.getLayer("camping-spots-halo")) {
+          try {
+            map.setFilter(
+              "camping-spots-halo",
+              selectedSpotId ? ["==", ["get", "id"], selectedSpotId] : ["==", ["get", "id"], "__none__"]
+            );
+          } catch (_) {
+          }
+        }
+        ["camping-spots-clusters", "camping-spots-cluster-count", "camping-spots-halo", "camping-spots-points"].forEach((id) => {
           if (map.getLayer(id)) {
             try {
               map.moveLayer(id);
@@ -44453,7 +44476,7 @@ ${suffix}`;
       return () => {
         cancelled = true;
       };
-    }, [mapRef, ready, rows, visible, refreshKey]);
+    }, [mapRef, ready, rows, visible, refreshKey, selectedSpotId]);
   }
   var PUBLIC_LANDS_COLORS = {
     // Overlander-prime federal
@@ -50281,7 +50304,7 @@ ${suffix}`;
     useCampingSpotsLayer(mapInst, mapReady, campingSpots, showCampingSpots, (spot) => {
       clearOtherSelections();
       setSelectedSpot(spot);
-    }, layerRefreshTick);
+    }, layerRefreshTick, selectedSpot && selectedSpot.id);
     usePublicLandsLayer(mapInst, mapReady, showPublicLands, (land) => {
       clearOtherSelections();
       setSelectedLand(land);
@@ -57120,6 +57143,7 @@ ${suffix}`;
       };
     }, [campingSpots]);
     const [showCampingSpots, setShowCampingSpots] = (0, import_react4.useState)(() => {
+      if (initialSharedLink && initialSharedLink.kind === "spot") return true;
       try {
         const v = localStorage.getItem("th_show_camping");
         return v === "1";
