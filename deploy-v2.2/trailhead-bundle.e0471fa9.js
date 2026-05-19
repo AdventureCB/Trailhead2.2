@@ -43117,6 +43117,24 @@ ${suffix}`;
   `;
     document.head.appendChild(mbStyle);
   }
+  var BUILD_MOD_CATEGORIES = [
+    { key: "suspension", label: "Suspension", icon: Wrench },
+    { key: "tires", label: "Tires", icon: Wrench },
+    { key: "wheels", label: "Wheels", icon: Wrench },
+    { key: "transmission", label: "Transmission / Gearing", icon: Wrench },
+    { key: "bumpers", label: "Bumpers", icon: Shield },
+    { key: "armor", label: "Armor", icon: Shield },
+    { key: "lighting", label: "Lighting", icon: Zap },
+    { key: "rack", label: "Rack / Storage", icon: Bookmark },
+    { key: "winch", label: "Winch", icon: Target },
+    { key: "otherMods", label: "Other Mods", icon: Plus }
+  ];
+  var BUILD_MOD_KEYS = BUILD_MOD_CATEGORIES.map((c) => c.key);
+  function toModList(m) {
+    if (Array.isArray(m)) return m;
+    if (m && (m.value || Array.isArray(m.photo) && m.photo.length || m.link)) return [m];
+    return [];
+  }
   function arrayShallowEq(a, b) {
     if (a === b) return true;
     if (!a || !b) return a === b;
@@ -45354,8 +45372,10 @@ ${suffix}`;
     const collectBuildImages = (bd) => {
       const imgs = [];
       if (bd.mainPhotos) bd.mainPhotos.forEach((p) => imgs.push(p.url));
-      [bd.suspension, bd.tires, bd.wheels, bd.bumpers, bd.armor, bd.lighting, bd.rack, bd.winch, bd.otherMods].forEach((mod) => {
-        if (mod && mod.photo) mod.photo.forEach((p) => imgs.push(p.url));
+      BUILD_MOD_KEYS.forEach((key) => {
+        toModList(bd[key]).forEach((mod) => {
+          if (mod && Array.isArray(mod.photo)) mod.photo.forEach((p) => imgs.push(p.url));
+        });
       });
       if (bd.camperPhoto) bd.camperPhoto.forEach((p) => imgs.push(p.url));
       return imgs;
@@ -45668,7 +45688,7 @@ ${suffix}`;
             const imgs = bd ? collectBuildImages(bd) : item.photoUrls.map((x) => typeof x === "string" ? x : x.url);
             openCarousel(imgs, 0);
           }, style: { width: "100%", height: 220, cursor: "pointer" }, fallbackIcon: Wrench }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, background: "linear-gradient(transparent 40%, rgba(0,0,0,0.8))", pointerEvents: "none" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", bottom: 12, left: 14, right: 14, pointerEvents: "none" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 4 } }, /* @__PURE__ */ import_react4.default.createElement(Wrench, { size: 12, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 1.5, fontWeight: 600 } }, "NEW BUILD")), /* @__PURE__ */ import_react4.default.createElement("h3", { style: { fontFamily: sans, fontSize: 20, color: T.white, margin: 0, fontWeight: 700, letterSpacing: 0.5 } }, item.title), item.vehicle && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 12, color: T.warmBg, opacity: 0.8 } }, item.vehicle)));
-        })() : /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => setExpandedBuildPost(isExpanded ? null : item.id), style: { height: 180, background: `linear-gradient(135deg, ${T.charcoal} 0%, ${T.tertiary}30 100%)`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", position: "relative", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(Wrench, { size: 40, color: T.tertiary, strokeWidth: 0.5, style: { opacity: 0.3 } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", bottom: 12, left: 14 } }, /* @__PURE__ */ import_react4.default.createElement("h3", { style: { fontFamily: sans, fontSize: 20, color: T.white, margin: 0, fontWeight: 700 } }, item.title), item.vehicle && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 12, color: T.warmBg, opacity: 0.8 } }, item.vehicle))), /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => setExpandedBuildPost(isExpanded ? null : item.id), style: { position: "absolute", top: 10, right: 10, background: `${T.darkBg}CC`, padding: "5px 10px", borderRadius: 12, display: "flex", alignItems: "center", gap: 4, cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(ChevronDown, { size: 12, color: T.warmBg, style: { transform: isExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" } }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.warmBg, letterSpacing: 0.5 } }, isExpanded ? "COLLAPSE" : "VIEW BUILD"))), !isExpanded && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "10px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.charcoal, padding: "8px 12px", borderRadius: 6, display: "inline-block" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white } }, item.stage))), isExpanded && bd && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "12px 16px 4px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 12 } }, /* @__PURE__ */ import_react4.default.createElement(Wrench, { size: 12, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 1.5, fontWeight: 600 } }, "BUILD SPECS")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column" } }, modRow("Suspension", bd.suspension), modRow("Tires", bd.tires), modRow("Wheels", bd.wheels), modRow("Bumpers", bd.bumpers), modRow("Armor", bd.armor), modRow("Lighting", bd.lighting), modRow("Rack/Storage", bd.rack), modRow("Winch", bd.winch), modRow("Other Mods", bd.otherMods)), bd.hasCamper && (bd.camperMake || bd.camperModel) && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { height: 1, background: T.charcoal, margin: "12px 0" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 10 } }, /* @__PURE__ */ import_react4.default.createElement(House, { size: 12, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 1.5, fontWeight: 600 } }, "CAMPER")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 6 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, "Setup"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 12, color: T.white, textAlign: "right" } }, bd.camperMake, " ", bd.camperModel)), bd.camperPhoto && bd.camperPhoto.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, marginTop: 6 } }, bd.camperPhoto.map((p, pi) => /* @__PURE__ */ import_react4.default.createElement("img", { key: pi, src: p.url, alt: "", onClick: () => {
+        })() : /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => setExpandedBuildPost(isExpanded ? null : item.id), style: { height: 180, background: `linear-gradient(135deg, ${T.charcoal} 0%, ${T.tertiary}30 100%)`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", position: "relative", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(Wrench, { size: 40, color: T.tertiary, strokeWidth: 0.5, style: { opacity: 0.3 } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", bottom: 12, left: 14 } }, /* @__PURE__ */ import_react4.default.createElement("h3", { style: { fontFamily: sans, fontSize: 20, color: T.white, margin: 0, fontWeight: 700 } }, item.title), item.vehicle && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 12, color: T.warmBg, opacity: 0.8 } }, item.vehicle))), /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => setExpandedBuildPost(isExpanded ? null : item.id), style: { position: "absolute", top: 10, right: 10, background: `${T.darkBg}CC`, padding: "5px 10px", borderRadius: 12, display: "flex", alignItems: "center", gap: 4, cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(ChevronDown, { size: 12, color: T.warmBg, style: { transform: isExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" } }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.warmBg, letterSpacing: 0.5 } }, isExpanded ? "COLLAPSE" : "VIEW BUILD"))), !isExpanded && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "10px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.charcoal, padding: "8px 12px", borderRadius: 6, display: "inline-block" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white } }, item.stage))), isExpanded && bd && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "12px 16px 4px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 12 } }, /* @__PURE__ */ import_react4.default.createElement(Wrench, { size: 12, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 1.5, fontWeight: 600 } }, "BUILD SPECS")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column" } }, BUILD_MOD_CATEGORIES.map((c) => toModList(bd[c.key]).map((m, i) => /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, { key: `${c.key}_${i}` }, modRow(`${c.label}${i > 0 ? ` #${i + 1}` : ""}`, m))))), bd.hasCamper && (bd.camperMake || bd.camperModel) && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { height: 1, background: T.charcoal, margin: "12px 0" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 10 } }, /* @__PURE__ */ import_react4.default.createElement(House, { size: 12, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 1.5, fontWeight: 600 } }, "CAMPER")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 6 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, "Setup"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 12, color: T.white, textAlign: "right" } }, bd.camperMake, " ", bd.camperModel)), bd.camperPhoto && bd.camperPhoto.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, marginTop: 6 } }, bd.camperPhoto.map((p, pi) => /* @__PURE__ */ import_react4.default.createElement("img", { key: pi, src: p.url, alt: "", onClick: () => {
           const imgs = collectBuildImages(bd);
           openCarousel(imgs, 0);
         }, style: { width: 60, height: 60, borderRadius: 6, objectFit: "cover", cursor: "pointer" } }))), bd.camperLink && /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginTop: 6 } }, /* @__PURE__ */ import_react4.default.createElement("a", { href: ensureUrl(bd.camperLink), target: "_blank", rel: "noopener noreferrer", style: { fontFamily: sans, fontSize: 10, color: T.copper, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3 } }, /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 9 }), " View Product"))), bd.mainPhotos && bd.mainPhotos.length > 1 && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { height: 1, background: T.charcoal, margin: "12px 0" } }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.5, display: "block", marginBottom: 8 } }, "MORE PHOTOS"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 } }, bd.mainPhotos.slice(1).map((p, pi) => /* @__PURE__ */ import_react4.default.createElement("img", { key: pi, src: p.url, alt: "", onClick: () => openCarousel(collectBuildImages(bd), pi + 1), style: { width: 80, height: 80, borderRadius: 8, objectFit: "cover", flexShrink: 0, cursor: "pointer" } }))))), isExpanded && !bd && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "10px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.charcoal, padding: "8px 12px", borderRadius: 6, display: "inline-block" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white } }, item.stage))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "10px 16px 4px" } }, /* @__PURE__ */ import_react4.default.createElement(
@@ -51401,8 +51421,10 @@ ${suffix}`;
     const collectBuildImagesGallery = (bd) => {
       const imgs = [];
       if (bd.mainPhotos) bd.mainPhotos.forEach((p) => imgs.push(p.url));
-      [bd.suspension, bd.tires, bd.wheels, bd.bumpers, bd.armor, bd.lighting, bd.rack, bd.winch, bd.otherMods].forEach((mod) => {
-        if (mod && mod.photo) mod.photo.forEach((p) => imgs.push(p.url));
+      BUILD_MOD_KEYS.forEach((key) => {
+        toModList(bd[key]).forEach((mod) => {
+          if (mod && Array.isArray(mod.photo)) mod.photo.forEach((p) => imgs.push(p.url));
+        });
       });
       if (bd.camperPhoto) bd.camperPhoto.forEach((p) => imgs.push(p.url));
       return imgs;
@@ -51508,18 +51530,10 @@ ${suffix}`;
       const heroImage = detailBuild.image || bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url || null;
       const gradient = gradients[allBuilds.indexOf(detailBuild) % gradients.length];
       const liked = !!likedBuilds[detailBuild.id];
-      const modCategories = [
-        { key: "suspension", label: "Suspension", icon: Wrench },
-        { key: "tires", label: "Tires", icon: Wrench },
-        { key: "wheels", label: "Wheels", icon: Wrench },
-        { key: "bumpers", label: "Bumpers", icon: Shield },
-        { key: "armor", label: "Armor", icon: Shield },
-        { key: "lighting", label: "Lighting", icon: Zap },
-        { key: "rack", label: "Rack / Storage", icon: Bookmark },
-        { key: "winch", label: "Winch", icon: Target },
-        { key: "otherMods", label: "Other Mods", icon: Plus }
-      ];
-      const modRows = modCategories.map((c) => ({ ...c, mod: bd ? bd[c.key] : null })).filter((r) => r.mod && r.mod.value);
+      const modRows = BUILD_MOD_CATEGORIES.flatMap((c) => {
+        const entries = bd ? toModList(bd[c.key]) : [];
+        return entries.map((mod, i) => ({ ...c, mod, idx: i, rowKey: `${c.key}_${i}`, label: `${c.label}${i > 0 ? ` #${i + 1}` : ""}` })).filter((r) => r.mod && r.mod.value);
+      });
       return /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 0 16px" } }, carouselImages && /* @__PURE__ */ import_react4.default.createElement(ImageCarousel, { images: carouselImages, startIndex: carouselIndex, onClose: () => setCarouselImages(null) }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", height: 280, background: heroImage ? T.darkBg : gradient, overflow: "hidden" } }, heroImage ? /* @__PURE__ */ import_react4.default.createElement("img", { src: txImg(heroImage, 900), alt: "", onClick: () => openGalleryCarousel(detailBuild, 0), style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", cursor: "pointer" } }) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Wrench, { size: 120, color: T.tertiary, strokeWidth: 0.15, style: { opacity: 0.08 } })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, background: "linear-gradient(transparent 35%, rgba(0,0,0,0.85))" } }), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setDetailBuildId(null), style: { position: "absolute", top: 14, left: 14, width: 36, height: 36, borderRadius: 10, background: `${T.darkBg}CC`, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)" } }, /* @__PURE__ */ import_react4.default.createElement(ChevronLeft, { size: 20, color: T.white })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: 14, right: 14, display: "flex", gap: 8 } }, detailBuild.isMine && detailBuild.rawId && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
         const src = (userBuilds || []).find((ub) => ub.id === detailBuild.rawId);
         if (src) setEditingBuild(src);
@@ -51546,12 +51560,12 @@ ${suffix}`;
         const Icon2 = row.icon;
         const m = row.mod;
         const hasPhoto = m.photo && m.photo.length > 0;
-        const isOpen = expandedModKey === row.key;
+        const isOpen = expandedModKey === row.rowKey;
         const descriptor = (m.value || "").split(/[,/]/)[0].trim().split(" ").slice(0, 3).join(" ");
-        return /* @__PURE__ */ import_react4.default.createElement("div", { key: row.key, style: { ...cardStyle, overflow: "hidden" } }, /* @__PURE__ */ import_react4.default.createElement(
+        return /* @__PURE__ */ import_react4.default.createElement("div", { key: row.rowKey, style: { ...cardStyle, overflow: "hidden" } }, /* @__PURE__ */ import_react4.default.createElement(
           "div",
           {
-            onClick: () => setExpandedModKey(isOpen ? null : row.key),
+            onClick: () => setExpandedModKey(isOpen ? null : row.rowKey),
             style: { display: "flex", alignItems: "center", gap: 12, padding: 14, cursor: "pointer" }
           },
           /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 42, height: 42, borderRadius: 8, background: T.charcoal, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(Icon2, { size: 18, color: T.red })),
@@ -52215,7 +52229,11 @@ ${suffix}`;
   };
   function AddBuildForm({ onClose, onSave, initialData }) {
     const d = initialData || {};
-    const initMod = (m) => m && m.value != null ? { ...m } : { value: "", photo: [], link: "" };
+    const emptyMod = () => ({ value: "", photo: [], link: "" });
+    const initModList = (m) => {
+      const list = toModList(m);
+      return list.length > 0 ? list.map((e) => ({ ...emptyMod(), ...e })) : [emptyMod()];
+    };
     const [buildName, setBuildName] = (0, import_react4.useState)(d.buildName || "");
     const [year, setYear] = (0, import_react4.useState)(d.year || "");
     const [yearMode, setYearMode] = (0, import_react4.useState)(d.year && !VEHICLE_YEARS.includes(String(d.year)) ? "other" : "select");
@@ -52231,16 +52249,16 @@ ${suffix}`;
     const [showPreview, setShowPreview] = (0, import_react4.useState)(false);
     const [shareToFeed, setShareToFeed] = (0, import_react4.useState)(initialData ? false : true);
     const [mainPhotos, setMainPhotos] = (0, import_react4.useState)(d.mainPhotos || []);
-    const emptyMod = () => ({ value: "", photo: [], link: "" });
-    const [suspension, setSuspension] = (0, import_react4.useState)(initMod(d.suspension));
-    const [tires, setTires] = (0, import_react4.useState)(initMod(d.tires));
-    const [wheels, setWheels] = (0, import_react4.useState)(initMod(d.wheels));
-    const [bumpers, setBumpers] = (0, import_react4.useState)(initMod(d.bumpers));
-    const [armor, setArmor] = (0, import_react4.useState)(initMod(d.armor));
-    const [lighting, setLighting] = (0, import_react4.useState)(initMod(d.lighting));
-    const [rack, setRack] = (0, import_react4.useState)(initMod(d.rack));
-    const [winch, setWinch] = (0, import_react4.useState)(initMod(d.winch));
-    const [otherMods, setOtherMods] = (0, import_react4.useState)(initMod(d.otherMods));
+    const [suspension, setSuspension] = (0, import_react4.useState)(initModList(d.suspension));
+    const [tires, setTires] = (0, import_react4.useState)(initModList(d.tires));
+    const [wheels, setWheels] = (0, import_react4.useState)(initModList(d.wheels));
+    const [transmission, setTransmission] = (0, import_react4.useState)(initModList(d.transmission));
+    const [bumpers, setBumpers] = (0, import_react4.useState)(initModList(d.bumpers));
+    const [armor, setArmor] = (0, import_react4.useState)(initModList(d.armor));
+    const [lighting, setLighting] = (0, import_react4.useState)(initModList(d.lighting));
+    const [rack, setRack] = (0, import_react4.useState)(initModList(d.rack));
+    const [winch, setWinch] = (0, import_react4.useState)(initModList(d.winch));
+    const [otherMods, setOtherMods] = (0, import_react4.useState)(initModList(d.otherMods));
     const [hasCamper, setHasCamper] = (0, import_react4.useState)(d.hasCamper || false);
     const [camperMake, setCamperMake] = (0, import_react4.useState)(d.camperMake || "");
     const [camperModel, setCamperModel] = (0, import_react4.useState)(d.camperModel || "");
@@ -52264,10 +52282,39 @@ ${suffix}`;
     const labelStyle = { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 600, display: "block", marginBottom: 6 };
     const sectionTitle = (text, icon) => /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 14, marginTop: 24 } }, icon, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.copper, letterSpacing: 1.5, fontWeight: 700 } }, text));
     const fieldGroup = (label, value, setter, placeholder, multiline) => /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, label), multiline ? /* @__PURE__ */ import_react4.default.createElement("textarea", { value, onChange: (e) => setter(e.target.value), placeholder, style: { ...inputStyle, minHeight: 70, resize: "vertical", lineHeight: 1.6 } }) : /* @__PURE__ */ import_react4.default.createElement("input", { value, onChange: (e) => setter(e.target.value), placeholder, style: inputStyle }));
-    const modField = (label, mod, setMod, placeholder) => /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, label), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-start" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement("input", { value: mod.value, onChange: (e) => setMod({ ...mod, value: e.target.value }), placeholder, style: inputStyle }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginTop: 6 } }, /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 12, color: mod.link ? T.copper : T.tertiary, style: { flexShrink: 0 } }), /* @__PURE__ */ import_react4.default.createElement("input", { value: mod.link, onChange: (e) => setMod({ ...mod, link: e.target.value }), placeholder: "Product link (optional)", style: { ...inputStyle, padding: "7px 10px", fontSize: 11, background: "transparent", border: `1px solid ${mod.link ? T.copper + "40" : T.charcoal}` } }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginTop: 0 } }, /* @__PURE__ */ import_react4.default.createElement(ModFieldPhoto, { mod, setMod }))));
+    const modField = (label, list, setList, placeholder) => {
+      const updateAt = (idx, patch) => setList(list.map((m, i) => i === idx ? { ...m, ...patch } : m));
+      const removeAt = (idx) => setList(list.filter((_, i) => i !== idx));
+      const addAnother = () => setList([...list, emptyMod()]);
+      return /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, label), list.map((mod, idx) => /* @__PURE__ */ import_react4.default.createElement("div", { key: idx, style: { marginTop: idx > 0 ? 12 : 0, paddingTop: idx > 0 ? 12 : 0, borderTop: idx > 0 ? `1px dashed ${T.charcoal}` : "none" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-start" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement("input", { value: mod.value, onChange: (e) => updateAt(idx, { value: e.target.value }), placeholder, style: inputStyle }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginTop: 6 } }, /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 12, color: mod.link ? T.copper : T.tertiary, style: { flexShrink: 0 } }), /* @__PURE__ */ import_react4.default.createElement("input", { value: mod.link, onChange: (e) => updateAt(idx, { link: e.target.value }), placeholder: "Product link (optional)", style: { ...inputStyle, padding: "7px 10px", fontSize: 11, background: "transparent", border: `1px solid ${mod.link ? T.copper + "40" : T.charcoal}` } }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginTop: 0 } }, /* @__PURE__ */ import_react4.default.createElement(ModFieldPhoto, { mod, setMod: (next) => updateAt(idx, next) })), list.length > 1 && /* @__PURE__ */ import_react4.default.createElement("button", { type: "button", onClick: () => removeAt(idx), style: { marginTop: 4, width: 28, height: 28, borderRadius: 6, background: T.charcoal, border: `1px solid ${T.tertiary}40`, color: T.tertiary, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }, "aria-label": "Remove" }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 14 }))))), /* @__PURE__ */ import_react4.default.createElement("button", { type: "button", onClick: addAnother, style: { marginTop: 8, padding: "6px 12px", borderRadius: 6, background: "transparent", border: `1px dashed ${T.copper}60`, color: T.copper, cursor: "pointer", fontFamily: sans, fontSize: 10, letterSpacing: 1, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 5 } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 11 }), " ADD ANOTHER"));
+    };
     const handleSave = () => {
       if (!make || !model || !year) return;
-      onSave && onSave({ buildName, year, make, model, trim, mainPhotos, suspension, tires, wheels, bumpers, armor, lighting, rack, winch, otherMods, hasCamper, camperMake, camperModel, camperPhoto, camperLink, shareToFeed });
+      const cleanList = (list) => list.filter((m) => m.value && m.value.trim() || Array.isArray(m.photo) && m.photo.length || m.link && m.link.trim());
+      onSave && onSave({
+        buildName,
+        year,
+        make,
+        model,
+        trim,
+        mainPhotos,
+        suspension: cleanList(suspension),
+        tires: cleanList(tires),
+        wheels: cleanList(wheels),
+        transmission: cleanList(transmission),
+        bumpers: cleanList(bumpers),
+        armor: cleanList(armor),
+        lighting: cleanList(lighting),
+        rack: cleanList(rack),
+        winch: cleanList(winch),
+        otherMods: cleanList(otherMods),
+        hasCamper,
+        camperMake,
+        camperModel,
+        camperPhoto,
+        camperLink,
+        shareToFeed
+      });
       onClose();
     };
     const formView = /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "8px 16px 32px" } }, sectionTitle("BUILD IDENTITY", /* @__PURE__ */ import_react4.default.createElement(Wrench, { size: 16, color: T.copper })), fieldGroup("BUILD NAME", buildName, setBuildName, "e.g. THE HIGHLANDER"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "YEAR"), yearMode === "select" ? /* @__PURE__ */ import_react4.default.createElement(
@@ -52335,7 +52382,7 @@ ${suffix}`;
         next.unshift(item);
         return next;
       }), style: { position: "absolute", bottom: 4, left: 4, padding: "3px 6px", borderRadius: 4, background: `${T.copper}CC`, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 8, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, "SET HERO"));
-    })), /* @__PURE__ */ import_react4.default.createElement(PhotoUploader, { photos: [], onChange: (p) => setMainPhotos((prev) => [...prev, ...p]), maxPhotos: 20 }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 6, display: "block" } }, "Add as many photos as you want \u2014 they appear in your build gallery")), sectionTitle("SUSPENSION & WHEELS", /* @__PURE__ */ import_react4.default.createElement(ChevronUp, { size: 16, color: T.copper })), modField("SUSPENSION", suspension, setSuspension, 'e.g. Icon Stage 3, 2.5" lift'), modField("TIRES", tires, setTires, "e.g. BFGoodrich KO2 35x12.5R17"), modField("WHEELS", wheels, setWheels, "e.g. Method 305 NV 17x8.5"), sectionTitle("ARMOR & PROTECTION", /* @__PURE__ */ import_react4.default.createElement(Shield, { size: 16, color: T.copper })), modField("BUMPERS", bumpers, setBumpers, "e.g. CBI front & rear bumpers"), modField("SKID PLATES / ARMOR", armor, setArmor, "e.g. RCI full skid package"), sectionTitle("ACCESSORIES", /* @__PURE__ */ import_react4.default.createElement(Star, { size: 16, color: T.copper })), modField("LIGHTING", lighting, setLighting, "e.g. Baja Designs squadron, ditch lights"), modField("ROOF RACK / BED RACK", rack, setRack, "e.g. Uptop Overland Alpha bed rack"), modField("RECOVERY / WINCH", winch, setWinch, "e.g. WARN Zeon 10-S"), modField("OTHER MODS", otherMods, setOtherMods, "Snorkel, dual battery, fridge slide, etc."), sectionTitle("CAMPER", /* @__PURE__ */ import_react4.default.createElement(House, { size: 16, color: T.copper })), /* @__PURE__ */ import_react4.default.createElement(
+    })), /* @__PURE__ */ import_react4.default.createElement(PhotoUploader, { photos: [], onChange: (p) => setMainPhotos((prev) => [...prev, ...p]), maxPhotos: 20 }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 6, display: "block" } }, "Add as many photos as you want \u2014 they appear in your build gallery")), sectionTitle("SUSPENSION & DRIVETRAIN", /* @__PURE__ */ import_react4.default.createElement(ChevronUp, { size: 16, color: T.copper })), modField("SUSPENSION", suspension, setSuspension, 'e.g. Icon Stage 3, 2.5" lift'), modField("TIRES", tires, setTires, "e.g. BFGoodrich KO2 35x12.5R17"), modField("WHEELS", wheels, setWheels, "e.g. Method 305 NV 17x8.5"), modField("TRANSMISSION / GEARING", transmission, setTransmission, "e.g. 4.88 regear, Nitro front & rear"), sectionTitle("ARMOR & PROTECTION", /* @__PURE__ */ import_react4.default.createElement(Shield, { size: 16, color: T.copper })), modField("BUMPERS", bumpers, setBumpers, "e.g. CBI front & rear bumpers"), modField("SKID PLATES / ARMOR", armor, setArmor, "e.g. RCI full skid package"), sectionTitle("ACCESSORIES", /* @__PURE__ */ import_react4.default.createElement(Star, { size: 16, color: T.copper })), modField("LIGHTING", lighting, setLighting, "e.g. Baja Designs squadron, ditch lights"), modField("ROOF RACK / BED RACK", rack, setRack, "e.g. Uptop Overland Alpha bed rack"), modField("RECOVERY / WINCH", winch, setWinch, "e.g. WARN Zeon 10-S"), modField("OTHER MODS", otherMods, setOtherMods, "Snorkel, dual battery, fridge slide, etc."), sectionTitle("CAMPER", /* @__PURE__ */ import_react4.default.createElement(House, { size: 16, color: T.copper })), /* @__PURE__ */ import_react4.default.createElement(
       "div",
       {
         onClick: () => setHasCamper(!hasCamper),
@@ -52372,17 +52419,21 @@ ${suffix}`;
       "PREVIEW BUILD"
     ), (!make || !model || !year) && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, textAlign: "center", display: "block", marginTop: 8 } }, "Year, make, and model are required"));
     const displayName = buildName || `${year} ${make} ${model}`;
-    const specRows = [
-      suspension.value && { label: "Suspension", mod: suspension },
-      tires.value && { label: "Tires", mod: tires },
-      wheels.value && { label: "Wheels", mod: wheels },
-      bumpers.value && { label: "Bumpers", mod: bumpers },
-      armor.value && { label: "Armor / Skid Plates", mod: armor },
-      lighting.value && { label: "Lighting", mod: lighting },
-      rack.value && { label: "Rack", mod: rack },
-      winch.value && { label: "Recovery / Winch", mod: winch },
-      otherMods.value && { label: "Other", mod: otherMods }
-    ].filter(Boolean);
+    const categorySources = {
+      suspension,
+      tires,
+      wheels,
+      transmission,
+      bumpers,
+      armor,
+      lighting,
+      rack,
+      winch,
+      otherMods
+    };
+    const specRows = BUILD_MOD_CATEGORIES.flatMap(
+      (c) => (categorySources[c.key] || []).filter((m) => m.value).map((mod, i) => ({ label: `${c.label}${i > 0 ? ` #${i + 1}` : ""}`, mod }))
+    );
     const previewView = /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "8px 16px 32px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { ...cardStyle, overflow: "hidden", marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { height: 180, background: mainPhotos.length > 0 ? "none" : `linear-gradient(135deg, ${T.charcoal} 0%, ${T.red}20 100%)`, position: "relative", display: "flex", flexDirection: "column", justifyContent: "flex-end" } }, mainPhotos.length > 0 ? /* @__PURE__ */ import_react4.default.createElement("img", { src: txImg(mainPhotos[0].url, 480), alt: "", style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Wrench, { size: 70, color: T.tertiary, strokeWidth: 0.2, style: { opacity: 0.06 } })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, background: "linear-gradient(transparent 30%, rgba(0,0,0,0.8) 100%)" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", padding: "0 14px 12px" } }, trim && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 8, color: T.warmBg, background: "#3D3D3A", padding: "3px 6px", borderRadius: 3, letterSpacing: 0.8, marginBottom: 4, display: "inline-block" } }, trim.toUpperCase()), /* @__PURE__ */ import_react4.default.createElement("h3", { style: { fontFamily: sans, fontSize: 24, color: T.warmBg, margin: "4px 0 0", fontWeight: 700, letterSpacing: 1 } }, displayName.toUpperCase()), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary } }, year, " ", make, " ", model))), specRows.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "12px 14px", borderTop: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.5, fontWeight: 600, display: "block", marginBottom: 10 } }, "MODIFICATIONS"), specRows.map((row, j) => /* @__PURE__ */ import_react4.default.createElement("div", { key: j, style: { padding: "10px 0", borderTop: j > 0 ? `1px solid ${T.charcoal}` : "none" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary, flexShrink: 0 } }, row.label), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 12, color: T.white, textAlign: "right" } }, row.mod.value)), row.mod.photo.length > 0 && /* @__PURE__ */ import_react4.default.createElement("img", { src: txImg(row.mod.photo[0].url, 128), alt: "", style: { width: "100%", height: 100, borderRadius: 6, objectFit: "cover", display: "block", marginTop: 8, border: `1px solid ${T.charcoal}` } }), row.mod.link && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, marginTop: 6 } }, /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 11, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, "View Product"))))), hasCamper && (camperMake || camperModel) && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "12px 14px", borderTop: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 8 } }, /* @__PURE__ */ import_react4.default.createElement(House, { size: 12, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 1.5, fontWeight: 600 } }, "CAMPER")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 8 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, "Make / Model"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 12, color: T.white, textAlign: "right" } }, [camperMake, camperModel].filter(Boolean).join(" "))), camperPhoto.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, marginTop: 6 } }, camperPhoto.map((p, pi) => /* @__PURE__ */ import_react4.default.createElement("img", { key: pi, src: p.url, alt: "", style: { width: 60, height: 60, borderRadius: 6, objectFit: "cover", border: `1px solid ${T.charcoal}` } }))), camperLink && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, marginTop: 6 } }, /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 11, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600 } }, "View Product")))), /* @__PURE__ */ import_react4.default.createElement(
       "div",
       {
@@ -52479,8 +52530,10 @@ ${suffix}`;
       if (bd && bd.mainPhotos) bd.mainPhotos.forEach((p) => imgs.push(p.url));
       else if (build.image) imgs.push(build.image);
       if (bd) {
-        [bd.suspension, bd.tires, bd.wheels, bd.bumpers, bd.armor, bd.lighting, bd.rack, bd.winch, bd.otherMods].forEach((mod) => {
-          if (mod && mod.photo) mod.photo.forEach((p) => imgs.push(p.url));
+        BUILD_MOD_KEYS.forEach((key) => {
+          toModList(bd[key]).forEach((mod) => {
+            if (mod && Array.isArray(mod.photo)) mod.photo.forEach((p) => imgs.push(p.url));
+          });
         });
         if (bd.camperPhoto) bd.camperPhoto.forEach((p) => imgs.push(p.url));
       }
@@ -52646,7 +52699,7 @@ ${suffix}`;
       }, style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", cursor: "pointer" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, background: "linear-gradient(transparent 20%, rgba(0,0,0,0.75))", pointerEvents: "none" } })) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Wrench, { size: 60, color: T.tertiary, strokeWidth: 0.2, style: { opacity: 0.08 } })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", padding: 16, pointerEvents: "none" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 6 } }, ab.tags.map((tag, j) => /* @__PURE__ */ import_react4.default.createElement("span", { key: j, style: { fontFamily: sans, fontSize: 9, color: T.warmBg, background: "#3D3D3A", padding: "3px 8px", borderRadius: 4, letterSpacing: 1 } }, tag))), /* @__PURE__ */ import_react4.default.createElement("h3", { style: { fontFamily: sans, fontSize: 28, color: T.warmBg, margin: 0, fontWeight: 700, letterSpacing: 1 } }, ab.name), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary } }, ab.vehicle)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: 10, right: 10, background: `${T.darkBg}CC`, padding: "5px 10px", borderRadius: 12, display: "flex", alignItems: "center", gap: 4 } }, /* @__PURE__ */ import_react4.default.createElement(ChevronDown, { size: 12, color: T.warmBg, style: { transform: isExp ? "rotate(180deg)" : "none", transition: "transform 0.2s" } }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.warmBg, letterSpacing: 0.5 } }, isExp ? "COLLAPSE" : "PREVIEW")), onViewBuild && ab.id && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: (e) => {
         e.stopPropagation();
         onViewBuild({ rawId: ab.id, name: ab.name });
-      }, style: { position: "absolute", top: 10, left: 10, background: `${T.red}DD`, padding: "5px 10px", borderRadius: 12, display: "flex", alignItems: "center", gap: 4, border: "none", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 11, color: T.white }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.white, letterSpacing: 0.5, fontWeight: 700 } }, "OPEN BUILD")))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 0, borderTop: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "14px 16px", textAlign: "center", borderRight: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block", marginBottom: 2 } }, "TRAIL MILES"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 18, color: T.white, fontWeight: 700 } }, ab.miles)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "14px 16px", textAlign: "center", borderRight: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block", marginBottom: 2 } }, "ELEVATION"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 18, color: T.white, fontWeight: 700 } }, ab.elevation)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "14px 16px", textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block", marginBottom: 2 } }, "ROUTES"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 18, color: T.white, fontWeight: 700 } }, ab.routes))), isExp && /* @__PURE__ */ import_react4.default.createElement("div", { style: { borderTop: `1px solid ${T.charcoal}`, padding: "12px 16px" } }, bd ? /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.5, fontWeight: 600, display: "block", marginBottom: 8 } }, "BUILD SPECS"), profSpecRow("Suspension", bd.suspension), profSpecRow("Tires", bd.tires), profSpecRow("Wheels", bd.wheels), profSpecRow("Bumpers", bd.bumpers), profSpecRow("Armor", bd.armor), profSpecRow("Lighting", bd.lighting), profSpecRow("Rack/Storage", bd.rack), profSpecRow("Winch", bd.winch), profSpecRow("Other Mods", bd.otherMods), bd.hasCamper && (bd.camperMake || bd.camperModel) && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { height: 1, background: T.charcoal, margin: "10px 0" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 8 } }, /* @__PURE__ */ import_react4.default.createElement(House, { size: 12, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 1.5, fontWeight: 600 } }, "CAMPER")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 6 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, "Setup"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 12, color: T.white, textAlign: "right" } }, bd.camperMake, " ", bd.camperModel)), bd.camperPhoto && bd.camperPhoto.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, marginTop: 6 } }, bd.camperPhoto.map((p, pi) => /* @__PURE__ */ import_react4.default.createElement("img", { key: pi, src: p.url, alt: "", onClick: (e) => {
+      }, style: { position: "absolute", top: 10, left: 10, background: `${T.red}DD`, padding: "5px 10px", borderRadius: 12, display: "flex", alignItems: "center", gap: 4, border: "none", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 11, color: T.white }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.white, letterSpacing: 0.5, fontWeight: 700 } }, "OPEN BUILD")))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 0, borderTop: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "14px 16px", textAlign: "center", borderRight: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block", marginBottom: 2 } }, "TRAIL MILES"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 18, color: T.white, fontWeight: 700 } }, ab.miles)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "14px 16px", textAlign: "center", borderRight: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block", marginBottom: 2 } }, "ELEVATION"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 18, color: T.white, fontWeight: 700 } }, ab.elevation)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "14px 16px", textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block", marginBottom: 2 } }, "ROUTES"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 18, color: T.white, fontWeight: 700 } }, ab.routes))), isExp && /* @__PURE__ */ import_react4.default.createElement("div", { style: { borderTop: `1px solid ${T.charcoal}`, padding: "12px 16px" } }, bd ? /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.5, fontWeight: 600, display: "block", marginBottom: 8 } }, "BUILD SPECS"), BUILD_MOD_CATEGORIES.map((c) => toModList(bd[c.key]).map((m, i) => /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, { key: `${c.key}_${i}` }, profSpecRow(`${c.label}${i > 0 ? ` #${i + 1}` : ""}`, m)))), bd.hasCamper && (bd.camperMake || bd.camperModel) && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { height: 1, background: T.charcoal, margin: "10px 0" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 8 } }, /* @__PURE__ */ import_react4.default.createElement(House, { size: 12, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 1.5, fontWeight: 600 } }, "CAMPER")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 6 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, "Setup"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 12, color: T.white, textAlign: "right" } }, bd.camperMake, " ", bd.camperModel)), bd.camperPhoto && bd.camperPhoto.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, marginTop: 6 } }, bd.camperPhoto.map((p, pi) => /* @__PURE__ */ import_react4.default.createElement("img", { key: pi, src: p.url, alt: "", onClick: (e) => {
         e.stopPropagation();
         collectAndOpenCarousel(ab, 0);
       }, style: { width: 56, height: 56, borderRadius: 6, objectFit: "cover", cursor: "pointer" } }))), bd.camperLink && /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginTop: 6 } }, /* @__PURE__ */ import_react4.default.createElement("a", { href: ensureUrl(bd.camperLink), target: "_blank", rel: "noopener noreferrer", onClick: (e) => e.stopPropagation(), style: { fontFamily: sans, fontSize: 10, color: T.copper, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3 } }, /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 9 }), " View Product"))), bd.mainPhotos && bd.mainPhotos.length > 1 && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { height: 1, background: T.charcoal, margin: "10px 0" } }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.5, display: "block", marginBottom: 8 } }, "PHOTOS"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 } }, bd.mainPhotos.map((p, pi) => /* @__PURE__ */ import_react4.default.createElement("img", { key: pi, src: p.url, alt: "", onClick: () => collectAndOpenCarousel(ab, pi), style: { width: 68, height: 68, borderRadius: 8, objectFit: "cover", flexShrink: 0, cursor: "pointer" } }))))) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary } }, "No detailed specs available for this build."), /* @__PURE__ */ import_react4.default.createElement("div", { style: { height: 1, background: T.charcoal, margin: "12px 0" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, ab.isUserBuild && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setEditingBuild({ id: ab.id, buildData: bd }), style: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px", borderRadius: 8, background: `${T.copper}18`, border: `1px solid ${T.copper}30`, cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(Settings, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600, letterSpacing: 0.5 } }, "EDIT BUILD")), ab.isUserBuild && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setDeleteBuildConfirm(deleteBuildConfirm === ab.id ? null : ab.id), style: { display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 14px", borderRadius: 8, background: `${T.red}18`, border: `1px solid ${T.red}30`, cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(Trash2, { size: 14, color: T.red })), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
@@ -54693,9 +54746,9 @@ ${suffix}`;
       make: row.make || "",
       model: row.model || "",
       tags: [row.trim ? row.trim.toUpperCase() : (row.make || "").toUpperCase(), "BUILD"].filter(Boolean),
-      suspension: bd.suspension && bd.suspension.value || "",
-      tires: bd.tires && bd.tires.value || "",
-      bumpers: bd.bumpers && bd.bumpers.value || "",
+      suspension: toModList(bd.suspension)[0] && toModList(bd.suspension)[0].value || "",
+      tires: toModList(bd.tires)[0] && toModList(bd.tires)[0].value || "",
+      bumpers: toModList(bd.bumpers)[0] && toModList(bd.bumpers)[0].value || "",
       miles: "0",
       elevation: "0 ft",
       routes: 0,
@@ -54973,10 +55026,18 @@ ${suffix}`;
     const out = { ...data };
     if (Array.isArray(data.mainPhotos)) out.mainPhotos = await uploadPostPhotoList(data.mainPhotos, uid);
     if (Array.isArray(data.camperPhoto)) out.camperPhoto = await uploadPostPhotoList(data.camperPhoto, uid);
-    for (const key of ["suspension", "tires", "wheels", "bumpers", "armor", "lighting", "rack", "winch", "otherMods"]) {
-      if (out[key] && Array.isArray(out[key].photo)) {
-        out[key] = { ...out[key], photo: await uploadPostPhotoList(out[key].photo, uid) };
+    for (const key of BUILD_MOD_KEYS) {
+      const list = toModList(out[key]);
+      if (list.length === 0) continue;
+      const uploaded = [];
+      for (const m of list) {
+        if (m && Array.isArray(m.photo)) {
+          uploaded.push({ ...m, photo: await uploadPostPhotoList(m.photo, uid) });
+        } else {
+          uploaded.push(m);
+        }
       }
+      out[key] = uploaded;
     }
     return out;
   }
@@ -54990,10 +55051,10 @@ ${suffix}`;
     const out = { ...bd };
     if (Array.isArray(out.mainPhotos)) out.mainPhotos = filterList(out.mainPhotos);
     if (Array.isArray(out.camperPhoto)) out.camperPhoto = filterList(out.camperPhoto);
-    for (const key of ["suspension", "tires", "wheels", "bumpers", "armor", "lighting", "rack", "winch", "otherMods"]) {
-      if (out[key] && Array.isArray(out[key].photo)) {
-        out[key] = { ...out[key], photo: filterList(out[key].photo) };
-      }
+    for (const key of BUILD_MOD_KEYS) {
+      const list = toModList(out[key]);
+      if (list.length === 0) continue;
+      out[key] = list.map((m) => m && Array.isArray(m.photo) ? { ...m, photo: filterList(m.photo) } : m);
     }
     return out;
   }
@@ -57652,9 +57713,9 @@ ${suffix}`;
           make: uploadedData.make,
           model: uploadedData.model,
           tags: [uploadedData.trim ? uploadedData.trim.toUpperCase() : (uploadedData.make || "").toUpperCase(), "NEW BUILD"],
-          suspension: uploadedData.suspension.value || "",
-          tires: uploadedData.tires.value || "",
-          bumpers: uploadedData.bumpers.value || "",
+          suspension: toModList(uploadedData.suspension)[0] && toModList(uploadedData.suspension)[0].value || "",
+          tires: toModList(uploadedData.tires)[0] && toModList(uploadedData.tires)[0].value || "",
+          bumpers: toModList(uploadedData.bumpers)[0] && toModList(uploadedData.bumpers)[0].value || "",
           miles: "0",
           elevation: "0 ft",
           routes: 0,
@@ -57679,7 +57740,11 @@ ${suffix}`;
           time: Date.now(),
           title: displayName.toUpperCase(),
           subtitle: "Added a new build",
-          stage: uploadedData.suspension.value ? "Suspension: " + uploadedData.suspension.value : uploadedData.bumpers.value ? "Armor: " + uploadedData.bumpers.value : "New Build",
+          stage: (() => {
+            const susp = toModList(uploadedData.suspension)[0] && toModList(uploadedData.suspension)[0].value || "";
+            const bump = toModList(uploadedData.bumpers)[0] && toModList(uploadedData.bumpers)[0].value || "";
+            return susp ? "Suspension: " + susp : bump ? "Armor: " + bump : "New Build";
+          })(),
           likes: 0,
           comments: 0,
           seedComments: [],
