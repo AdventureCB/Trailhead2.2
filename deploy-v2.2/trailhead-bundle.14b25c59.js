@@ -54964,6 +54964,14 @@ ${suffix}`;
         }
         return { kind: "spot", id: decodeURIComponent(spotMatch[1]) };
       }
+      const buildMatch = path.match(/^\/builds\/(.+?)\/?$/);
+      if (buildMatch) {
+        try {
+          window.history.replaceState(null, "", "/");
+        } catch (e) {
+        }
+        return { kind: "build", id: decodeURIComponent(buildMatch[1]) };
+      }
       if (/^\/hq\/?$/.test(path)) {
         try {
           window.history.replaceState(null, "", "/");
@@ -56370,6 +56378,7 @@ ${suffix}`;
     const [screen, setScreen] = (0, import_react4.useState)(() => {
       if (!initialSharedLink) return "feed";
       if (initialSharedLink.kind === "trip" || initialSharedLink.kind === "spot" || initialSharedLink.kind === "hq" || initialSharedLink.kind === "plan") return "routes";
+      if (initialSharedLink.kind === "build") return "builds";
       return "feed";
     });
     const [profileStack, setProfileStack] = (0, import_react4.useState)([]);
@@ -56691,7 +56700,9 @@ ${suffix}`;
     };
     const [showTripPinFullscreen, setShowTripPinFullscreen] = (0, import_react4.useState)(false);
     const [pendingThread, setPendingThread] = (0, import_react4.useState)(null);
-    const [pendingBuildNav, setPendingBuildNav] = (0, import_react4.useState)(null);
+    const [pendingBuildNav, setPendingBuildNav] = (0, import_react4.useState)(
+      initialSharedLink && initialSharedLink.kind === "build" ? { rawId: initialSharedLink.id, name: "" } : null
+    );
     const [pendingTripNav, setPendingTripNav] = (0, import_react4.useState)(
       initialSharedLink && (initialSharedLink.kind === "trip" || initialSharedLink.kind === "plan") ? initialSharedLink.slug : null
     );
