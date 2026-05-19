@@ -52393,20 +52393,26 @@ ${suffix}`;
     ), hasCamper && (() => {
       const suggestedMake = "Lone Peak Overland";
       const suggestedModel = "V2";
+      const suggestedLink = "https://www.lonepeakoverland.com/pages/lone-peak-camper-v2";
       const showMakeSuggest = !camperMakeTouched && !camperMake;
       const showModelSuggest = !camperModelTouched && !camperModel;
+      const prefillLinkIfEmpty = () => {
+        if (!camperLink) setCamperLink(suggestedLink);
+      };
       return /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: `${T.copper}08`, borderRadius: 10, padding: "4px 0 0", marginBottom: 14 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 4 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "CAMPER MAKE"), /* @__PURE__ */ import_react4.default.createElement("input", { value: camperMake, onChange: (e) => {
         setCamperMake(e.target.value);
         setCamperMakeTouched(true);
       }, onFocus: () => setCamperMakeTouched(true), placeholder: suggestedMake, style: inputStyle }), showMakeSuggest && /* @__PURE__ */ import_react4.default.createElement("button", { type: "button", onClick: () => {
         setCamperMake(suggestedMake);
         setCamperMakeTouched(true);
+        prefillLinkIfEmpty();
       }, style: { marginTop: 6, padding: "5px 10px", borderRadius: 6, background: `${T.copper}20`, border: `1px solid ${T.copper}50`, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5, fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600, letterSpacing: 0.5 } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 10 }), ' USE "', suggestedMake.toUpperCase(), '"')), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "CAMPER MODEL"), /* @__PURE__ */ import_react4.default.createElement("input", { value: camperModel, onChange: (e) => {
         setCamperModel(e.target.value);
         setCamperModelTouched(true);
       }, onFocus: () => setCamperModelTouched(true), placeholder: suggestedModel, style: inputStyle }), showModelSuggest && /* @__PURE__ */ import_react4.default.createElement("button", { type: "button", onClick: () => {
         setCamperModel(suggestedModel);
         setCamperModelTouched(true);
+        prefillLinkIfEmpty();
       }, style: { marginTop: 6, padding: "5px 10px", borderRadius: 6, background: `${T.copper}20`, border: `1px solid ${T.copper}50`, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5, fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600, letterSpacing: 0.5 } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 10 }), ' USE "', suggestedModel, '"'))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 12 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 12, color: camperLink ? T.copper : T.tertiary, style: { flexShrink: 0 } }), /* @__PURE__ */ import_react4.default.createElement("input", { value: camperLink, onChange: (e) => setCamperLink(e.target.value), placeholder: "Product link (optional)", style: { ...inputStyle, padding: "7px 10px", fontSize: 11, background: "transparent", border: `1px solid ${camperLink ? T.copper + "40" : T.charcoal}` } }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 12 } }, /* @__PURE__ */ import_react4.default.createElement(ModFieldPhoto, { mod: { photo: camperPhoto }, setMod: (m) => setCamperPhoto(m.photo) }), camperPhoto.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, marginTop: 8 } }, camperPhoto.map((p, pi) => /* @__PURE__ */ import_react4.default.createElement("div", { key: pi, style: { position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement("img", { src: txImg(p.url, 480), alt: "", style: { width: 52, height: 52, borderRadius: 6, objectFit: "cover" } }), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setCamperPhoto(camperPhoto.filter((_, j) => j !== pi)), style: { position: "absolute", top: -4, right: -4, width: 16, height: 16, borderRadius: "50%", background: T.red, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 8, color: T.white })))))));
     })(), /* @__PURE__ */ import_react4.default.createElement(
       "button",
