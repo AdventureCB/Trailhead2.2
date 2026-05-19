@@ -43187,6 +43187,39 @@ ${suffix}`;
     if (a.length === 0) return true;
     return a[0] === b[0] && a[a.length - 1] === b[a.length - 1];
   }
+  function mergeTripRowsPreservingHeavy(fresh, prev) {
+    const prevById = {};
+    (prev || []).forEach((t) => {
+      if (t && t.id) prevById[t.id] = t;
+    });
+    const merged = (fresh || []).map((r) => {
+      const old = prevById[r.id];
+      if (!old) return r;
+      const out = { ...r };
+      if (old.route_data && !r.route_data) out.route_data = old.route_data;
+      return out;
+    });
+    const freshIds = new Set(merged.map((t) => t.id));
+    const extras = (prev || []).filter((t) => t && t.id && !freshIds.has(t.id));
+    return [...merged, ...extras];
+  }
+  function mergeSpotRowsPreservingHeavy(fresh, prev) {
+    const prevById = {};
+    (prev || []).forEach((s) => {
+      if (s && s.id) prevById[s.id] = s;
+    });
+    const merged = (fresh || []).map((r) => {
+      const old = prevById[r.id];
+      if (!old) return r;
+      const out = { ...r };
+      if (old.photos && !r.photos) out.photos = old.photos;
+      if (old.elevation_ft != null && r.elevation_ft == null) out.elevation_ft = old.elevation_ft;
+      return out;
+    });
+    const freshIds = new Set(merged.map((s) => s.id));
+    const extras = (prev || []).filter((s) => s && s.id && !freshIds.has(s.id));
+    return [...merged, ...extras];
+  }
   function imgAlt(p) {
     if (!p || typeof p !== "object") return "";
     return typeof p.alt === "string" ? p.alt : "";
@@ -55506,8 +55539,7 @@ ${suffix}`;
       try {
         const { data: tripRows } = await supabase.from("trip_reports").select("id,user_id,name,slug,description,hero_img,start_lat,start_lng,end_lat,end_lng,route_geom,kind,visibility,status,distance_mi,elev_gain_ft,max_elev_ft,duration_min,region,state_code,terrains,tags,difficulty,planned_start,planned_end,party_size,view_count,created_at,updated_at").eq("status", "published").order("created_at", { ascending: false }).limit(100);
         if (Array.isArray(tripRows)) {
-          const ids = new Set(tripRows.map((r) => r.id));
-          setTripReports((prev) => [...tripRows, ...(prev || []).filter((t) => !ids.has(t.id))]);
+          setTripReports((prev) => mergeTripRowsPreservingHeavy(tripRows, prev));
         }
       } catch (e) {
         console.warn("[guest-hydrate] trip_reports fetch failed", e);
@@ -55631,8 +55663,7 @@ ${suffix}`;
           return;
         }
         if (Array.isArray(csRows)) {
-          const ids = new Set(csRows.map((r) => r.id));
-          setUserCampingSpots((prev) => [...csRows, ...(prev || []).filter((s) => !ids.has(s.id))]);
+          setUserCampingSpots((prev) => mergeSpotRowsPreservingHeavy(csRows, prev));
         }
       });
       supabase.from("trip_reports").select("id, user_id, slug, name, description, status, kind, visibility, planned_start, planned_end, party_size, checklist, promoted_to_trip_id, start_lat, start_lng, start_label, end_lat, end_lng, route_geom, hero_img, distance_mi, duration_min, elev_gain_ft, max_elev_ft, difficulty, region, state_code, terrains, tags, view_count, like_count, comment_count, published_at, created_at, updated_at").order("created_at", { ascending: false }).limit(500).then(({ data: trRows, error: trErr }) => {
@@ -55641,8 +55672,7 @@ ${suffix}`;
           return;
         }
         if (!Array.isArray(trRows)) return;
-        const ids = new Set(trRows.map((r) => r.id));
-        setTripReports((prev) => [...trRows, ...(prev || []).filter((t) => !ids.has(t.id))]);
+        setTripReports((prev) => mergeTripRowsPreservingHeavy(trRows, prev));
         const tripIds = trRows.map((t) => t.id).filter((id) => typeof id === "string");
         if (tripIds.length === 0) return;
         supabase.from("trip_report_likes").select("trip_id, user_id").in("trip_id", tripIds).then(({ data: tlRows, error: tlErr }) => {
