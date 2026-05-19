@@ -25,6 +25,7 @@ cat > ${DEPLOY_DIR}/index.html << HTMLEOF
 <!-- PWA + iOS install support so Add-to-Home-Screen works (required for iOS web push). -->
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#BD472A">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Trailhead">
