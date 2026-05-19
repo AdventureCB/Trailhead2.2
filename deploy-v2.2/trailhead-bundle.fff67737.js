@@ -43238,20 +43238,28 @@ ${suffix}`;
     return /* @__PURE__ */ import_react4.default.createElement("div", { className: "th-shimmer", style: { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: spinnerSize, height: spinnerSize, borderRadius: "50%", border: `2px solid ${col}30`, borderTopColor: col, animation: "th-spin 0.8s linear infinite" } }));
   }
   var LoadingImage = (0, import_react4.memo)(function LoadingImageImpl({ src, alt = "", style, imgStyle, accent, onClick, fallbackIcon, width }) {
+    const imgRef = (0, import_react4.useRef)(null);
     const [state, setState] = (0, import_react4.useState)("loading");
-    (0, import_react4.useEffect)(() => {
-      setState("loading");
+    (0, import_react4.useLayoutEffect)(() => {
+      const el = imgRef.current;
+      if (el && el.complete && el.naturalWidth > 0) {
+        setState("loaded");
+      } else {
+        setState("loading");
+      }
     }, [src]);
     const FallbackIcon = fallbackIcon || Mountain;
     const txSrc = width ? txImg(src, width) : src;
     return /* @__PURE__ */ import_react4.default.createElement("div", { onClick, style: { position: "relative", overflow: "hidden", background: T.darkCard, ...style } }, src ? /* @__PURE__ */ import_react4.default.createElement(
       "img",
       {
+        ref: imgRef,
         src: txSrc,
         alt,
+        decoding: "async",
         onLoad: () => setState("loaded"),
         onError: () => setState("error"),
-        style: { width: "100%", height: "100%", objectFit: "cover", display: "block", opacity: state === "loaded" ? 1 : 0, transition: "opacity 0.2s ease-out", ...imgStyle }
+        style: { width: "100%", height: "100%", objectFit: "cover", display: "block", opacity: state === "loaded" ? 1 : 0, transition: state === "loaded" ? "none" : "opacity 0.2s ease-out", ...imgStyle }
       }
     ) : null, state === "loading" && src && /* @__PURE__ */ import_react4.default.createElement(ContentLoader, { accent }), (state === "error" || !src) && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: `linear-gradient(135deg, ${T.charcoal} 0%, ${T.copper}15 100%)` } }, /* @__PURE__ */ import_react4.default.createElement(FallbackIcon, { size: 32, color: T.tertiary, strokeWidth: 0.8, style: { opacity: 0.3 } })));
   }, (prev, next) => (
