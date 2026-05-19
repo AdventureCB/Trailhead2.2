@@ -21557,22 +21557,31 @@
     return Component;
   };
 
-  // node_modules/lucide-react/dist/esm/icons/arrow-up.mjs
+  // node_modules/lucide-react/dist/esm/icons/anchor.mjs
   var __iconNode = [
+    ["path", { d: "M12 6v16", key: "nqf5sj" }],
+    ["path", { d: "m19 13 2-1a9 9 0 0 1-18 0l2 1", key: "y7qv08" }],
+    ["path", { d: "M9 11h6", key: "1fldmi" }],
+    ["circle", { cx: "12", cy: "4", r: "2", key: "muu5ef" }]
+  ];
+  var Anchor = createLucideIcon("anchor", __iconNode);
+
+  // node_modules/lucide-react/dist/esm/icons/arrow-up.mjs
+  var __iconNode2 = [
     ["path", { d: "m5 12 7-7 7 7", key: "hav0vg" }],
     ["path", { d: "M12 19V5", key: "x0mq9r" }]
   ];
-  var ArrowUp = createLucideIcon("arrow-up", __iconNode);
+  var ArrowUp = createLucideIcon("arrow-up", __iconNode2);
 
   // node_modules/lucide-react/dist/esm/icons/at-sign.mjs
-  var __iconNode2 = [
+  var __iconNode3 = [
     ["circle", { cx: "12", cy: "12", r: "4", key: "4exip2" }],
     ["path", { d: "M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8", key: "7n84p3" }]
   ];
-  var AtSign = createLucideIcon("at-sign", __iconNode2);
+  var AtSign = createLucideIcon("at-sign", __iconNode3);
 
   // node_modules/lucide-react/dist/esm/icons/award.mjs
-  var __iconNode3 = [
+  var __iconNode4 = [
     [
       "path",
       {
@@ -21582,10 +21591,10 @@
     ],
     ["circle", { cx: "12", cy: "8", r: "6", key: "1vp47v" }]
   ];
-  var Award = createLucideIcon("award", __iconNode3);
+  var Award = createLucideIcon("award", __iconNode4);
 
   // node_modules/lucide-react/dist/esm/icons/bell.mjs
-  var __iconNode4 = [
+  var __iconNode5 = [
     ["path", { d: "M10.268 21a2 2 0 0 0 3.464 0", key: "vwvbt9" }],
     [
       "path",
@@ -21595,10 +21604,10 @@
       }
     ]
   ];
-  var Bell = createLucideIcon("bell", __iconNode4);
+  var Bell = createLucideIcon("bell", __iconNode5);
 
   // node_modules/lucide-react/dist/esm/icons/binoculars.mjs
-  var __iconNode5 = [
+  var __iconNode6 = [
     ["path", { d: "M10 10h4", key: "tcdvrf" }],
     ["path", { d: "M19 7V4a1 1 0 0 0-1-1h-2a1 1 0 0 0-1 1v3", key: "3apit1" }],
     [
@@ -21618,10 +21627,10 @@
     ],
     ["path", { d: "M9 7V4a1 1 0 0 0-1-1H6a1 1 0 0 0-1 1v3", key: "14fczp" }]
   ];
-  var Binoculars = createLucideIcon("binoculars", __iconNode5);
+  var Binoculars = createLucideIcon("binoculars", __iconNode6);
 
   // node_modules/lucide-react/dist/esm/icons/book-open.mjs
-  var __iconNode6 = [
+  var __iconNode7 = [
     ["path", { d: "M12 7v14", key: "1akyts" }],
     [
       "path",
@@ -21631,10 +21640,10 @@
       }
     ]
   ];
-  var BookOpen = createLucideIcon("book-open", __iconNode6);
+  var BookOpen = createLucideIcon("book-open", __iconNode7);
 
   // node_modules/lucide-react/dist/esm/icons/bookmark.mjs
-  var __iconNode7 = [
+  var __iconNode8 = [
     [
       "path",
       {
@@ -21643,10 +21652,10 @@
       }
     ]
   ];
-  var Bookmark = createLucideIcon("bookmark", __iconNode7);
+  var Bookmark = createLucideIcon("bookmark", __iconNode8);
 
   // node_modules/lucide-react/dist/esm/icons/camera.mjs
-  var __iconNode8 = [
+  var __iconNode9 = [
     [
       "path",
       {
@@ -21656,40 +21665,72 @@
     ],
     ["circle", { cx: "12", cy: "13", r: "3", key: "1vg3eu" }]
   ];
-  var Camera = createLucideIcon("camera", __iconNode8);
+  var Camera = createLucideIcon("camera", __iconNode9);
 
   // node_modules/lucide-react/dist/esm/icons/chevron-down.mjs
-  var __iconNode9 = [["path", { d: "m6 9 6 6 6-6", key: "qrunsl" }]];
-  var ChevronDown = createLucideIcon("chevron-down", __iconNode9);
+  var __iconNode10 = [["path", { d: "m6 9 6 6 6-6", key: "qrunsl" }]];
+  var ChevronDown = createLucideIcon("chevron-down", __iconNode10);
 
   // node_modules/lucide-react/dist/esm/icons/chevron-left.mjs
-  var __iconNode10 = [["path", { d: "m15 18-6-6 6-6", key: "1wnfg3" }]];
-  var ChevronLeft = createLucideIcon("chevron-left", __iconNode10);
+  var __iconNode11 = [["path", { d: "m15 18-6-6 6-6", key: "1wnfg3" }]];
+  var ChevronLeft = createLucideIcon("chevron-left", __iconNode11);
 
   // node_modules/lucide-react/dist/esm/icons/chevron-right.mjs
-  var __iconNode11 = [["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]];
-  var ChevronRight = createLucideIcon("chevron-right", __iconNode11);
+  var __iconNode12 = [["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]];
+  var ChevronRight = createLucideIcon("chevron-right", __iconNode12);
 
   // node_modules/lucide-react/dist/esm/icons/chevron-up.mjs
-  var __iconNode12 = [["path", { d: "m18 15-6-6-6 6", key: "153udz" }]];
-  var ChevronUp = createLucideIcon("chevron-up", __iconNode12);
+  var __iconNode13 = [["path", { d: "m18 15-6-6-6 6", key: "153udz" }]];
+  var ChevronUp = createLucideIcon("chevron-up", __iconNode13);
 
   // node_modules/lucide-react/dist/esm/icons/circle-check-big.mjs
-  var __iconNode13 = [
+  var __iconNode14 = [
     ["path", { d: "M21.801 10A10 10 0 1 1 17 3.335", key: "yps3ct" }],
     ["path", { d: "m9 11 3 3L22 4", key: "1pflzl" }]
   ];
-  var CircleCheckBig = createLucideIcon("circle-check-big", __iconNode13);
+  var CircleCheckBig = createLucideIcon("circle-check-big", __iconNode14);
+
+  // node_modules/lucide-react/dist/esm/icons/circle-dashed.mjs
+  var __iconNode15 = [
+    ["path", { d: "M10.1 2.182a10 10 0 0 1 3.8 0", key: "5ilxe3" }],
+    ["path", { d: "M13.9 21.818a10 10 0 0 1-3.8 0", key: "11zvb9" }],
+    ["path", { d: "M17.609 3.721a10 10 0 0 1 2.69 2.7", key: "1iw5b2" }],
+    ["path", { d: "M2.182 13.9a10 10 0 0 1 0-3.8", key: "c0bmvh" }],
+    ["path", { d: "M20.279 17.609a10 10 0 0 1-2.7 2.69", key: "1ruxm7" }],
+    ["path", { d: "M21.818 10.1a10 10 0 0 1 0 3.8", key: "qkgqxc" }],
+    ["path", { d: "M3.721 6.391a10 10 0 0 1 2.7-2.69", key: "1mcia2" }],
+    ["path", { d: "M6.391 20.279a10 10 0 0 1-2.69-2.7", key: "1fvljs" }]
+  ];
+  var CircleDashed = createLucideIcon("circle-dashed", __iconNode15);
 
   // node_modules/lucide-react/dist/esm/icons/clock.mjs
-  var __iconNode14 = [
+  var __iconNode16 = [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["path", { d: "M12 6v6l4 2", key: "mmk7yg" }]
   ];
-  var Clock = createLucideIcon("clock", __iconNode14);
+  var Clock = createLucideIcon("clock", __iconNode16);
+
+  // node_modules/lucide-react/dist/esm/icons/cog.mjs
+  var __iconNode17 = [
+    ["path", { d: "M11 10.27 7 3.34", key: "16pf9h" }],
+    ["path", { d: "m11 13.73-4 6.93", key: "794ttg" }],
+    ["path", { d: "M12 22v-2", key: "1osdcq" }],
+    ["path", { d: "M12 2v2", key: "tus03m" }],
+    ["path", { d: "M14 12h8", key: "4f43i9" }],
+    ["path", { d: "m17 20.66-1-1.73", key: "eq3orb" }],
+    ["path", { d: "m17 3.34-1 1.73", key: "2wel8s" }],
+    ["path", { d: "M2 12h2", key: "1t8f8n" }],
+    ["path", { d: "m20.66 17-1.73-1", key: "sg0v6f" }],
+    ["path", { d: "m20.66 7-1.73 1", key: "1ow05n" }],
+    ["path", { d: "m3.34 17 1.73-1", key: "nuk764" }],
+    ["path", { d: "m3.34 7 1.73 1", key: "1ulond" }],
+    ["circle", { cx: "12", cy: "12", r: "2", key: "1c9p78" }],
+    ["circle", { cx: "12", cy: "12", r: "8", key: "46899m" }]
+  ];
+  var Cog = createLucideIcon("cog", __iconNode17);
 
   // node_modules/lucide-react/dist/esm/icons/compass.mjs
-  var __iconNode15 = [
+  var __iconNode18 = [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     [
       "path",
@@ -21699,33 +21740,40 @@
       }
     ]
   ];
-  var Compass = createLucideIcon("compass", __iconNode15);
+  var Compass = createLucideIcon("compass", __iconNode18);
+
+  // node_modules/lucide-react/dist/esm/icons/disc.mjs
+  var __iconNode19 = [
+    ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
+    ["circle", { cx: "12", cy: "12", r: "2", key: "1c9p78" }]
+  ];
+  var Disc = createLucideIcon("disc", __iconNode19);
 
   // node_modules/lucide-react/dist/esm/icons/dollar-sign.mjs
-  var __iconNode16 = [
+  var __iconNode20 = [
     ["line", { x1: "12", x2: "12", y1: "2", y2: "22", key: "7eqyqh" }],
     ["path", { d: "M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6", key: "1b0p4s" }]
   ];
-  var DollarSign = createLucideIcon("dollar-sign", __iconNode16);
+  var DollarSign = createLucideIcon("dollar-sign", __iconNode20);
 
   // node_modules/lucide-react/dist/esm/icons/ellipsis.mjs
-  var __iconNode17 = [
+  var __iconNode21 = [
     ["circle", { cx: "12", cy: "12", r: "1", key: "41hilf" }],
     ["circle", { cx: "19", cy: "12", r: "1", key: "1wjl8i" }],
     ["circle", { cx: "5", cy: "12", r: "1", key: "1pcz8c" }]
   ];
-  var Ellipsis = createLucideIcon("ellipsis", __iconNode17);
+  var Ellipsis = createLucideIcon("ellipsis", __iconNode21);
 
   // node_modules/lucide-react/dist/esm/icons/external-link.mjs
-  var __iconNode18 = [
+  var __iconNode22 = [
     ["path", { d: "M15 3h6v6", key: "1q9fwt" }],
     ["path", { d: "M10 14 21 3", key: "gplh6r" }],
     ["path", { d: "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6", key: "a6xqqp" }]
   ];
-  var ExternalLink = createLucideIcon("external-link", __iconNode18);
+  var ExternalLink = createLucideIcon("external-link", __iconNode22);
 
   // node_modules/lucide-react/dist/esm/icons/eye-off.mjs
-  var __iconNode19 = [
+  var __iconNode23 = [
     [
       "path",
       {
@@ -21743,10 +21791,10 @@
     ],
     ["path", { d: "m2 2 20 20", key: "1ooewy" }]
   ];
-  var EyeOff = createLucideIcon("eye-off", __iconNode19);
+  var EyeOff = createLucideIcon("eye-off", __iconNode23);
 
   // node_modules/lucide-react/dist/esm/icons/eye.mjs
-  var __iconNode20 = [
+  var __iconNode24 = [
     [
       "path",
       {
@@ -21756,10 +21804,10 @@
     ],
     ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
   ];
-  var Eye = createLucideIcon("eye", __iconNode20);
+  var Eye = createLucideIcon("eye", __iconNode24);
 
   // node_modules/lucide-react/dist/esm/icons/flame.mjs
-  var __iconNode21 = [
+  var __iconNode25 = [
     [
       "path",
       {
@@ -21768,18 +21816,18 @@
       }
     ]
   ];
-  var Flame = createLucideIcon("flame", __iconNode21);
+  var Flame = createLucideIcon("flame", __iconNode25);
 
   // node_modules/lucide-react/dist/esm/icons/globe.mjs
-  var __iconNode22 = [
+  var __iconNode26 = [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["path", { d: "M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20", key: "13o1zl" }],
     ["path", { d: "M2 12h20", key: "9i4pu4" }]
   ];
-  var Globe = createLucideIcon("globe", __iconNode22);
+  var Globe = createLucideIcon("globe", __iconNode26);
 
   // node_modules/lucide-react/dist/esm/icons/heart.mjs
-  var __iconNode23 = [
+  var __iconNode27 = [
     [
       "path",
       {
@@ -21788,10 +21836,10 @@
       }
     ]
   ];
-  var Heart = createLucideIcon("heart", __iconNode23);
+  var Heart = createLucideIcon("heart", __iconNode27);
 
   // node_modules/lucide-react/dist/esm/icons/house.mjs
-  var __iconNode24 = [
+  var __iconNode28 = [
     ["path", { d: "M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8", key: "5wwlr5" }],
     [
       "path",
@@ -21801,18 +21849,18 @@
       }
     ]
   ];
-  var House = createLucideIcon("house", __iconNode24);
+  var House = createLucideIcon("house", __iconNode28);
 
   // node_modules/lucide-react/dist/esm/icons/image.mjs
-  var __iconNode25 = [
+  var __iconNode29 = [
     ["rect", { width: "18", height: "18", x: "3", y: "3", rx: "2", ry: "2", key: "1m3agn" }],
     ["circle", { cx: "9", cy: "9", r: "2", key: "af1f0g" }],
     ["path", { d: "m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21", key: "1xmnt7" }]
   ];
-  var Image = createLucideIcon("image", __iconNode25);
+  var Image = createLucideIcon("image", __iconNode29);
 
   // node_modules/lucide-react/dist/esm/icons/layers.mjs
-  var __iconNode26 = [
+  var __iconNode30 = [
     [
       "path",
       {
@@ -21835,32 +21883,32 @@
       }
     ]
   ];
-  var Layers = createLucideIcon("layers", __iconNode26);
+  var Layers = createLucideIcon("layers", __iconNode30);
 
   // node_modules/lucide-react/dist/esm/icons/link-2.mjs
-  var __iconNode27 = [
+  var __iconNode31 = [
     ["path", { d: "M9 17H7A5 5 0 0 1 7 7h2", key: "8i5ue5" }],
     ["path", { d: "M15 7h2a5 5 0 1 1 0 10h-2", key: "1b9ql8" }],
     ["line", { x1: "8", x2: "16", y1: "12", y2: "12", key: "1jonct" }]
   ];
-  var Link2 = createLucideIcon("link-2", __iconNode27);
+  var Link2 = createLucideIcon("link-2", __iconNode31);
 
   // node_modules/lucide-react/dist/esm/icons/lock.mjs
-  var __iconNode28 = [
+  var __iconNode32 = [
     ["rect", { width: "18", height: "11", x: "3", y: "11", rx: "2", ry: "2", key: "1w4ew1" }],
     ["path", { d: "M7 11V7a5 5 0 0 1 10 0v4", key: "fwvmzm" }]
   ];
-  var Lock = createLucideIcon("lock", __iconNode28);
+  var Lock = createLucideIcon("lock", __iconNode32);
 
   // node_modules/lucide-react/dist/esm/icons/mail.mjs
-  var __iconNode29 = [
+  var __iconNode33 = [
     ["path", { d: "m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7", key: "132q7q" }],
     ["rect", { x: "2", y: "4", width: "20", height: "16", rx: "2", key: "izxlao" }]
   ];
-  var Mail = createLucideIcon("mail", __iconNode29);
+  var Mail = createLucideIcon("mail", __iconNode33);
 
   // node_modules/lucide-react/dist/esm/icons/map-pin.mjs
-  var __iconNode30 = [
+  var __iconNode34 = [
     [
       "path",
       {
@@ -21870,10 +21918,10 @@
     ],
     ["circle", { cx: "12", cy: "10", r: "3", key: "ilqhr7" }]
   ];
-  var MapPin = createLucideIcon("map-pin", __iconNode30);
+  var MapPin = createLucideIcon("map-pin", __iconNode34);
 
   // node_modules/lucide-react/dist/esm/icons/map.mjs
-  var __iconNode31 = [
+  var __iconNode35 = [
     [
       "path",
       {
@@ -21884,19 +21932,19 @@
     ["path", { d: "M15 5.764v15", key: "1pn4in" }],
     ["path", { d: "M9 3.236v15", key: "1uimfh" }]
   ];
-  var Map2 = createLucideIcon("map", __iconNode31);
+  var Map2 = createLucideIcon("map", __iconNode35);
 
   // node_modules/lucide-react/dist/esm/icons/maximize-2.mjs
-  var __iconNode32 = [
+  var __iconNode36 = [
     ["path", { d: "M15 3h6v6", key: "1q9fwt" }],
     ["path", { d: "m21 3-7 7", key: "1l2asr" }],
     ["path", { d: "m3 21 7-7", key: "tjx5ai" }],
     ["path", { d: "M9 21H3v-6", key: "wtvkvv" }]
   ];
-  var Maximize2 = createLucideIcon("maximize-2", __iconNode32);
+  var Maximize2 = createLucideIcon("maximize-2", __iconNode36);
 
   // node_modules/lucide-react/dist/esm/icons/message-circle.mjs
-  var __iconNode33 = [
+  var __iconNode37 = [
     [
       "path",
       {
@@ -21905,29 +21953,37 @@
       }
     ]
   ];
-  var MessageCircle = createLucideIcon("message-circle", __iconNode33);
+  var MessageCircle = createLucideIcon("message-circle", __iconNode37);
 
   // node_modules/lucide-react/dist/esm/icons/minimize-2.mjs
-  var __iconNode34 = [
+  var __iconNode38 = [
     ["path", { d: "m14 10 7-7", key: "oa77jy" }],
     ["path", { d: "M20 10h-6V4", key: "mjg0md" }],
     ["path", { d: "m3 21 7-7", key: "tjx5ai" }],
     ["path", { d: "M4 14h6v6", key: "rmj7iw" }]
   ];
-  var Minimize2 = createLucideIcon("minimize-2", __iconNode34);
+  var Minimize2 = createLucideIcon("minimize-2", __iconNode38);
 
   // node_modules/lucide-react/dist/esm/icons/mountain.mjs
-  var __iconNode35 = [["path", { d: "m8 3 4 8 5-5 5 15H2L8 3z", key: "otkl63" }]];
-  var Mountain = createLucideIcon("mountain", __iconNode35);
+  var __iconNode39 = [["path", { d: "m8 3 4 8 5-5 5 15H2L8 3z", key: "otkl63" }]];
+  var Mountain = createLucideIcon("mountain", __iconNode39);
+
+  // node_modules/lucide-react/dist/esm/icons/move-vertical.mjs
+  var __iconNode40 = [
+    ["path", { d: "M12 2v20", key: "t6zp3m" }],
+    ["path", { d: "m8 18 4 4 4-4", key: "bh5tu3" }],
+    ["path", { d: "m8 6 4-4 4 4", key: "ybng9g" }]
+  ];
+  var MoveVertical = createLucideIcon("move-vertical", __iconNode40);
 
   // node_modules/lucide-react/dist/esm/icons/navigation.mjs
-  var __iconNode36 = [
+  var __iconNode41 = [
     ["polygon", { points: "3 11 22 2 13 21 11 13 3 11", key: "1ltx0t" }]
   ];
-  var Navigation = createLucideIcon("navigation", __iconNode36);
+  var Navigation = createLucideIcon("navigation", __iconNode41);
 
   // node_modules/lucide-react/dist/esm/icons/pen-line.mjs
-  var __iconNode37 = [
+  var __iconNode42 = [
     ["path", { d: "M13 21h8", key: "1jsn5i" }],
     [
       "path",
@@ -21937,10 +21993,10 @@
       }
     ]
   ];
-  var PenLine = createLucideIcon("pen-line", __iconNode37);
+  var PenLine = createLucideIcon("pen-line", __iconNode42);
 
   // node_modules/lucide-react/dist/esm/icons/play.mjs
-  var __iconNode38 = [
+  var __iconNode43 = [
     [
       "path",
       {
@@ -21949,42 +22005,42 @@
       }
     ]
   ];
-  var Play = createLucideIcon("play", __iconNode38);
+  var Play = createLucideIcon("play", __iconNode43);
 
   // node_modules/lucide-react/dist/esm/icons/plus.mjs
-  var __iconNode39 = [
+  var __iconNode44 = [
     ["path", { d: "M5 12h14", key: "1ays0h" }],
     ["path", { d: "M12 5v14", key: "s699le" }]
   ];
-  var Plus = createLucideIcon("plus", __iconNode39);
+  var Plus = createLucideIcon("plus", __iconNode44);
 
   // node_modules/lucide-react/dist/esm/icons/radio.mjs
-  var __iconNode40 = [
+  var __iconNode45 = [
     ["path", { d: "M16.247 7.761a6 6 0 0 1 0 8.478", key: "1fwjs5" }],
     ["path", { d: "M19.075 4.933a10 10 0 0 1 0 14.134", key: "ehdyv1" }],
     ["path", { d: "M4.925 19.067a10 10 0 0 1 0-14.134", key: "1q22gi" }],
     ["path", { d: "M7.753 16.239a6 6 0 0 1 0-8.478", key: "r2q7qm" }],
     ["circle", { cx: "12", cy: "12", r: "2", key: "1c9p78" }]
   ];
-  var Radio = createLucideIcon("radio", __iconNode40);
+  var Radio = createLucideIcon("radio", __iconNode45);
 
   // node_modules/lucide-react/dist/esm/icons/route.mjs
-  var __iconNode41 = [
+  var __iconNode46 = [
     ["circle", { cx: "6", cy: "19", r: "3", key: "1kj8tv" }],
     ["path", { d: "M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15", key: "1d8sl" }],
     ["circle", { cx: "18", cy: "5", r: "3", key: "gq8acd" }]
   ];
-  var Route = createLucideIcon("route", __iconNode41);
+  var Route = createLucideIcon("route", __iconNode46);
 
   // node_modules/lucide-react/dist/esm/icons/search.mjs
-  var __iconNode42 = [
+  var __iconNode47 = [
     ["path", { d: "m21 21-4.34-4.34", key: "14j7rj" }],
     ["circle", { cx: "11", cy: "11", r: "8", key: "4ej97u" }]
   ];
-  var Search = createLucideIcon("search", __iconNode42);
+  var Search = createLucideIcon("search", __iconNode47);
 
   // node_modules/lucide-react/dist/esm/icons/send.mjs
-  var __iconNode43 = [
+  var __iconNode48 = [
     [
       "path",
       {
@@ -21994,10 +22050,10 @@
     ],
     ["path", { d: "m21.854 2.147-10.94 10.939", key: "12cjpa" }]
   ];
-  var Send = createLucideIcon("send", __iconNode43);
+  var Send = createLucideIcon("send", __iconNode48);
 
   // node_modules/lucide-react/dist/esm/icons/settings.mjs
-  var __iconNode44 = [
+  var __iconNode49 = [
     [
       "path",
       {
@@ -22007,20 +22063,33 @@
     ],
     ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
   ];
-  var Settings = createLucideIcon("settings", __iconNode44);
+  var Settings = createLucideIcon("settings", __iconNode49);
 
   // node_modules/lucide-react/dist/esm/icons/share-2.mjs
-  var __iconNode45 = [
+  var __iconNode50 = [
     ["circle", { cx: "18", cy: "5", r: "3", key: "gq8acd" }],
     ["circle", { cx: "6", cy: "12", r: "3", key: "w7nqdw" }],
     ["circle", { cx: "18", cy: "19", r: "3", key: "1xt0gg" }],
     ["line", { x1: "8.59", x2: "15.42", y1: "13.51", y2: "17.49", key: "47mynk" }],
     ["line", { x1: "15.41", x2: "8.59", y1: "6.51", y2: "10.49", key: "1n3mei" }]
   ];
-  var Share2 = createLucideIcon("share-2", __iconNode45);
+  var Share2 = createLucideIcon("share-2", __iconNode50);
+
+  // node_modules/lucide-react/dist/esm/icons/shield-check.mjs
+  var __iconNode51 = [
+    [
+      "path",
+      {
+        d: "M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z",
+        key: "oel41y"
+      }
+    ],
+    ["path", { d: "m9 12 2 2 4-4", key: "dzmm74" }]
+  ];
+  var ShieldCheck = createLucideIcon("shield-check", __iconNode51);
 
   // node_modules/lucide-react/dist/esm/icons/shield.mjs
-  var __iconNode46 = [
+  var __iconNode52 = [
     [
       "path",
       {
@@ -22029,25 +22098,25 @@
       }
     ]
   ];
-  var Shield = createLucideIcon("shield", __iconNode46);
+  var Shield = createLucideIcon("shield", __iconNode52);
 
   // node_modules/lucide-react/dist/esm/icons/smartphone.mjs
-  var __iconNode47 = [
+  var __iconNode53 = [
     ["rect", { width: "14", height: "20", x: "5", y: "2", rx: "2", ry: "2", key: "1yt0o3" }],
     ["path", { d: "M12 18h.01", key: "mhygvu" }]
   ];
-  var Smartphone = createLucideIcon("smartphone", __iconNode47);
+  var Smartphone = createLucideIcon("smartphone", __iconNode53);
 
   // node_modules/lucide-react/dist/esm/icons/square-plus.mjs
-  var __iconNode48 = [
+  var __iconNode54 = [
     ["rect", { width: "18", height: "18", x: "3", y: "3", rx: "2", key: "afitv7" }],
     ["path", { d: "M8 12h8", key: "1wcyev" }],
     ["path", { d: "M12 8v8", key: "napkw2" }]
   ];
-  var SquarePlus = createLucideIcon("square-plus", __iconNode48);
+  var SquarePlus = createLucideIcon("square-plus", __iconNode54);
 
   // node_modules/lucide-react/dist/esm/icons/star.mjs
-  var __iconNode49 = [
+  var __iconNode55 = [
     [
       "path",
       {
@@ -22056,44 +22125,44 @@
       }
     ]
   ];
-  var Star = createLucideIcon("star", __iconNode49);
+  var Star = createLucideIcon("star", __iconNode55);
 
   // node_modules/lucide-react/dist/esm/icons/target.mjs
-  var __iconNode50 = [
+  var __iconNode56 = [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["circle", { cx: "12", cy: "12", r: "6", key: "1vlfrh" }],
     ["circle", { cx: "12", cy: "12", r: "2", key: "1c9p78" }]
   ];
-  var Target = createLucideIcon("target", __iconNode50);
+  var Target = createLucideIcon("target", __iconNode56);
 
   // node_modules/lucide-react/dist/esm/icons/tent.mjs
-  var __iconNode51 = [
+  var __iconNode57 = [
     ["path", { d: "M3.5 21 14 3", key: "1szst5" }],
     ["path", { d: "M20.5 21 10 3", key: "1310c3" }],
     ["path", { d: "M15.5 21 12 15l-3.5 6", key: "1ddtfw" }],
     ["path", { d: "M2 21h20", key: "1nyx9w" }]
   ];
-  var Tent = createLucideIcon("tent", __iconNode51);
+  var Tent = createLucideIcon("tent", __iconNode57);
 
   // node_modules/lucide-react/dist/esm/icons/trash-2.mjs
-  var __iconNode52 = [
+  var __iconNode58 = [
     ["path", { d: "M10 11v6", key: "nco0om" }],
     ["path", { d: "M14 11v6", key: "outv1u" }],
     ["path", { d: "M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6", key: "miytrc" }],
     ["path", { d: "M3 6h18", key: "d0wm0j" }],
     ["path", { d: "M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2", key: "e791ji" }]
   ];
-  var Trash2 = createLucideIcon("trash-2", __iconNode52);
+  var Trash2 = createLucideIcon("trash-2", __iconNode58);
 
   // node_modules/lucide-react/dist/esm/icons/trending-up.mjs
-  var __iconNode53 = [
+  var __iconNode59 = [
     ["path", { d: "M16 7h6v6", key: "box55l" }],
     ["path", { d: "m22 7-8.5 8.5-5-5L2 17", key: "1t1m79" }]
   ];
-  var TrendingUp = createLucideIcon("trending-up", __iconNode53);
+  var TrendingUp = createLucideIcon("trending-up", __iconNode59);
 
   // node_modules/lucide-react/dist/esm/icons/triangle-alert.mjs
-  var __iconNode54 = [
+  var __iconNode60 = [
     [
       "path",
       {
@@ -22104,10 +22173,10 @@
     ["path", { d: "M12 9v4", key: "juzpu7" }],
     ["path", { d: "M12 17h.01", key: "p32p05" }]
   ];
-  var TriangleAlert = createLucideIcon("triangle-alert", __iconNode54);
+  var TriangleAlert = createLucideIcon("triangle-alert", __iconNode60);
 
   // node_modules/lucide-react/dist/esm/icons/trophy.mjs
-  var __iconNode55 = [
+  var __iconNode61 = [
     ["path", { d: "M10 14.66v1.626a2 2 0 0 1-.976 1.696A5 5 0 0 0 7 21.978", key: "1n3hpd" }],
     ["path", { d: "M14 14.66v1.626a2 2 0 0 0 .976 1.696A5 5 0 0 1 17 21.978", key: "rfe1zi" }],
     ["path", { d: "M18 9h1.5a1 1 0 0 0 0-5H18", key: "7xy6bh" }],
@@ -22115,36 +22184,36 @@
     ["path", { d: "M6 9a6 6 0 0 0 12 0V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1z", key: "1mhfuq" }],
     ["path", { d: "M6 9H4.5a1 1 0 0 1 0-5H6", key: "tex48p" }]
   ];
-  var Trophy = createLucideIcon("trophy", __iconNode55);
+  var Trophy = createLucideIcon("trophy", __iconNode61);
 
   // node_modules/lucide-react/dist/esm/icons/user-check.mjs
-  var __iconNode56 = [
+  var __iconNode62 = [
     ["path", { d: "m16 11 2 2 4-4", key: "9rsbq5" }],
     ["path", { d: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2", key: "1yyitq" }],
     ["circle", { cx: "9", cy: "7", r: "4", key: "nufk8" }]
   ];
-  var UserCheck = createLucideIcon("user-check", __iconNode56);
+  var UserCheck = createLucideIcon("user-check", __iconNode62);
 
   // node_modules/lucide-react/dist/esm/icons/user-plus.mjs
-  var __iconNode57 = [
+  var __iconNode63 = [
     ["path", { d: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2", key: "1yyitq" }],
     ["circle", { cx: "9", cy: "7", r: "4", key: "nufk8" }],
     ["line", { x1: "19", x2: "19", y1: "8", y2: "14", key: "1bvyxn" }],
     ["line", { x1: "22", x2: "16", y1: "11", y2: "11", key: "1shjgl" }]
   ];
-  var UserPlus = createLucideIcon("user-plus", __iconNode57);
+  var UserPlus = createLucideIcon("user-plus", __iconNode63);
 
   // node_modules/lucide-react/dist/esm/icons/users.mjs
-  var __iconNode58 = [
+  var __iconNode64 = [
     ["path", { d: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2", key: "1yyitq" }],
     ["path", { d: "M16 3.128a4 4 0 0 1 0 7.744", key: "16gr8j" }],
     ["path", { d: "M22 21v-2a4 4 0 0 0-3-3.87", key: "kshegd" }],
     ["circle", { cx: "9", cy: "7", r: "4", key: "nufk8" }]
   ];
-  var Users = createLucideIcon("users", __iconNode58);
+  var Users = createLucideIcon("users", __iconNode64);
 
   // node_modules/lucide-react/dist/esm/icons/video.mjs
-  var __iconNode59 = [
+  var __iconNode65 = [
     [
       "path",
       {
@@ -22154,10 +22223,10 @@
     ],
     ["rect", { x: "2", y: "6", width: "14", height: "12", rx: "2", key: "158x01" }]
   ];
-  var Video = createLucideIcon("video", __iconNode59);
+  var Video = createLucideIcon("video", __iconNode65);
 
   // node_modules/lucide-react/dist/esm/icons/wrench.mjs
-  var __iconNode60 = [
+  var __iconNode66 = [
     [
       "path",
       {
@@ -22166,17 +22235,17 @@
       }
     ]
   ];
-  var Wrench = createLucideIcon("wrench", __iconNode60);
+  var Wrench = createLucideIcon("wrench", __iconNode66);
 
   // node_modules/lucide-react/dist/esm/icons/x.mjs
-  var __iconNode61 = [
+  var __iconNode67 = [
     ["path", { d: "M18 6 6 18", key: "1bl5f8" }],
     ["path", { d: "m6 6 12 12", key: "d8bk6v" }]
   ];
-  var X = createLucideIcon("x", __iconNode61);
+  var X = createLucideIcon("x", __iconNode67);
 
   // node_modules/lucide-react/dist/esm/icons/zap.mjs
-  var __iconNode62 = [
+  var __iconNode68 = [
     [
       "path",
       {
@@ -22185,7 +22254,7 @@
       }
     ]
   ];
-  var Zap = createLucideIcon("zap", __iconNode62);
+  var Zap = createLucideIcon("zap", __iconNode68);
 
   // node_modules/tslib/tslib.es6.mjs
   function __rest(s, e) {
@@ -43118,15 +43187,15 @@ ${suffix}`;
     document.head.appendChild(mbStyle);
   }
   var BUILD_MOD_CATEGORIES = [
-    { key: "suspension", label: "Suspension", icon: Wrench },
-    { key: "tires", label: "Tires", icon: Wrench },
-    { key: "wheels", label: "Wheels", icon: Wrench },
-    { key: "transmission", label: "Transmission / Gearing", icon: Wrench },
+    { key: "suspension", label: "Suspension", icon: MoveVertical },
+    { key: "tires", label: "Tires", icon: CircleDashed },
+    { key: "wheels", label: "Wheels", icon: Disc },
+    { key: "transmission", label: "Transmission / Gearing", icon: Cog },
     { key: "bumpers", label: "Bumpers", icon: Shield },
-    { key: "armor", label: "Armor", icon: Shield },
+    { key: "armor", label: "Armor", icon: ShieldCheck },
     { key: "lighting", label: "Lighting", icon: Zap },
-    { key: "rack", label: "Rack / Storage", icon: Bookmark },
-    { key: "winch", label: "Winch", icon: Target },
+    { key: "rack", label: "Rack / Storage", icon: Layers },
+    { key: "winch", label: "Winch", icon: Anchor },
     { key: "otherMods", label: "Other Mods", icon: Plus }
   ];
   var BUILD_MOD_KEYS = BUILD_MOD_CATEGORIES.map((c) => c.key);
@@ -44995,7 +45064,7 @@ ${suffix}`;
     if (!count) return null;
     return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: -4, right: -4, minWidth: 16, height: 16, borderRadius: 8, background: color || T.red, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px", border: `2px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, fontWeight: 700, color: T.white, lineHeight: 1 } }, count > 99 ? "99+" : count));
   }
-  function UnifiedNotifPanel({ onClose, onViewUser, onGoToPost, notifs, onDismissNotif, onClearNotifs, recoveryAlerts, onDismissAlert, onClearAlerts, onGoToRecovery, onOpenMap, onOpenDM, initialTab }) {
+  function UnifiedNotifPanel({ onClose, onViewUser, onGoToPost, onGoToBuild, notifs, onDismissNotif, onClearNotifs, recoveryAlerts, onDismissAlert, onClearAlerts, onGoToRecovery, onOpenMap, onOpenDM, initialTab }) {
     const [tab, setTab] = (0, import_react4.useState)(initialTab || "general");
     const urgencyColor = (u) => u === "HIGH" ? T.red : T.copper;
     const tabBtn = (key, label, count, color) => /* @__PURE__ */ import_react4.default.createElement(
@@ -45026,7 +45095,9 @@ ${suffix}`;
     return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: "100%", right: 0, width: "calc(100vw - 32px)", maxWidth: 398, background: T.darkCard, borderRadius: "0 0 12px 12px", boxShadow: `0 12px 40px rgba(0,0,0,0.6)`, zIndex: 200, maxHeight: "70vh", display: "flex", flexDirection: "column", overflow: "hidden", border: `1px solid ${T.charcoal}`, borderTop: "none" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: `1px solid ${T.charcoal}`, flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, letterSpacing: 1 } }, "NOTIFICATIONS"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: onClose, style: { background: "none", border: "none", cursor: "pointer", padding: 2, display: "flex" } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 16, color: T.tertiary }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", borderBottom: `1px solid ${T.charcoal}`, flexShrink: 0 } }, tabBtn("general", "GENERAL", notifs.length, T.copper), tabBtn("recovery", "RECOVERY", recoveryAlerts.length, T.red)), /* @__PURE__ */ import_react4.default.createElement("div", { className: "th-scroll", style: { flex: 1, overflowY: "auto", minHeight: 0 } }, tab === "general" && (notifs.length === 0 ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "40px 16px", textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Bell, { size: 28, color: T.tertiary, strokeWidth: 1, style: { opacity: 0.3, marginBottom: 8 } }), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: sans, fontSize: 13, color: T.tertiary, margin: 0 } }, "No new notifications")) : notifs.map((n) => {
       const Icon2 = n.icon;
       return /* @__PURE__ */ import_react4.default.createElement("div", { key: n.id, onClick: () => {
-        if (n.postId) {
+        if (n.buildId) {
+          onGoToBuild && onGoToBuild(n.buildId, n.target);
+        } else if (n.postId) {
           onGoToPost && onGoToPost(n.postId);
         }
       }, style: { display: "flex", gap: 10, padding: "12px 16px", borderBottom: `1px solid ${T.charcoal}22`, cursor: "pointer", transition: "background 0.15s", position: "relative" }, onMouseEnter: (e) => e.currentTarget.style.background = `${T.charcoal}`, onMouseLeave: (e) => e.currentTarget.style.background = "transparent" }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 32, height: 32, borderRadius: "50%", background: `${n.iconColor}18`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2 } }, /* @__PURE__ */ import_react4.default.createElement(Icon2, { size: 14, color: n.iconColor, strokeWidth: 1.8 })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.white, margin: 0, lineHeight: 1.45 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontWeight: 600, cursor: "pointer" }, onClick: (e) => {
@@ -45050,7 +45121,7 @@ ${suffix}`;
       onGoToRecovery && onGoToRecovery();
     }, style: { flex: 2, padding: "12px 16px", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 } }, /* @__PURE__ */ import_react4.default.createElement(TriangleAlert, { size: 12, color: T.red }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.red, fontWeight: 600, letterSpacing: 0.5 } }, "VIEW ALL"), /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 14, color: T.red }))));
   }
-  function TopBar({ onProfile, onBack, showBack, title, onViewUser, onGoToPost, onGoToRecovery, onOpenMap, onSearch, onOpenDM, dmUnread, bellNotifs, onDismissNotif, onClearNotifs, profilePic, notifPrefs, recoveryAlerts, setRecoveryAlerts }) {
+  function TopBar({ onProfile, onBack, showBack, title, onViewUser, onGoToPost, onGoToBuild, onGoToRecovery, onOpenMap, onSearch, onOpenDM, dmUnread, bellNotifs, onDismissNotif, onClearNotifs, profilePic, notifPrefs, recoveryAlerts, setRecoveryAlerts }) {
     const notifTypeMap = { like: "likes", comment: "comments", reply: "replies", follow: "follows", mention: "mentions" };
     const filteredNotifs = bellNotifs.filter((n) => {
       const pref = notifTypeMap[n.type];
@@ -45082,6 +45153,10 @@ ${suffix}`;
         onGoToPost: (postId) => {
           setOpenPanel(null);
           onGoToPost && onGoToPost(postId);
+        },
+        onGoToBuild: (buildId, name) => {
+          setOpenPanel(null);
+          onGoToBuild && onGoToBuild(buildId, name);
         },
         notifs: filteredNotifs,
         onDismissNotif,
@@ -51395,7 +51470,52 @@ ${suffix}`;
       }
     ));
   }
-  function BuildsScreen({ onViewUser, userBuilds, allBuilds: allBuildsProp, onLoadAllBuilds, currentUserId, followingIds, onAddBuild, onUpdateBuild, onPostBuildToFeed, onOpenDM, onOpenShareCompose, onOpenShareIntent, userRoutes, pendingBuildNav, onConsumePendingBuildNav, isGuest, onGuestTap, likedBuildIds, buildLikeCounts, onToggleBuildLike }) {
+  function BuildCommentsSection({ buildId, comments, currentUserId, currentUserName, currentUserHandle, currentUserAvatar, onLoad, onAdd, onDelete, onViewUser, isGuest, onGuestTap }) {
+    const [draft, setDraft] = (0, import_react4.useState)("");
+    const [sending, setSending] = (0, import_react4.useState)(false);
+    (0, import_react4.useEffect)(() => {
+      if (buildId && onLoad) onLoad(buildId);
+    }, [buildId]);
+    const submit = async () => {
+      if (isGuest) {
+        onGuestTap && onGuestTap();
+        return;
+      }
+      const text = draft.trim();
+      if (!text || sending) return;
+      setSending(true);
+      try {
+        await onAdd(buildId, text);
+        setDraft("");
+      } finally {
+        setSending(false);
+      }
+    };
+    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "20px 16px 0" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 12 } }, /* @__PURE__ */ import_react4.default.createElement(MessageCircle, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600 } }, "COMMENTS"), comments.length > 0 && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.5, fontWeight: 700 } }, "\xB7 ", comments.length)), comments.length === 0 ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "12px 0", fontFamily: serif, fontSize: 13, color: T.tertiary } }, "Be the first to comment on this build.") : /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 } }, comments.map((c) => {
+      const isMine = c.userId && currentUserId && c.userId === currentUserId;
+      return /* @__PURE__ */ import_react4.default.createElement("div", { key: c.id, style: { display: "flex", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => onViewUser && onViewUser(c.userId || c.handle), style: { width: 32, height: 32, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0, cursor: "pointer" } }, c.avatarUrl ? /* @__PURE__ */ import_react4.default.createElement("img", { src: txImg(c.avatarUrl, 96), alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700 } }, c.initial)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 2 } }, /* @__PURE__ */ import_react4.default.createElement("span", { onClick: () => onViewUser && onViewUser(c.userId || c.handle), style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, cursor: "pointer" } }, c.user), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, formatPostTime(c.time)), isMine && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => onDelete && onDelete(buildId, c.id), style: { marginLeft: "auto", background: "transparent", border: "none", color: T.tertiary, cursor: "pointer", padding: 2 }, "aria-label": "Delete" }, /* @__PURE__ */ import_react4.default.createElement(Trash2, { size: 12 }))), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.white, margin: 0, lineHeight: 1.5, wordBreak: "break-word" } }, c.text)));
+    })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 10, alignItems: "flex-start", paddingTop: 12, borderTop: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 32, height: 32, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 } }, currentUserAvatar ? /* @__PURE__ */ import_react4.default.createElement("img", { src: txImg(currentUserAvatar, 96), alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700 } }, (currentUserName || "U").charAt(0).toUpperCase())), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, display: "flex", gap: 8, alignItems: "center" } }, /* @__PURE__ */ import_react4.default.createElement(
+      "input",
+      {
+        value: draft,
+        onChange: (e) => setDraft(e.target.value),
+        onKeyDown: (e) => {
+          if (e.key === "Enter") submit();
+        },
+        placeholder: isGuest ? "Sign in to comment\u2026" : "Add a comment\u2026",
+        style: { flex: 1, padding: "10px 12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none" }
+      }
+    ), /* @__PURE__ */ import_react4.default.createElement(
+      "button",
+      {
+        onClick: submit,
+        disabled: sending || !draft.trim(),
+        style: { padding: "10px 14px", borderRadius: 8, background: draft.trim() ? T.red : T.charcoal, border: "none", color: T.white, cursor: draft.trim() && !sending ? "pointer" : "default", fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 1, opacity: sending ? 0.7 : 1 }
+      },
+      "POST"
+    ))));
+  }
+  function BuildsScreen({ onViewUser, userBuilds, allBuilds: allBuildsProp, onLoadAllBuilds, currentUserId, followingIds, onAddBuild, onUpdateBuild, onPostBuildToFeed, onOpenDM, onOpenShareCompose, onOpenShareIntent, userRoutes, pendingBuildNav, onConsumePendingBuildNav, isGuest, onGuestTap, likedBuildIds, buildLikeCounts, onToggleBuildLike, buildComments, onLoadBuildComments, onAddBuildComment, onDeleteBuildComment, currentUserName, currentUserHandle, currentUserAvatar }) {
     (0, import_react4.useEffect)(() => {
       if (typeof onLoadAllBuilds === "function") onLoadAllBuilds();
     }, []);
@@ -51553,7 +51673,7 @@ ${suffix}`;
         },
         /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 16, color: T.white }),
         /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 1.5 } }, "SHARE")
-      )), shareToast && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "fixed", bottom: 90, left: "50%", transform: "translateX(-50%)", background: T.charcoal, border: `1px solid ${T.copper}`, borderRadius: 8, padding: "10px 16px", zIndex: 100, boxShadow: "0 4px 20px rgba(0,0,0,0.5)" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 } }, shareToast))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "18px 16px 0" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 12 } }, "TECHNICAL SPECIFICATIONS"), modRows.length === 0 ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { ...cardStyle, padding: 20, textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Wrench, { size: 28, color: T.tertiary, strokeWidth: 0.8, style: { opacity: 0.4, marginBottom: 8 } }), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: sans, fontSize: 12, color: T.tertiary, margin: 0 } }, "No specs added yet"), detailBuild.isMine && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
+      )), shareToast && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "fixed", bottom: 90, left: "50%", transform: "translateX(-50%)", background: T.charcoal, border: `1px solid ${T.copper}`, borderRadius: 8, padding: "10px 16px", zIndex: 100, boxShadow: "0 4px 20px rgba(0,0,0,0.5)" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 } }, shareToast))), bd && bd.buildStory && bd.buildStory.trim() && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "18px 16px 0" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 12 } }, "BUILD STORY"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { ...cardStyle, padding: 14 } }, /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 14, color: T.white, lineHeight: 1.7, margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" } }, bd.buildStory))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "18px 16px 0" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 12 } }, "TECHNICAL SPECIFICATIONS"), modRows.length === 0 ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { ...cardStyle, padding: 20, textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Wrench, { size: 28, color: T.tertiary, strokeWidth: 0.8, style: { opacity: 0.4, marginBottom: 8 } }), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: sans, fontSize: 12, color: T.tertiary, margin: 0 } }, "No specs added yet"), detailBuild.isMine && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
         const src = (userBuilds || []).find((ub) => ub.id === detailBuild.rawId);
         if (src) setEditingBuild(src);
       }, style: { marginTop: 10, padding: "8px 14px", borderRadius: 8, background: T.copper, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 1 } }, "ADD MODS")) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 10 } }, modRows.map((row) => {
@@ -51571,13 +51691,32 @@ ${suffix}`;
           /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 42, height: 42, borderRadius: 8, background: T.charcoal, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(Icon2, { size: 18, color: T.red })),
           /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, fontWeight: 400, display: "block", marginBottom: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, descriptor || "Installed"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 15, color: T.white, fontWeight: 700, letterSpacing: 1 } }, row.label.toUpperCase())),
           isOpen ? /* @__PURE__ */ import_react4.default.createElement(ChevronDown, { size: 18, color: T.tertiary }) : /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 18, color: T.tertiary })
-        ), isOpen && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 14px 14px", borderTop: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 13, color: T.white, paddingTop: 12, lineHeight: 1.55, wordBreak: "break-word" } }, m.value), hasPhoto && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" } }, m.photo.map((p, pi) => /* @__PURE__ */ import_react4.default.createElement("img", { key: pi, src: p.url, alt: "", onClick: () => openGalleryCarousel(detailBuild, 0), style: { width: 72, height: 72, borderRadius: 6, objectFit: "cover", cursor: "pointer" } }))), m.link && /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginTop: 10 } }, /* @__PURE__ */ import_react4.default.createElement("a", { href: ensureUrl(m.link), target: "_blank", rel: "noopener noreferrer", style: { fontFamily: sans, fontSize: 11, color: T.copper, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 5 } }, /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 11 }), " View Product"))));
+        ), isOpen && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 14px 14px", borderTop: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 13, color: T.white, paddingTop: 12, lineHeight: 1.55, wordBreak: "break-word" } }, m.value), hasPhoto && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" } }, m.photo.map((p, pi) => /* @__PURE__ */ import_react4.default.createElement("img", { key: pi, src: txImg(p.url, 256), alt: "", onClick: () => {
+          setCarouselImages(m.photo.map((x) => x.url));
+          setCarouselIndex(pi);
+        }, style: { width: 72, height: 72, borderRadius: 6, objectFit: "cover", cursor: "pointer" } }))), m.link && /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginTop: 10 } }, /* @__PURE__ */ import_react4.default.createElement("a", { href: ensureUrl(m.link), target: "_blank", rel: "noopener noreferrer", style: { fontFamily: sans, fontSize: 11, color: T.copper, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 5 } }, /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 11 }), " View Product"))));
       }))), detailBuild.hasCamper && /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "18px 16px 0" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 12 } }, "CAMPER SETUP"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { ...cardStyle, padding: 14, display: "flex", alignItems: "flex-start", gap: 12 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 38, height: 38, borderRadius: 8, background: `${T.copper}25`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(House, { size: 17, color: T.copper })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.2, display: "block", marginBottom: 2 } }, "CAMPER"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, letterSpacing: 0.3 } }, detailBuild.camperMake, " ", detailBuild.camperModel), bd && bd.camperPhoto && bd.camperPhoto.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" } }, bd.camperPhoto.map((p, pi) => /* @__PURE__ */ import_react4.default.createElement("img", { key: pi, src: p.url, alt: "", onClick: () => openGalleryCarousel(detailBuild, 0), style: { width: 60, height: 60, borderRadius: 6, objectFit: "cover", cursor: "pointer" } }))), bd && bd.camperLink && /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginTop: 6 } }, /* @__PURE__ */ import_react4.default.createElement("a", { href: ensureUrl(bd.camperLink), target: "_blank", rel: "noopener noreferrer", style: { fontFamily: sans, fontSize: 10, color: T.copper, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 } }, /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 10 }), " View Product"))))), (() => {
         if (!bd) return null;
         const galleryImgs = collectBuildImagesGallery(bd);
         if (galleryImgs.length <= 1) return null;
         return /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "18px 16px 0" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 12 } }, /* @__PURE__ */ import_react4.default.createElement(Image, { size: 12, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600 } }, "GALLERY"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.5, fontWeight: 700 } }, "\xB7 ", galleryImgs.length, " PHOTOS")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 } }, galleryImgs.slice(1).map((url, pi) => /* @__PURE__ */ import_react4.default.createElement("img", { key: pi, src: url, alt: "", onClick: () => openGalleryCarousel(detailBuild, pi + 1), style: { width: 100, height: 100, borderRadius: 8, objectFit: "cover", flexShrink: 0, cursor: "pointer" } }))));
-      })(), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "20px 16px 0" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { ...cardStyle, padding: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.5, display: "block", marginBottom: 4 } }, "TOTAL TRAIL MILES"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 28, color: T.white, fontWeight: 800, letterSpacing: 0.5 } }, detailBuild.miles), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 24, height: 2, background: T.red, marginTop: 6 } })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { ...cardStyle, padding: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.5, display: "block", marginBottom: 4 } }, "ELEVATION GAIN"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 28, color: T.white, fontWeight: 800, letterSpacing: 0.5 } }, detailBuild.elevation), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 24, height: 2, background: T.copper, marginTop: 6 } }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { ...cardStyle, padding: 16, marginTop: 10 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.5, display: "block", marginBottom: 4 } }, "ROUTES COMPLETED"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 28, color: T.white, fontWeight: 800, letterSpacing: 0.5 } }, detailBuild.routes), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 24, height: 2, background: T.green, marginTop: 6 } }))));
+      })(), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "20px 16px 0" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { ...cardStyle, padding: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.5, display: "block", marginBottom: 4 } }, "TOTAL TRAIL MILES"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 28, color: T.white, fontWeight: 800, letterSpacing: 0.5 } }, detailBuild.miles), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 24, height: 2, background: T.red, marginTop: 6 } })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { ...cardStyle, padding: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.5, display: "block", marginBottom: 4 } }, "ELEVATION GAIN"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 28, color: T.white, fontWeight: 800, letterSpacing: 0.5 } }, detailBuild.elevation), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 24, height: 2, background: T.copper, marginTop: 6 } }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { ...cardStyle, padding: 16, marginTop: 10 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.5, display: "block", marginBottom: 4 } }, "ROUTES COMPLETED"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 28, color: T.white, fontWeight: 800, letterSpacing: 0.5 } }, detailBuild.routes), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 24, height: 2, background: T.green, marginTop: 6 } }))), /* @__PURE__ */ import_react4.default.createElement(
+        BuildCommentsSection,
+        {
+          buildId: detailBuild.rawId,
+          comments: buildComments && detailBuild.rawId && buildComments[detailBuild.rawId] || [],
+          currentUserId,
+          currentUserName,
+          currentUserHandle,
+          currentUserAvatar,
+          onLoad: onLoadBuildComments,
+          onAdd: onAddBuildComment,
+          onDelete: onDeleteBuildComment,
+          onViewUser,
+          isGuest,
+          onGuestTap
+        }
+      ));
     }
     return /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 0 16px" } }, carouselImages && /* @__PURE__ */ import_react4.default.createElement(ImageCarousel, { images: carouselImages, startIndex: carouselIndex, onClose: () => setCarouselImages(null) }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "16px 16px 0" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 } }, /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("h2", { style: { fontFamily: sans, fontSize: 22, color: T.white, margin: "0 0 4px", fontWeight: 700 } }, "Build Gallery"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "0 0 16px" } }, "Explore rigs from the Trailhead community")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
       if (isGuest) {
@@ -52246,6 +52385,7 @@ ${suffix}`;
       return list.includes(d.model) ? "select" : "other";
     });
     const [trim, setTrim] = (0, import_react4.useState)(d.trim || "");
+    const [buildStory, setBuildStory] = (0, import_react4.useState)(d.buildStory || "");
     const [showPreview, setShowPreview] = (0, import_react4.useState)(false);
     const [shareToFeed, setShareToFeed] = (0, import_react4.useState)(initialData ? false : true);
     const [mainPhotos, setMainPhotos] = (0, import_react4.useState)(d.mainPhotos || []);
@@ -52297,6 +52437,7 @@ ${suffix}`;
         make,
         model,
         trim,
+        buildStory,
         mainPhotos,
         suspension: cleanList(suspension),
         tires: cleanList(tires),
@@ -52382,7 +52523,15 @@ ${suffix}`;
         next.unshift(item);
         return next;
       }), style: { position: "absolute", bottom: 4, left: 4, padding: "3px 6px", borderRadius: 4, background: `${T.copper}CC`, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 8, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, "SET HERO"));
-    })), /* @__PURE__ */ import_react4.default.createElement(PhotoUploader, { photos: [], onChange: (p) => setMainPhotos((prev) => [...prev, ...p]), maxPhotos: 20 }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 6, display: "block" } }, "Add as many photos as you want \u2014 they appear in your build gallery")), sectionTitle("SUSPENSION & DRIVETRAIN", /* @__PURE__ */ import_react4.default.createElement(ChevronUp, { size: 16, color: T.copper })), modField("SUSPENSION", suspension, setSuspension, 'e.g. Icon Stage 3, 2.5" lift'), modField("TIRES", tires, setTires, "e.g. BFGoodrich KO2 35x12.5R17"), modField("WHEELS", wheels, setWheels, "e.g. Method 305 NV 17x8.5"), modField("TRANSMISSION / GEARING", transmission, setTransmission, "e.g. 4.88 regear, Nitro front & rear"), sectionTitle("ARMOR & PROTECTION", /* @__PURE__ */ import_react4.default.createElement(Shield, { size: 16, color: T.copper })), modField("BUMPERS", bumpers, setBumpers, "e.g. CBI front & rear bumpers"), modField("SKID PLATES / ARMOR", armor, setArmor, "e.g. RCI full skid package"), sectionTitle("ACCESSORIES", /* @__PURE__ */ import_react4.default.createElement(Star, { size: 16, color: T.copper })), modField("LIGHTING", lighting, setLighting, "e.g. Baja Designs squadron, ditch lights"), modField("ROOF RACK / BED RACK", rack, setRack, "e.g. Uptop Overland Alpha bed rack"), modField("RECOVERY / WINCH", winch, setWinch, "e.g. WARN Zeon 10-S"), modField("OTHER MODS", otherMods, setOtherMods, "Snorkel, dual battery, fridge slide, etc."), sectionTitle("CAMPER", /* @__PURE__ */ import_react4.default.createElement(House, { size: 16, color: T.copper })), /* @__PURE__ */ import_react4.default.createElement(
+    })), /* @__PURE__ */ import_react4.default.createElement(PhotoUploader, { photos: [], onChange: (p) => setMainPhotos((prev) => [...prev, ...p]), maxPhotos: 20 }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 6, display: "block" } }, "Add as many photos as you want \u2014 they appear in your build gallery")), sectionTitle("BUILD STORY", /* @__PURE__ */ import_react4.default.createElement(BookOpen, { size: 16, color: T.copper })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "TELL THE STORY"), /* @__PURE__ */ import_react4.default.createElement(
+      "textarea",
+      {
+        value: buildStory,
+        onChange: (e) => setBuildStory(e.target.value),
+        placeholder: "How did this build come together? Inspiration, milestones, lessons learned, future plans...",
+        style: { ...inputStyle, minHeight: 110, resize: "vertical", lineHeight: 1.6 }
+      }
+    ), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 4, display: "block" } }, "Optional \u2014 appears under the build hero on your build page.")), sectionTitle("SUSPENSION & DRIVETRAIN", /* @__PURE__ */ import_react4.default.createElement(ChevronUp, { size: 16, color: T.copper })), modField("SUSPENSION", suspension, setSuspension, 'e.g. Icon Stage 3, 2.5" lift'), modField("TIRES", tires, setTires, "e.g. BFGoodrich KO2 35x12.5R17"), modField("WHEELS", wheels, setWheels, "e.g. Method 305 NV 17x8.5"), modField("TRANSMISSION / GEARING", transmission, setTransmission, "e.g. 4.88 regear, Nitro front & rear"), sectionTitle("ARMOR & PROTECTION", /* @__PURE__ */ import_react4.default.createElement(Shield, { size: 16, color: T.copper })), modField("BUMPERS", bumpers, setBumpers, "e.g. CBI front & rear bumpers"), modField("SKID PLATES / ARMOR", armor, setArmor, "e.g. RCI full skid package"), sectionTitle("ACCESSORIES", /* @__PURE__ */ import_react4.default.createElement(Star, { size: 16, color: T.copper })), modField("LIGHTING", lighting, setLighting, "e.g. Baja Designs squadron, ditch lights"), modField("ROOF RACK / BED RACK", rack, setRack, "e.g. Uptop Overland Alpha bed rack"), modField("RECOVERY / WINCH", winch, setWinch, "e.g. WARN Zeon 10-S"), modField("OTHER MODS", otherMods, setOtherMods, "Snorkel, dual battery, fridge slide, etc."), sectionTitle("CAMPER", /* @__PURE__ */ import_react4.default.createElement(House, { size: 16, color: T.copper })), /* @__PURE__ */ import_react4.default.createElement(
       "div",
       {
         onClick: () => setHasCamper(!hasCamper),
@@ -54796,6 +54945,7 @@ ${suffix}`;
       text: row.text || "",
       target: row.target || null,
       postId: row.post_id || null,
+      buildId: row.build_id || null,
       time: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
       isRead: row.is_read || false,
       icon: ic.icon,
@@ -55596,6 +55746,29 @@ ${suffix}`;
         if (!row || !row.post_id) return;
         if (row.user_id === uid) return;
         setFeedItems((prev) => prev.map((p) => p.id === row.post_id ? { ...p, likes: Math.max((p.likes || 0) - 1, 0) } : p));
+      }).on("postgres_changes", { event: "INSERT", schema: "public", table: "build_comments" }, async (payload) => {
+        const row = payload.new;
+        if (!row || !row.build_id) return;
+        if (row.user_id === uid) return;
+        let prof = null;
+        try {
+          const { data } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").eq("id", row.user_id).single();
+          prof = data;
+        } catch (e) {
+        }
+        const c = dbRowToComment(row, prof);
+        if (c) {
+          setBuildComments((prev) => {
+            const list = prev[row.build_id] || [];
+            if (list.some((x) => x.id === c.id)) return prev;
+            return { ...prev, [row.build_id]: [...list, c] };
+          });
+        }
+      }).on("postgres_changes", { event: "DELETE", schema: "public", table: "build_comments" }, (payload) => {
+        const row = payload.old;
+        if (!row || !row.build_id) return;
+        if (row.user_id === uid) return;
+        setBuildComments((prev) => ({ ...prev, [row.build_id]: (prev[row.build_id] || []).filter((c) => c.id !== row.id) }));
       }).on("postgres_changes", { event: "INSERT", schema: "public", table: "builds" }, async (payload) => {
         const row = payload.new;
         if (!row || !row.id) return;
@@ -56366,6 +56539,8 @@ ${suffix}`;
     };
     const [likedPostIds, setLikedPostIds] = (0, import_react4.useState)({});
     const [postComments, setPostComments] = (0, import_react4.useState)({});
+    const [buildComments, setBuildComments] = (0, import_react4.useState)({});
+    const buildCommentsLoadedRef = (0, import_react4.useRef)({});
     const [likedCommentIds, setLikedCommentIds] = (0, import_react4.useState)({});
     const [forumUserThreads, setForumUserThreads] = (0, import_react4.useState)({});
     const [forumUserReplies, setForumUserReplies] = (0, import_react4.useState)({});
@@ -58763,6 +58938,79 @@ ${suffix}`;
         setFeedItems((prev) => prev.map((p) => p.id === postId ? { ...p, comments: (p.comments || 0) + 1 } : p));
       }
     };
+    const loadBuildComments = async (buildId) => {
+      if (!buildId || typeof buildId !== "string") return;
+      if (buildCommentsLoadedRef.current[buildId]) return;
+      buildCommentsLoadedRef.current[buildId] = true;
+      try {
+        const { data: rows, error } = await supabase.from("build_comments").select("*").eq("build_id", buildId).order("created_at", { ascending: true });
+        if (error) throw error;
+        const list = rows || [];
+        const authorIds = Array.from(new Set(list.map((r) => r.user_id).filter(Boolean)));
+        let profilesById = {};
+        if (authorIds.length > 0) {
+          const { data: profs } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").in("id", authorIds);
+          (profs || []).forEach((p) => {
+            profilesById[p.id] = p;
+          });
+        }
+        const mapped = list.map((r) => dbRowToComment(r, profilesById[r.user_id])).filter(Boolean);
+        setBuildComments((prev) => ({ ...prev, [buildId]: mapped }));
+      } catch (e) {
+        console.error("[build_comments] load failed", e);
+        delete buildCommentsLoadedRef.current[buildId];
+      }
+    };
+    const addBuildComment = async (buildId, text) => {
+      const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+      if (!uid) return null;
+      if (typeof buildId !== "string" || buildId.length < 20) return null;
+      const trimmed = (text || "").trim();
+      if (!trimmed) return null;
+      try {
+        const { data: inserted, error } = await supabase.from("build_comments").insert({ build_id: buildId, user_id: uid, body: trimmed }).select().single();
+        if (error || !inserted) {
+          console.error("[build_comments] insert error", error);
+          return null;
+        }
+        const clientComment = dbRowToComment(inserted, currentProfile);
+        setBuildComments((prev) => ({ ...prev, [buildId]: [...prev[buildId] || [], clientComment] }));
+        const build = (allBuilds || []).find((b) => b.rawId === buildId) || (userBuilds || []).find((b) => b.id === buildId);
+        const ownerId = build && build.userId;
+        if (ownerId && ownerId !== uid) {
+          const myName = currentProfile && currentProfile.full_name || "Someone";
+          supabase.from("notifications").insert({
+            user_id: ownerId,
+            type: "comment",
+            actor_id: uid,
+            actor_name: myName,
+            text: "commented on your build",
+            target: build.name || "",
+            build_id: buildId
+          }).then(({ error: ne }) => {
+            if (ne) console.error("[notif] build comment insert", ne);
+          });
+        }
+        return clientComment;
+      } catch (e) {
+        console.error("[build_comments] addBuildComment failed", e);
+        return null;
+      }
+    };
+    const deleteBuildComment = async (buildId, commentId) => {
+      const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+      if (!uid) return;
+      if (typeof commentId !== "string" || commentId.length < 20) return;
+      const prevList = buildComments[buildId] || [];
+      setBuildComments((prev) => ({ ...prev, [buildId]: (prev[buildId] || []).filter((c) => c.id !== commentId) }));
+      try {
+        const { error } = await supabase.from("build_comments").delete().eq("id", commentId).eq("user_id", uid);
+        if (error) throw error;
+      } catch (e) {
+        console.error("[build_comments] deleteBuildComment failed", e);
+        setBuildComments((prev) => ({ ...prev, [buildId]: prevList }));
+      }
+    };
     const toggleCommentLike = async (postId, commentId) => {
       const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
       if (!uid) return;
@@ -58964,6 +59212,13 @@ ${suffix}`;
           setScreen("feed");
           setPendingPostNav(postId);
         },
+        onGoToBuild: (buildId, name) => {
+          setProfileStack([]);
+          setShowRecovery(false);
+          setShowCompose(false);
+          setScreen("builds");
+          setPendingBuildNav({ rawId: buildId, name: name || "" });
+        },
         onGoToRecovery: () => {
           setShowRecovery(true);
           setProfileStack([]);
@@ -59047,7 +59302,7 @@ ${suffix}`;
       const ownerName = isReshare ? b.owner || null : null;
       addPost({ id: "feedbuild_" + Date.now(), type: "BUILDS", user: meName, initial: meName.charAt(0).toUpperCase(), time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, subtitle: isReshare ? `Shared @${ownerHandle}'s build` : "Added a new build", vehicle: `${b.year} ${b.make} ${b.model}`, photoUrls: heroImg ? [heroImg] : void 0, image: heroImg, likes: 0, comments: 0, buildData: bd, buildRawId: b.rawId != null ? b.rawId : null, sharedFromOwnerHandle: ownerHandle, sharedFromOwnerName: ownerName, _skipBuildIdCol: isReshare });
       awardPoints(POINTS.feedPost, "Build Shared");
-    }) }), screen === "ranks" && (isGuest ? /* @__PURE__ */ import_react4.default.createElement(GuestGateScreen, { title: "RANKS REQUIRE AN ACCOUNT", subtitle: "Sign in to see the leaderboard and start earning points from your posts, routes and builds.", onSignIn: goToLoginFromGuest }) : /* @__PURE__ */ import_react4.default.createElement(RanksScreen, { myPoints: myTotalPoints, pointsBreakdown })))), screen === "feed" && !isOverlay && !isGuest && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setShowCompose(true), style: { position: "absolute", bottom: 88, right: 16, width: 52, height: 52, borderRadius: "50%", background: T.red, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 4px 20px ${T.red}60`, zIndex: 90 } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 24, color: T.white, strokeWidth: 2 })), !keyboardOpen && /* @__PURE__ */ import_react4.default.createElement(BottomNav, { active: isOverlay ? "" : screen, onNav: handleNav, isGuest }), mapData && /* @__PURE__ */ import_react4.default.createElement(
+    }), buildComments, onLoadBuildComments: loadBuildComments, onAddBuildComment: requireAuth(addBuildComment), onDeleteBuildComment: deleteBuildComment, currentUserName: currentProfile && currentProfile.full_name || "", currentUserHandle: currentProfile && currentProfile.handle ? "@" + currentProfile.handle : "", currentUserAvatar: currentProfile && currentProfile.avatar_url || null }), screen === "ranks" && (isGuest ? /* @__PURE__ */ import_react4.default.createElement(GuestGateScreen, { title: "RANKS REQUIRE AN ACCOUNT", subtitle: "Sign in to see the leaderboard and start earning points from your posts, routes and builds.", onSignIn: goToLoginFromGuest }) : /* @__PURE__ */ import_react4.default.createElement(RanksScreen, { myPoints: myTotalPoints, pointsBreakdown })))), screen === "feed" && !isOverlay && !isGuest && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setShowCompose(true), style: { position: "absolute", bottom: 88, right: 16, width: 52, height: 52, borderRadius: "50%", background: T.red, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 4px 20px ${T.red}60`, zIndex: 90 } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 24, color: T.white, strokeWidth: 2 })), !keyboardOpen && /* @__PURE__ */ import_react4.default.createElement(BottomNav, { active: isOverlay ? "" : screen, onNav: handleNav, isGuest }), mapData && /* @__PURE__ */ import_react4.default.createElement(
       MapOverlay,
       {
         coords: mapData.coords,
@@ -59786,6 +60041,7 @@ lucide-react/dist/esm/shared/src/utils/hasA11yProp.mjs:
 lucide-react/dist/esm/context.mjs:
 lucide-react/dist/esm/Icon.mjs:
 lucide-react/dist/esm/createLucideIcon.mjs:
+lucide-react/dist/esm/icons/anchor.mjs:
 lucide-react/dist/esm/icons/arrow-up.mjs:
 lucide-react/dist/esm/icons/at-sign.mjs:
 lucide-react/dist/esm/icons/award.mjs:
@@ -59799,8 +60055,11 @@ lucide-react/dist/esm/icons/chevron-left.mjs:
 lucide-react/dist/esm/icons/chevron-right.mjs:
 lucide-react/dist/esm/icons/chevron-up.mjs:
 lucide-react/dist/esm/icons/circle-check-big.mjs:
+lucide-react/dist/esm/icons/circle-dashed.mjs:
 lucide-react/dist/esm/icons/clock.mjs:
+lucide-react/dist/esm/icons/cog.mjs:
 lucide-react/dist/esm/icons/compass.mjs:
+lucide-react/dist/esm/icons/disc.mjs:
 lucide-react/dist/esm/icons/dollar-sign.mjs:
 lucide-react/dist/esm/icons/ellipsis.mjs:
 lucide-react/dist/esm/icons/external-link.mjs:
@@ -59821,6 +60080,7 @@ lucide-react/dist/esm/icons/maximize-2.mjs:
 lucide-react/dist/esm/icons/message-circle.mjs:
 lucide-react/dist/esm/icons/minimize-2.mjs:
 lucide-react/dist/esm/icons/mountain.mjs:
+lucide-react/dist/esm/icons/move-vertical.mjs:
 lucide-react/dist/esm/icons/navigation.mjs:
 lucide-react/dist/esm/icons/pen-line.mjs:
 lucide-react/dist/esm/icons/play.mjs:
@@ -59831,6 +60091,7 @@ lucide-react/dist/esm/icons/search.mjs:
 lucide-react/dist/esm/icons/send.mjs:
 lucide-react/dist/esm/icons/settings.mjs:
 lucide-react/dist/esm/icons/share-2.mjs:
+lucide-react/dist/esm/icons/shield-check.mjs:
 lucide-react/dist/esm/icons/shield.mjs:
 lucide-react/dist/esm/icons/smartphone.mjs:
 lucide-react/dist/esm/icons/square-plus.mjs:
