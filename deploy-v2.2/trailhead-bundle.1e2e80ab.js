@@ -46092,6 +46092,47 @@ ${suffix}`;
       FORUM_SUB_BY_SLUG[subSlug] = { name: sub.name, slug: subSlug, catName: cat.name, catSlug };
     });
   });
+  async function processForumBodyImages(html, uid) {
+    if (!html || typeof html !== "string") return html;
+    if (!uid) return html;
+    try {
+      const container = document.createElement("div");
+      container.innerHTML = html;
+      const imgs = Array.from(container.querySelectorAll("img"));
+      const localImgs = imgs.filter((img) => {
+        const s = img.getAttribute("src") || "";
+        return s.startsWith("data:") || s.startsWith("blob:");
+      });
+      if (localImgs.length === 0) return html;
+      const payload = localImgs.map((img) => ({ url: img.getAttribute("src") }));
+      const uploaded = await uploadPostPhotoList(payload, uid);
+      localImgs.forEach((img, i) => {
+        const out = uploaded[i];
+        if (!out) return;
+        const publicUrl = typeof out === "string" ? out : out.url;
+        const alt = typeof out === "object" && typeof out.alt === "string" ? out.alt : "";
+        if (publicUrl) img.setAttribute("src", publicUrl);
+        if (alt) img.setAttribute("alt", alt);
+      });
+      return container.innerHTML;
+    } catch (e) {
+      console.warn("[forum] processForumBodyImages failed", e);
+      return html;
+    }
+  }
+  function assembleSectionsHtml(sections) {
+    if (!Array.isArray(sections) || sections.length === 0) return "";
+    const parts = [];
+    sections.forEach((s) => {
+      if (!s) return;
+      const sub = (s.subheading || "").trim();
+      const body = (s.body || "").trim();
+      if (!sub && !body) return;
+      if (sub) parts.push(`<h2>${sub.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</h2>`);
+      if (body) parts.push(body);
+    });
+    return parts.join("\n");
+  }
   function dbRowToForumThread(row, profile) {
     if (!row) return null;
     const name = profile && profile.full_name || "User";
@@ -46103,6 +46144,7 @@ ${suffix}`;
       title: row.title || "",
       slug: row.slug,
       body: row.body || null,
+      sections: Array.isArray(row.sections) ? row.sections : [],
       photos: Array.isArray(row.photos) ? row.photos : [],
       pinned: !!row.pinned,
       views: row.view_count || 0,
@@ -46144,6 +46186,154 @@ ${suffix}`;
       likes: 0
       // not persisted yet — next pass
     };
+  }
+  function ForumSectionEditor({ subheading, onSubheadingChange, value, onChange, onRemove, showRemove, placeholder, autoFocusBody, sectionNumber }) {
+    const bodyRef = (0, import_react4.useRef)(null);
+    const [activeFormats, setActiveFormats] = (0, import_react4.useState)({});
+    const [linkInputOpen, setLinkInputOpen] = (0, import_react4.useState)(false);
+    const [linkUrl, setLinkUrl] = (0, import_react4.useState)("");
+    const savedRange = (0, import_react4.useRef)(null);
+    const initialized = (0, import_react4.useRef)(false);
+    (0, import_react4.useEffect)(() => {
+      if (initialized.current) return;
+      if (bodyRef.current) {
+        bodyRef.current.innerHTML = value || "";
+        initialized.current = true;
+        if (autoFocusBody) {
+          try {
+            bodyRef.current.focus();
+          } catch (e) {
+          }
+        }
+      }
+    }, []);
+    const updateActiveFormats = () => {
+      try {
+        setActiveFormats({
+          bold: document.queryCommandState("bold"),
+          italic: document.queryCommandState("italic"),
+          underline: document.queryCommandState("underline"),
+          strikeThrough: document.queryCommandState("strikeThrough"),
+          insertUnorderedList: document.queryCommandState("insertUnorderedList"),
+          insertOrderedList: document.queryCommandState("insertOrderedList")
+        });
+      } catch (e) {
+      }
+    };
+    const push = () => {
+      if (bodyRef.current && onChange) onChange(bodyRef.current.innerHTML);
+    };
+    const cmd = (command, arg) => {
+      document.execCommand(command, false, arg || null);
+      push();
+      setTimeout(updateActiveFormats, 0);
+    };
+    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600 } }, sectionNumber ? `SECTION ${sectionNumber}` : "SECTION"), showRemove && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: onRemove, style: { display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}30`, cursor: "pointer", color: T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 600 }, title: "Remove section" }, /* @__PURE__ */ import_react4.default.createElement(Trash2, { size: 11, color: T.tertiary }), " Remove")), /* @__PURE__ */ import_react4.default.createElement(
+      "input",
+      {
+        value: subheading || "",
+        onChange: (e) => onSubheadingChange && onSubheadingChange(e.target.value),
+        placeholder: "Subheading (optional)...",
+        style: { width: "100%", padding: "10px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 16, fontWeight: 600, outline: "none", boxSizing: "border-box", marginBottom: 8 }
+      }
+    ), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 2, padding: "6px 8px", background: T.charcoal, borderRadius: "8px 8px 0 0", border: `1px solid ${T.charcoal}`, borderBottom: "none" } }, [
+      { c: "bold", label: "B", st: { fontWeight: 700 } },
+      { c: "italic", label: "I", st: { fontStyle: "italic" } },
+      { c: "underline", label: "U", st: { textDecoration: "underline" } },
+      { c: "strikeThrough", label: "S", st: { textDecoration: "line-through" } }
+    ].map((btn) => {
+      const isActive = !!activeFormats[btn.c];
+      return /* @__PURE__ */ import_react4.default.createElement("button", { key: btn.c, onMouseDown: (e) => {
+        e.preventDefault();
+        cmd(btn.c);
+      }, style: { width: 30, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: isActive ? `${T.copper}30` : "none", border: isActive ? `1px solid ${T.copper}` : `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", ...btn.st, color: isActive ? T.copper : T.white, fontFamily: serif, fontSize: 13 } }, btn.label);
+    }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 1, height: 20, background: `${T.tertiary}30`, margin: "4px 4px", alignSelf: "center" } }), /* @__PURE__ */ import_react4.default.createElement("button", { onMouseDown: (e) => {
+      e.preventDefault();
+      cmd("insertUnorderedList");
+    }, style: { width: 30, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: activeFormats.insertUnorderedList ? `${T.copper}30` : "none", border: activeFormats.insertUnorderedList ? `1px solid ${T.copper}` : `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", color: activeFormats.insertUnorderedList ? T.copper : T.white, fontFamily: sans, fontSize: 11 }, title: "Bullet list" }, "\u2022\u2261"), /* @__PURE__ */ import_react4.default.createElement("button", { onMouseDown: (e) => {
+      e.preventDefault();
+      cmd("insertOrderedList");
+    }, style: { width: 30, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: activeFormats.insertOrderedList ? `${T.copper}30` : "none", border: activeFormats.insertOrderedList ? `1px solid ${T.copper}` : `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", color: activeFormats.insertOrderedList ? T.copper : T.white, fontFamily: sans, fontSize: 11 }, title: "Numbered list" }, "1."), /* @__PURE__ */ import_react4.default.createElement("button", { onMouseDown: (e) => {
+      e.preventDefault();
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
+      savedRange.current = selection.getRangeAt(0).cloneRange();
+      setLinkInputOpen(true);
+      setLinkUrl("");
+    }, style: { width: 30, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: linkInputOpen ? `${T.copper}30` : "none", border: linkInputOpen ? `1px solid ${T.copper}` : `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", color: T.copper, fontFamily: sans, fontSize: 11, textDecoration: "underline" }, title: "Insert link" }, "\u{1F517}"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 1, height: 20, background: `${T.tertiary}30`, margin: "4px 4px", alignSelf: "center" } }), /* @__PURE__ */ import_react4.default.createElement("button", { onMouseDown: (e) => {
+      e.preventDefault();
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0) savedRange.current = selection.getRangeAt(0).cloneRange();
+      const fileInput = document.createElement("input");
+      fileInput.type = "file";
+      fileInput.accept = "image/*";
+      fileInput.multiple = true;
+      fileInput.onchange = (ev) => {
+        const files = Array.from(ev.target.files || []);
+        files.forEach((file) => {
+          const reader = new FileReader();
+          reader.onload = (re) => {
+            if (!bodyRef.current) return;
+            bodyRef.current.focus();
+            const sel = window.getSelection();
+            if (savedRange.current) {
+              sel.removeAllRanges();
+              sel.addRange(savedRange.current);
+            }
+            document.execCommand("insertHTML", false, `<div style="margin:8px 0"><img src="${re.target.result}" style="max-width:100%;border-radius:8px;display:block" /></div>`);
+            push();
+            const newSel = window.getSelection();
+            if (newSel.rangeCount > 0) savedRange.current = newSel.getRangeAt(0).cloneRange();
+          };
+          reader.readAsDataURL(file);
+        });
+      };
+      fileInput.click();
+    }, style: { width: 30, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", color: T.copper, fontFamily: sans, fontSize: 13 }, title: "Insert image" }, "\u{1F4F7}")), linkInputOpen && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, padding: "8px 10px", background: T.darkBg, border: `1px solid ${T.copper}`, borderBottom: "none" } }, /* @__PURE__ */ import_react4.default.createElement("input", { autoFocus: true, value: linkUrl, onChange: (e) => setLinkUrl(e.target.value), onKeyDown: (e) => {
+      if (e.key === "Enter" && linkUrl.trim()) {
+        e.preventDefault();
+        const sel = window.getSelection();
+        if (savedRange.current) {
+          sel.removeAllRanges();
+          sel.addRange(savedRange.current);
+        }
+        document.execCommand("createLink", false, linkUrl.trim().startsWith("http") ? linkUrl.trim() : "https://" + linkUrl.trim());
+        push();
+        setLinkInputOpen(false);
+        setLinkUrl("");
+        savedRange.current = null;
+      } else if (e.key === "Escape") {
+        setLinkInputOpen(false);
+        setLinkUrl("");
+        savedRange.current = null;
+      }
+    }, placeholder: "Paste URL and press Enter...", style: { flex: 1, padding: "6px 10px", borderRadius: 6, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 12, outline: "none" } }), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
+      setLinkInputOpen(false);
+      setLinkUrl("");
+      savedRange.current = null;
+    }, style: { padding: "6px 8px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}40`, cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 12, color: T.tertiary }))), /* @__PURE__ */ import_react4.default.createElement(
+      "div",
+      {
+        ref: bodyRef,
+        contentEditable: true,
+        onInput: () => {
+          push();
+          updateActiveFormats();
+        },
+        onKeyUp: updateActiveFormats,
+        onMouseUp: updateActiveFormats,
+        onSelect: updateActiveFormats,
+        onFocus: updateActiveFormats,
+        onPaste: (e) => {
+          e.preventDefault();
+          const text = e.clipboardData.getData("text/html") || e.clipboardData.getData("text/plain");
+          document.execCommand("insertHTML", false, text);
+          push();
+        },
+        "data-placeholder": placeholder || "Share your knowledge, ask a question, or start a discussion...",
+        style: { width: "100%", minHeight: 140, padding: "12px 14px", borderRadius: "0 0 8px 8px", background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none", boxSizing: "border-box", lineHeight: 1.6, overflowY: "auto", maxHeight: 360 }
+      }
+    ));
   }
   function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpenDM, onOpenShareCompose, onOpenShareIntent, onAddFeedPost, threadsBySub, repliesByThread, onAddForumThread, onUpdateForumThread, onDeleteForumThread, onAddForumReply, onDeleteForumReply, onLoadForumReplies, likedForumThreadIds, forumThreadLikeCounts, onToggleForumThreadLike, likedForumReplyIds, forumReplyLikeCounts, onToggleForumReplyLike, onBumpForumThreadView, onAwardPoints, isGuest, onGuestTap, currentUserId, currentUserName, currentUserHandle, currentUserAvatar }) {
     const commitForumPhotos = async (photos) => {
@@ -46277,51 +46467,25 @@ ${suffix}`;
     }, [view, selectedSub, threadsBySub]);
     const [editingThreadId, setEditingThreadId] = (0, import_react4.useState)(null);
     const [editTitle, setEditTitle] = (0, import_react4.useState)("");
-    const [editBody, setEditBody] = (0, import_react4.useState)("");
-    const editBodyRef = (0, import_react4.useRef)(null);
+    const [editSections, setEditSections] = (0, import_react4.useState)([]);
     const [editPhotos, setEditPhotos] = (0, import_react4.useState)([]);
-    const [editActiveFormats, setEditActiveFormats] = (0, import_react4.useState)({});
-    const editSavedRange = (0, import_react4.useRef)(null);
-    const editInitialized = (0, import_react4.useRef)(null);
-    const [editLinkInput, setEditLinkInput] = (0, import_react4.useState)(false);
-    const [editLinkUrl, setEditLinkUrl] = (0, import_react4.useState)("");
-    const updateEditFormats = () => {
-      const fb = (document.queryCommandValue("formatBlock") || "").toLowerCase();
-      setEditActiveFormats({
-        bold: document.queryCommandState("bold"),
-        italic: document.queryCommandState("italic"),
-        underline: document.queryCommandState("underline"),
-        strikeThrough: document.queryCommandState("strikeThrough"),
-        insertUnorderedList: document.queryCommandState("insertUnorderedList"),
-        insertOrderedList: document.queryCommandState("insertOrderedList"),
-        h1: fb === "h1",
-        h2: fb === "h2",
-        h3: fb === "h3",
-        p: fb === "p" || fb === "" || fb === "div"
-      });
+    const beginEditThread = (thread) => {
+      if (!thread) return;
+      setEditingThreadId(thread.id);
+      setEditTitle(thread.title || "");
+      const fromSections = Array.isArray(thread.sections) && thread.sections.length > 0 ? thread.sections.map((s) => ({ id: newSectionId(), subheading: s.subheading || "", body: s.body || "" })) : [{ id: newSectionId(), subheading: "", body: thread.body || "" }];
+      setEditSections(fromSections);
+      setEditPhotos(thread.photos ? thread.photos.map((u, i) => ({ url: u.url || u, id: i, type: u.type || "image", caption: u.caption || "", alt: u.alt || "" })) : []);
     };
+    const updateEditSection = (id, patch) => setEditSections((prev) => prev.map((s) => s.id === id ? { ...s, ...patch } : s));
+    const addEditSection = () => setEditSections((prev) => [...prev, { id: newSectionId(), subheading: "", body: "" }]);
+    const removeEditSection = (id) => setEditSections((prev) => prev.length > 1 ? prev.filter((s) => s.id !== id) : prev);
     const [ntTitle, setNtTitle] = (0, import_react4.useState)("");
-    const [ntBody, setNtBody] = (0, import_react4.useState)("");
-    const ntBodyRef = (0, import_react4.useRef)(null);
-    const [ntLinkInput, setNtLinkInput] = (0, import_react4.useState)(false);
-    const [ntLinkUrl, setNtLinkUrl] = (0, import_react4.useState)("");
-    const ntSavedRange = (0, import_react4.useRef)(null);
-    const [ntActiveFormats, setNtActiveFormats] = (0, import_react4.useState)({});
-    const updateActiveFormats = () => {
-      const fb = (document.queryCommandValue("formatBlock") || "").toLowerCase();
-      setNtActiveFormats({
-        bold: document.queryCommandState("bold"),
-        italic: document.queryCommandState("italic"),
-        underline: document.queryCommandState("underline"),
-        strikeThrough: document.queryCommandState("strikeThrough"),
-        insertUnorderedList: document.queryCommandState("insertUnorderedList"),
-        insertOrderedList: document.queryCommandState("insertOrderedList"),
-        h1: fb === "h1",
-        h2: fb === "h2",
-        h3: fb === "h3",
-        p: fb === "p" || fb === "" || fb === "div"
-      });
-    };
+    const newSectionId = () => "sec_" + Math.random().toString(36).slice(2, 8);
+    const [ntSections, setNtSections] = (0, import_react4.useState)([{ id: newSectionId(), subheading: "", body: "" }]);
+    const updateSection = (id, patch) => setNtSections((prev) => prev.map((s) => s.id === id ? { ...s, ...patch } : s));
+    const addSection = () => setNtSections((prev) => [...prev, { id: newSectionId(), subheading: "", body: "" }]);
+    const removeSection = (id) => setNtSections((prev) => prev.length > 1 ? prev.filter((s) => s.id !== id) : prev);
     const [ntShareToFeed, setNtShareToFeed] = (0, import_react4.useState)(true);
     const [ntPhotos, setNtPhotos] = (0, import_react4.useState)([]);
     const [ntPickCat, setNtPickCat] = (0, import_react4.useState)(null);
@@ -46375,7 +46539,7 @@ ${suffix}`;
       setNtPickCat(null);
       setNtPickSub(null);
       setNtTitle("");
-      setNtBody("");
+      setNtSections([{ id: newSectionId(), subheading: "", body: "" }]);
       setNtPhotos([]);
       setNtShareToFeed(true);
       setView("newThread");
@@ -46389,7 +46553,7 @@ ${suffix}`;
       setNtPickCat(selectedCat);
       setNtPickSub(selectedSub);
       setNtTitle("");
-      setNtBody("");
+      setNtSections([{ id: newSectionId(), subheading: "", body: "" }]);
       setNtPhotos([]);
       setNtShareToFeed(true);
       setView("newThread");
@@ -46411,15 +46575,22 @@ ${suffix}`;
         const sub = activeSub || ntPickSub;
         const subName = sub.name;
         const catName = cat.name;
-        const photoPayload = await commitForumPhotos(ntPhotos);
         const titleText = ntTitle.trim();
-        const bodyHtml = (() => {
-          const html = ntBodyRef.current ? ntBodyRef.current.innerHTML : ntBody;
-          return html && html.replace(/<[^>]+>/g, "").trim() ? html : null;
-        })();
+        const photoPayload = await commitForumPhotos(ntPhotos);
+        const processedSections = [];
+        for (const s of ntSections) {
+          const subheading = (s.subheading || "").trim();
+          const rawBody = (s.body || "").trim();
+          const processedBody = await processForumBodyImages(rawBody, currentUserId);
+          const plain = processedBody.replace(/<[^>]+>/g, "").trim();
+          if (!subheading && !plain) continue;
+          processedSections.push({ subheading, body: processedBody });
+        }
+        const bodyHtml = assembleSectionsHtml(processedSections) || null;
         const created = await onAddForumThread({
           title: titleText,
           body: bodyHtml,
+          sections: processedSections,
           photos: photoPayload,
           categoryName: catName,
           subcategoryName: subName
@@ -46444,8 +46615,8 @@ ${suffix}`;
             forumSub: subName
           });
         }
-        const plainBody = ntBody.replace(/<[^>]+>/g, " ");
-        const mentions = extractMentions(titleText + " " + plainBody);
+        const plainText = titleText + " " + processedSections.map((s) => `${s.subheading} ${(s.body || "").replace(/<[^>]+>/g, " ")}`).join(" ");
+        const mentions = extractMentions(plainText);
         mentions.forEach((handle) => {
           if (handle !== currentUserHandle) {
             onAddNotification && onAddNotification({ type: "mention", user: currentUserName || "You", text: "mentioned you in a forum thread", target: titleText, icon: AtSign, iconColor: T.copper });
@@ -46454,8 +46625,7 @@ ${suffix}`;
         onAwardPoints && onAwardPoints(25, "Forum Thread");
         if (ntPhotos.length > 0) onAwardPoints && onAwardPoints(5 * ntPhotos.length, "Photos Uploaded");
         setNtTitle("");
-        setNtBody("");
-        if (ntBodyRef.current) ntBodyRef.current.innerHTML = "";
+        setNtSections([{ id: newSectionId(), subheading: "", body: "" }]);
         setNtPhotos([]);
         setNtShareToFeed(true);
         if (ntFromHome) {
@@ -46466,7 +46636,7 @@ ${suffix}`;
           setView("threads");
         }
       };
-      const canPost = ntTitle.trim() && (!ntFromHome || ntPickCat && ntPickSub);
+      const canPost = ntTitle.trim() && ntSections.some((s) => (s.subheading || "").trim() || (s.body || "").replace(/<[^>]+>/g, "").trim()) && (!ntFromHome || ntPickCat && ntPickSub);
       return /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 0 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "14px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: goBack, style: { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" } }, /* @__PURE__ */ import_react4.default.createElement(ChevronLeft, { size: 20, color: T.white, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, display: "block" } }, "New Thread"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, activeSub ? activeSub.name : "Select a category"))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px" } }, ntFromHome && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "CATEGORY *"), /* @__PURE__ */ import_react4.default.createElement("select", { value: ntPickCat ? ntPickCat.name : "", onChange: (e) => {
         const cat = forumData.categories.find((c) => c.name === e.target.value);
         setNtPickCat(cat || null);
@@ -46474,188 +46644,36 @@ ${suffix}`;
       }, style: { width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, outline: "none", boxSizing: "border-box", appearance: "none", WebkitAppearance: "none", backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238B7D6B' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 14px center" } }, /* @__PURE__ */ import_react4.default.createElement("option", { value: "", disabled: true, style: { color: T.tertiary } }, "Select category..."), forumData.categories.map((cat) => /* @__PURE__ */ import_react4.default.createElement("option", { key: cat.name, value: cat.name, style: { background: T.darkCard, color: T.white } }, cat.name)))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "SUBCATEGORY *"), /* @__PURE__ */ import_react4.default.createElement("select", { value: ntPickSub ? ntPickSub.name : "", onChange: (e) => {
         const sub = ntPickCat ? ntPickCat.subs.find((s) => s.name === e.target.value) : null;
         setNtPickSub(sub || null);
-      }, disabled: !ntPickCat, style: { width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: ntPickCat ? T.white : T.tertiary, fontFamily: sans, fontSize: 13, outline: "none", boxSizing: "border-box", opacity: ntPickCat ? 1 : 0.5, appearance: "none", WebkitAppearance: "none", backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238B7D6B' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 14px center" } }, /* @__PURE__ */ import_react4.default.createElement("option", { value: "", disabled: true, style: { color: T.tertiary } }, "Select subcategory..."), ntPickCat && ntPickCat.subs.map((sub) => /* @__PURE__ */ import_react4.default.createElement("option", { key: sub.name, value: sub.name, style: { background: T.darkCard, color: T.white } }, sub.name))))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "TITLE *"), /* @__PURE__ */ import_react4.default.createElement("input", { value: ntTitle, onChange: (e) => setNtTitle(e.target.value), placeholder: "Thread title...", style: { width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none", boxSizing: "border-box" } })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "BODY"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 2, padding: "6px 8px", background: T.charcoal, borderRadius: "8px 8px 0 0", border: `1px solid ${T.charcoal}`, borderBottom: "none" } }, [
-        { cmd: "bold", label: "B", style: { fontWeight: 700 } },
-        { cmd: "italic", label: "I", style: { fontStyle: "italic" } },
-        { cmd: "underline", label: "U", style: { textDecoration: "underline" } },
-        { cmd: "strikeThrough", label: "S", style: { textDecoration: "line-through" } }
-      ].map((btn) => {
-        const isActive = ntActiveFormats[btn.cmd];
-        return /* @__PURE__ */ import_react4.default.createElement("button", { key: btn.cmd, onMouseDown: (e) => {
-          e.preventDefault();
-          document.execCommand(btn.cmd, false, null);
-          ntBodyRef.current && setNtBody(ntBodyRef.current.innerHTML);
-          setTimeout(updateActiveFormats, 0);
-        }, style: { width: 30, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: isActive ? `${T.copper}30` : "none", border: isActive ? `1px solid ${T.copper}` : `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", ...btn.style, color: isActive ? T.copper : T.white, fontFamily: serif, fontSize: 13, transition: "all 0.15s" } }, btn.label);
-      }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 1, height: 20, background: `${T.tertiary}30`, margin: "4px 4px", alignSelf: "center" } }), [
-        { cmd: "formatBlock", arg: "<h1>", label: "H1", key: "h1" },
-        { cmd: "formatBlock", arg: "<h2>", label: "H2", key: "h2" },
-        { cmd: "formatBlock", arg: "<h3>", label: "H3", key: "h3" },
-        { cmd: "formatBlock", arg: "<p>", label: "P", key: "p" }
-      ].map((btn) => {
-        const isActive = ntActiveFormats[btn.key];
-        return /* @__PURE__ */ import_react4.default.createElement("button", { key: btn.label, onMouseDown: (e) => {
-          e.preventDefault();
-          document.execCommand(btn.cmd, false, btn.arg);
-          ntBodyRef.current && setNtBody(ntBodyRef.current.innerHTML);
-          setTimeout(updateActiveFormats, 0);
-        }, style: { minWidth: 28, height: 28, padding: "0 6px", display: "flex", alignItems: "center", justifyContent: "center", background: isActive ? `${T.copper}30` : "none", border: isActive ? `1px solid ${T.copper}` : `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", color: isActive ? T.copper : T.white, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.3, transition: "all 0.15s" } }, btn.label);
-      }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 1, height: 20, background: `${T.tertiary}30`, margin: "4px 4px", alignSelf: "center" } }), (() => {
-        const ulActive = ntActiveFormats.insertUnorderedList;
-        return /* @__PURE__ */ import_react4.default.createElement("button", { onMouseDown: (e) => {
-          e.preventDefault();
-          document.execCommand("insertUnorderedList", false, null);
-          ntBodyRef.current && setNtBody(ntBodyRef.current.innerHTML);
-          setTimeout(updateActiveFormats, 0);
-        }, style: { width: 30, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: ulActive ? `${T.copper}30` : "none", border: ulActive ? `1px solid ${T.copper}` : `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", color: ulActive ? T.copper : T.white, fontFamily: sans, fontSize: 11, transition: "all 0.15s" }, title: "Bullet list" }, "\u2022\u2261");
-      })(), (() => {
-        const olActive = ntActiveFormats.insertOrderedList;
-        return /* @__PURE__ */ import_react4.default.createElement("button", { onMouseDown: (e) => {
-          e.preventDefault();
-          document.execCommand("insertOrderedList", false, null);
-          ntBodyRef.current && setNtBody(ntBodyRef.current.innerHTML);
-          setTimeout(updateActiveFormats, 0);
-        }, style: { width: 30, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: olActive ? `${T.copper}30` : "none", border: olActive ? `1px solid ${T.copper}` : `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", color: olActive ? T.copper : T.white, fontFamily: sans, fontSize: 11, transition: "all 0.15s" }, title: "Numbered list" }, "1.");
-      })(), (() => {
-        const sel = window.getSelection && window.getSelection();
-        let isHighlighted = false;
-        if (sel && sel.rangeCount > 0 && sel.anchorNode) {
-          let node = sel.anchorNode.nodeType === 3 ? sel.anchorNode.parentElement : sel.anchorNode;
-          while (node && node !== ntBodyRef.current) {
-            const bg = node.style && node.style.backgroundColor;
-            if (bg && bg !== "transparent" && bg !== "rgba(0, 0, 0, 0)" && bg !== "") {
-              isHighlighted = true;
-              break;
-            }
-            node = node.parentElement;
-          }
-        }
-        return /* @__PURE__ */ import_react4.default.createElement("button", { onMouseDown: (e) => {
-          e.preventDefault();
-          if (isHighlighted) {
-            document.execCommand("hiliteColor", false, "transparent");
-          } else {
-            document.execCommand("hiliteColor", false, "#C49A6C40");
-          }
-          ntBodyRef.current && setNtBody(ntBodyRef.current.innerHTML);
-        }, style: { width: 30, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: isHighlighted ? `${T.copper}60` : `${T.copper}20`, border: isHighlighted ? `1px solid ${T.copper}` : `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", color: T.copper, fontFamily: sans, fontSize: 10, fontWeight: 700, transition: "all 0.15s" }, title: isHighlighted ? "Remove highlight" : "Highlight" }, "Hi");
-      })(), /* @__PURE__ */ import_react4.default.createElement("button", { onMouseDown: (e) => {
-        e.preventDefault();
-        const selection = window.getSelection();
-        if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
-        ntSavedRange.current = selection.getRangeAt(0).cloneRange();
-        setNtLinkInput(true);
-        setNtLinkUrl("");
-      }, style: { width: 30, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: ntLinkInput ? `${T.copper}30` : "none", border: ntLinkInput ? `1px solid ${T.copper}` : `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", color: T.copper, fontFamily: sans, fontSize: 11, textDecoration: "underline", transition: "all 0.15s" }, title: "Insert link" }, "\u{1F517}"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 1, height: 20, background: `${T.tertiary}30`, margin: "4px 4px", alignSelf: "center" } }), /* @__PURE__ */ import_react4.default.createElement("button", { onMouseDown: (e) => {
-        e.preventDefault();
-        const selection = window.getSelection();
-        if (selection && selection.rangeCount > 0) {
-          ntSavedRange.current = selection.getRangeAt(0).cloneRange();
-        }
-        const fileInput = document.createElement("input");
-        fileInput.type = "file";
-        fileInput.accept = "image/*";
-        fileInput.multiple = true;
-        fileInput.onchange = (ev) => {
-          const files = Array.from(ev.target.files || []);
-          files.forEach((file) => {
-            const reader = new FileReader();
-            reader.onload = (re) => {
-              if (ntBodyRef.current) {
-                ntBodyRef.current.focus();
-                const sel = window.getSelection();
-                if (ntSavedRange.current) {
-                  sel.removeAllRanges();
-                  sel.addRange(ntSavedRange.current);
-                }
-                document.execCommand("insertHTML", false, `<div style="margin:8px 0"><img src="${re.target.result}" style="max-width:100%;border-radius:8px;display:block" /></div>`);
-                setNtBody(ntBodyRef.current.innerHTML);
-                const newSel = window.getSelection();
-                if (newSel.rangeCount > 0) {
-                  ntSavedRange.current = newSel.getRangeAt(0).cloneRange();
-                }
-              }
-            };
-            reader.readAsDataURL(file);
-          });
-        };
-        fileInput.click();
-      }, style: { width: 30, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", color: T.copper, fontFamily: sans, fontSize: 13, transition: "all 0.15s" }, title: "Insert image" }, "\u{1F4F7}")), ntLinkInput && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, padding: "8px 10px", background: T.darkBg, border: `1px solid ${T.copper}`, borderBottom: "none" } }, /* @__PURE__ */ import_react4.default.createElement("input", { autoFocus: true, value: ntLinkUrl, onChange: (e) => setNtLinkUrl(e.target.value), onKeyDown: (e) => {
-        if (e.key === "Enter" && ntLinkUrl.trim()) {
-          e.preventDefault();
-          const sel = window.getSelection();
-          if (ntSavedRange.current) {
-            sel.removeAllRanges();
-            sel.addRange(ntSavedRange.current);
-          }
-          document.execCommand("createLink", false, ntLinkUrl.trim().startsWith("http") ? ntLinkUrl.trim() : "https://" + ntLinkUrl.trim());
-          ntBodyRef.current && setNtBody(ntBodyRef.current.innerHTML);
-          setNtLinkInput(false);
-          setNtLinkUrl("");
-          ntSavedRange.current = null;
-        } else if (e.key === "Escape") {
-          setNtLinkInput(false);
-          setNtLinkUrl("");
-          ntSavedRange.current = null;
-        }
-      }, placeholder: "Paste URL and press Enter...", style: { flex: 1, padding: "6px 10px", borderRadius: 6, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 12, outline: "none" } }), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
-        if (ntLinkUrl.trim()) {
-          const sel = window.getSelection();
-          if (ntSavedRange.current) {
-            sel.removeAllRanges();
-            sel.addRange(ntSavedRange.current);
-          }
-          document.execCommand("createLink", false, ntLinkUrl.trim().startsWith("http") ? ntLinkUrl.trim() : "https://" + ntLinkUrl.trim());
-          ntBodyRef.current && setNtBody(ntBodyRef.current.innerHTML);
-        }
-        setNtLinkInput(false);
-        setNtLinkUrl("");
-        ntSavedRange.current = null;
-      }, style: { padding: "6px 12px", borderRadius: 6, background: T.copper, border: "none", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 } }, "Add")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
-        setNtLinkInput(false);
-        setNtLinkUrl("");
-        ntSavedRange.current = null;
-      }, style: { padding: "6px 8px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}40`, cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 12, color: T.tertiary }))), /* @__PURE__ */ import_react4.default.createElement(
-        "div",
+      }, disabled: !ntPickCat, style: { width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: ntPickCat ? T.white : T.tertiary, fontFamily: sans, fontSize: 13, outline: "none", boxSizing: "border-box", opacity: ntPickCat ? 1 : 0.5, appearance: "none", WebkitAppearance: "none", backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238B7D6B' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 14px center" } }, /* @__PURE__ */ import_react4.default.createElement("option", { value: "", disabled: true, style: { color: T.tertiary } }, "Select subcategory..."), ntPickCat && ntPickCat.subs.map((sub) => /* @__PURE__ */ import_react4.default.createElement("option", { key: sub.name, value: sub.name, style: { background: T.darkCard, color: T.white } }, sub.name))))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "TITLE *"), /* @__PURE__ */ import_react4.default.createElement("input", { value: ntTitle, onChange: (e) => setNtTitle(e.target.value), placeholder: "Thread title...", style: { width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none", boxSizing: "border-box" } })), ntSections.map((s, i) => /* @__PURE__ */ import_react4.default.createElement(
+        ForumSectionEditor,
         {
-          ref: ntBodyRef,
-          contentEditable: true,
-          onInput: () => {
-            ntBodyRef.current && setNtBody(ntBodyRef.current.innerHTML);
-            updateActiveFormats();
-          },
-          onKeyUp: updateActiveFormats,
-          onMouseUp: updateActiveFormats,
-          onSelect: updateActiveFormats,
-          onFocus: updateActiveFormats,
-          onPaste: (e) => {
-            e.preventDefault();
-            const text = e.clipboardData.getData("text/html") || e.clipboardData.getData("text/plain");
-            document.execCommand("insertHTML", false, text);
-            ntBodyRef.current && setNtBody(ntBodyRef.current.innerHTML);
-          },
-          "data-placeholder": "Share your knowledge, ask a question, or start a discussion...",
-          style: { width: "100%", minHeight: 140, padding: "12px 14px", borderRadius: "0 0 8px 8px", background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none", boxSizing: "border-box", lineHeight: 1.6, overflowY: "auto", maxHeight: 300, position: "relative" }
+          key: s.id,
+          sectionNumber: ntSections.length > 1 ? i + 1 : null,
+          subheading: s.subheading,
+          onSubheadingChange: (v) => updateSection(s.id, { subheading: v }),
+          value: s.body,
+          onChange: (v) => updateSection(s.id, { body: v }),
+          showRemove: ntSections.length > 1,
+          onRemove: () => removeSection(s.id),
+          autoFocusBody: false,
+          placeholder: i === 0 ? "Share your knowledge, ask a question, or start a discussion..." : "Continue the discussion..."
         }
-      ), /* @__PURE__ */ import_react4.default.createElement("style", null, `
-              [contenteditable][data-placeholder]:empty::before {
-                content: attr(data-placeholder);
-                color: ${T.tertiary};
-                opacity: 0.5;
-                pointer-events: none;
-              }
-              [contenteditable] h1 { font-size: 26px !important; font-weight: 700; color: ${T.white}; margin: 10px 0 6px; font-family: ${sans}; line-height: 1.2; }
-              [contenteditable] h2 { font-size: 21px !important; font-weight: 700; color: ${T.white}; margin: 8px 0 4px; font-family: ${sans}; line-height: 1.3; }
-              [contenteditable] h3 { font-size: 17px !important; font-weight: 600; color: ${T.white}; margin: 6px 0 3px; font-family: ${sans}; line-height: 1.3; }
-              [contenteditable] p { margin: 4px 0; font-size: 14px; }
-              [contenteditable] ul { list-style-type: disc !important; padding-left: 24px !important; margin: 6px 0; }
-              [contenteditable] ol { list-style-type: decimal !important; padding-left: 24px !important; margin: 6px 0; }
-              [contenteditable] li { display: list-item !important; margin: 3px 0; list-style-position: outside !important; }
-              [contenteditable] ul li { list-style-type: disc !important; }
-              [contenteditable] ol li { list-style-type: decimal !important; }
-              [contenteditable] a { color: ${T.copper}; text-decoration: underline; }
-              [contenteditable] img { max-width: 100%; border-radius: 8px; display: block; margin: 8px 0; }
-            `)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "HERO IMAGE"), /* @__PURE__ */ import_react4.default.createElement(PhotoUploader, { photos: ntPhotos, onChange: setNtPhotos })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 0", borderTop: `1px solid ${T.charcoal}`, marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, display: "block" } }, "Share to Feed"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary } }, "Post a snippet with link to the community feed")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setNtShareToFeed(!ntShareToFeed), style: { width: 48, height: 28, borderRadius: 14, background: ntShareToFeed ? T.green : T.charcoal, border: `1px solid ${ntShareToFeed ? T.green : T.tertiary}40`, cursor: "pointer", position: "relative", transition: "background 0.2s" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 22, height: 22, borderRadius: "50%", background: T.white, position: "absolute", top: 2, left: ntShareToFeed ? 23 : 2, transition: "left 0.2s" } }))), ntShareToFeed && /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkCard, borderRadius: 8, padding: "12px 14px", marginBottom: 16, border: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 6 } }, /* @__PURE__ */ import_react4.default.createElement(MessageCircle, { size: 12, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 0.5, fontWeight: 600 } }, "FEED PREVIEW")), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 13, color: T.white, fontWeight: 600, display: "block", marginBottom: 4 } }, ntTitle || "Thread title..."), ntPhotos.length > 0 && /* @__PURE__ */ import_react4.default.createElement("img", { src: txImg(ntPhotos[0].url, 256), alt: "", style: { width: "100%", height: 100, objectFit: "cover", borderRadius: 6, marginBottom: 6 } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginTop: 4 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.red } }, "VIEW THREAD >"))), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: submitThread, disabled: !canPost, style: { width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "14px", borderRadius: 8, background: canPost ? T.red : T.charcoal, border: "none", cursor: canPost ? "pointer" : "default", opacity: canPost ? 1 : 0.5 } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 16, color: T.white }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, "POST THREAD"))));
+      )), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: addSection, style: { width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", borderRadius: 8, background: "none", border: `1px dashed ${T.copper}60`, cursor: "pointer", marginBottom: 16, color: T.copper, fontFamily: sans, fontSize: 12, fontWeight: 600, letterSpacing: 0.5 } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 14, color: T.copper }), "ADD SECTION"), /* @__PURE__ */ import_react4.default.createElement("style", null, `
+            [contenteditable][data-placeholder]:empty::before {
+              content: attr(data-placeholder);
+              color: ${T.tertiary};
+              opacity: 0.5;
+              pointer-events: none;
+            }
+            [contenteditable] p { margin: 4px 0; font-size: 14px; }
+            [contenteditable] ul { list-style-type: disc !important; padding-left: 24px !important; margin: 6px 0; }
+            [contenteditable] ol { list-style-type: decimal !important; padding-left: 24px !important; margin: 6px 0; }
+            [contenteditable] li { display: list-item !important; margin: 3px 0; list-style-position: outside !important; }
+            [contenteditable] ul li { list-style-type: disc !important; }
+            [contenteditable] ol li { list-style-type: decimal !important; }
+            [contenteditable] a { color: ${T.copper}; text-decoration: underline; }
+            [contenteditable] img { max-width: 100%; border-radius: 8px; display: block; margin: 8px 0; }
+          `), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "HERO IMAGE"), /* @__PURE__ */ import_react4.default.createElement(PhotoUploader, { photos: ntPhotos, onChange: setNtPhotos })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 0", borderTop: `1px solid ${T.charcoal}`, marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, display: "block" } }, "Share to Feed"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary } }, "Post a snippet with link to the community feed")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setNtShareToFeed(!ntShareToFeed), style: { width: 48, height: 28, borderRadius: 14, background: ntShareToFeed ? T.green : T.charcoal, border: `1px solid ${ntShareToFeed ? T.green : T.tertiary}40`, cursor: "pointer", position: "relative", transition: "background 0.2s" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 22, height: 22, borderRadius: "50%", background: T.white, position: "absolute", top: 2, left: ntShareToFeed ? 23 : 2, transition: "left 0.2s" } }))), ntShareToFeed && /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkCard, borderRadius: 8, padding: "12px 14px", marginBottom: 16, border: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 6 } }, /* @__PURE__ */ import_react4.default.createElement(MessageCircle, { size: 12, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 0.5, fontWeight: 600 } }, "FEED PREVIEW")), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 13, color: T.white, fontWeight: 600, display: "block", marginBottom: 4 } }, ntTitle || "Thread title..."), ntPhotos.length > 0 && /* @__PURE__ */ import_react4.default.createElement("img", { src: txImg(ntPhotos[0].url, 256), alt: "", style: { width: "100%", height: 100, objectFit: "cover", borderRadius: 6, marginBottom: 6 } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginTop: 4 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.red } }, "VIEW THREAD >"))), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: submitThread, disabled: !canPost, style: { width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "14px", borderRadius: 8, background: canPost ? T.red : T.charcoal, border: "none", cursor: canPost ? "pointer" : "default", opacity: canPost ? 1 : 0.5 } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 16, color: T.white }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, "POST THREAD"))));
     }
     if (view === "thread" && selectedThread) {
       const allPosts = (repliesByThread || {})[selectedThread.id] || [];
@@ -46806,16 +46824,15 @@ ${suffix}`;
           }
         }, muted: true, style: { width: "100%", height: "100%", objectFit: "cover" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: 12, right: 50, background: "rgba(0,0,0,0.6)", borderRadius: 4, padding: "2px 8px", display: "flex", alignItems: "center", gap: 4, zIndex: 2 } }, /* @__PURE__ */ import_react4.default.createElement(Video, { size: 10, color: T.white }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.white, fontWeight: 600 } }, "VIDEO"))) : /* @__PURE__ */ import_react4.default.createElement("img", { src: txImg(firstUrl, 480), alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } });
       })(), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", bottom: 0, left: 0, right: 0, height: "60%", background: "linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.4) 50%, transparent 100%)" } }), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: goBack, style: { position: "absolute", top: 14, left: 14, background: "rgba(0,0,0,0.5)", border: "none", cursor: "pointer", padding: 6, borderRadius: "50%", display: "flex", backdropFilter: "blur(4px)" } }, /* @__PURE__ */ import_react4.default.createElement(ChevronLeft, { size: 20, color: T.white, strokeWidth: 1.5 })), isOwnThread && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
-        setEditingThreadId(selectedThread.id);
-        setEditTitle(selectedThread.title);
-        setEditBody(selectedThread.body || "");
-        setEditPhotos(selectedThread.photos ? selectedThread.photos.map((u, i) => ({ url: u.url || u, id: i, type: u.type || "image", caption: u.caption || "" })) : []);
+        beginEditThread(selectedThread);
       }, style: { position: "absolute", top: 14, right: 14, background: "rgba(0,0,0,0.5)", border: "none", cursor: "pointer", padding: 6, borderRadius: "50%", display: "flex", backdropFilter: "blur(4px)" } }, /* @__PURE__ */ import_react4.default.createElement(PenLine, { size: 16, color: T.white, strokeWidth: 1.5 })), selectedThread.pinned && /* @__PURE__ */ import_react4.default.createElement("span", { style: { position: "absolute", top: 14, left: 50, fontFamily: sans, fontSize: 9, color: T.copper, background: `rgba(0,0,0,0.6)`, padding: "3px 8px", borderRadius: 3, letterSpacing: 1, backdropFilter: "blur(4px)" } }, "PINNED"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", bottom: 0, left: 0, right: 0, padding: "0 16px 14px" } }, /* @__PURE__ */ import_react4.default.createElement("h2", { style: { fontFamily: sans, fontSize: 20, color: T.white, fontWeight: 700, margin: 0, lineHeight: 1.25, textShadow: "0 1px 4px rgba(0,0,0,0.6)" } }, selectedThread.title))) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: goBack, style: { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" } }, /* @__PURE__ */ import_react4.default.createElement(ChevronLeft, { size: 20, color: T.white, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.tertiary } }, selectedSub?.name)), isOwnThread && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
-        setEditingThreadId(selectedThread.id);
-        setEditTitle(selectedThread.title);
-        setEditBody(selectedThread.body || "");
-        setEditPhotos(selectedThread.photos ? selectedThread.photos.map((u, i) => ({ url: u.url || u, id: i, type: u.type || "image", caption: u.caption || "" })) : []);
-      }, style: { background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex" } }, /* @__PURE__ */ import_react4.default.createElement(PenLine, { size: 16, color: T.tertiary, strokeWidth: 1.5 }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { margin: "0 16px 4px", padding: "0 0 8px" } }, selectedThread.pinned && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.copper, background: `${T.copper}20`, padding: "2px 6px", borderRadius: 3, letterSpacing: 1, marginBottom: 8, display: "inline-block" } }, "PINNED"), /* @__PURE__ */ import_react4.default.createElement("h2", { style: { fontFamily: sans, fontSize: 20, color: T.white, fontWeight: 700, margin: 0, lineHeight: 1.25 } }, selectedThread.title))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { margin: "0 16px 12px", background: T.darkCard, borderRadius: 12, padding: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 12 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 32, height: 32, borderRadius: "50%", background: T.charcoal, display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, fontWeight: 700, color: T.copper } }, selectedThread.initial)), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 } }, "@", selectedThread.author), /* @__PURE__ */ import_react4.default.createElement(RankBadgeWithName, { points: getPoints(selectedThread.author), size: 10 })), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, display: "block" } }, formatPostTime(selectedThread.time), selectedThread.editedAt ? " \xB7 edited" : ""))), selectedThread.body && /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 14, color: T.warmStone, lineHeight: 1.6, margin: 0 }, dangerouslySetInnerHTML: { __html: `${thRbCSS}<div class="th-rb">${selectedThread.body}</div>` } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginTop: 14, paddingTop: 12, borderTop: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: toggleThreadHeart, style: { display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 8px 4px 0" } }, /* @__PURE__ */ import_react4.default.createElement(Heart, { size: 14, color: threadLiked ? T.red : T.tertiary, strokeWidth: 1.5, fill: threadLiked ? T.red : "none" }), threadLikes > 0 && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: threadLiked ? T.red : T.tertiary } }, threadLikes)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, /* @__PURE__ */ import_react4.default.createElement(MessageCircle, { size: 14, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, allPosts.length, " replies")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, /* @__PURE__ */ import_react4.default.createElement(Eye, { size: 14, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, getViewCount(selectedThread), " views")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => onOpenShareIntent && onOpenShareIntent({ kind: "forum", data: { id: selectedThread.id, threadId: selectedThread.id, title: selectedThread.title, body: selectedThread.body, author: selectedThread.author, forumCat: selectedCat?.name || "", forumSub: selectedSub?.name || "", subSlug: forumSlugify(selectedSub?.name || ""), slug: selectedThread.slug, image: selectedThread.photos && selectedThread.photos[0] || null } }), style: { display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px", marginLeft: "auto" } }, /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 14, color: T.tertiary, strokeWidth: 1.5 })))), allPosts.length > 0 && (() => {
+        beginEditThread(selectedThread);
+      }, style: { background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex" } }, /* @__PURE__ */ import_react4.default.createElement(PenLine, { size: 16, color: T.tertiary, strokeWidth: 1.5 }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { margin: "0 16px 4px", padding: "0 0 8px" } }, selectedThread.pinned && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.copper, background: `${T.copper}20`, padding: "2px 6px", borderRadius: 3, letterSpacing: 1, marginBottom: 8, display: "inline-block" } }, "PINNED"), /* @__PURE__ */ import_react4.default.createElement("h2", { style: { fontFamily: sans, fontSize: 20, color: T.white, fontWeight: 700, margin: 0, lineHeight: 1.25 } }, selectedThread.title))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { margin: "0 16px 12px", background: T.darkCard, borderRadius: 12, padding: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 12 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 32, height: 32, borderRadius: "50%", background: T.charcoal, display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, fontWeight: 700, color: T.copper } }, selectedThread.initial)), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 } }, "@", selectedThread.author), /* @__PURE__ */ import_react4.default.createElement(RankBadgeWithName, { points: getPoints(selectedThread.author), size: 10 })), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, display: "block" } }, formatPostTime(selectedThread.time), selectedThread.editedAt ? " \xB7 edited" : ""))), (() => {
+        const hasSections = Array.isArray(selectedThread.sections) && selectedThread.sections.length > 0;
+        if (!hasSections && !selectedThread.body) return null;
+        const html = hasSections ? assembleSectionsHtml(selectedThread.sections) : selectedThread.body;
+        return /* @__PURE__ */ import_react4.default.createElement("div", { style: { fontFamily: serif, fontSize: 14, color: T.warmStone, lineHeight: 1.6, margin: 0 }, dangerouslySetInnerHTML: { __html: `${thRbCSS}<div class="th-rb">${html}</div>` } });
+      })(), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginTop: 14, paddingTop: 12, borderTop: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: toggleThreadHeart, style: { display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 8px 4px 0" } }, /* @__PURE__ */ import_react4.default.createElement(Heart, { size: 14, color: threadLiked ? T.red : T.tertiary, strokeWidth: 1.5, fill: threadLiked ? T.red : "none" }), threadLikes > 0 && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: threadLiked ? T.red : T.tertiary } }, threadLikes)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, /* @__PURE__ */ import_react4.default.createElement(MessageCircle, { size: 14, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, allPosts.length, " replies")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, /* @__PURE__ */ import_react4.default.createElement(Eye, { size: 14, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, getViewCount(selectedThread), " views")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => onOpenShareIntent && onOpenShareIntent({ kind: "forum", data: { id: selectedThread.id, threadId: selectedThread.id, title: selectedThread.title, body: selectedThread.body, author: selectedThread.author, forumCat: selectedCat?.name || "", forumSub: selectedSub?.name || "", subSlug: forumSlugify(selectedSub?.name || ""), slug: selectedThread.slug, image: selectedThread.photos && selectedThread.photos[0] || null } }), style: { display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px", marginLeft: "auto" } }, /* @__PURE__ */ import_react4.default.createElement(Share2, { size: 14, color: T.tertiary, strokeWidth: 1.5 })))), allPosts.length > 0 && (() => {
         const topLevel = [];
         const subReplies = {};
         allPosts.forEach((post2, i) => {
@@ -46857,187 +46874,41 @@ ${suffix}`;
         onGuestTap && onGuestTap();
       } : void 0, placeholder: isGuest ? "Sign in to reply..." : "Write a reply...", style: { flex: 1, padding: "12px 38px 12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", width: "100%" } }), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => replyFileRef.current && replyFileRef.current.click(), style: { position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", padding: 2, display: "flex", alignItems: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Camera, { size: 16, color: T.tertiary }))), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: submitReply, style: { padding: "0 16px", borderRadius: 8, height: 42, background: forumReplyText.trim() || replyPhotos.length > 0 ? T.red : T.charcoal, border: "none", cursor: forumReplyText.trim() || replyPhotos.length > 0 ? "pointer" : "default", opacity: forumReplyText.trim() || replyPhotos.length > 0 ? 1 : 0.4, display: "flex", alignItems: "center" } }, /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 18, color: T.white }))), replyPhotos.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginTop: 8 } }, /* @__PURE__ */ import_react4.default.createElement(PhotoUploader, { photos: replyPhotos, onChange: setReplyPhotos }))), editingThreadId === selectedThread.id && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: T.darkBg, zIndex: 500, overflowY: "auto", display: "flex", flexDirection: "column" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", borderBottom: `1px solid ${T.charcoal}`, flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
         setEditingThreadId(null);
-        setEditLinkInput(false);
       }, style: { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 20, color: T.white, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700 } }, "Edit Thread")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: async () => {
-        const newBody = editBodyRef.current ? editBodyRef.current.innerHTML : editBody;
-        const cleanBody = newBody && newBody.replace(/<[^>]+>/g, "").trim() ? newBody : null;
         const newPhotos = await commitForumPhotos(editPhotos);
+        const processedSections = [];
+        for (const s of editSections) {
+          const subheading = (s.subheading || "").trim();
+          const rawBody = (s.body || "").trim();
+          const processedBody = await processForumBodyImages(rawBody, currentUserId);
+          const plain = processedBody.replace(/<[^>]+>/g, "").trim();
+          if (!subheading && !plain) continue;
+          processedSections.push({ subheading, body: processedBody });
+        }
+        const bodyHtml = assembleSectionsHtml(processedSections) || null;
         const updates = {
           title: editTitle.trim(),
-          body: cleanBody,
+          body: bodyHtml,
+          sections: processedSections,
           photos: newPhotos.length > 0 ? newPhotos : []
         };
         if (onUpdateForumThread) await onUpdateForumThread(selectedThread.id, updates);
         setSelectedThread({ ...selectedThread, ...updates, photos: newPhotos.length > 0 ? newPhotos : void 0, editedAt: Date.now() });
         setEditingThreadId(null);
-        setEditLinkInput(false);
-      }, style: { padding: "8px 18px", borderRadius: 8, background: editTitle.trim() ? T.red : T.charcoal, border: "none", cursor: editTitle.trim() ? "pointer" : "default", opacity: editTitle.trim() ? 1 : 0.5 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, "SAVE"))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, overflowY: "auto", padding: "16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "TITLE *"), /* @__PURE__ */ import_react4.default.createElement("input", { value: editTitle, onChange: (e) => setEditTitle(e.target.value), style: { width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none", boxSizing: "border-box" } })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "BODY"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 2, padding: "6px 8px", background: T.charcoal, borderRadius: "8px 8px 0 0", border: `1px solid ${T.charcoal}`, borderBottom: "none" } }, [
-        { cmd: "bold", label: "B", style: { fontWeight: 700 } },
-        { cmd: "italic", label: "I", style: { fontStyle: "italic" } },
-        { cmd: "underline", label: "U", style: { textDecoration: "underline" } },
-        { cmd: "strikeThrough", label: "S", style: { textDecoration: "line-through" } }
-      ].map((btn) => {
-        const isActive = editActiveFormats[btn.cmd];
-        return /* @__PURE__ */ import_react4.default.createElement("button", { key: btn.cmd, onMouseDown: (e) => {
-          e.preventDefault();
-          document.execCommand(btn.cmd, false, null);
-          editBodyRef.current && setEditBody(editBodyRef.current.innerHTML);
-          setTimeout(updateEditFormats, 0);
-        }, style: { width: 30, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: isActive ? `${T.copper}30` : "none", border: isActive ? `1px solid ${T.copper}` : `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", ...btn.style, color: isActive ? T.copper : T.white, fontFamily: serif, fontSize: 13, transition: "all 0.15s" } }, btn.label);
-      }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 1, height: 20, background: `${T.tertiary}30`, margin: "4px 4px", alignSelf: "center" } }), [
-        { cmd: "formatBlock", arg: "<h1>", label: "H1", key: "h1" },
-        { cmd: "formatBlock", arg: "<h2>", label: "H2", key: "h2" },
-        { cmd: "formatBlock", arg: "<h3>", label: "H3", key: "h3" },
-        { cmd: "formatBlock", arg: "<p>", label: "P", key: "p" }
-      ].map((btn) => {
-        const isActive = editActiveFormats[btn.key];
-        return /* @__PURE__ */ import_react4.default.createElement("button", { key: btn.label, onMouseDown: (e) => {
-          e.preventDefault();
-          document.execCommand(btn.cmd, false, btn.arg);
-          editBodyRef.current && setEditBody(editBodyRef.current.innerHTML);
-          setTimeout(updateEditFormats, 0);
-        }, style: { minWidth: 28, height: 28, padding: "0 6px", display: "flex", alignItems: "center", justifyContent: "center", background: isActive ? `${T.copper}30` : "none", border: isActive ? `1px solid ${T.copper}` : `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", color: isActive ? T.copper : T.white, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.3, transition: "all 0.15s" } }, btn.label);
-      }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 1, height: 20, background: `${T.tertiary}30`, margin: "4px 4px", alignSelf: "center" } }), (() => {
-        const ulActive = editActiveFormats.insertUnorderedList;
-        return /* @__PURE__ */ import_react4.default.createElement("button", { onMouseDown: (e) => {
-          e.preventDefault();
-          document.execCommand("insertUnorderedList", false, null);
-          editBodyRef.current && setEditBody(editBodyRef.current.innerHTML);
-          setTimeout(updateEditFormats, 0);
-        }, style: { width: 30, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: ulActive ? `${T.copper}30` : "none", border: ulActive ? `1px solid ${T.copper}` : `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", color: ulActive ? T.copper : T.white, fontFamily: sans, fontSize: 11, transition: "all 0.15s" }, title: "Bullet list" }, "\u2022\u2261");
-      })(), (() => {
-        const olActive = editActiveFormats.insertOrderedList;
-        return /* @__PURE__ */ import_react4.default.createElement("button", { onMouseDown: (e) => {
-          e.preventDefault();
-          document.execCommand("insertOrderedList", false, null);
-          editBodyRef.current && setEditBody(editBodyRef.current.innerHTML);
-          setTimeout(updateEditFormats, 0);
-        }, style: { width: 30, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: olActive ? `${T.copper}30` : "none", border: olActive ? `1px solid ${T.copper}` : `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", color: olActive ? T.copper : T.white, fontFamily: sans, fontSize: 11, transition: "all 0.15s" }, title: "Numbered list" }, "1.");
-      })(), (() => {
-        const sel = window.getSelection && window.getSelection();
-        let isHighlighted = false;
-        if (sel && sel.rangeCount > 0 && sel.anchorNode) {
-          let node = sel.anchorNode.nodeType === 3 ? sel.anchorNode.parentElement : sel.anchorNode;
-          while (node && node !== editBodyRef.current) {
-            const bg = node.style && node.style.backgroundColor;
-            if (bg && bg !== "transparent" && bg !== "rgba(0, 0, 0, 0)" && bg !== "") {
-              isHighlighted = true;
-              break;
-            }
-            node = node.parentElement;
-          }
-        }
-        return /* @__PURE__ */ import_react4.default.createElement("button", { onMouseDown: (e) => {
-          e.preventDefault();
-          document.execCommand("hiliteColor", false, isHighlighted ? "transparent" : "#C49A6C40");
-          editBodyRef.current && setEditBody(editBodyRef.current.innerHTML);
-        }, style: { width: 30, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: isHighlighted ? `${T.copper}60` : `${T.copper}20`, border: isHighlighted ? `1px solid ${T.copper}` : `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", color: T.copper, fontFamily: sans, fontSize: 10, fontWeight: 700, transition: "all 0.15s" }, title: "Highlight" }, "Hi");
-      })(), /* @__PURE__ */ import_react4.default.createElement("button", { onMouseDown: (e) => {
-        e.preventDefault();
-        const selection = window.getSelection();
-        if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
-        editSavedRange.current = selection.getRangeAt(0).cloneRange();
-        setEditLinkInput(true);
-        setEditLinkUrl("");
-      }, style: { width: 30, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: editLinkInput ? `${T.copper}30` : "none", border: editLinkInput ? `1px solid ${T.copper}` : `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", color: T.copper, fontFamily: sans, fontSize: 11, textDecoration: "underline", transition: "all 0.15s" }, title: "Insert link" }, "\u{1F517}"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 1, height: 20, background: `${T.tertiary}30`, margin: "4px 4px", alignSelf: "center" } }), /* @__PURE__ */ import_react4.default.createElement("button", { onMouseDown: (e) => {
-        e.preventDefault();
-        const selection = window.getSelection();
-        if (selection && selection.rangeCount > 0) editSavedRange.current = selection.getRangeAt(0).cloneRange();
-        const fileInput = document.createElement("input");
-        fileInput.type = "file";
-        fileInput.accept = "image/*";
-        fileInput.multiple = true;
-        fileInput.onchange = (ev) => {
-          Array.from(ev.target.files || []).forEach((file) => {
-            const reader = new FileReader();
-            reader.onload = (re) => {
-              if (editBodyRef.current) {
-                editBodyRef.current.focus();
-                const sel = window.getSelection();
-                if (editSavedRange.current) {
-                  sel.removeAllRanges();
-                  sel.addRange(editSavedRange.current);
-                }
-                document.execCommand("insertHTML", false, `<div style="margin:8px 0"><img src="${re.target.result}" style="max-width:100%;border-radius:8px;display:block" /></div>`);
-                setEditBody(editBodyRef.current.innerHTML);
-              }
-            };
-            reader.readAsDataURL(file);
-          });
-        };
-        fileInput.click();
-      }, style: { width: 30, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", color: T.copper, fontFamily: sans, fontSize: 13, transition: "all 0.15s" }, title: "Insert image" }, "\u{1F4F7}")), editLinkInput && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, padding: "8px 10px", background: T.darkBg, border: `1px solid ${T.copper}`, borderBottom: "none" } }, /* @__PURE__ */ import_react4.default.createElement("input", { autoFocus: true, value: editLinkUrl, onChange: (e) => setEditLinkUrl(e.target.value), onKeyDown: (e) => {
-        if (e.key === "Enter" && editLinkUrl.trim()) {
-          e.preventDefault();
-          const sel = window.getSelection();
-          if (editSavedRange.current) {
-            sel.removeAllRanges();
-            sel.addRange(editSavedRange.current);
-          }
-          document.execCommand("createLink", false, editLinkUrl.trim().startsWith("http") ? editLinkUrl.trim() : "https://" + editLinkUrl.trim());
-          editBodyRef.current && setEditBody(editBodyRef.current.innerHTML);
-          setEditLinkInput(false);
-          setEditLinkUrl("");
-          editSavedRange.current = null;
-        } else if (e.key === "Escape") {
-          setEditLinkInput(false);
-          setEditLinkUrl("");
-          editSavedRange.current = null;
-        }
-      }, placeholder: "Paste URL and press Enter...", style: { flex: 1, padding: "6px 10px", borderRadius: 6, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 12, outline: "none" } }), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
-        if (editLinkUrl.trim()) {
-          const sel = window.getSelection();
-          if (editSavedRange.current) {
-            sel.removeAllRanges();
-            sel.addRange(editSavedRange.current);
-          }
-          document.execCommand("createLink", false, editLinkUrl.trim().startsWith("http") ? editLinkUrl.trim() : "https://" + editLinkUrl.trim());
-          editBodyRef.current && setEditBody(editBodyRef.current.innerHTML);
-        }
-        setEditLinkInput(false);
-        setEditLinkUrl("");
-        editSavedRange.current = null;
-      }, style: { padding: "6px 12px", borderRadius: 6, background: T.copper, border: "none", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 } }, "Add")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
-        setEditLinkInput(false);
-        setEditLinkUrl("");
-        editSavedRange.current = null;
-      }, style: { padding: "6px 8px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}40`, cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 12, color: T.tertiary }))), /* @__PURE__ */ import_react4.default.createElement(
-        "div",
+      }, style: { padding: "8px 18px", borderRadius: 8, background: editTitle.trim() ? T.red : T.charcoal, border: "none", cursor: editTitle.trim() ? "pointer" : "default", opacity: editTitle.trim() ? 1 : 0.5 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, "SAVE"))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, overflowY: "auto", padding: "16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "TITLE *"), /* @__PURE__ */ import_react4.default.createElement("input", { value: editTitle, onChange: (e) => setEditTitle(e.target.value), style: { width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none", boxSizing: "border-box" } })), editSections.map((s, i) => /* @__PURE__ */ import_react4.default.createElement(
+        ForumSectionEditor,
         {
-          ref: (el) => {
-            editBodyRef.current = el;
-            if (el && editInitialized.current !== editingThreadId) {
-              el.innerHTML = editBody;
-              editInitialized.current = editingThreadId;
-            }
-          },
-          contentEditable: true,
-          onInput: () => {
-            editBodyRef.current && setEditBody(editBodyRef.current.innerHTML);
-            updateEditFormats();
-          },
-          onKeyUp: updateEditFormats,
-          onMouseUp: updateEditFormats,
-          onSelect: updateEditFormats,
-          onFocus: updateEditFormats,
-          onPaste: (e) => {
-            e.preventDefault();
-            const text = e.clipboardData.getData("text/html") || e.clipboardData.getData("text/plain");
-            document.execCommand("insertHTML", false, text);
-            editBodyRef.current && setEditBody(editBodyRef.current.innerHTML);
-          },
-          style: { width: "100%", minHeight: 180, padding: "12px 14px", borderRadius: "0 0 8px 8px", background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none", boxSizing: "border-box", lineHeight: 1.6, overflowY: "auto", maxHeight: 400 }
+          key: s.id,
+          sectionNumber: editSections.length > 1 ? i + 1 : null,
+          subheading: s.subheading,
+          onSubheadingChange: (v) => updateEditSection(s.id, { subheading: v }),
+          value: s.body,
+          onChange: (v) => updateEditSection(s.id, { body: v }),
+          showRemove: editSections.length > 1,
+          onRemove: () => removeEditSection(s.id),
+          placeholder: i === 0 ? "Share your knowledge, ask a question, or start a discussion..." : "Continue the discussion..."
         }
-      ), /* @__PURE__ */ import_react4.default.createElement("style", null, `
-                  [contenteditable] h1 { font-size: 26px !important; font-weight: 700; color: ${T.white}; margin: 10px 0 6px; font-family: ${sans}; line-height: 1.2; }
-                  [contenteditable] h2 { font-size: 21px !important; font-weight: 700; color: ${T.white}; margin: 8px 0 4px; font-family: ${sans}; line-height: 1.3; }
-                  [contenteditable] h3 { font-size: 17px !important; font-weight: 600; color: ${T.white}; margin: 6px 0 3px; font-family: ${sans}; line-height: 1.3; }
-                  [contenteditable] img { max-width: 100%; border-radius: 8px; display: block; margin: 8px 0; }
-                  [contenteditable] a { color: ${T.copper}; text-decoration: underline; }
-                  [contenteditable] ul { list-style-type: disc !important; padding-left: 24px !important; }
-                  [contenteditable] ol { list-style-type: decimal !important; padding-left: 24px !important; }
-                  [contenteditable] li { display: list-item !important; }
-                `)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "HERO IMAGE"), /* @__PURE__ */ import_react4.default.createElement(PhotoUploader, { photos: editPhotos, onChange: setEditPhotos })))));
+      )), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: addEditSection, style: { width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", borderRadius: 8, background: "none", border: `1px dashed ${T.copper}60`, cursor: "pointer", marginBottom: 16, color: T.copper, fontFamily: sans, fontSize: 12, fontWeight: 600, letterSpacing: 0.5 } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 14, color: T.copper }), "ADD SECTION"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "HERO IMAGE"), /* @__PURE__ */ import_react4.default.createElement(PhotoUploader, { photos: editPhotos, onChange: setEditPhotos })))));
     }
     if (view === "threads" && selectedSub && selectedCat) {
       const threads = ((threadsBySub || {})[selectedSub.name] || []).slice().sort((a, b) => {
@@ -59749,7 +59620,7 @@ ${suffix}`;
         forumRepliesLoadedRef.current[threadId] = false;
       }
     };
-    const addForumThread = async ({ title, body, photos, categoryName, subcategoryName }) => {
+    const addForumThread = async ({ title, body, sections, photos, categoryName, subcategoryName }) => {
       const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
       if (!uid) return null;
       if (!title || !title.trim()) return null;
@@ -59769,6 +59640,7 @@ ${suffix}`;
           title: trimmed,
           slug: candidateSlug,
           body: body || null,
+          sections: Array.isArray(sections) ? sections : [],
           photos: Array.isArray(photos) ? photos : []
         }).select().single();
         if (!error) {
@@ -59796,6 +59668,7 @@ ${suffix}`;
       const patch = {};
       if (typeof updates.title === "string") patch.title = updates.title;
       if (updates.body !== void 0) patch.body = updates.body;
+      if (Array.isArray(updates.sections)) patch.sections = updates.sections;
       if (Array.isArray(updates.photos)) patch.photos = updates.photos;
       if (typeof updates.pinned === "boolean") patch.pinned = updates.pinned;
       patch.updated_at = (/* @__PURE__ */ new Date()).toISOString();
