@@ -18815,9 +18815,14 @@ function LoginScreen({ onLogin, onGoToSignup, onGuestEnter }) {
 }
 
 /* ─── CREATE ACCOUNT SCREEN ─── */
-function SignupScreen({ onSignup, onGoToLogin, onSetProfilePic, onAddBuild }) {
+function SignupScreen({ onSignup, onGoToLogin, onSetProfilePic, onAddBuild, onAwaitVerification }) {
   const [step, setStep] = useState(1); // 1 = account info, 2 = profile pic + rig survey
   const [form, setForm] = useState({ name: "", email: "", handle: "", password: "", confirmPassword: "" });
+  // TOS acceptance is a hard gate. Stored in user_metadata.terms_accepted_at
+  // + version on signup so we have an audit trail. `showTerms` opens the
+  // modal that shows the full text inline.
+  const [tosAccepted, setTosAccepted] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
   const [rig, setRig] = useState({ year: "", make: "", model: "", buildName: "" });
   const [yearMode, setYearMode] = useState("select");
   const [makeMode, setMakeMode] = useState("select");
@@ -18867,6 +18872,7 @@ function SignupScreen({ onSignup, onGoToLogin, onSetProfilePic, onAddBuild }) {
     if (!form.handle.trim()) return setError("Choose a username.");
     if (form.password.length < 6) return setError("Password must be at least 6 characters.");
     if (form.password !== form.confirmPassword) return setError("Passwords don't match.");
+    if (!tosAccepted) return setError("You must agree to the Terms of Service to continue.");
     setError("");
     setLoading(true);
     try {
@@ -18879,14 +18885,16 @@ function SignupScreen({ onSignup, onGoToLogin, onSetProfilePic, onAddBuild }) {
           data: {
             full_name: form.name.trim(),
             handle: form.handle.trim().replace(/^@/, ""),
+            terms_accepted_at: new Date().toISOString(),
+            terms_version: TRAILHEAD_TOS_VERSION,
           },
         },
       });
       if (authError) { setError(authError.message || "Sign up failed."); setLoading(false); return; }
-      // If email confirmation is ON in Supabase, data.session will be null and the user
-      // must click a link in their email. If OFF, they're signed in immediately.
+      // Email confirmation is enforced — Supabase returns user with no session
+      // and sends a magic link. Hand off to the parent's verification flow.
       if (data && data.user && !data.session) {
-        setError("Check your email to confirm your account, then sign in.");
+        if (onAwaitVerification) onAwaitVerification(form.email.trim());
         setLoading(false);
         return;
       }
@@ -19023,14 +19031,28 @@ function SignupScreen({ onSignup, onGoToLogin, onSetProfilePic, onAddBuild }) {
                 </button>
               </div>
             </div>
-            <div style={{ marginBottom: 24 }}>
+            <div style={{ marginBottom: 18 }}>
               <label style={labelStyle}>CONFIRM PASSWORD</label>
               <input type="password" value={form.confirmPassword} onChange={(e) => set("confirmPassword", e.target.value)} placeholder="Re-enter your password" style={inputStyle} onFocus={(e) => e.target.style.borderColor = T.copper} onBlur={(e) => e.target.style.borderColor = T.charcoal} />
+            </div>
+
+            {/* TOS acceptance — version persisted in user_metadata. */}
+            <div onClick={() => setTosAccepted(t => !t)} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${tosAccepted ? T.green : T.charcoal}`, cursor: "pointer", marginBottom: 20 }}>
+              <div style={{ width: 18, height: 18, borderRadius: 4, background: tosAccepted ? T.green : "transparent", border: `1.5px solid ${tosAccepted ? T.green : T.tertiary}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
+                {tosAccepted && <CheckCircle size={12} color={T.white} strokeWidth={2.5} />}
+              </div>
+              <span style={{ fontFamily: serif, fontSize: 12, color: T.warmStone || T.white, lineHeight: 1.5 }}>
+                I agree to the{" "}
+                <span onClick={(e) => { e.stopPropagation(); setShowTerms(true); }} style={{ color: T.copper, textDecoration: "underline", fontWeight: 600 }}>Terms of Service</span>
+                {" "}— Lone Peak Overland owns and may use any content I create on Trailhead.
+              </span>
             </div>
 
             <button onClick={handleStep1} disabled={loading} style={{ width: "100%", padding: "14px 0", borderRadius: 8, background: T.red, border: "none", cursor: loading ? "wait" : "pointer", marginBottom: 16, opacity: loading ? 0.7 : 1 }}>
               <span style={{ fontFamily: sans, fontSize: 13, fontWeight: 600, color: T.white, letterSpacing: 1.5 }}>{loading ? "CREATING ACCOUNT..." : "CONTINUE"}</span>
             </button>
+
+            {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
 
             {/* Divider */}
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
@@ -19503,6 +19525,34 @@ function OnboardingScreen({ session, onComplete, onSetProfilePic, onAddBuild }) 
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Where to start — quick orientation card so first-timers
+              aren't dropped on an empty feed without a sense of what to
+              do. Each item is informational only; the actual screens are
+              one tap away after onboarding completes. */}
+          <div style={{ background: T.darkCard, borderRadius: 12, padding: 18, border: `1px solid ${T.copper}30`, marginBottom: 16 }}>
+            <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.5, fontWeight: 700, display: "block", marginBottom: 12 }}>WELCOME — HERE'S WHERE TO START</span>
+            {[
+              { icon: Wrench, title: "Add your build", body: "Document your rig with photos + a full mods breakdown. Other users can like, comment, and share." },
+              { icon: Map, title: "Explore the map", body: "See community trip reports, plans, and camping spots near you. Save the ones you want to do." },
+              { icon: Route, title: "Plan a trip", body: "Drop pins on the map to chart out a route. Bring others along by turning a plan into a convoy." },
+              { icon: Compass, title: "Browse the forum", body: "How-to guides, troubleshooting, regional groups, and the marketplace are all in there." },
+              { icon: Users, title: "Find your people", body: "Follow other overlanders, join convoys, and DM when you need a buddy on the trail." },
+            ].map((it, i, arr) => {
+              const Icon = it.icon;
+              return (
+                <div key={i} style={{ display: "flex", gap: 12, paddingBottom: i < arr.length - 1 ? 12 : 0, marginBottom: i < arr.length - 1 ? 12 : 0, borderBottom: i < arr.length - 1 ? `1px solid ${T.charcoal}` : "none" }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 8, background: `${T.copper}18`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <Icon size={16} color={T.copper} strokeWidth={1.5} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontFamily: sans, fontSize: 13, color: T.white, margin: "0 0 2px", fontWeight: 600 }}>{it.title}</p>
+                    <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: 0, lineHeight: 1.5 }}>{it.body}</p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
           <button onClick={handleFinish} disabled={loading} style={{ width: "100%", padding: "14px 0", borderRadius: 8, background: T.red, border: "none", cursor: loading ? "wait" : "pointer", marginBottom: 12, opacity: loading ? 0.7 : 1 }}>
@@ -21833,6 +21883,237 @@ function GuestBanner({ onSignIn, overlay }) {
 }
 
 // Full-screen gate shown when a guest hits a logged-in-only surface (e.g. Ranks).
+// Placeholder TOS — draft text covering the key points Kyle laid out:
+// LPO owns all content, may use it for marketing, may contact users via
+// supplied info, may moderate/remove/delete at will. Update freely as
+// real legal copy lands.
+const TRAILHEAD_TOS_VERSION = "2026-05-20";
+const TRAILHEAD_TOS_BODY = `TRAILHEAD TERMS OF SERVICE
+Last updated: May 2026
+
+Welcome to Trailhead, an overlanding community app operated by Lone Peak Overland LLC ("Lone Peak Overland", "we", "us", or "our"). By creating an account or using Trailhead, you agree to these Terms of Service.
+
+1. CONTENT OWNERSHIP AND LICENSE
+All content you post, upload, or create on Trailhead — including but not limited to photos, videos, trip reports, route data, forum posts, vehicle build entries, comments, messages, and any other user-generated content — is owned by Lone Peak Overland. By using Trailhead, you grant Lone Peak Overland a perpetual, irrevocable, worldwide, royalty-free license to store, display, modify, distribute, and use your content for any purpose, including but not limited to operating the platform, marketing and promoting Lone Peak Overland's products and services, and any other commercial or non-commercial use we see fit.
+
+2. MARKETING USE OF CONTENT
+Lone Peak Overland may use any content you submit — including your handle, name, photos, builds, trip reports, comments, and other contributions — in our marketing materials, social media channels, website, advertisements, and product packaging without further consent or compensation to you.
+
+3. CONTACT
+You agree that Lone Peak Overland may contact you using any contact information you provide (including your email address and any other information in your profile) for purposes including account-related notifications, product announcements, marketing communications, and community updates.
+
+4. MODERATION
+Lone Peak Overland reserves the unrestricted right to remove, edit, suspend, or permanently delete any content, account, or feature on Trailhead at any time, for any reason or no reason, with or without notice. This includes the right to enforce any community guidelines as we see fit.
+
+5. ACCOUNT TERMINATION
+We may terminate or suspend your account at any time at our sole discretion. You may also terminate your account at any time by contacting us.
+
+6. WARRANTIES AND LIMITATION OF LIABILITY
+Trailhead is provided "as is" without warranty of any kind. To the maximum extent permitted by law, Lone Peak Overland disclaims all warranties, express or implied. We are not liable for any damages arising from your use of the platform.
+
+7. CHANGES TO THESE TERMS
+We may update these Terms at any time. Continued use of Trailhead after changes constitutes acceptance of the updated Terms.
+
+8. CONTACT US
+Questions about these Terms? Email kyle@lonepeakoverland.com.`;
+
+function TermsModal({ onClose }) {
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 11000, background: "rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: T.darkCard, borderRadius: 14, width: "100%", maxWidth: 520, maxHeight: "85vh", display: "flex", flexDirection: "column", border: `1px solid ${T.charcoal}`, overflow: "hidden" }}>
+        <div style={{ padding: "14px 18px", borderBottom: `1px solid ${T.charcoal}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, letterSpacing: 1.5, fontWeight: 700 }}>TERMS OF SERVICE</span>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex" }}>
+            <X size={18} color={T.tertiary} />
+          </button>
+        </div>
+        <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
+          <pre style={{ fontFamily: serif, fontSize: 13, color: T.warmStone || T.white, lineHeight: 1.7, margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{TRAILHEAD_TOS_BODY}</pre>
+        </div>
+        <div style={{ padding: "12px 18px", borderTop: `1px solid ${T.charcoal}` }}>
+          <button onClick={onClose} style={{ width: "100%", padding: "12px 16px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 1 }}>CLOSE</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Platform detection for the install-PWA step. Returns one of:
+//   "standalone" — already running as a PWA, no install needed
+//   "ios"        — iOS Safari, needs Share → Add to Home Screen
+//   "android"    — Android Chrome / Edge, needs menu → Install app
+//   "desktop"    — desktop browser, no install needed
+//   "other"      — unknown (e.g. desktop Safari) — skip
+function detectInstallPlatform() {
+  if (typeof window === "undefined" || typeof navigator === "undefined") return "other";
+  const standalone = window.matchMedia && window.matchMedia("(display-mode: standalone)").matches;
+  if (standalone || navigator.standalone === true) return "standalone";
+  const ua = navigator.userAgent || "";
+  const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+  if (isIOS) return "ios";
+  const isAndroid = /Android/.test(ua);
+  if (isAndroid) return "android";
+  // Desktop: width > 1024 + no touch. We treat as "no install needed".
+  const isLikelyDesktop = window.innerWidth >= 1024 && !("ontouchstart" in window);
+  return isLikelyDesktop ? "desktop" : "other";
+}
+
+function VerifyEmailScreen({ session, email, onContinue, onCancel }) {
+  const [checking, setChecking] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resendOk, setResendOk] = useState(false);
+  const [error, setError] = useState("");
+  // Listen for SIGNED_IN events — if the user clicks the magic link in
+  // another tab + Supabase fires a fresh session, advance automatically.
+  useEffect(() => {
+    if (!session) return;
+    const { data: sub } = supabase.auth.onAuthStateChange((event, sess) => {
+      if (sess && sess.user && sess.user.email_confirmed_at) onContinue();
+    });
+    return () => sub && sub.subscription && sub.subscription.unsubscribe();
+  }, [session, onContinue]);
+  const checkVerified = async () => {
+    setError(""); setChecking(true);
+    try {
+      // Force a session refresh so email_confirmed_at reflects the latest.
+      const { data, error: err } = await supabase.auth.refreshSession();
+      if (err) { setError(err.message || "Could not refresh session."); setChecking(false); return; }
+      const u = (data && data.user) || (data && data.session && data.session.user);
+      if (u && u.email_confirmed_at) { onContinue(); return; }
+      setError("Email not yet verified. Click the link in your inbox, then try again.");
+    } catch (e) { setError("Network error. Try again."); }
+    setChecking(false);
+  };
+  const resend = async () => {
+    setError(""); setResending(true); setResendOk(false);
+    try {
+      const { error: err } = await supabase.auth.resend({ type: "signup", email });
+      if (err) setError(err.message || "Could not resend."); else setResendOk(true);
+    } catch (e) { setError("Network error. Try again."); }
+    setResending(false);
+  };
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: T.darkBg, padding: 24, justifyContent: "center", alignItems: "center" }}>
+      <div style={{ width: "100%", maxWidth: 380 }}>
+        <div style={{ width: 64, height: 64, borderRadius: "50%", background: `${T.copper}18`, border: `2px solid ${T.copper}`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
+          <Mail size={26} color={T.copper} strokeWidth={1.5} />
+        </div>
+        <h2 style={{ fontFamily: sans, fontSize: 22, color: T.white, margin: "0 0 8px", fontWeight: 700, letterSpacing: 0.5, textAlign: "center" }}>CHECK YOUR EMAIL</h2>
+        <p style={{ fontFamily: serif, fontSize: 14, color: T.tertiary, textAlign: "center", margin: "0 0 4px", lineHeight: 1.6 }}>We sent a verification link to</p>
+        <p style={{ fontFamily: sans, fontSize: 14, color: T.copper, textAlign: "center", margin: "0 0 24px", fontWeight: 600 }}>{email || "your email"}</p>
+        <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, textAlign: "center", margin: "0 0 24px", lineHeight: 1.6 }}>Click the link in your inbox, then come back here and tap "I'm verified".</p>
+        {error && <div style={{ background: `${T.red}15`, border: `1px solid ${T.red}40`, padding: 12, borderRadius: 8, marginBottom: 16, fontFamily: sans, fontSize: 12, color: T.red }}>{error}</div>}
+        {resendOk && <div style={{ background: `${T.green}15`, border: `1px solid ${T.green}40`, padding: 12, borderRadius: 8, marginBottom: 16, fontFamily: sans, fontSize: 12, color: T.green }}>Verification email resent.</div>}
+        <button onClick={checkVerified} disabled={checking} style={{ width: "100%", padding: "14px 16px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 1.5, marginBottom: 10 }}>{checking ? "CHECKING…" : "I'M VERIFIED — CONTINUE"}</button>
+        <button onClick={resend} disabled={resending} style={{ width: "100%", padding: "12px 16px", borderRadius: 8, background: "transparent", border: `1px solid ${T.copper}40`, cursor: "pointer", fontFamily: sans, fontSize: 12, color: T.copper, fontWeight: 600, letterSpacing: 1, marginBottom: 18 }}>{resending ? "SENDING…" : "RESEND EMAIL"}</button>
+        {onCancel && (
+          <button onClick={onCancel} style={{ width: "100%", padding: "10px 16px", background: "transparent", border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, letterSpacing: 0.5 }}>Use a different email</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function InstallPWAScreen({ onContinue, onSkip }) {
+  const platform = detectInstallPlatform();
+  // Already installed / desktop / unknown → no useful install action,
+  // auto-advance the user past this step on mount.
+  useEffect(() => {
+    if (platform === "standalone" || platform === "desktop" || platform === "other") {
+      onContinue();
+    }
+  }, [platform]);
+  if (platform === "standalone" || platform === "desktop" || platform === "other") return null;
+  const isIOS = platform === "ios";
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: T.darkBg, padding: 24, justifyContent: "center", alignItems: "center" }}>
+      <div style={{ width: "100%", maxWidth: 380 }}>
+        <div style={{ width: 64, height: 64, borderRadius: "50%", background: `${T.green}15`, border: `2px solid ${T.green}`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
+          <Smartphone size={28} color={T.green} strokeWidth={1.5} />
+        </div>
+        <h2 style={{ fontFamily: sans, fontSize: 22, color: T.white, margin: "0 0 8px", fontWeight: 700, letterSpacing: 0.5, textAlign: "center" }}>INSTALL TRAILHEAD</h2>
+        <p style={{ fontFamily: serif, fontSize: 14, color: T.tertiary, textAlign: "center", margin: "0 0 24px", lineHeight: 1.6 }}>Add Trailhead to your home screen to get push notifications, offline map caching, and an app-like experience.</p>
+        {isIOS ? (
+          <div style={{ background: T.darkCard, borderRadius: 12, padding: 18, border: `1px solid ${T.charcoal}`, marginBottom: 18 }}>
+            <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700, display: "block", marginBottom: 12 }}>ON IPHONE / IPAD (SAFARI)</span>
+            <ol style={{ margin: 0, paddingLeft: 20, fontFamily: serif, fontSize: 14, color: T.white, lineHeight: 1.8 }}>
+              <li>Tap the <strong style={{ color: T.copper }}>Share</strong> button at the bottom of Safari (the square with an arrow pointing up)</li>
+              <li>Scroll down and tap <strong style={{ color: T.copper }}>Add to Home Screen</strong></li>
+              <li>Tap <strong style={{ color: T.copper }}>Add</strong> in the top right</li>
+              <li>Open Trailhead from your home screen icon</li>
+            </ol>
+          </div>
+        ) : (
+          <div style={{ background: T.darkCard, borderRadius: 12, padding: 18, border: `1px solid ${T.charcoal}`, marginBottom: 18 }}>
+            <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700, display: "block", marginBottom: 12 }}>ON ANDROID (CHROME / EDGE)</span>
+            <ol style={{ margin: 0, paddingLeft: 20, fontFamily: serif, fontSize: 14, color: T.white, lineHeight: 1.8 }}>
+              <li>Tap the <strong style={{ color: T.copper }}>⋮ menu</strong> in the top-right corner of Chrome</li>
+              <li>Tap <strong style={{ color: T.copper }}>Install app</strong> (or "Add to Home screen")</li>
+              <li>Tap <strong style={{ color: T.copper }}>Install</strong> to confirm</li>
+              <li>Open Trailhead from your home screen</li>
+            </ol>
+          </div>
+        )}
+        <button onClick={onContinue} style={{ width: "100%", padding: "14px 16px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 1.5, marginBottom: 10 }}>I'VE INSTALLED IT</button>
+        <button onClick={onSkip} style={{ width: "100%", padding: "10px 16px", background: "transparent", border: "none", cursor: "pointer", fontFamily: sans, fontSize: 12, color: T.tertiary, letterSpacing: 0.5 }}>Skip for now</button>
+      </div>
+    </div>
+  );
+}
+
+function EnablePushScreen({ onSubscribe, onSkip }) {
+  const [subscribing, setSubscribing] = useState(false);
+  const [error, setError] = useState("");
+  const platform = detectInstallPlatform();
+  // iOS Safari only supports web push when the app is installed as PWA.
+  // If we land here in iOS Safari (not standalone) → push is unavailable.
+  const iosBrowserNotPwa = (typeof navigator !== "undefined" && /iPad|iPhone|iPod/.test(navigator.userAgent) && platform !== "standalone");
+  const handleEnable = async () => {
+    setError(""); setSubscribing(true);
+    try {
+      const ok = await onSubscribe();
+      if (!ok) { setError("Notifications were not enabled. You can turn them on later in Profile → Settings."); setSubscribing(false); return; }
+    } catch (e) { setError("Could not enable notifications. Try again later."); setSubscribing(false); return; }
+    setSubscribing(false);
+    // onSubscribe already triggered the browser permission flow; advance regardless of result.
+  };
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: T.darkBg, padding: 24, justifyContent: "center", alignItems: "center" }}>
+      <div style={{ width: "100%", maxWidth: 380 }}>
+        <div style={{ width: 64, height: 64, borderRadius: "50%", background: `${T.red}15`, border: `2px solid ${T.red}`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
+          <Bell size={26} color={T.red} strokeWidth={1.5} />
+        </div>
+        <h2 style={{ fontFamily: sans, fontSize: 22, color: T.white, margin: "0 0 8px", fontWeight: 700, letterSpacing: 0.5, textAlign: "center" }}>STAY IN THE LOOP</h2>
+        <p style={{ fontFamily: serif, fontSize: 14, color: T.tertiary, textAlign: "center", margin: "0 0 22px", lineHeight: 1.6 }}>Turn on push notifications to get alerts when:</p>
+        <div style={{ background: T.darkCard, borderRadius: 12, padding: 16, border: `1px solid ${T.charcoal}`, marginBottom: 18 }}>
+          {[
+            { icon: Heart, label: "Someone likes your post or build" },
+            { icon: MessageCircle, label: "Someone comments or replies" },
+            { icon: UserPlus, label: "Someone follows you" },
+            { icon: AtSign, label: "You're mentioned in a thread" },
+            { icon: Users, label: "A convoy you joined posts an update" },
+            { icon: AlertTriangle, label: "Nearby recovery requests" },
+          ].map((it, i) => {
+            const Icon = it.icon;
+            return (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: i < 5 ? `1px solid ${T.charcoal}` : "none" }}>
+                <Icon size={14} color={T.copper} />
+                <span style={{ fontFamily: sans, fontSize: 13, color: T.white }}>{it.label}</span>
+              </div>
+            );
+          })}
+        </div>
+        {iosBrowserNotPwa && (
+          <div style={{ background: `${T.copper}15`, border: `1px solid ${T.copper}40`, padding: 12, borderRadius: 8, marginBottom: 14, fontFamily: serif, fontSize: 12, color: T.copper, lineHeight: 1.5 }}>iOS only supports push when Trailhead is installed as an app. Install first, then enable here.</div>
+        )}
+        {error && <div style={{ background: `${T.red}15`, border: `1px solid ${T.red}40`, padding: 12, borderRadius: 8, marginBottom: 14, fontFamily: sans, fontSize: 12, color: T.red }}>{error}</div>}
+        <button onClick={handleEnable} disabled={subscribing || iosBrowserNotPwa} style={{ width: "100%", padding: "14px 16px", borderRadius: 8, background: iosBrowserNotPwa ? T.charcoal : T.red, border: "none", cursor: iosBrowserNotPwa ? "default" : "pointer", fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 1.5, marginBottom: 10, opacity: iosBrowserNotPwa ? 0.5 : 1 }}>{subscribing ? "ENABLING…" : "ENABLE NOTIFICATIONS"}</button>
+        <button onClick={onSkip} style={{ width: "100%", padding: "10px 16px", background: "transparent", border: "none", cursor: "pointer", fontFamily: sans, fontSize: 12, color: T.tertiary, letterSpacing: 0.5 }}>Skip for now</button>
+      </div>
+    </div>
+  );
+}
+
 function GuestGateScreen({ title, subtitle, onSignIn }) {
   return (
     <div style={{ padding: "48px 24px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", minHeight: "60vh", justifyContent: "center" }}>
@@ -22380,7 +22661,31 @@ function scrubLocalPhotosFromBuildData(bd) {
 export default function Trailhead() {
   // Seed from cached module-scope URL parse so LoginScreen never mounts for shared links.
   const initialSharedLink = __INITIAL_SHARED_LINK;
-  const [authState, setAuthState] = useState(initialSharedLink ? "app" : "login"); // "login" | "signup" | "app"
+  // Auth/onboarding state machine:
+  //   "login" | "signup" | "verify-email" | "install-pwa" | "enable-push" | "onboarding" | "app"
+  // The middle states walk new signups through the post-account wizard.
+  // Existing users (handle already set) skip directly to "app".
+  const [authState, setAuthState] = useState(initialSharedLink ? "app" : "login");
+  // Email captured at signup so VerifyEmailScreen can show + resend to it
+  // even after a page refresh (paired with localStorage below).
+  const [pendingVerifyEmail, setPendingVerifyEmail] = useState(() => {
+    if (typeof localStorage === "undefined") return "";
+    try { return localStorage.getItem("th_pending_verify_email") || ""; } catch (e) { return ""; }
+  });
+  // Persist auth-wizard checkpoints so a refresh mid-onboarding resumes at
+  // the same step rather than dropping back to login. Cleared once the
+  // user lands in the "app" state.
+  useEffect(() => {
+    if (typeof localStorage === "undefined") return;
+    try {
+      if (authState === "verify-email" || authState === "install-pwa" || authState === "enable-push" || authState === "onboarding") {
+        localStorage.setItem("th_onboarding_step", authState);
+      } else if (authState === "app") {
+        localStorage.removeItem("th_onboarding_step");
+        localStorage.removeItem("th_pending_verify_email");
+      }
+    } catch (e) {}
+  }, [authState]);
   // Supabase session — hydrated on boot from localStorage. While null, we
   // show the login screen (unless we're in guest/shared-link mode).
   const [supabaseSession, setSupabaseSession] = useState(null);
@@ -23041,10 +23346,15 @@ export default function Trailhead() {
         // Skip login screen if already signed in. If this user has no
         // handle yet (e.g. they interrupted OAuth onboarding last time),
         // route them into the onboarding flow instead of the app.
+        // Resume any onboarding wizard checkpoint from localStorage so a
+        // refresh mid-flow lands on the same step.
         const hasHandle = !!(session.user && session.user.user_metadata && session.user.user_metadata.handle);
-        setAuthState(hasHandle ? "app" : "onboarding");
-        if (hasHandle) hydrateUserData(session); // sets appReady when complete
-        else setAppReady(true); // onboarding screen needs no hydrate
+        let resumed = null;
+        try { resumed = typeof localStorage !== "undefined" ? localStorage.getItem("th_onboarding_step") : null; } catch (e) {}
+        const next = resumed || (hasHandle ? "app" : "onboarding");
+        setAuthState(next);
+        if (next === "app" && hasHandle) hydrateUserData(session); // sets appReady when complete
+        else setAppReady(true); // wizard screens need no hydrate
       } else if (initialSharedLink) {
         // Pick the right fast-loader based on the link kind.
         let fastLoad = Promise.resolve();
@@ -23077,11 +23387,13 @@ export default function Trailhead() {
       if (event === "SIGNED_IN" && session) {
         // Route decision:
         //   - mid-signup (email flow) → don't touch; SignupScreen owns transition
+        //   - mid-wizard (verify-email, install-pwa, enable-push, onboarding) → stay
+        //     where they are; the wizard step handlers own their own next() calls
         //   - missing handle in user_metadata → onboarding (OAuth new users)
         //   - otherwise → into the app
         const hasHandle = !!(session.user && session.user.user_metadata && session.user.user_metadata.handle);
         setAuthState(prev => {
-          if (prev === "signup") return prev;
+          if (prev === "signup" || prev === "verify-email" || prev === "install-pwa" || prev === "enable-push" || prev === "onboarding") return prev;
           return hasHandle ? "app" : "onboarding";
         });
         setIsGuest(false);
@@ -28405,7 +28717,45 @@ export default function Trailhead() {
     />;
   }
   if (authState === "signup") {
-    return <SignupScreen onSignup={() => setAuthState("app")} onGoToLogin={() => setAuthState("login")} onSetProfilePic={handleSetProfilePic} onAddBuild={addBuild} />;
+    return <SignupScreen
+      onSignup={() => setAuthState("install-pwa")}
+      onGoToLogin={() => setAuthState("login")}
+      onSetProfilePic={handleSetProfilePic}
+      onAddBuild={addBuild}
+      onAwaitVerification={(email) => {
+        setPendingVerifyEmail(email);
+        try { localStorage.setItem("th_pending_verify_email", email); } catch (e) {}
+        setAuthState("verify-email");
+      }}
+    />;
+  }
+  if (authState === "verify-email") {
+    return <VerifyEmailScreen
+      session={supabaseSession}
+      email={pendingVerifyEmail}
+      onContinue={() => setAuthState("install-pwa")}
+      onCancel={() => { setPendingVerifyEmail(""); try { localStorage.removeItem("th_pending_verify_email"); } catch (e) {} setAuthState("signup"); }}
+    />;
+  }
+  if (authState === "install-pwa") {
+    return <InstallPWAScreen
+      onContinue={() => setAuthState("enable-push")}
+      onSkip={() => setAuthState("enable-push")}
+    />;
+  }
+  if (authState === "enable-push") {
+    // Push subscribe needs an authed session; if somehow we're here
+    // without one, fall through to onboarding so login retries via the
+    // post-onboarding flow.
+    return <EnablePushScreen
+      onSubscribe={async () => {
+        const ok = await subscribeToPush();
+        if (ok) setNotifPrefs(prev => ({ ...prev, push: true }));
+        setAuthState("onboarding");
+        return ok;
+      }}
+      onSkip={() => setAuthState("onboarding")}
+    />;
   }
   if (authState === "onboarding") {
     return <OnboardingScreen
