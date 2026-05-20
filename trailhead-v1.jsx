@@ -22136,12 +22136,29 @@ function InstallPromptModal({ onClose }) {
 }
 
 // Fires once when a user opens Trailhead in standalone (PWA) mode for the
-// first time AND push isn't already enabled. Primary CTA navigates them
-// straight to the push toggle in Profile → Settings so they can flip it
-// on with one tap. iOS PWA push requires a user gesture from within the
-// app, so a button-into-settings is the right pattern (vs. firing the
-// subscribe directly from this modal).
-function PushPromptModal({ onGoToSettings, onSkip }) {
+// first time AND push isn't already enabled. Primary CTA fires the
+// subscribe flow directly (the button click IS the user gesture iOS
+// requires for push permission). On success the modal closes + the
+// welcome modal chains. On failure the inline error surfaces and the
+// user can retry or skip.
+function PushPromptModal({ onEnable, onSkip }) {
+  const [working, setWorking] = useState(false);
+  const [error, setError] = useState("");
+  const handleEnable = async () => {
+    setError(""); setWorking(true);
+    try {
+      const ok = await onEnable();
+      if (!ok) {
+        setError("Couldn't enable notifications. Check your browser/system settings and try again.");
+        setWorking(false);
+        return;
+      }
+      // onEnable resolved true → parent already closed the modal + queued the welcome.
+    } catch (e) {
+      setError("Couldn't enable notifications. Check your browser/system settings and try again.");
+      setWorking(false);
+    }
+  };
   return (
     <div onClick={onSkip} style={{ position: "fixed", inset: 0, zIndex: 11000, background: "rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: T.darkCard, borderRadius: 14, padding: 22, maxWidth: 380, width: "100%", border: `1px solid ${T.charcoal}`, position: "relative" }}>
@@ -22153,7 +22170,7 @@ function PushPromptModal({ onGoToSettings, onSkip }) {
         </div>
         <h2 style={{ fontFamily: sans, fontSize: 18, color: T.white, margin: "0 0 6px", fontWeight: 700, textAlign: "center", letterSpacing: 0.5 }}>YOU'RE INSTALLED</h2>
         <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, textAlign: "center", margin: "0 0 18px", lineHeight: 1.5 }}>Now turn on push notifications so you don't miss replies, follows, mentions, and convoy updates.</p>
-        <div style={{ background: T.darkBg, borderRadius: 10, padding: 14, border: `1px solid ${T.charcoal}`, marginBottom: 18 }}>
+        <div style={{ background: T.darkBg, borderRadius: 10, padding: 14, border: `1px solid ${T.charcoal}`, marginBottom: error ? 12 : 18 }}>
           {[
             { icon: Heart, label: "Likes on your posts" },
             { icon: MessageCircle, label: "Comments + replies" },
@@ -22170,8 +22187,9 @@ function PushPromptModal({ onGoToSettings, onSkip }) {
             );
           })}
         </div>
-        <button onClick={onGoToSettings} style={{ width: "100%", padding: "13px 16px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 1.5, marginBottom: 8 }}>ENABLE NOTIFICATIONS</button>
-        <button onClick={onSkip} style={{ width: "100%", padding: "10px 16px", borderRadius: 8, background: "transparent", border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 600, letterSpacing: 1 }}>MAYBE LATER</button>
+        {error && <div style={{ background: `${T.red}15`, border: `1px solid ${T.red}40`, padding: 10, borderRadius: 8, marginBottom: 14, fontFamily: sans, fontSize: 11, color: T.red, lineHeight: 1.4 }}>{error}</div>}
+        <button onClick={handleEnable} disabled={working} style={{ width: "100%", padding: "13px 16px", borderRadius: 8, background: T.red, border: "none", cursor: working ? "wait" : "pointer", fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 1.5, marginBottom: 8, opacity: working ? 0.7 : 1 }}>{working ? "ENABLING…" : "ENABLE NOTIFICATIONS"}</button>
+        <button onClick={onSkip} disabled={working} style={{ width: "100%", padding: "10px 16px", borderRadius: 8, background: "transparent", border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 600, letterSpacing: 1 }}>MAYBE LATER</button>
       </div>
     </div>
   );
@@ -29270,16 +29288,20 @@ export default function Trailhead() {
       )}
       {showPushModal && (
         <PushPromptModal
-          onGoToSettings={() => {
-            setShowPushModal(false);
-            try { localStorage.setItem("th_push_prompt_seen_at", String(Date.now())); } catch (e) {}
-            setProfileStack(["self"]);
-            setPendingProfileScroll("push");
-            // For new-signup PWA path: chain into welcome after a moment
-            // so they see both prompts. For existing users (no wizard
-            // flag), this is a no-op since wizard_pwa_pending is undef.
-            const wizardPwaPending = !!(supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.wizard_pwa_pending);
-            if (wizardPwaPending) setTimeout(() => setShowWelcomeModal(true), 800);
+          onEnable={async () => {
+            // Fires the subscribe flow directly — the click IS the user
+            // gesture iOS requires. On success: flip the local toggle,
+            // mark as seen, close modal, chain welcome. On failure: the
+            // modal surfaces an inline error and we leave it open.
+            const ok = await subscribeToPush();
+            if (ok) {
+              setNotifPrefs(prev => ({ ...prev, push: true }));
+              try { localStorage.setItem("th_push_prompt_seen_at", String(Date.now())); } catch (e) {}
+              setShowPushModal(false);
+              const wizardPwaPending = !!(supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.wizard_pwa_pending);
+              if (wizardPwaPending) setTimeout(() => setShowWelcomeModal(true), 400);
+            }
+            return ok;
           }}
           onSkip={() => {
             setShowPushModal(false);
