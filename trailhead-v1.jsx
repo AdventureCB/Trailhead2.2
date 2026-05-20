@@ -17265,7 +17265,7 @@ function AddBuildForm({ onClose, onSave, onDelete, initialData }) {
 }
 
 /* ─── PROFILE SCREEN (Own Profile) ─── */
-function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, initialUserBio, initialIsPublic, onViewUser, onLogout, userBuilds, onAddBuild, onUpdateBuild, onDeleteBuild, profilePic, onSetProfilePic, notifPrefs, onSetNotifPrefs, feedItems, onDeletePost, onEditPost, onUpdateConvoy, onGoToPost, myPoints: myPointsProp, onSaveProfile, followerCount, followingCount, convoyRsvps, onSubscribePush, onUnsubscribePush, renderFeedScopedTo, onViewBuild, savedRoutes, onUnsaveRoute, onStartNav, myTripPlans, onOpenTripPlan, onNewTripPlan, isAdmin, savedTrips, onUnsaveTrip, onOpenSavedTrip }) {
+function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, initialUserBio, initialIsPublic, onViewUser, onLogout, userBuilds, onAddBuild, onUpdateBuild, onDeleteBuild, profilePic, onSetProfilePic, notifPrefs, onSetNotifPrefs, feedItems, onDeletePost, onEditPost, onUpdateConvoy, onGoToPost, myPoints: myPointsProp, onSaveProfile, followerCount, followingCount, convoyRsvps, onSubscribePush, onUnsubscribePush, renderFeedScopedTo, onViewBuild, savedRoutes, onUnsaveRoute, onStartNav, myTripPlans, onOpenTripPlan, onNewTripPlan, isAdmin, savedTrips, onUnsaveTrip, onOpenSavedTrip, pendingScroll, onConsumePendingScroll }) {
   const [isPublic, setIsPublic] = useState(initialIsPublic == null ? true : !!initialIsPublic);
   const [activeTab, setActiveTab] = useState("builds");
   const [activeBuild, setActiveBuild] = useState(0);
@@ -17276,6 +17276,25 @@ function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, init
   const [carouselImages, setCarouselImages] = useState(null);
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
+  // Ref + effect for deep-linking into the push toggle. When the parent
+  // sets `pendingScroll="push"` (e.g. from the PushPromptModal CTA), we
+  // open the settings panel, scroll the toggle into view, and trigger a
+  // brief highlight so the user spots it.
+  const pushToggleRef = useRef(null);
+  const [pushToggleHighlight, setPushToggleHighlight] = useState(false);
+  useEffect(() => {
+    if (pendingScroll !== "push") return;
+    setShowSettings(true);
+    const t = setTimeout(() => {
+      if (pushToggleRef.current && pushToggleRef.current.scrollIntoView) {
+        pushToggleRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      setPushToggleHighlight(true);
+      setTimeout(() => setPushToggleHighlight(false), 2400);
+      onConsumePendingScroll && onConsumePendingScroll();
+    }, 300);
+    return () => clearTimeout(t);
+  }, [pendingScroll]);
   const [showNotifSettings, setShowNotifSettings] = useState(false);
   const [userName, setUserName] = useState(initialUserName || "");
   const [userHandle, setUserHandle] = useState(initialUserHandle ? "@" + initialUserHandle.replace(/^@/, "") : "");
@@ -17497,7 +17516,7 @@ function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, init
               {prefToggle("Follows", "When someone follows you or requests to follow", "follows", UserPlus, T.green)}
               {prefToggle("Mentions", "When someone mentions you in a post or comment", "mentions", AtSign, T.copper)}
             </div>
-            <div style={{ marginTop: 16, background: T.darkCard, borderRadius: 12, padding: 16 }}>
+            <div ref={pushToggleRef} style={{ marginTop: 16, background: T.darkCard, borderRadius: 12, padding: 16, border: pushToggleHighlight ? `2px solid ${T.red}` : "2px solid transparent", boxShadow: pushToggleHighlight ? `0 0 0 4px ${T.red}30` : "none", transition: "border 0.4s, box-shadow 0.4s" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1 }}>
                   <Smartphone size={16} color={T.copper} />
@@ -22061,6 +22080,92 @@ function InstallPWAScreen({ onContinue, onSkip }) {
   );
 }
 
+// In-app modal urging the user to install Trailhead as a PWA. Replaces
+// the old thin "tap share + add to home screen" banner. Full-screen
+// overlay with step-by-step instructions per platform. Shown to logged-in
+// users who aren't already standalone, with a localStorage cooldown so
+// dismiss doesn't re-fire on every page load.
+function InstallPromptModal({ onClose }) {
+  const platform = detectInstallPlatform();
+  if (platform === "standalone" || platform === "desktop" || platform === "other") return null;
+  const isIOS = platform === "ios";
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 11000, background: "rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: T.darkCard, borderRadius: 14, padding: 22, maxWidth: 380, width: "100%", maxHeight: "90vh", overflowY: "auto", border: `1px solid ${T.charcoal}`, position: "relative" }}>
+        <button onClick={onClose} style={{ position: "absolute", top: 12, right: 12, background: "none", border: "none", cursor: "pointer", padding: 6, display: "flex" }}>
+          <X size={18} color={T.tertiary} />
+        </button>
+        <div style={{ width: 56, height: 56, borderRadius: "50%", background: `${T.green}15`, border: `2px solid ${T.green}`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
+          <Smartphone size={26} color={T.green} strokeWidth={1.5} />
+        </div>
+        <h2 style={{ fontFamily: sans, fontSize: 18, color: T.white, margin: "0 0 6px", fontWeight: 700, textAlign: "center", letterSpacing: 0.5 }}>FOR THE FULL EXPERIENCE</h2>
+        <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, textAlign: "center", margin: "0 0 18px", lineHeight: 1.5 }}>Install Trailhead as an app to get push notifications, offline maps, and a faster, full-screen experience.</p>
+        <div style={{ background: T.darkBg, borderRadius: 10, padding: 16, border: `1px solid ${T.charcoal}`, marginBottom: 16 }}>
+          <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 1.5, fontWeight: 700, display: "block", marginBottom: 10 }}>{isIOS ? "STEP-BY-STEP — IOS SAFARI" : "STEP-BY-STEP — ANDROID CHROME"}</span>
+          {isIOS ? (
+            <ol style={{ margin: 0, paddingLeft: 18, fontFamily: serif, fontSize: 13, color: T.white, lineHeight: 1.7 }}>
+              <li>Tap the <strong style={{ color: T.copper }}>Share</strong> button at the bottom of Safari (square with arrow ↑)</li>
+              <li>Scroll down and tap <strong style={{ color: T.copper }}>Add to Home Screen</strong></li>
+              <li>Tap <strong style={{ color: T.copper }}>Add</strong> in the top right</li>
+              <li>Open Trailhead from your home screen — you'll see a push notification prompt next</li>
+            </ol>
+          ) : (
+            <ol style={{ margin: 0, paddingLeft: 18, fontFamily: serif, fontSize: 13, color: T.white, lineHeight: 1.7 }}>
+              <li>Tap the <strong style={{ color: T.copper }}>⋮ menu</strong> in the top-right corner of Chrome</li>
+              <li>Tap <strong style={{ color: T.copper }}>Install app</strong> (or "Add to Home screen")</li>
+              <li>Tap <strong style={{ color: T.copper }}>Install</strong> to confirm</li>
+              <li>Open Trailhead from your home screen — you'll see a push notification prompt next</li>
+            </ol>
+          )}
+        </div>
+        <button onClick={onClose} style={{ width: "100%", padding: "12px 16px", borderRadius: 8, background: "transparent", border: `1px solid ${T.tertiary}40`, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 600, letterSpacing: 1 }}>MAYBE LATER</button>
+      </div>
+    </div>
+  );
+}
+
+// Fires once when a user opens Trailhead in standalone (PWA) mode for the
+// first time AND push isn't already enabled. Primary CTA navigates them
+// straight to the push toggle in Profile → Settings so they can flip it
+// on with one tap. iOS PWA push requires a user gesture from within the
+// app, so a button-into-settings is the right pattern (vs. firing the
+// subscribe directly from this modal).
+function PushPromptModal({ onGoToSettings, onSkip }) {
+  return (
+    <div onClick={onSkip} style={{ position: "fixed", inset: 0, zIndex: 11000, background: "rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: T.darkCard, borderRadius: 14, padding: 22, maxWidth: 380, width: "100%", border: `1px solid ${T.charcoal}`, position: "relative" }}>
+        <button onClick={onSkip} style={{ position: "absolute", top: 12, right: 12, background: "none", border: "none", cursor: "pointer", padding: 6, display: "flex" }}>
+          <X size={18} color={T.tertiary} />
+        </button>
+        <div style={{ width: 56, height: 56, borderRadius: "50%", background: `${T.red}15`, border: `2px solid ${T.red}`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
+          <Bell size={26} color={T.red} strokeWidth={1.5} />
+        </div>
+        <h2 style={{ fontFamily: sans, fontSize: 18, color: T.white, margin: "0 0 6px", fontWeight: 700, textAlign: "center", letterSpacing: 0.5 }}>YOU'RE INSTALLED</h2>
+        <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, textAlign: "center", margin: "0 0 18px", lineHeight: 1.5 }}>Now turn on push notifications so you don't miss replies, follows, mentions, and convoy updates.</p>
+        <div style={{ background: T.darkBg, borderRadius: 10, padding: 14, border: `1px solid ${T.charcoal}`, marginBottom: 18 }}>
+          {[
+            { icon: Heart, label: "Likes on your posts" },
+            { icon: MessageCircle, label: "Comments + replies" },
+            { icon: UserPlus, label: "New followers" },
+            { icon: AtSign, label: "Mentions" },
+            { icon: Users, label: "Convoy updates + RSVPs" },
+          ].map((it, i, arr) => {
+            const Icon = it.icon;
+            return (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderBottom: i < arr.length - 1 ? `1px solid ${T.charcoal}` : "none" }}>
+                <Icon size={13} color={T.copper} />
+                <span style={{ fontFamily: sans, fontSize: 12, color: T.white }}>{it.label}</span>
+              </div>
+            );
+          })}
+        </div>
+        <button onClick={onGoToSettings} style={{ width: "100%", padding: "13px 16px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 1.5, marginBottom: 8 }}>ENABLE NOTIFICATIONS</button>
+        <button onClick={onSkip} style={{ width: "100%", padding: "10px 16px", borderRadius: 8, background: "transparent", border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 600, letterSpacing: 1 }}>MAYBE LATER</button>
+      </div>
+    </div>
+  );
+}
+
 function EnablePushScreen({ onSubscribe, onSkip }) {
   const [subscribing, setSubscribing] = useState(false);
   const [error, setError] = useState("");
@@ -22702,6 +22807,51 @@ export default function Trailhead() {
   const [iosHintDismissed, setIosHintDismissed] = useState(() => {
     try { return localStorage.getItem("th-ios-install-dismissed") === "1"; } catch (e) { return false; }
   });
+  // In-app install modal — full-screen prompt that replaces the old thin
+  // banner. Dismissals carry a 3-day cooldown so we don't nag on every
+  // page load, but we do re-surface once they're past it.
+  const [showInstallModal, setShowInstallModal] = useState(false);
+  // Push prompt modal — fires once when a user opens Trailhead in
+  // standalone mode for the first time and push isn't enabled yet.
+  const [showPushModal, setShowPushModal] = useState(false);
+  // Deep-link target for ProfileScreen: when set to "push", profile opens
+  // with the settings panel open + scrolled to the push notification toggle.
+  const [pendingProfileScroll, setPendingProfileScroll] = useState(null);
+  // Decide which install/push prompt to surface inside the app. Two paths:
+  //   1. Not standalone (browser) + iOS or Android → show install modal
+  //      (unless dismissed within last 3 days). Triggered once when the
+  //      user reaches "app" state.
+  //   2. Standalone (PWA) + push not enabled + haven't seen this prompt
+  //      yet → show push modal. Triggered on first standalone visit.
+  // Both are mutually exclusive — install fires first since you can't
+  // enable push until you're standalone (on iOS at least).
+  useEffect(() => {
+    if (authState !== "app") return;
+    if (isGuest) return;
+    if (typeof window === "undefined") return;
+    const platform = detectInstallPlatform();
+    // Push prompt path — already installed, push not on, not yet prompted.
+    if (platform === "standalone") {
+      try {
+        const seenAt = localStorage.getItem("th_push_prompt_seen_at");
+        if (!seenAt && !notifPrefs.push && typeof Notification !== "undefined" && Notification.permission !== "denied") {
+          // Small delay so the modal doesn't feel like it ambushes the splash.
+          const t = setTimeout(() => setShowPushModal(true), 1200);
+          return () => clearTimeout(t);
+        }
+      } catch (e) {}
+      return;
+    }
+    // Install prompt path — iOS Safari or Android Chrome, not standalone.
+    if (platform !== "ios" && platform !== "android") return;
+    try {
+      const dismissedAt = parseInt(localStorage.getItem("th_install_modal_dismissed_at") || "0", 10);
+      const threeDays = 3 * 24 * 60 * 60 * 1000;
+      if (dismissedAt && Date.now() - dismissedAt < threeDays) return;
+      const t = setTimeout(() => setShowInstallModal(true), 1500);
+      return () => clearTimeout(t);
+    } catch (e) {}
+  }, [authState, isGuest, notifPrefs.push]);
   // Profile row from public.profiles, fetched after sign-in. Source of truth
   // for handle / full_name / avatar_url — supersedes user_metadata reads.
   const [currentProfile, setCurrentProfile] = useState(null);
@@ -29037,16 +29187,25 @@ export default function Trailhead() {
       {/* iOS install hint — Safari on iOS only delivers web push to installed
           PWAs. Banner is sticky-dismissed via localStorage. Shown only when
           we detect Safari on iOS and we're not in standalone mode. */}
-      {isIosNotInstalled && !iosHintDismissed && authState === "app" && !isGuest && (
-        <div style={{ background: `${T.copper}20`, borderBottom: `1px solid ${T.copper}40`, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-          <Bell size={14} color={T.copper} />
-          <span style={{ flex: 1, fontFamily: serif, fontSize: 11, color: T.warmStone, lineHeight: 1.4 }}>
-            For push notifications, tap <Share2 size={11} color={T.copper} style={{ verticalAlign: "middle", margin: "0 2px" }} /> in Safari and "Add to Home Screen".
-          </span>
-          <button onClick={dismissIosHint} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", flexShrink: 0 }}>
-            <X size={12} color={T.tertiary} />
-          </button>
-        </div>
+      {showInstallModal && (
+        <InstallPromptModal onClose={() => {
+          setShowInstallModal(false);
+          try { localStorage.setItem("th_install_modal_dismissed_at", String(Date.now())); } catch (e) {}
+        }} />
+      )}
+      {showPushModal && (
+        <PushPromptModal
+          onGoToSettings={() => {
+            setShowPushModal(false);
+            try { localStorage.setItem("th_push_prompt_seen_at", String(Date.now())); } catch (e) {}
+            setProfileStack(["self"]);
+            setPendingProfileScroll("push");
+          }}
+          onSkip={() => {
+            setShowPushModal(false);
+            try { localStorage.setItem("th_push_prompt_seen_at", String(Date.now())); } catch (e) {}
+          }}
+        />
       )}
       <TopBar
         onProfile={openProfile}
@@ -29087,7 +29246,7 @@ export default function Trailhead() {
           isOtherProfile ? (
             <OtherProfileScreen userId={profileStack[1]} onBack={goBack} onMessage={(user) => openDM(user)} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} onAdminUpdateUserRole={adminUpdateUserRole} onAdminDeclineAmbassador={adminDeclineAmbassadorRequest} followingIds={followingIds} onFollow={requireAuth(followUser)} onUnfollow={requireAuth(unfollowUser)} fetchFollowCounts={fetchFollowCounts} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} allBuilds={allBuilds} onLoadAllBuilds={loadAllBuildsOnce} onlineUserIds={onlineUserIds} allTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} />
           ) : (
-            <ProfileScreen currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} convoyRsvps={convoyRsvps} followerCount={myFollowerCount} followingCount={myFollowingCount} onSubscribePush={subscribeToPush} onUnsubscribePush={unsubscribeFromPush} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} savedRoutes={savedRoutes} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} savedTrips={(() => { const ids = savedTripIds || {}; const pool = [...(allTripReports || []), ...(allTripPlans || [])]; const seen = {}; const out = []; pool.forEach(t => { if (t && t.id && ids[t.id] && !seen[t.id]) { seen[t.id] = true; out.push(t); } }); return out; })()} onUnsaveTrip={requireAuth(toggleSaveTrip)} onOpenSavedTrip={(t) => { if (!t) return; if (t.slug) setPendingTripNav(t.slug); else setDetailTripId(t.id); }} onStartNav={(route) => setActiveNavRoute(route)} myTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} onNewTripPlan={requireAuth(() => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("routes"); enterPlanBuilder(); })} initialUserName={(currentProfile && currentProfile.full_name) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name) || null} initialUserHandle={(currentProfile && currentProfile.handle) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle) || null} initialUserBio={currentProfile ? currentProfile.bio : null} initialIsPublic={currentProfile ? currentProfile.is_public : null} onSaveProfile={saveProfile} onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={deleteBuild} profilePic={profilePic} onSetProfilePic={handleSetProfilePic} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => deletePost(id)} onEditPost={(id, newText) => updatePost(id, { title: newText })} onUpdateConvoy={(convoyId, updates) => {
+            <ProfileScreen currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} convoyRsvps={convoyRsvps} followerCount={myFollowerCount} followingCount={myFollowingCount} onSubscribePush={subscribeToPush} onUnsubscribePush={unsubscribeFromPush} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} savedRoutes={savedRoutes} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} savedTrips={(() => { const ids = savedTripIds || {}; const pool = [...(allTripReports || []), ...(allTripPlans || [])]; const seen = {}; const out = []; pool.forEach(t => { if (t && t.id && ids[t.id] && !seen[t.id]) { seen[t.id] = true; out.push(t); } }); return out; })()} onUnsaveTrip={requireAuth(toggleSaveTrip)} onOpenSavedTrip={(t) => { if (!t) return; if (t.slug) setPendingTripNav(t.slug); else setDetailTripId(t.id); }} pendingScroll={pendingProfileScroll} onConsumePendingScroll={() => setPendingProfileScroll(null)} onStartNav={(route) => setActiveNavRoute(route)} myTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} onNewTripPlan={requireAuth(() => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("routes"); enterPlanBuilder(); })} initialUserName={(currentProfile && currentProfile.full_name) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name) || null} initialUserHandle={(currentProfile && currentProfile.handle) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle) || null} initialUserBio={currentProfile ? currentProfile.bio : null} initialIsPublic={currentProfile ? currentProfile.is_public : null} onSaveProfile={saveProfile} onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={deleteBuild} profilePic={profilePic} onSetProfilePic={handleSetProfilePic} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => deletePost(id)} onEditPost={(id, newText) => updatePost(id, { title: newText })} onUpdateConvoy={(convoyId, updates) => {
               updatePost(convoyId, updates);
               // DM going/maybe responders that the convoy was updated.
               const convoy = feedItemsRef.current.find(p => p.id === convoyId);
