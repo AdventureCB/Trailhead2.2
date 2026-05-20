@@ -45397,12 +45397,12 @@ ${suffix}`;
     }, [q, allBuilds]);
     const spotResults = (0, import_react4.useMemo)(() => {
       if (!q) return [];
-      const byId = new Map2();
+      const byId = {};
       (campingSpots || []).forEach((s) => {
-        if (s && s.id) byId.set(s.id, s);
+        if (s && s.id) byId[s.id] = s;
       });
       const matches = [];
-      byId.forEach((s) => {
+      Object.values(byId).forEach((s) => {
         const fields = [s.name, s.description, s.spot_type, s.fee];
         if (fields.some((f) => f && String(f).toLowerCase().includes(q))) matches.push(s);
       });
@@ -45418,28 +45418,28 @@ ${suffix}`;
     }, [q, feedItems]);
     const userResults = (0, import_react4.useMemo)(() => {
       if (!q) return [];
-      const byId = new Map2();
+      const byId = {};
       const pushUser = (u) => {
         if (!u) return;
         const id = u.id || u.userId || u.user_id || u.handle || u.user;
-        if (!id || byId.has(id)) return;
+        if (!id || byId[id] !== void 0) return;
         const name = u.full_name || u.user || u.name || "";
         const handle = u.handle || "";
-        byId.set(id, {
+        byId[id] = {
           id: u.id || u.userId || null,
           handle,
           name,
           avatarUrl: u.avatar_url || u.avatarUrl || null,
           followers: u.followers,
           badge: u.badge
-        });
+        };
       };
       (feedItems || []).forEach((p) => p && p.userId && pushUser({ id: p.userId, full_name: p.user, handle: p.handle, avatar_url: p.avatarUrl }));
       (allBuilds || []).forEach((b) => b && b.userId && pushUser({ id: b.userId, full_name: b.owner, handle: (b.handle || "").replace(/^@/, ""), avatar_url: b.avatarUrl }));
       Object.values(forumThreadsBySub || {}).forEach((list) => (list || []).forEach((t) => t && t.userId && pushUser({ id: t.userId, full_name: t.user, handle: t.handle, avatar_url: t.avatarUrl })));
       (serverUsers || []).forEach((u) => pushUser(u));
       const matches = [];
-      byId.forEach((u) => {
+      Object.values(byId).forEach((u) => {
         if ((u.handle || "").toLowerCase().includes(q) || (u.name || "").toLowerCase().includes(q)) matches.push(u);
       });
       return matches;
