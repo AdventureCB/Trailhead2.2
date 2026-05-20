@@ -1,0 +1,24 @@
+# Trailhead — robots.txt
+# Forums, trip reports, builds, spots, and the HQ page are all public and
+# crawlable. App-internal routes (compose, profile editor, DMs) don't have
+# their own URLs so there's nothing to block. The sitemap below lists every
+# publicly-indexable URL with lastmod dates.
+
+User-agent: *
+Allow: /
+
+# Allow link-preview scrapers (iMessage, Slack, Twitter, Discord, etc.)
+# explicit access — some have stricter defaults.
+User-agent: Twitterbot
+Allow: /
+
+User-agent: facebookexternalhit
+Allow: /
+
+User-agent: Slackbot-LinkExpanding
+Allow: /
+
+# Honor crawler politeness on Supabase-backed pages — no aggressive crawling.
+Crawl-delay: 1
+
+Sitemap: https://trailhead.lonepeakoverland.com/sitemap.xml

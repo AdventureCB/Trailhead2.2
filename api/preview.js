@@ -35,6 +35,48 @@ const LPO_HQ = {
   lng: -120.2072479120492,
 };
 
+// Forum subcategory slug → display name + parent category. Mirrors
+// forumData.categories in trailhead-v1.jsx so the OG handler can render
+// breadcrumbs + landing pages without an extra round trip. Keep in sync;
+// when admin category CRUD ships, swap for a DB query.
+const FORUM_SUB_TO_INFO = {
+  // How-To Guides
+  "suspension-lift": { name: "Suspension & Lift", catName: "How-To Guides", catSlug: "how-to-guides" },
+  "electrical-wiring": { name: "Electrical & Wiring", catName: "How-To Guides", catSlug: "how-to-guides" },
+  "armor-protection": { name: "Armor & Protection", catName: "How-To Guides", catSlug: "how-to-guides" },
+  "camper-installs": { name: "Camper Installs", catName: "How-To Guides", catSlug: "how-to-guides" },
+  "recovery-techniques": { name: "Recovery Techniques", catName: "How-To Guides", catSlug: "how-to-guides" },
+  "maintenance-repair": { name: "Maintenance & Repair", catName: "How-To Guides", catSlug: "how-to-guides" },
+  // Troubleshooting
+  "engine-drivetrain": { name: "Engine & Drivetrain", catName: "Troubleshooting", catSlug: "troubleshooting" },
+  "electrical-issues": { name: "Electrical Issues", catName: "Troubleshooting", catSlug: "troubleshooting" },
+  "suspension-steering": { name: "Suspension & Steering", catName: "Troubleshooting", catSlug: "troubleshooting" },
+  "body-frame": { name: "Body & Frame", catName: "Troubleshooting", catSlug: "troubleshooting" },
+  "accessories-mods": { name: "Accessories & Mods", catName: "Troubleshooting", catSlug: "troubleshooting" },
+  // Inspiration
+  "trip-reports": { name: "Trip Reports", catName: "Inspiration", catSlug: "inspiration" },
+  "build-showcases": { name: "Build Showcases", catName: "Inspiration", catSlug: "inspiration" },
+  "photography": { name: "Photography", catName: "Inspiration", catSlug: "inspiration" },
+  "bucket-list-routes": { name: "Bucket List Routes", catName: "Inspiration", catSlug: "inspiration" },
+  // Trip Coordination
+  "convoy-planning": { name: "Convoy Planning", catName: "Trip Coordination", catSlug: "trip-coordination" },
+  "meetups-events": { name: "Meetups & Events", catName: "Trip Coordination", catSlug: "trip-coordination" },
+  "trail-partners-wanted": { name: "Trail Partners Wanted", catName: "Trip Coordination", catSlug: "trip-coordination" },
+  // Regional Groups
+  "pacific-northwest": { name: "Pacific Northwest", catName: "Regional Groups", catSlug: "regional-groups" },
+  "southwest-desert": { name: "Southwest & Desert", catName: "Regional Groups", catSlug: "regional-groups" },
+  "rockies-high-plains": { name: "Rockies & High Plains", catName: "Regional Groups", catSlug: "regional-groups" },
+  "southeast-appalachia": { name: "Southeast & Appalachia", catName: "Regional Groups", catSlug: "regional-groups" },
+  "midwest": { name: "Midwest", catName: "Regional Groups", catSlug: "regional-groups" },
+  "international": { name: "International", catName: "Regional Groups", catSlug: "regional-groups" },
+  // Marketplace
+  "parts-for-sale": { name: "Parts For Sale", catName: "Marketplace", catSlug: "marketplace" },
+  "vehicles-for-sale": { name: "Vehicles For Sale", catName: "Marketplace", catSlug: "marketplace" },
+  "wanted-iso": { name: "Wanted / ISO", catName: "Marketplace", catSlug: "marketplace" },
+  "group-buys": { name: "Group Buys", catName: "Marketplace", catSlug: "marketplace" },
+  "free-trade": { name: "Free / Trade", catName: "Marketplace", catSlug: "marketplace" },
+};
+
 // Read the SPA shell once at module load. `includeFiles` in vercel.json
 // makes deploy-v2.2/index.html available to the function bundle.
 let SPA_HTML = "";
@@ -210,6 +252,25 @@ async function supabaseFetch(table, queryStr) {
     return Array.isArray(rows) ? rows[0] || null : null;
   } catch (e) {
     return null;
+  }
+}
+
+// Same as supabaseFetch but returns the full result array (not just rows[0]).
+async function supabaseFetchAll(table, queryStr) {
+  const url = `${SUPABASE_URL}/rest/v1/${table}?${queryStr}`;
+  try {
+    const res = await fetch(url, {
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        Accept: "application/json",
+      },
+    });
+    if (!res.ok) return [];
+    const rows = await res.json();
+    return Array.isArray(rows) ? rows : [];
+  } catch (e) {
+    return [];
   }
 }
 
@@ -432,17 +493,131 @@ async function resolveEntity(type, id) {
       },
     };
   }
-  // Legacy /forum/:id (timestamp ids from the in-memory era) — no DB row
-  // exists. Return the brand default to keep cards from breaking.
-  if (type === "forum") {
+  // Forum SUBCATEGORY landing page — `/forum/<sub-slug>`. Topical hub that
+  // lists recent threads in that subcategory. Each subcategory is a SEO
+  // keyword cluster (e.g. "suspension lift", "trip reports", "convoy
+  // planning") so these pages can rank for those terms independently of
+  // any single thread.
+  if (type === "forum-sub") {
+    const subInfo = FORUM_SUB_TO_INFO[id];
+    if (!subInfo) {
+      // Unknown subcategory slug — return brand default rather than 404
+      // so legacy /forum/<timestamp-id> URLs degrade gracefully.
+      return {
+        title: "Forum · Trailhead",
+        description: "Join the conversation on the Trailhead community forum.",
+        image: null,
+        imageAlt: "",
+      };
+    }
+    // Pull recent threads in this subcategory (up to 50) for the SSR list.
+    const threadRows = await supabaseFetchAll(
+      "forum_threads",
+      `subcategory_slug=eq.${encodeURIComponent(id)}&select=id,slug,title,body,sections,photos,view_count,created_at,updated_at,user_id&order=created_at.desc&limit=50`
+    );
+    // Pull the author profiles in one shot so the byline on each card has
+    // a real name + handle.
+    const authorIds = Array.from(new Set((threadRows || []).map(t => t.user_id).filter(Boolean)));
+    const authorsById = {};
+    if (authorIds.length > 0) {
+      const profs = await supabaseFetchAll(
+        "profiles",
+        `id=in.(${authorIds.map(encodeURIComponent).join(",")})&select=id,full_name,handle,avatar_url`
+      );
+      profs.forEach(p => { authorsById[p.id] = p; });
+    }
     return {
-      title: "Forum Thread · Trailhead",
-      description: "Join the conversation on the Trailhead community forum.",
+      title: `${subInfo.name} · ${subInfo.catName} · Trailhead Forum`,
+      description: `${threadRows.length} thread${threadRows.length === 1 ? "" : "s"} on ${subInfo.name.toLowerCase()} in the Trailhead overlanding community forum.`,
       image: null,
       imageAlt: "",
+      jsonLd: {
+        kind: "CollectionPage",
+        subInfo,
+        threads: threadRows,
+        authors: authorsById,
+      },
+      article: {
+        kind: "forum-sub",
+        subInfo,
+        threads: threadRows,
+        authors: authorsById,
+      },
     };
   }
   return null;
+}
+
+// Build the SSR landing page for a forum subcategory. Renders breadcrumbs +
+// subcategory heading + a list of recent threads (title, body excerpt,
+// author byline, date, view count). Each thread title is an anchor to its
+// canonical /forum/<sub>/<slug> URL — internal link density Google uses
+// to discover threads + flow PageRank to the subcategory hub.
+function buildForumSubSSR(payload, origin) {
+  if (!payload || payload.kind !== "forum-sub") return "";
+  const sub = payload.subInfo;
+  const threads = Array.isArray(payload.threads) ? payload.threads : [];
+  const authors = payload.authors || {};
+  const subName = escapeHtml(sub.name);
+  const catName = escapeHtml(sub.catName);
+  const subSlug = escapeHtml(sub.slug || "");
+  const catSlug = escapeHtml(sub.catSlug || "");
+  const crumbs = [
+    `<a href="${origin}/" style="color:#C49A6C;text-decoration:none;">Trailhead</a>`,
+    `<a href="${origin}/" style="color:#C49A6C;text-decoration:none;">Forum</a>`,
+    `<span style="color:#fff;">${subName}</span>`,
+  ].join(' <span style="color:#8B7D6B;">/</span> ');
+  const threadsHtml = threads.length === 0
+    ? `<div style="padding:32px 0;color:#8B7D6B;font-size:14px;text-align:center;">No threads yet in ${subName}. Be the first to post.</div>`
+    : threads.map(t => {
+        const author = authors[t.user_id] || null;
+        const authorName = escapeHtml((author && author.full_name) || "Author");
+        const authorHandle = author && author.handle ? `@${escapeHtml(author.handle)}` : "";
+        const date = t.created_at ? new Date(t.created_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "";
+        // Pull a snippet from sections or body, stripped of tags.
+        let snippet = "";
+        if (Array.isArray(t.sections) && t.sections.length > 0) {
+          const firstBody = t.sections.find(s => s && s.body) || { body: "" };
+          snippet = (firstBody.body || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        }
+        if (!snippet && t.body) {
+          snippet = t.body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        }
+        snippet = snippet.slice(0, 220);
+        const url = `${origin}/forum/${subSlug}/${escapeHtml(t.slug || "")}`;
+        return `
+          <article style="padding:20px 0;border-bottom:1px solid #2A2A28;">
+            <h2 style="margin:0 0 8px;font-size:20px;font-family:'Trebuchet MS','Gill Sans',sans-serif;font-weight:700;line-height:1.3;">
+              <a href="${url}" style="color:#fff;text-decoration:none;">${escapeHtml(t.title || "Untitled")}</a>
+            </h2>
+            ${snippet ? `<p style="margin:0 0 10px;font-size:14px;color:#F5F2ED;line-height:1.5;">${escapeHtml(snippet)}${snippet.length >= 220 ? "…" : ""}</p>` : ""}
+            <div style="font-family:'Trebuchet MS',sans-serif;font-size:11px;color:#8B7D6B;">
+              <strong style="color:#fff;font-weight:600;">${authorName}</strong>
+              ${authorHandle ? ` · <span style="color:#C49A6C;">${authorHandle}</span>` : ""}
+              · ${escapeHtml(date)}
+              ${typeof t.view_count === "number" && t.view_count > 0 ? ` · ${t.view_count} view${t.view_count === 1 ? "" : "s"}` : ""}
+            </div>
+          </article>
+        `;
+      }).join("\n");
+  return `
+    <main style="max-width:720px;margin:0 auto;padding:32px 20px 80px;color:#fff;background:#111111;min-height:100vh;font-family:'Source Serif 4',Georgia,serif;line-height:1.6;box-sizing:border-box;">
+      <nav style="font-family:'Trebuchet MS',sans-serif;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:24px;color:#8B7D6B;">
+        ${crumbs}
+      </nav>
+      <header style="margin-bottom:24px;">
+        <span style="font-family:'Trebuchet MS',sans-serif;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:#C49A6C;">${catName}</span>
+        <h1 style="margin:6px 0 8px;font-size:32px;font-family:'Trebuchet MS','Gill Sans',sans-serif;line-height:1.2;font-weight:700;color:#fff;">${subName}</h1>
+        <p style="margin:0;font-size:14px;color:#8B7D6B;">${threads.length} thread${threads.length === 1 ? "" : "s"} from the Trailhead overlanding community.</p>
+      </header>
+      <section style="margin:0;">
+        ${threadsHtml}
+      </section>
+      <footer style="margin-top:48px;padding-top:24px;border-top:1px solid #2A2A28;font-family:'Trebuchet MS',sans-serif;font-size:12px;color:#8B7D6B;">
+        Browse more on the <a href="${origin}/" style="color:#C49A6C;text-decoration:none;">Trailhead Overlanding Forum</a> — the community for overlanders sharing trips, builds, and trail knowledge.
+      </footer>
+    </main>
+  `;
 }
 
 const DEFAULT_META = {
@@ -496,14 +671,15 @@ module.exports = async function handler(req, res) {
     type === "build" ? `/builds/${id}` :
     type === "post" || type === "route" ? `/post/${id}` :
     type === "forum-thread" ? `/forum/${sub}/${slug}` :
-    type === "forum" ? `/forum/${id}` :
+    type === "forum-sub" ? `/forum/${sub}` :
     type === "hq" ? `/hq` : "/";
   const canonicalUrl = `${proto}://${host}${prettyPath}`;
 
   let meta = DEFAULT_META;
   if (type) {
-    // For forum threads the lookup key is the slug, not id.
-    const lookupId = type === "forum-thread" ? slug : id;
+    // For forum threads the lookup key is the slug, not id. For forum-sub
+    // it's the subcategory slug passed as `sub`.
+    const lookupId = type === "forum-thread" ? slug : (type === "forum-sub" ? sub : id);
     const data = await resolveEntity(type, lookupId);
     if (data) meta = data;
   }
@@ -516,6 +692,57 @@ module.exports = async function handler(req, res) {
     url: canonicalUrl,
   });
 
+  // Canonical URL tag — prevents duplicate-content penalties when the same
+  // page is reachable via multiple URLs (query string variations, trailing
+  // slash variants, etc.). Emitted for every entity type since Google
+  // strongly prefers it.
+  const origin = `${proto}://${host}`;
+  const canonicalTag = `<link rel="canonical" href="${escapeHtml(canonicalUrl)}">`;
+
+  // BreadcrumbList JSON-LD — gives Google the navigation hierarchy so
+  // SERPs show "Trailhead › Forum › Suspension & Lift › <thread title>"
+  // instead of the raw URL. Emitted for forum threads + subcategory
+  // pages; other entity types could add this too as a future improvement.
+  let breadcrumbLdTag = "";
+  if (type === "forum-thread" && meta.article && meta.article.subcategorySlug) {
+    const subInfo = FORUM_SUB_TO_INFO[meta.article.subcategorySlug];
+    const items = [
+      { name: "Trailhead", url: `${origin}/` },
+      { name: "Forum", url: `${origin}/` },
+    ];
+    if (subInfo) items.push({ name: subInfo.name, url: `${origin}/forum/${meta.article.subcategorySlug}` });
+    items.push({ name: meta.article.title || "Thread", url: canonicalUrl });
+    const breadcrumb = {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      itemListElement: items.map((it, i) => ({
+        "@type": "ListItem",
+        position: i + 1,
+        name: it.name,
+        item: it.url,
+      })),
+    };
+    breadcrumbLdTag = `<script type="application/ld+json">${JSON.stringify(breadcrumb).replace(/</g, "\\u003c")}</script>`;
+  } else if (type === "forum-sub" && meta.article && meta.article.subInfo) {
+    const subInfo = meta.article.subInfo;
+    const items = [
+      { name: "Trailhead", url: `${origin}/` },
+      { name: "Forum", url: `${origin}/` },
+      { name: subInfo.name, url: canonicalUrl },
+    ];
+    const breadcrumb = {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      itemListElement: items.map((it, i) => ({
+        "@type": "ListItem",
+        position: i + 1,
+        name: it.name,
+        item: it.url,
+      })),
+    };
+    breadcrumbLdTag = `<script type="application/ld+json">${JSON.stringify(breadcrumb).replace(/</g, "\\u003c")}</script>`;
+  }
+
   // Emit JSON-LD structured data when the resolver returned it. Lets Google
   // index forum threads as DiscussionForumPosting (rich result eligible).
   // The full Person schema for author carries name + handle + url + image,
@@ -524,7 +751,6 @@ module.exports = async function handler(req, res) {
   let jsonLdTag = "";
   if (meta.jsonLd && meta.jsonLd.kind === "DiscussionForumPosting") {
     const a = meta.jsonLd.author || null;
-    const origin = `${proto}://${host}`;
     const authorNode = a
       ? Object.fromEntries(Object.entries({
           "@type": "Person",
@@ -559,21 +785,56 @@ module.exports = async function handler(req, res) {
     // Closing-script-tag escape per Google's recommendation for inline JSON-LD.
     const serialized = JSON.stringify(clean).replace(/</g, "\\u003c");
     jsonLdTag = `<script type="application/ld+json">${serialized}</script>`;
+  } else if (meta.jsonLd && meta.jsonLd.kind === "CollectionPage") {
+    // Subcategory landing page — emit CollectionPage with an inline
+    // ItemList of thread headlines + URLs so Google understands this is
+    // a hub of related discussions in the topical cluster.
+    const sub = meta.jsonLd.subInfo;
+    const threads = Array.isArray(meta.jsonLd.threads) ? meta.jsonLd.threads : [];
+    const ld = {
+      "@context": "https://schema.org",
+      "@type": "CollectionPage",
+      name: `${sub.name} · ${sub.catName} · Trailhead Forum`,
+      url: canonicalUrl,
+      isPartOf: { "@type": "WebSite", name: "Trailhead", url: `${origin}/` },
+      mainEntity: {
+        "@type": "ItemList",
+        numberOfItems: threads.length,
+        itemListElement: threads.map((t, i) => ({
+          "@type": "ListItem",
+          position: i + 1,
+          url: `${origin}/forum/${meta.article.subInfo.slug || ""}/${t.slug || ""}`.replace(/\/$/, ""),
+          name: t.title || "Thread",
+        })),
+      },
+    };
+    const serialized = JSON.stringify(ld).replace(/</g, "\\u003c");
+    jsonLdTag = `<script type="application/ld+json">${serialized}</script>`;
   }
 
   let html = SPA_HTML;
   // Replace the existing <title> with our entity-specific one so browser
   // tabs / search results show a meaningful name even before the SPA mounts.
   html = html.replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(meta.title)}</title>`);
-  html = html.replace("</head>", `${tags}${jsonLdTag ? "\n" + jsonLdTag : ""}\n</head>`);
+  // Inject canonical link + BreadcrumbList + entity JSON-LD just before </head>.
+  const headInjections = [canonicalTag, tags, breadcrumbLdTag, jsonLdTag].filter(Boolean).join("\n");
+  html = html.replace("</head>", `${headInjections}\n</head>`);
   // SSR article: inject the article HTML into the SPA root div so crawlers
   // see real content in the initial HTML response (not "Loading Trailhead").
   // React's createRoot.render() replaces the root's children on mount, so
   // human visitors see the article paint immediately then transition to
-  // the SPA's version. Currently only forum threads — extend to other
-  // entities when they ship server-rendered article versions.
+  // the SPA's version. Currently forum threads + subcategory landing
+  // pages — extend to other entities when they ship server-rendered
+  // article versions.
   if (type === "forum-thread" && meta.article) {
-    const ssr = buildForumThreadSSR(meta.article, canonicalUrl, `${proto}://${host}`);
+    const ssr = buildForumThreadSSR(meta.article, canonicalUrl, origin);
+    if (ssr) {
+      html = html.replace(/(<div id="root"[^>]*>)([\s\S]*?)(<\/div>)/i, `$1${ssr}$3`);
+    }
+  } else if (type === "forum-sub" && meta.article) {
+    // The subInfo carries its own slug for the canonical URL builder.
+    const subInfoWithSlug = { ...meta.article.subInfo, slug: sub };
+    const ssr = buildForumSubSSR({ ...meta.article, subInfo: subInfoWithSlug }, origin);
     if (ssr) {
       html = html.replace(/(<div id="root"[^>]*>)([\s\S]*?)(<\/div>)/i, `$1${ssr}$3`);
     }

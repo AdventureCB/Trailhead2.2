@@ -46335,7 +46335,7 @@ ${suffix}`;
       }
     ));
   }
-  function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpenDM, onOpenShareCompose, onOpenShareIntent, onAddFeedPost, threadsBySub, repliesByThread, onAddForumThread, onUpdateForumThread, onDeleteForumThread, onAddForumReply, onDeleteForumReply, onLoadForumReplies, likedForumThreadIds, forumThreadLikeCounts, onToggleForumThreadLike, likedForumReplyIds, forumReplyLikeCounts, onToggleForumReplyLike, onBumpForumThreadView, onAwardPoints, isGuest, onGuestTap, currentUserId, currentUserName, currentUserHandle, currentUserAvatar }) {
+  function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onConsumePendingForumSubNav, onAddNotification, onOpenDM, onOpenShareCompose, onOpenShareIntent, onAddFeedPost, threadsBySub, repliesByThread, onAddForumThread, onUpdateForumThread, onDeleteForumThread, onAddForumReply, onDeleteForumReply, onLoadForumReplies, likedForumThreadIds, forumThreadLikeCounts, onToggleForumThreadLike, likedForumReplyIds, forumReplyLikeCounts, onToggleForumReplyLike, onBumpForumThreadView, onAwardPoints, isGuest, onGuestTap, currentUserId, currentUserName, currentUserHandle, currentUserAvatar }) {
     const commitForumPhotos = async (photos) => {
       if (!Array.isArray(photos) || photos.length === 0) return [];
       if (!currentUserId) {
@@ -46420,6 +46420,22 @@ ${suffix}`;
       }
       onPendingHandled && onPendingHandled();
     }, [pendingThread, threadsBySub]);
+    (0, import_react4.useEffect)(() => {
+      if (!pendingForumSubNav) return;
+      const subSlug = pendingForumSubNav;
+      for (const cat of forumData.categories) {
+        for (const sub of cat.subs) {
+          if (forumSlugify(sub.name) === subSlug) {
+            setSelectedCat(cat);
+            setSelectedSub(sub);
+            setView("threads");
+            onConsumePendingForumSubNav && onConsumePendingForumSubNav();
+            return;
+          }
+        }
+      }
+      onConsumePendingForumSubNav && onConsumePendingForumSubNav();
+    }, [pendingForumSubNav]);
     const forumUrlBootstrapped = (0, import_react4.useRef)(false);
     (0, import_react4.useEffect)(() => {
       try {
@@ -46432,8 +46448,20 @@ ${suffix}`;
             else window.history.replaceState({ forumSlug: threadSlug }, "", target);
           }
           forumUrlBootstrapped.current = true;
-        } else if (forumUrlBootstrapped.current) {
-          if (window.location.pathname !== "/") window.history.pushState(null, "", "/");
+          return;
+        }
+        if (view === "threads" && selectedSub) {
+          const subSlug = forumSlugify(selectedSub.name);
+          const target = `/forum/${subSlug}`;
+          if (window.location.pathname !== target) {
+            if (forumUrlBootstrapped.current) window.history.pushState({ forumSub: subSlug }, "", target);
+            else window.history.replaceState({ forumSub: subSlug }, "", target);
+          }
+          forumUrlBootstrapped.current = true;
+          return;
+        }
+        if (forumUrlBootstrapped.current && window.location.pathname !== "/") {
+          window.history.pushState(null, "", "/");
         }
       } catch (e) {
       }
@@ -46441,14 +46469,14 @@ ${suffix}`;
     (0, import_react4.useEffect)(() => {
       const onPop = () => {
         const path = window.location.pathname || "";
-        const m = path.match(/^\/forum\/([^/]+)\/([^/]+)\/?$/);
-        if (m) {
-          const subInfo = FORUM_SUB_BY_SLUG[m[1]];
+        const m2 = path.match(/^\/forum\/([^/]+)\/([^/]+)\/?$/);
+        if (m2) {
+          const subInfo = FORUM_SUB_BY_SLUG[m2[1]];
           if (subInfo) {
             const sub = forumData.categories.flatMap((c) => c.subs.map((s) => ({ s, c }))).find(({ s }) => s.name === subInfo.name);
             if (sub) {
               const list = (threadsBySub || {})[subInfo.name] || [];
-              const t = list.find((x) => x.slug === m[2]);
+              const t = list.find((x) => x.slug === m2[2]);
               if (t) {
                 setSelectedCat(sub.c);
                 setSelectedSub(sub.s);
@@ -46460,7 +46488,22 @@ ${suffix}`;
             }
           }
         }
+        const m1 = path.match(/^\/forum\/([^/]+)\/?$/);
+        if (m1) {
+          const subInfo = FORUM_SUB_BY_SLUG[m1[1]];
+          if (subInfo) {
+            const sub = forumData.categories.flatMap((c) => c.subs.map((s) => ({ s, c }))).find(({ s }) => s.name === subInfo.name);
+            if (sub) {
+              setSelectedCat(sub.c);
+              setSelectedSub(sub.s);
+              setSelectedThread(null);
+              setView("threads");
+              return;
+            }
+          }
+        }
         if (view === "thread") setView(selectedSub ? "threads" : "categories");
+        else if (view === "threads") setView("categories");
       };
       window.addEventListener("popstate", onPop);
       return () => window.removeEventListener("popstate", onPop);
@@ -54971,6 +55014,10 @@ ${suffix}`;
       if (forumMatch) {
         return { kind: "forum-thread", subSlug: decodeURIComponent(forumMatch[1]), threadSlug: decodeURIComponent(forumMatch[2]) };
       }
+      const forumSubMatch = path.match(/^\/forum\/([^/]+)\/?$/);
+      if (forumSubMatch) {
+        return { kind: "forum-sub", subSlug: decodeURIComponent(forumSubMatch[1]) };
+      }
     } catch (e) {
     }
     return null;
@@ -56538,7 +56585,7 @@ ${suffix}`;
       if (!initialSharedLink) return "feed";
       if (initialSharedLink.kind === "spot" || initialSharedLink.kind === "hq") return "routes";
       if (initialSharedLink.kind === "build") return "builds";
-      if (initialSharedLink.kind === "forum-thread") return "forum";
+      if (initialSharedLink.kind === "forum-thread" || initialSharedLink.kind === "forum-sub") return "forum";
       return "feed";
     });
     const [profileStack, setProfileStack] = (0, import_react4.useState)([]);
@@ -56862,6 +56909,9 @@ ${suffix}`;
     const [pendingThread, setPendingThread] = (0, import_react4.useState)(null);
     const [pendingForumNav, setPendingForumNav] = (0, import_react4.useState)(
       initialSharedLink && initialSharedLink.kind === "forum-thread" ? { subSlug: initialSharedLink.subSlug, threadSlug: initialSharedLink.threadSlug } : null
+    );
+    const [pendingForumSubNav, setPendingForumSubNav] = (0, import_react4.useState)(
+      initialSharedLink && initialSharedLink.kind === "forum-sub" ? initialSharedLink.subSlug : null
     );
     const [pendingBuildNav, setPendingBuildNav] = (0, import_react4.useState)(
       initialSharedLink && initialSharedLink.kind === "build" ? { rawId: initialSharedLink.id, name: "" } : null
@@ -60163,7 +60213,7 @@ ${suffix}`;
     }, onGoToPost: (id) => {
       setProfileStack([]);
       setScreen("feed");
-    }, myPoints: myTotalPoints }) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, isGuest && screen !== "routes" && /* @__PURE__ */ import_react4.default.createElement(GuestBanner, { onSignIn: () => setShowGuestPrompt(true) }), screen === "feed" && renderFeedScopedTo({ hideFilters: false }), screen === "forum" && /* @__PURE__ */ import_react4.default.createElement(ForumScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, currentUserName: currentProfile && currentProfile.full_name || "You", currentUserHandle: currentProfile && currentProfile.handle || "", currentUserAvatar: profilePic || currentProfile && currentProfile.avatar_url || null, pendingThread, onPendingHandled: () => setPendingThread(null), onAddNotification: requireAuth(addNotification), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onOpenShareCompose: openShareCompose, onOpenShareIntent: openShareIntent, onAddFeedPost: requireAuth((post2) => addPost(post2)), threadsBySub: forumThreadsBySub, repliesByThread: forumReplies, onAddForumThread: requireAuth(addForumThread), onUpdateForumThread: requireAuth(updateForumThread), onDeleteForumThread: requireAuth(deleteForumThread), onAddForumReply: requireAuth(addForumReply), onDeleteForumReply: requireAuth(deleteForumReply), onLoadForumReplies: loadForumReplies, likedForumThreadIds, forumThreadLikeCounts, onToggleForumThreadLike: requireAuth(toggleForumThreadLike), likedForumReplyIds, forumReplyLikeCounts, onToggleForumReplyLike: requireAuth(toggleForumReplyLike), onBumpForumThreadView: bumpForumThreadView, onAwardPoints: awardPoints }), screen === "routes" && /* @__PURE__ */ import_react4.default.createElement(RoutesScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, onOpenShareIntent: openShareIntent, tripAuthors, onLoadRouteData: loadTripRouteData, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, tripReports: allTripReports, showTripReports, setShowTripReports, tripPlans: allTripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot: requireAuth(addCampingSpot), onUpdateCampingSpot: requireAuth(updateCampingSpot), onDeleteCampingSpot: requireAuth(deleteCampingSpot), onLoadCampingSpotPhotos: loadCampingSpotPhotos, onLoadCampingSpotElevation: loadCampingSpotElevation, spotAuthors, onViewUser: openUserProfile, onStartNav: (route) => setActiveNavRoute(route), onOpenTripDetail: (slug) => setPendingTripNav(slug), onOpenTripPlanDraft: (id) => setDetailTripId(id), onNewTripReport: () => setTripCreatorMode("report"), onNewTripPlan: () => requireAuth(() => enterPlanBuilder())(), pendingSpotNav, onConsumePendingSpotNav: () => setPendingSpotNav(null), pendingHQOpen, onConsumePendingHQOpen: () => setPendingHQOpen(false), pendingPlanNav, onConsumePendingPlanNav: () => setPendingPlanNav(null), onShareCampingSpotToFeed: requireAuth(shareCampingSpotToFeed), onShareHQToFeed: requireAuth(shareHQToFeed), onShareTripToFeed: requireAuth(shareTripToFeed), onShareTripPlanToFeed: requireAuth(shareTripPlanToFeed), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onShowToast: showErrorToast, onOpenShareCompose: openShareCompose, planBuilder: { active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, editingId: planBuilderEditingId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen, accent: planBuilderEditingId && (tripReports || []).find((t) => t.id === planBuilderEditingId && t.kind === "report") ? T.purple : T.copper } }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, onLoadAllBuilds: loadAllBuildsOnce, onLoadBuildById: loadBuildById, allBuildsLoaded, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onOpenShareCompose: openShareCompose, onOpenShareIntent: openShareIntent, onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onDeleteBuild: requireAuth(deleteBuild), onPostBuildToFeed: requireAuth((b, opts) => {
+    }, myPoints: myTotalPoints }) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, isGuest && screen !== "routes" && /* @__PURE__ */ import_react4.default.createElement(GuestBanner, { onSignIn: () => setShowGuestPrompt(true) }), screen === "feed" && renderFeedScopedTo({ hideFilters: false }), screen === "forum" && /* @__PURE__ */ import_react4.default.createElement(ForumScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, currentUserName: currentProfile && currentProfile.full_name || "You", currentUserHandle: currentProfile && currentProfile.handle || "", currentUserAvatar: profilePic || currentProfile && currentProfile.avatar_url || null, pendingThread, onPendingHandled: () => setPendingThread(null), pendingForumSubNav, onConsumePendingForumSubNav: () => setPendingForumSubNav(null), onAddNotification: requireAuth(addNotification), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onOpenShareCompose: openShareCompose, onOpenShareIntent: openShareIntent, onAddFeedPost: requireAuth((post2) => addPost(post2)), threadsBySub: forumThreadsBySub, repliesByThread: forumReplies, onAddForumThread: requireAuth(addForumThread), onUpdateForumThread: requireAuth(updateForumThread), onDeleteForumThread: requireAuth(deleteForumThread), onAddForumReply: requireAuth(addForumReply), onDeleteForumReply: requireAuth(deleteForumReply), onLoadForumReplies: loadForumReplies, likedForumThreadIds, forumThreadLikeCounts, onToggleForumThreadLike: requireAuth(toggleForumThreadLike), likedForumReplyIds, forumReplyLikeCounts, onToggleForumReplyLike: requireAuth(toggleForumReplyLike), onBumpForumThreadView: bumpForumThreadView, onAwardPoints: awardPoints }), screen === "routes" && /* @__PURE__ */ import_react4.default.createElement(RoutesScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, onOpenShareIntent: openShareIntent, tripAuthors, onLoadRouteData: loadTripRouteData, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, tripReports: allTripReports, showTripReports, setShowTripReports, tripPlans: allTripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot: requireAuth(addCampingSpot), onUpdateCampingSpot: requireAuth(updateCampingSpot), onDeleteCampingSpot: requireAuth(deleteCampingSpot), onLoadCampingSpotPhotos: loadCampingSpotPhotos, onLoadCampingSpotElevation: loadCampingSpotElevation, spotAuthors, onViewUser: openUserProfile, onStartNav: (route) => setActiveNavRoute(route), onOpenTripDetail: (slug) => setPendingTripNav(slug), onOpenTripPlanDraft: (id) => setDetailTripId(id), onNewTripReport: () => setTripCreatorMode("report"), onNewTripPlan: () => requireAuth(() => enterPlanBuilder())(), pendingSpotNav, onConsumePendingSpotNav: () => setPendingSpotNav(null), pendingHQOpen, onConsumePendingHQOpen: () => setPendingHQOpen(false), pendingPlanNav, onConsumePendingPlanNav: () => setPendingPlanNav(null), onShareCampingSpotToFeed: requireAuth(shareCampingSpotToFeed), onShareHQToFeed: requireAuth(shareHQToFeed), onShareTripToFeed: requireAuth(shareTripToFeed), onShareTripPlanToFeed: requireAuth(shareTripPlanToFeed), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onShowToast: showErrorToast, onOpenShareCompose: openShareCompose, planBuilder: { active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, editingId: planBuilderEditingId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen, accent: planBuilderEditingId && (tripReports || []).find((t) => t.id === planBuilderEditingId && t.kind === "report") ? T.purple : T.copper } }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, onLoadAllBuilds: loadAllBuildsOnce, onLoadBuildById: loadBuildById, allBuildsLoaded, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onOpenShareCompose: openShareCompose, onOpenShareIntent: openShareIntent, onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onDeleteBuild: requireAuth(deleteBuild), onPostBuildToFeed: requireAuth((b, opts) => {
       const rawBd = b.buildData;
       const bd = scrubLocalPhotosFromBuildData(rawBd);
       const isLocalUrl = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:"));
