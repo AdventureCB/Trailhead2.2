@@ -54089,6 +54089,9 @@ ${suffix}`;
     const prefillAvatar = session && session.user && session.user.user_metadata && session.user.user_metadata.avatar_url || null;
     const prefillHandle = session && session.user && session.user.user_metadata && session.user.user_metadata.handle || "";
     const [handle, setHandle] = (0, import_react4.useState)(prefillHandle);
+    const alreadyAcceptedTos = !!(session && session.user && session.user.user_metadata && session.user.user_metadata.terms_accepted_at);
+    const [tosAccepted, setTosAccepted] = (0, import_react4.useState)(alreadyAcceptedTos);
+    const [showTerms, setShowTerms] = (0, import_react4.useState)(false);
     const [signupRole, setSignupRole] = (0, import_react4.useState)("user");
     const [buildName, setBuildName] = (0, import_react4.useState)("");
     const [year, setYear] = (0, import_react4.useState)("");
@@ -54138,6 +54141,10 @@ ${suffix}`;
         setError("Choose a username to continue.");
         return;
       }
+      if (!tosAccepted) {
+        setError("You must agree to the Terms of Service to continue.");
+        return;
+      }
       setError("");
       setLoading(true);
       const cleanHandle = handle.trim().replace(/^@/, "");
@@ -54148,6 +54155,10 @@ ${suffix}`;
             // Preserve whatever name we already have from the OAuth provider
             ...prefillName ? { full_name: prefillName } : {},
             first_build: buildName || model ? { name: buildName, year, make, model } : null,
+            // Stamp TOS acceptance for OAuth users who didn't pass through
+            // SignupScreen's TOS gate. Email signups already have this set
+            // from signup time; we don't overwrite their timestamp.
+            ...alreadyAcceptedTos ? {} : { terms_accepted_at: (/* @__PURE__ */ new Date()).toISOString(), terms_version: TRAILHEAD_TOS_VERSION },
             // Browser-phase wizard complete. Two follow-on flags:
             //   wizard_pending=false → cross-device flag cleared; future
             //     SIGNED_IN no longer routes to install-pwa
@@ -54276,7 +54287,10 @@ ${suffix}`;
     ) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("input", { value: model, onChange: (e) => setModel(e.target.value), placeholder: "Enter model", style: { ...inputStyle, flex: 1 } }), modelOptions.length > 0 && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
       setModelMode("select");
       setModel("");
-    }, style: { padding: "0 14px", borderRadius: 8, background: "transparent", border: `1px solid ${T.charcoal}`, color: T.tertiary, fontFamily: sans, fontSize: 10, letterSpacing: 1, cursor: "pointer" } }, "BACK")))), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: handleFinish, disabled: loading, style: { width: "100%", padding: "14px 0", borderRadius: 8, background: T.red, border: "none", cursor: loading ? "wait" : "pointer", marginBottom: 12, opacity: loading ? 0.7 : 1 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, fontWeight: 600, color: T.white, letterSpacing: 1.5 } }, loading ? "SAVING..." : "ENTER TRAILHEAD")))));
+    }, style: { padding: "0 14px", borderRadius: 8, background: "transparent", border: `1px solid ${T.charcoal}`, color: T.tertiary, fontFamily: sans, fontSize: 10, letterSpacing: 1, cursor: "pointer" } }, "BACK")))), !alreadyAcceptedTos && /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => setTosAccepted((t) => !t), style: { display: "flex", alignItems: "flex-start", gap: 10, padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${tosAccepted ? T.green : T.charcoal}`, cursor: "pointer", marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 18, height: 18, borderRadius: 4, background: tosAccepted ? T.green : "transparent", border: `1.5px solid ${tosAccepted ? T.green : T.tertiary}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 } }, tosAccepted && /* @__PURE__ */ import_react4.default.createElement(CircleCheckBig, { size: 12, color: T.white, strokeWidth: 2.5 })), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 12, color: T.warmStone || T.white, lineHeight: 1.5 } }, "I agree to the", " ", /* @__PURE__ */ import_react4.default.createElement("span", { onClick: (e) => {
+      e.stopPropagation();
+      setShowTerms(true);
+    }, style: { color: T.copper, textDecoration: "underline", fontWeight: 600 } }, "Terms of Service"), " ", "\u2014 Lone Peak Overland owns and may use any content I create on Trailhead.")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: handleFinish, disabled: loading, style: { width: "100%", padding: "14px 0", borderRadius: 8, background: T.red, border: "none", cursor: loading ? "wait" : "pointer", marginBottom: 12, opacity: loading ? 0.7 : 1 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, fontWeight: 600, color: T.white, letterSpacing: 1.5 } }, loading ? "SAVING..." : "ENTER TRAILHEAD")), showTerms && /* @__PURE__ */ import_react4.default.createElement(TermsModal, { onClose: () => setShowTerms(false) }))));
   }
   function fmtBytes(bytes) {
     if (!bytes && bytes !== 0) return "";

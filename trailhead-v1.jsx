@@ -19268,6 +19268,14 @@ function OnboardingScreen({ session, onComplete, onSetProfilePic, onAddBuild }) 
   const prefillHandle =
     (session && session.user && session.user.user_metadata && session.user.user_metadata.handle) || "";
   const [handle, setHandle] = useState(prefillHandle);
+  // TOS is collected at SignupScreen for email signups (writes
+  // user_metadata.terms_accepted_at). OAuth (Google) signups bypass that
+  // screen entirely → no acceptance. Mirror the handle gating: pre-fill
+  // from user_metadata + hide checkbox when already accepted, otherwise
+  // require it before "Enter Trailhead".
+  const alreadyAcceptedTos = !!(session && session.user && session.user.user_metadata && session.user.user_metadata.terms_accepted_at);
+  const [tosAccepted, setTosAccepted] = useState(alreadyAcceptedTos);
+  const [showTerms, setShowTerms] = useState(false);
   // Role pick at signup — user or ambassador. Admin role is server-side
   // only (existing admin promotes via SQL); self-signup as admin is
   // rejected by the profiles_role_guard trigger.
@@ -19315,6 +19323,7 @@ function OnboardingScreen({ session, onComplete, onSetProfilePic, onAddBuild }) 
 
   const handleFinish = async () => {
     if (!handle.trim()) { setError("Choose a username to continue."); return; }
+    if (!tosAccepted) { setError("You must agree to the Terms of Service to continue."); return; }
     setError("");
     setLoading(true);
     const cleanHandle = handle.trim().replace(/^@/, "");
@@ -19325,6 +19334,10 @@ function OnboardingScreen({ session, onComplete, onSetProfilePic, onAddBuild }) 
           // Preserve whatever name we already have from the OAuth provider
           ...(prefillName ? { full_name: prefillName } : {}),
           first_build: buildName || model ? { name: buildName, year, make, model } : null,
+          // Stamp TOS acceptance for OAuth users who didn't pass through
+          // SignupScreen's TOS gate. Email signups already have this set
+          // from signup time; we don't overwrite their timestamp.
+          ...(alreadyAcceptedTos ? {} : { terms_accepted_at: new Date().toISOString(), terms_version: TRAILHEAD_TOS_VERSION }),
           // Browser-phase wizard complete. Two follow-on flags:
           //   wizard_pending=false → cross-device flag cleared; future
           //     SIGNED_IN no longer routes to install-pwa
@@ -19568,9 +19581,25 @@ function OnboardingScreen({ session, onComplete, onSetProfilePic, onAddBuild }) 
             </div>
           </div>
 
+          {/* TOS gate — only shown when user_metadata.terms_accepted_at
+              is missing (i.e. OAuth signups who bypassed SignupScreen). */}
+          {!alreadyAcceptedTos && (
+            <div onClick={() => setTosAccepted(t => !t)} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${tosAccepted ? T.green : T.charcoal}`, cursor: "pointer", marginBottom: 16 }}>
+              <div style={{ width: 18, height: 18, borderRadius: 4, background: tosAccepted ? T.green : "transparent", border: `1.5px solid ${tosAccepted ? T.green : T.tertiary}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
+                {tosAccepted && <CheckCircle size={12} color={T.white} strokeWidth={2.5} />}
+              </div>
+              <span style={{ fontFamily: serif, fontSize: 12, color: T.warmStone || T.white, lineHeight: 1.5 }}>
+                I agree to the{" "}
+                <span onClick={(e) => { e.stopPropagation(); setShowTerms(true); }} style={{ color: T.copper, textDecoration: "underline", fontWeight: 600 }}>Terms of Service</span>
+                {" "}— Lone Peak Overland owns and may use any content I create on Trailhead.
+              </span>
+            </div>
+          )}
+
           <button onClick={handleFinish} disabled={loading} style={{ width: "100%", padding: "14px 0", borderRadius: 8, background: T.red, border: "none", cursor: loading ? "wait" : "pointer", marginBottom: 12, opacity: loading ? 0.7 : 1 }}>
             <span style={{ fontFamily: sans, fontSize: 13, fontWeight: 600, color: T.white, letterSpacing: 1.5 }}>{loading ? "SAVING..." : "ENTER TRAILHEAD"}</span>
           </button>
+          {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
         </div>
       </div>
     </div>
