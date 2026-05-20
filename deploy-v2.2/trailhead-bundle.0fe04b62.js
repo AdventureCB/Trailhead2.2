@@ -50037,7 +50037,7 @@ ${suffix}`;
       },
       /* @__PURE__ */ import_react4.default.createElement(Heart, { size: 13, color: isLiked ? T.red : T.white, fill: isLiked ? T.red : "transparent" }),
       (likeCount || 0) > 0 && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: isLiked ? T.red : T.white, fontWeight: 600 } }, likeCount)
-    ), trip.status === "published" && onToggleSave && trip.userId !== currentUserId && /* @__PURE__ */ import_react4.default.createElement(
+    ), trip.status === "published" && onToggleSave && (trip.user_id || trip.userId) !== currentUserId && /* @__PURE__ */ import_react4.default.createElement(
       "button",
       {
         onClick: () => onToggleSave(trip.id),
@@ -51244,7 +51244,7 @@ ${suffix}`;
         },
         /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 12 }),
         "OPEN TRIP"
-      ), !isGuest && t.userId !== currentUserId && onToggleSaveTrip && (() => {
+      ), !isGuest && (t.user_id || t.userId) !== currentUserId && onToggleSaveTrip && (() => {
         const isSaved = !!(savedTripIds && savedTripIds[t.id]);
         return /* @__PURE__ */ import_react4.default.createElement(
           "button",
@@ -51296,7 +51296,7 @@ ${suffix}`;
         },
         /* @__PURE__ */ import_react4.default.createElement(ExternalLink, { size: 12 }),
         "OPEN PLAN"
-      ), !isGuest && p.userId !== currentUserId && onToggleSaveTrip && (() => {
+      ), !isGuest && (p.user_id || p.userId) !== currentUserId && onToggleSaveTrip && (() => {
         const isSaved = !!(savedTripIds && savedTripIds[p.id]);
         return /* @__PURE__ */ import_react4.default.createElement(
           "button",

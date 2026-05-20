@@ -11754,7 +11754,7 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
               {(likeCount || 0) > 0 && <span style={{ fontFamily: sans, fontSize: 11, color: isLiked ? T.red : T.white, fontWeight: 600 }}>{likeCount}</span>}
             </button>
           )}
-          {trip.status === "published" && onToggleSave && trip.userId !== currentUserId && (
+          {trip.status === "published" && onToggleSave && (trip.user_id || trip.userId) !== currentUserId && (
             <button onClick={() => onToggleSave(trip.id)} title={isSaved ? "Unsave" : "Save for later"}
                     style={{ background: isSaved ? `${T.copper}25` : T.charcoal, border: `1px solid ${isSaved ? T.copper : T.charcoal}`, padding: "6px 10px", borderRadius: 6, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
               <Bookmark size={13} color={isSaved ? T.copper : T.white} fill={isSaved ? T.copper : "transparent"} />
@@ -13635,7 +13635,7 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
                     <ExternalLink size={12} />OPEN TRIP
                   </button>
                 )}
-                {!isGuest && t.userId !== currentUserId && onToggleSaveTrip && (() => {
+                {!isGuest && (t.user_id || t.userId) !== currentUserId && onToggleSaveTrip && (() => {
                   const isSaved = !!(savedTripIds && savedTripIds[t.id]);
                   return (
                     <button onClick={() => onToggleSaveTrip(t.id)}
@@ -13737,7 +13737,7 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
                     <ExternalLink size={12} />OPEN PLAN
                   </button>
                 )}
-                {!isGuest && p.userId !== currentUserId && onToggleSaveTrip && (() => {
+                {!isGuest && (p.user_id || p.userId) !== currentUserId && onToggleSaveTrip && (() => {
                   const isSaved = !!(savedTripIds && savedTripIds[p.id]);
                   return (
                     <button onClick={() => onToggleSaveTrip(p.id)}
