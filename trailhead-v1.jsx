@@ -3147,17 +3147,17 @@ const cardStyle = {
 };
 
 /* ─── Bottom Nav ─── */
-function BottomNav({ active, onNav, isGuest }) {
-  // Guests see everything except Ranks. Ranks requires sign-in (it's the
-  // points-earning leaderboard) and we don't want to surface a tab the
-  // user can't engage with. The screen-render guard at the root is kept
-  // as a safety net in case anything calls setScreen("ranks") directly.
+function BottomNav({ active, onNav, isGuest, isAdmin }) {
+  // Ranks is gated to admins-only while it's developed in-place on the
+  // live platform (v2 feature). Guests + general users + ambassadors
+  // don't see the tab at all. The screen-render guard at the root is
+  // kept as a safety net in case anything calls setScreen("ranks").
   const items = [
     { key: "feed", label: "Feed", icon: Home },
     { key: "forum", label: "Forum", icon: Compass },
     { key: "routes", label: "Maps", icon: Map },
     { key: "builds", label: "Builds", icon: Wrench },
-    !isGuest ? { key: "ranks", label: "Ranks", icon: Trophy } : null,
+    (!isGuest && isAdmin) ? { key: "ranks", label: "Ranks", icon: Trophy } : null,
   ].filter(Boolean);
   return (
     <div style={{ display: "flex", position: "sticky", bottom: 0, background: T.darkCard, padding: "10px 0 max(10px, env(safe-area-inset-bottom))", borderTop: `1px solid ${T.charcoal}`, zIndex: 100, flexShrink: 0 }}>
@@ -28231,7 +28231,7 @@ export default function Trailhead() {
     { key: "forum", label: "Forum", icon: Compass },
     { key: "routes", label: "Maps", icon: Map },
     { key: "builds", label: "Builds", icon: Wrench },
-    !isGuest ? { key: "ranks", label: "Ranks", icon: Trophy } : null,
+    (!isGuest && isAdmin) ? { key: "ranks", label: "Ranks", icon: Trophy } : null,
   ].filter(Boolean);
   const myFullName = (currentProfile && currentProfile.full_name) || "You";
   const myHandle = (currentProfile && currentProfile.handle) || "";
@@ -28459,7 +28459,9 @@ export default function Trailhead() {
             {screen === "builds" && <BuildsScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onViewUser={openUserProfile} userBuilds={userBuilds} allBuilds={allBuilds} onLoadAllBuilds={loadAllBuildsOnce} onLoadBuildById={loadBuildById} allBuildsLoaded={allBuildsLoaded} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} followingIds={followingIds} pendingBuildNav={pendingBuildNav} onConsumePendingBuildNav={() => setPendingBuildNav(null)} onAddBuild={requireAuth(addBuild)} userRoutes={userRoutes} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onOpenShareCompose={openShareCompose} onOpenShareIntent={openShareIntent} onUpdateBuild={requireAuth(updateBuild)} likedBuildIds={likedBuildIds} buildLikeCounts={buildLikeCounts} onToggleBuildLike={requireAuth(toggleBuildLike)} onDeleteBuild={requireAuth(deleteBuild)} onPostBuildToFeed={requireAuth((b, opts) => { const rawBd = b.buildData; const bd = scrubLocalPhotosFromBuildData(rawBd); const isLocalUrl = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:")); const rawHero = b.image || (rawBd && rawBd.mainPhotos && rawBd.mainPhotos[0] && rawBd.mainPhotos[0].url) || null; const cleanHero = isLocalUrl(rawHero) ? ((bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url) || null) : rawHero; const heroImg = isLocalUrl(cleanHero) ? null : cleanHero; const meName = (currentProfile && currentProfile.full_name) || "You"; const myUid = supabaseSession && supabaseSession.user && supabaseSession.user.id; const isReshare = b.userId && myUid && b.userId !== myUid; const ownerHandle = isReshare ? (b.handle || "").replace(/^@/, "") : null; const ownerName = isReshare ? (b.owner || null) : null; addPost({ id: "feedbuild_" + Date.now(), type: "BUILDS", user: meName, initial: meName.charAt(0).toUpperCase(), time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, subtitle: isReshare ? `Shared @${ownerHandle}'s build` : "Added a new build", vehicle: `${b.year} ${b.make} ${b.model}`, photoUrls: heroImg ? [heroImg] : undefined, image: heroImg, likes: 0, comments: 0, buildData: bd, buildRawId: b.rawId != null ? b.rawId : null, sharedFromOwnerHandle: ownerHandle, sharedFromOwnerName: ownerName, _skipBuildIdCol: isReshare }); awardPoints(POINTS.feedPost, "Build Shared"); })} buildComments={buildComments} onLoadBuildComments={loadBuildComments} onAddBuildComment={requireAuth(addBuildComment)} onDeleteBuildComment={deleteBuildComment} likedBuildCommentIds={likedBuildCommentIds} buildCommentLikeCounts={buildCommentLikeCounts} onToggleBuildCommentLike={requireAuth(toggleBuildCommentLike)} currentUserName={(currentProfile && currentProfile.full_name) || ""} currentUserHandle={(currentProfile && currentProfile.handle) ? "@" + currentProfile.handle : ""} currentUserAvatar={(currentProfile && currentProfile.avatar_url) || null} />}
             {screen === "ranks" && (isGuest
               ? <GuestGateScreen title="RANKS REQUIRE AN ACCOUNT" subtitle="Sign in to see the leaderboard and start earning points from your posts, routes and builds." onSignIn={goToLoginFromGuest} />
-              : <RanksScreen myPoints={myTotalPoints} pointsBreakdown={pointsBreakdown} />
+              : isAdmin
+                ? <RanksScreen myPoints={myTotalPoints} pointsBreakdown={pointsBreakdown} />
+                : <div style={{ padding: 32, textAlign: "center", fontFamily: serif, fontSize: 14, color: T.tertiary, lineHeight: 1.6 }}>Ranks is coming in a future release.</div>
             )}
           </>
         )}
@@ -28472,7 +28474,7 @@ export default function Trailhead() {
         </button>
       )}
 
-      {!keyboardOpen && !isDesktop && <BottomNav active={isOverlay ? "" : screen} onNav={handleNav} isGuest={isGuest} />}
+      {!keyboardOpen && !isDesktop && <BottomNav active={isOverlay ? "" : screen} onNav={handleNav} isGuest={isGuest} isAdmin={isAdmin} />}
 
       {/* Map Overlay */}
       {mapData && (

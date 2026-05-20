@@ -45171,13 +45171,13 @@ ${suffix}`;
     borderRadius: 12,
     overflow: "hidden"
   };
-  function BottomNav({ active, onNav, isGuest }) {
+  function BottomNav({ active, onNav, isGuest, isAdmin }) {
     const items = [
       { key: "feed", label: "Feed", icon: House },
       { key: "forum", label: "Forum", icon: Compass },
       { key: "routes", label: "Maps", icon: Map2 },
       { key: "builds", label: "Builds", icon: Wrench },
-      !isGuest ? { key: "ranks", label: "Ranks", icon: Trophy } : null
+      !isGuest && isAdmin ? { key: "ranks", label: "Ranks", icon: Trophy } : null
     ].filter(Boolean);
     return /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", position: "sticky", bottom: 0, background: T.darkCard, padding: "10px 0 max(10px, env(safe-area-inset-bottom))", borderTop: `1px solid ${T.charcoal}`, zIndex: 100, flexShrink: 0 } }, items.map((it) => {
       const Icon2 = it.icon;
@@ -60937,7 +60937,7 @@ ${suffix}`;
       { key: "forum", label: "Forum", icon: Compass },
       { key: "routes", label: "Maps", icon: Map2 },
       { key: "builds", label: "Builds", icon: Wrench },
-      !isGuest ? { key: "ranks", label: "Ranks", icon: Trophy } : null
+      !isGuest && isAdmin ? { key: "ranks", label: "Ranks", icon: Trophy } : null
     ].filter(Boolean);
     const myFullName = currentProfile && currentProfile.full_name || "You";
     const myHandle = currentProfile && currentProfile.handle || "";
@@ -61099,7 +61099,7 @@ ${suffix}`;
       const ownerName = isReshare ? b.owner || null : null;
       addPost({ id: "feedbuild_" + Date.now(), type: "BUILDS", user: meName, initial: meName.charAt(0).toUpperCase(), time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, subtitle: isReshare ? `Shared @${ownerHandle}'s build` : "Added a new build", vehicle: `${b.year} ${b.make} ${b.model}`, photoUrls: heroImg ? [heroImg] : void 0, image: heroImg, likes: 0, comments: 0, buildData: bd, buildRawId: b.rawId != null ? b.rawId : null, sharedFromOwnerHandle: ownerHandle, sharedFromOwnerName: ownerName, _skipBuildIdCol: isReshare });
       awardPoints(POINTS.feedPost, "Build Shared");
-    }), buildComments, onLoadBuildComments: loadBuildComments, onAddBuildComment: requireAuth(addBuildComment), onDeleteBuildComment: deleteBuildComment, likedBuildCommentIds, buildCommentLikeCounts, onToggleBuildCommentLike: requireAuth(toggleBuildCommentLike), currentUserName: currentProfile && currentProfile.full_name || "", currentUserHandle: currentProfile && currentProfile.handle ? "@" + currentProfile.handle : "", currentUserAvatar: currentProfile && currentProfile.avatar_url || null }), screen === "ranks" && (isGuest ? /* @__PURE__ */ import_react4.default.createElement(GuestGateScreen, { title: "RANKS REQUIRE AN ACCOUNT", subtitle: "Sign in to see the leaderboard and start earning points from your posts, routes and builds.", onSignIn: goToLoginFromGuest }) : /* @__PURE__ */ import_react4.default.createElement(RanksScreen, { myPoints: myTotalPoints, pointsBreakdown })))), screen === "feed" && !isOverlay && !isGuest && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setShowCompose(true), style: { position: "absolute", bottom: 88, right: 16, width: 52, height: 52, borderRadius: "50%", background: T.red, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 4px 20px ${T.red}60`, zIndex: 90 } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 24, color: T.white, strokeWidth: 2 })), !keyboardOpen && !isDesktop && /* @__PURE__ */ import_react4.default.createElement(BottomNav, { active: isOverlay ? "" : screen, onNav: handleNav, isGuest }), mapData && /* @__PURE__ */ import_react4.default.createElement(
+    }), buildComments, onLoadBuildComments: loadBuildComments, onAddBuildComment: requireAuth(addBuildComment), onDeleteBuildComment: deleteBuildComment, likedBuildCommentIds, buildCommentLikeCounts, onToggleBuildCommentLike: requireAuth(toggleBuildCommentLike), currentUserName: currentProfile && currentProfile.full_name || "", currentUserHandle: currentProfile && currentProfile.handle ? "@" + currentProfile.handle : "", currentUserAvatar: currentProfile && currentProfile.avatar_url || null }), screen === "ranks" && (isGuest ? /* @__PURE__ */ import_react4.default.createElement(GuestGateScreen, { title: "RANKS REQUIRE AN ACCOUNT", subtitle: "Sign in to see the leaderboard and start earning points from your posts, routes and builds.", onSignIn: goToLoginFromGuest }) : isAdmin ? /* @__PURE__ */ import_react4.default.createElement(RanksScreen, { myPoints: myTotalPoints, pointsBreakdown }) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: 32, textAlign: "center", fontFamily: serif, fontSize: 14, color: T.tertiary, lineHeight: 1.6 } }, "Ranks is coming in a future release.")))), screen === "feed" && !isOverlay && !isGuest && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setShowCompose(true), style: { position: "absolute", bottom: 88, right: 16, width: 52, height: 52, borderRadius: "50%", background: T.red, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 4px 20px ${T.red}60`, zIndex: 90 } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 24, color: T.white, strokeWidth: 2 })), !keyboardOpen && !isDesktop && /* @__PURE__ */ import_react4.default.createElement(BottomNav, { active: isOverlay ? "" : screen, onNav: handleNav, isGuest, isAdmin }), mapData && /* @__PURE__ */ import_react4.default.createElement(
       MapOverlay,
       {
         coords: mapData.coords,
