@@ -24240,37 +24240,6 @@ export default function Trailhead() {
   // Guests are only created by following a shared link without an active
   // session. Normal app use requires sign-in.
   const [isGuest, setIsGuest] = useState(!!initialSharedLink);
-  // Decide which install/push prompt to surface inside the app. Placed
-  // here (after `isGuest` declaration) to avoid a TDZ from referencing it
-  // in the deps array.
-  //   1. Not standalone + iOS/Android → InstallPromptModal (3-day cooldown
-  //      after dismiss)
-  //   2. Standalone + push not enabled + not yet prompted → PushPromptModal
-  // Install fires first since iOS can't enable push until standalone.
-  useEffect(() => {
-    if (authState !== "app") return;
-    if (isGuest) return;
-    if (typeof window === "undefined") return;
-    const platform = detectInstallPlatform();
-    if (platform === "standalone") {
-      try {
-        const seenAt = localStorage.getItem("th_push_prompt_seen_at");
-        if (!seenAt && !notifPrefs.push && typeof Notification !== "undefined" && Notification.permission !== "denied") {
-          const t = setTimeout(() => setShowPushModal(true), 1200);
-          return () => clearTimeout(t);
-        }
-      } catch (e) {}
-      return;
-    }
-    if (platform !== "ios" && platform !== "android") return;
-    try {
-      const dismissedAt = parseInt(localStorage.getItem("th_install_modal_dismissed_at") || "0", 10);
-      const threeDays = 3 * 24 * 60 * 60 * 1000;
-      if (dismissedAt && Date.now() - dismissedAt < threeDays) return;
-      const t = setTimeout(() => setShowInstallModal(true), 1500);
-      return () => clearTimeout(t);
-    } catch (e) {}
-  }, [authState, isGuest, notifPrefs.push]);
   const [showGuestPrompt, setShowGuestPrompt] = useState(false);
   // Keyboard-visibility hint — drives hiding the bottom nav while the user
   // is typing. iOS Safari (especially in standalone PWA mode) refuses to
@@ -25654,6 +25623,35 @@ export default function Trailhead() {
       return next;
     });
   };
+  // Install/push prompt detection — placed AFTER both isGuest and
+  // notifPrefs declarations to avoid TDZ in the deps array.
+  //   1. Not standalone + iOS/Android → InstallPromptModal (3-day cooldown)
+  //   2. Standalone + push not enabled + not yet prompted → PushPromptModal
+  // Install fires first since iOS can't enable push until standalone.
+  useEffect(() => {
+    if (authState !== "app") return;
+    if (isGuest) return;
+    if (typeof window === "undefined") return;
+    const platform = detectInstallPlatform();
+    if (platform === "standalone") {
+      try {
+        const seenAt = localStorage.getItem("th_push_prompt_seen_at");
+        if (!seenAt && !notifPrefs.push && typeof Notification !== "undefined" && Notification.permission !== "denied") {
+          const t = setTimeout(() => setShowPushModal(true), 1200);
+          return () => clearTimeout(t);
+        }
+      } catch (e) {}
+      return;
+    }
+    if (platform !== "ios" && platform !== "android") return;
+    try {
+      const dismissedAt = parseInt(localStorage.getItem("th_install_modal_dismissed_at") || "0", 10);
+      const threeDays = 3 * 24 * 60 * 60 * 1000;
+      if (dismissedAt && Date.now() - dismissedAt < threeDays) return;
+      const t = setTimeout(() => setShowInstallModal(true), 1500);
+      return () => clearTimeout(t);
+    } catch (e) {}
+  }, [authState, isGuest, notifPrefs.push]);
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [showDM, setShowDM] = useState(false);
   // initialConvId — set after find/create resolves; DMScreen consumes once.
