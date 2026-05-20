@@ -11408,7 +11408,7 @@ const TripReportCard = memo(function TripReportCardImpl({ trip, author, onOpen }
 // title + author + difficulty/region pills → terrain/tag chips →
 // description → trip stats → trailhead + Get Directions → full route map
 // → per-pin notes → photo grid → footer with author profile link.
-function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onEdit, onUpdate, onDelete, onEditPlanRoute, onLoadRouteData, onBumpView, isLiked, likeCount, onToggleLike, onShareToFeed, onStartDirections, onStartNav, onPlanConvoy, initialEditMode }) {
+function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onEdit, onUpdate, onDelete, onEditPlanRoute, onLoadRouteData, onBumpView, isLiked, likeCount, onToggleLike, onShareToFeed, onStartDirections, onStartNav, onPlanConvoy, initialEditMode, isSaved, onToggleSave }) {
   if (!trip) return null;
   const isPlan = trip.kind === "plan";
   const isOwner = !!(currentUserId && trip.user_id === currentUserId);
@@ -11752,6 +11752,13 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
                     style={{ background: isLiked ? `${T.red}20` : T.charcoal, border: `1px solid ${isLiked ? T.red : T.charcoal}`, padding: "6px 10px", borderRadius: 6, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
               <Heart size={13} color={isLiked ? T.red : T.white} fill={isLiked ? T.red : "transparent"} />
               {(likeCount || 0) > 0 && <span style={{ fontFamily: sans, fontSize: 11, color: isLiked ? T.red : T.white, fontWeight: 600 }}>{likeCount}</span>}
+            </button>
+          )}
+          {trip.status === "published" && onToggleSave && trip.userId !== currentUserId && (
+            <button onClick={() => onToggleSave(trip.id)} title={isSaved ? "Unsave" : "Save for later"}
+                    style={{ background: isSaved ? `${T.copper}25` : T.charcoal, border: `1px solid ${isSaved ? T.copper : T.charcoal}`, padding: "6px 10px", borderRadius: 6, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
+              <Bookmark size={13} color={isSaved ? T.copper : T.white} fill={isSaved ? T.copper : "transparent"} />
+              <span style={{ fontFamily: sans, fontSize: 10, color: isSaved ? T.copper : T.white, fontWeight: 600, letterSpacing: 0.5 }}>{isSaved ? "SAVED" : "SAVE"}</span>
             </button>
           )}
           {trip.status === "published" && onShareToFeed && (
@@ -12699,7 +12706,7 @@ function ConvoyDetail({ item, linkedPlan, currentUserId, currentUserName, curren
   );
 }
 
-function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onLoadCampingSpotPhotos, onLoadCampingSpotElevation, spotAuthors, tripAuthors, onLoadRouteData, onViewUser, onStartNav, onNewTripReport, onNewTripPlan, currentUserId, onMapViewportChange, tripReports, showTripReports, setShowTripReports, tripPlans, showTripPlans, setShowTripPlans, onOpenTripDetail, onOpenTripPlanDraft, pendingSpotNav, onConsumePendingSpotNav, pendingHQOpen, onConsumePendingHQOpen, pendingPlanNav, onConsumePendingPlanNav, onShareCampingSpotToFeed, onShareHQToFeed, onShareTripToFeed, onShareTripPlanToFeed, onOpenDM, onShowToast, onOpenShareCompose, onOpenShareIntent, planBuilder, isGuest, onGuestTap }) {
+function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onLoadCampingSpotPhotos, onLoadCampingSpotElevation, spotAuthors, tripAuthors, onLoadRouteData, onViewUser, onStartNav, onNewTripReport, onNewTripPlan, currentUserId, onMapViewportChange, tripReports, showTripReports, setShowTripReports, tripPlans, showTripPlans, setShowTripPlans, onOpenTripDetail, onOpenTripPlanDraft, pendingSpotNav, onConsumePendingSpotNav, pendingHQOpen, onConsumePendingHQOpen, pendingPlanNav, onConsumePendingPlanNav, onShareCampingSpotToFeed, onShareHQToFeed, onShareTripToFeed, onShareTripPlanToFeed, onOpenDM, onShowToast, onOpenShareCompose, onOpenShareIntent, planBuilder, isGuest, onGuestTap, savedTripIds, onToggleSaveTrip }) {
   const mapRef = useRef(null);
   const mapInst = useRef(null);
   const [mapReady, setMapReady] = useState(false);
@@ -13628,6 +13635,15 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
                     <ExternalLink size={12} />OPEN TRIP
                   </button>
                 )}
+                {!isGuest && t.userId !== currentUserId && onToggleSaveTrip && (() => {
+                  const isSaved = !!(savedTripIds && savedTripIds[t.id]);
+                  return (
+                    <button onClick={() => onToggleSaveTrip(t.id)}
+                            style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "8px 12px", background: isSaved ? "#8B6FAF" : T.charcoal, border: isSaved ? "none" : `1px solid ${T.tertiary}50`, borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>
+                      <Bookmark size={12} fill={isSaved ? T.white : "none"} />{isSaved ? "SAVED" : "SAVE"}
+                    </button>
+                  );
+                })()}
                 {!isGuest && (
                   <button onClick={() => onOpenShareIntent && onOpenShareIntent({ kind: "trip", data: t })}
                           style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "8px 12px", background: T.charcoal, border: `1px solid ${T.tertiary}50`, borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>
@@ -13721,6 +13737,15 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
                     <ExternalLink size={12} />OPEN PLAN
                   </button>
                 )}
+                {!isGuest && p.userId !== currentUserId && onToggleSaveTrip && (() => {
+                  const isSaved = !!(savedTripIds && savedTripIds[p.id]);
+                  return (
+                    <button onClick={() => onToggleSaveTrip(p.id)}
+                            style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "8px 12px", background: isSaved ? T.copper : T.charcoal, border: isSaved ? "none" : `1px solid ${T.tertiary}50`, borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>
+                      <Bookmark size={12} fill={isSaved ? T.white : "none"} />{isSaved ? "SAVED" : "SAVE"}
+                    </button>
+                  );
+                })()}
                 {!isGuest && (
                   <button onClick={() => onOpenShareIntent && onOpenShareIntent({ kind: "plan", data: p })}
                           style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "8px 12px", background: T.charcoal, border: `1px solid ${T.tertiary}50`, borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>
@@ -14276,7 +14301,7 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
   );
 }
 
-function RoutesScreen({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, currentUserId, tripReports, showTripReports, setShowTripReports, tripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onLoadCampingSpotPhotos, onLoadCampingSpotElevation, spotAuthors, tripAuthors, onLoadRouteData, onOpenTripDetail, onOpenTripPlanDraft, onNewTripReport, onNewTripPlan, pendingSpotNav, onConsumePendingSpotNav, pendingHQOpen, onConsumePendingHQOpen, pendingPlanNav, onConsumePendingPlanNav, onShareCampingSpotToFeed, onShareHQToFeed, onShareTripToFeed, onShareTripPlanToFeed, onOpenDM, onShowToast, onOpenShareCompose, onOpenShareIntent, onViewUser, onStartNav, planBuilder, isGuest, onGuestTap }) {
+function RoutesScreen({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, currentUserId, tripReports, showTripReports, setShowTripReports, tripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onLoadCampingSpotPhotos, onLoadCampingSpotElevation, spotAuthors, tripAuthors, onLoadRouteData, onOpenTripDetail, onOpenTripPlanDraft, onNewTripReport, onNewTripPlan, pendingSpotNav, onConsumePendingSpotNav, pendingHQOpen, onConsumePendingHQOpen, pendingPlanNav, onConsumePendingPlanNav, onShareCampingSpotToFeed, onShareHQToFeed, onShareTripToFeed, onShareTripPlanToFeed, onOpenDM, onShowToast, onOpenShareCompose, onOpenShareIntent, onViewUser, onStartNav, planBuilder, isGuest, onGuestTap, savedTripIds, onToggleSaveTrip }) {
   // Maps screen — full-height ExploreMap with no chrome. Trip-reports list,
   // create modal, and detail overlay all live at the root now (the list
   // moved to the Feed under the renamed TRIP REPORTS filter; the modal +
@@ -14333,6 +14358,8 @@ function RoutesScreen({ campingSpots, showCampingSpots, setShowCampingSpots, sho
         planBuilder={planBuilder}
         isGuest={isGuest}
         onGuestTap={onGuestTap}
+        savedTripIds={savedTripIds}
+        onToggleSaveTrip={onToggleSaveTrip}
         fillParent
       />
       {/* Guest banner — rendered HERE (not inline at the page level) so
@@ -17166,7 +17193,7 @@ function AddBuildForm({ onClose, onSave, onDelete, initialData }) {
 }
 
 /* ─── PROFILE SCREEN (Own Profile) ─── */
-function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, initialUserBio, initialIsPublic, onViewUser, onLogout, userBuilds, onAddBuild, onUpdateBuild, onDeleteBuild, profilePic, onSetProfilePic, notifPrefs, onSetNotifPrefs, feedItems, onDeletePost, onEditPost, onUpdateConvoy, onGoToPost, myPoints: myPointsProp, onSaveProfile, followerCount, followingCount, convoyRsvps, onSubscribePush, onUnsubscribePush, renderFeedScopedTo, onViewBuild, savedRoutes, onUnsaveRoute, onStartNav, myTripPlans, onOpenTripPlan, onNewTripPlan, isAdmin }) {
+function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, initialUserBio, initialIsPublic, onViewUser, onLogout, userBuilds, onAddBuild, onUpdateBuild, onDeleteBuild, profilePic, onSetProfilePic, notifPrefs, onSetNotifPrefs, feedItems, onDeletePost, onEditPost, onUpdateConvoy, onGoToPost, myPoints: myPointsProp, onSaveProfile, followerCount, followingCount, convoyRsvps, onSubscribePush, onUnsubscribePush, renderFeedScopedTo, onViewBuild, savedRoutes, onUnsaveRoute, onStartNav, myTripPlans, onOpenTripPlan, onNewTripPlan, isAdmin, savedTrips, onUnsaveTrip, onOpenSavedTrip }) {
   const [isPublic, setIsPublic] = useState(initialIsPublic == null ? true : !!initialIsPublic);
   const [activeTab, setActiveTab] = useState("builds");
   const [activeBuild, setActiveBuild] = useState(0);
@@ -17995,9 +18022,9 @@ function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, init
             <button onClick={() => setTripsSubTab("saved")} style={{ flex: 1, padding: "10px 0", background: tripsSubTab === "saved" ? T.charcoal : "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, borderBottom: tripsSubTab === "saved" ? `2px solid ${T.copper}` : "2px solid transparent" }}>
               <Bookmark size={13} color={tripsSubTab === "saved" ? T.copper : T.tertiary} />
               <span style={{ fontFamily: sans, fontSize: 10, color: tripsSubTab === "saved" ? T.white : T.tertiary, fontWeight: 600, letterSpacing: 0.5 }}>SAVED</span>
-              {savedRoutes && savedRoutes.length > 0 && (
-                <span style={{ minWidth: 16, height: 16, padding: "0 4px", borderRadius: 8, background: T.red, display: "inline-flex", alignItems: "center", justifyContent: "center", fontFamily: sans, fontSize: 9, color: T.white, fontWeight: 700 }}>{savedRoutes.length}</span>
-              )}
+              {(() => { const total = (savedTrips ? savedTrips.length : 0) + (savedRoutes ? savedRoutes.length : 0); return total > 0 ? (
+                <span style={{ minWidth: 16, height: 16, padding: "0 4px", borderRadius: 8, background: T.red, display: "inline-flex", alignItems: "center", justifyContent: "center", fontFamily: sans, fontSize: 9, color: T.white, fontWeight: 700 }}>{total}</span>
+              ) : null; })()}
             </button>
             <button onClick={() => setTripsSubTab("planner")} style={{ flex: 1, padding: "10px 0", background: tripsSubTab === "planner" ? T.charcoal : "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, borderBottom: tripsSubTab === "planner" ? `2px solid ${T.copper}` : "2px solid transparent" }}>
               <Route size={13} color={tripsSubTab === "planner" ? T.copper : T.tertiary} />
@@ -18030,14 +18057,59 @@ function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, init
             </>
           )}
           {tripsSubTab === "saved" && (
-            (!savedRoutes || savedRoutes.length === 0) ? (
+            (!savedRoutes || savedRoutes.length === 0) && (!savedTrips || savedTrips.length === 0) ? (
               <div style={{ textAlign: "center", padding: "60px 20px" }}>
                 <Bookmark size={36} color={T.tertiary} strokeWidth={1} style={{ opacity: 0.3, marginBottom: 12 }} />
-                <p style={{ fontFamily: serif, fontSize: 14, color: T.tertiary, margin: "0 0 6px" }}>No saved routes yet</p>
-                <p style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, opacity: 0.6 }}>Save routes from the feed or trip reports to build your bucket list.</p>
+                <p style={{ fontFamily: serif, fontSize: 14, color: T.tertiary, margin: "0 0 6px" }}>No saved trips yet</p>
+                <p style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, opacity: 0.6 }}>Tap SAVE on any community trip report or plan from the map to bookmark it here.</p>
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {/* DB-persisted trip/plan bookmarks rendered first. Each card
+                    is a compact summary with hero image (if any), title,
+                    type chip (REPORT vs PLAN), stats row, and OPEN + UNSAVE
+                    buttons. Tap opens the same TripReportDetail overlay used
+                    everywhere else. */}
+                {(savedTrips || []).map((t) => {
+                  const isPlan = t.kind === "plan";
+                  const accent = isPlan ? T.copper : "#8B6FAF";
+                  const stats = [];
+                  if (t.distance_mi != null) stats.push(`${Number(t.distance_mi).toFixed(1)} MI`);
+                  if (t.elev_gain_ft != null) stats.push(`+${Number(t.elev_gain_ft).toLocaleString()} FT`);
+                  if (t.region || t.state_code) stats.push([t.region, t.state_code].filter(Boolean).join(", "));
+                  return (
+                    <div key={"savedtrip_" + t.id} style={{ ...cardStyle, padding: 0, overflow: "hidden", borderLeft: `3px solid ${accent}` }}>
+                      <div onClick={() => onOpenSavedTrip && onOpenSavedTrip(t)} style={{ cursor: "pointer" }}>
+                        {t.hero_img && (
+                          <div style={{ height: 120, overflow: "hidden" }}>
+                            <img src={t.hero_img} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                          </div>
+                        )}
+                        <div style={{ padding: 14 }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                            <h3 style={{ fontFamily: sans, fontSize: 15, color: T.white, margin: 0, fontWeight: 600, flex: 1, minWidth: 0 }}>{t.name || "Untitled trip"}</h3>
+                            <span style={{ fontFamily: sans, fontSize: 9, color: accent, background: `${accent}20`, padding: "3px 8px", borderRadius: 4, letterSpacing: 0.8, marginLeft: 8, fontWeight: 700 }}>{isPlan ? "PLAN" : "REPORT"}</span>
+                          </div>
+                          {t.description && <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 10px", lineHeight: 1.5 }}>{t.description.length > 140 ? t.description.slice(0, 140) + "…" : t.description}</p>}
+                          {stats.length > 0 && (
+                            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 4 }}>
+                              {stats.map((s, i) => (
+                                <span key={i} style={{ fontFamily: sans, fontSize: 11, color: i === 0 ? T.copper : T.tertiary, fontWeight: i === 0 ? 600 : 400 }}>{s}</span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {onUnsaveTrip && (
+                        <div style={{ display: "flex", justifyContent: "flex-end", padding: "0 14px 12px" }}>
+                          <button onClick={() => onUnsaveTrip(t.id)} style={{ padding: "6px 12px", borderRadius: 6, background: "transparent", border: `1px solid ${T.red}50`, cursor: "pointer", fontFamily: sans, fontSize: 10, color: T.red, fontWeight: 600, letterSpacing: 0.5, display: "inline-flex", alignItems: "center", gap: 5 }}>
+                            <Bookmark size={11} fill={T.red} />UNSAVE
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
                 {savedRoutes.map((r, i) => {
                   const diff = r.difficulty || "";
                   const diffCol = diff === "Expert" ? T.red : diff === "Hard" ? T.copper : diff === "Moderate" ? T.tertiary : T.green;
@@ -22488,6 +22560,7 @@ export default function Trailhead() {
     try { hydrateForumThreads(); } catch (e) { /* non-fatal */ }
     try { hydrateForumLikes(); } catch (e) { /* non-fatal */ }
     try { hydrateForumCategories(); } catch (e) { /* non-fatal */ }
+    try { hydrateSavedTrips(); } catch (e) { /* non-fatal */ }
 
     // ─── Tier 1 — critical for first paint ───
     // Profile (header avatar/name) + posts (feed list). Both run in
@@ -23362,6 +23435,19 @@ export default function Trailhead() {
         if (!row || !row.trip_id) return;
         if (row.user_id === uid) return;
         setTripLikeCounts(prev => ({ ...prev, [row.trip_id]: Math.max((prev[row.trip_id] || 0) - 1, 0) }));
+      })
+      // Saved trips (cross-device sync). RLS already gates rows to the
+      // current user, but we filter again client-side to be explicit. Skip
+      // own-tab echoes — the local optimistic patch already updated state.
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "saved_trips", filter: `user_id=eq.${uid}` }, (payload) => {
+        const row = payload.new;
+        if (!row || !row.trip_id) return;
+        setSavedTripIds(prev => prev[row.trip_id] ? prev : { ...prev, [row.trip_id]: true });
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "saved_trips", filter: `user_id=eq.${uid}` }, (payload) => {
+        const row = payload.old;
+        if (!row || !row.trip_id) return;
+        setSavedTripIds(prev => { if (!prev[row.trip_id]) return prev; const next = { ...prev }; delete next[row.trip_id]; return next; });
       })
       // Profile updates — when any user changes their handle/name/avatar,
       // patch all their previous posts and comments in this client's feed
@@ -24361,6 +24447,11 @@ export default function Trailhead() {
   const [forumSubcategoryRows, setForumSubcategoryRows] = useState([]);
   const [userRoutes, setUserRoutes] = useState([]); // routes created by user
   const [savedRoutes, setSavedRoutes] = useState([]); // routes saved/bookmarked by user
+  // DB-backed trip/plan bookmarks. `savedTripIds` is { tripId: true } so
+  // the save button can flip color in O(1). Hydrated on signed-in boot
+  // via `hydrateSavedTrips`; mutations go through `toggleSaveTrip` which
+  // patches optimistically then INSERTs/DELETEs `public.saved_trips`.
+  const [savedTripIds, setSavedTripIds] = useState({});
   const [activeNavRoute, setActiveNavRoute] = useState(null); // route data for in-app navigation
   // Single shared "Get Directions" entry — every directions button in
   // the app routes through here so we get one consistent in-app
@@ -26454,6 +26545,54 @@ export default function Trailhead() {
     }
   };
 
+  // Hydrate the viewer's saved trips/plans from public.saved_trips. Cheap
+  // single-row-per-save query. Called from hydrateUserData on signed-in
+  // boot. Guests have no saves (RLS hides everything).
+  const hydrateSavedTrips = async () => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) return;
+    try {
+      const { data, error } = await supabase
+        .from("saved_trips")
+        .select("trip_id")
+        .eq("user_id", uid);
+      if (error) throw error;
+      const next = {};
+      (data || []).forEach(r => { if (r.trip_id) next[r.trip_id] = true; });
+      setSavedTripIds(next);
+    } catch (e) { console.warn("[saved_trips] hydrate failed", e); }
+  };
+  // Toggle a save on a trip/plan. Optimistic local patch + INSERT/DELETE
+  // on public.saved_trips. trip_id can refer to either a trip report or
+  // a published plan (both live in trip_reports, distinguished by `kind`).
+  const toggleSaveTrip = async (tripId) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid || !tripId) return;
+    if (typeof tripId !== "string" || tripId.length < 20) return; // skip local-only ids
+    const wasSaved = !!savedTripIds[tripId];
+    setSavedTripIds(prev => {
+      const next = { ...prev };
+      if (wasSaved) delete next[tripId]; else next[tripId] = true;
+      return next;
+    });
+    try {
+      if (wasSaved) {
+        const { error } = await supabase.from("saved_trips").delete().eq("user_id", uid).eq("trip_id", tripId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("saved_trips").insert({ user_id: uid, trip_id: tripId });
+        if (error && error.code !== "23505") throw error;
+      }
+    } catch (e) {
+      console.error("[saved_trips] toggle failed", e);
+      // Revert optimistic patch on failure.
+      setSavedTripIds(prev => {
+        const next = { ...prev };
+        if (wasSaved) next[tripId] = true; else delete next[tripId];
+        return next;
+      });
+    }
+  };
   // Toggle a trip-report like. Mirrors toggleBuildLike: optimistic local
   // patch, then write to public.trip_report_likes. Fires a notification to
   // the trip owner on a fresh like (skip self-likes). Local-only ids no-op.
@@ -28467,7 +28606,7 @@ export default function Trailhead() {
           isOtherProfile ? (
             <OtherProfileScreen userId={profileStack[1]} onBack={goBack} onMessage={(user) => openDM(user)} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} onAdminUpdateUserRole={adminUpdateUserRole} onAdminDeclineAmbassador={adminDeclineAmbassadorRequest} followingIds={followingIds} onFollow={requireAuth(followUser)} onUnfollow={requireAuth(unfollowUser)} fetchFollowCounts={fetchFollowCounts} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} allBuilds={allBuilds} onLoadAllBuilds={loadAllBuildsOnce} onlineUserIds={onlineUserIds} allTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} />
           ) : (
-            <ProfileScreen currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} convoyRsvps={convoyRsvps} followerCount={myFollowerCount} followingCount={myFollowingCount} onSubscribePush={subscribeToPush} onUnsubscribePush={unsubscribeFromPush} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} savedRoutes={savedRoutes} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} onStartNav={(route) => setActiveNavRoute(route)} myTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} onNewTripPlan={() => requireAuth(() => enterPlanBuilder())()} initialUserName={(currentProfile && currentProfile.full_name) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name) || null} initialUserHandle={(currentProfile && currentProfile.handle) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle) || null} initialUserBio={currentProfile ? currentProfile.bio : null} initialIsPublic={currentProfile ? currentProfile.is_public : null} onSaveProfile={saveProfile} onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={deleteBuild} profilePic={profilePic} onSetProfilePic={handleSetProfilePic} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => deletePost(id)} onEditPost={(id, newText) => updatePost(id, { title: newText })} onUpdateConvoy={(convoyId, updates) => {
+            <ProfileScreen currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} convoyRsvps={convoyRsvps} followerCount={myFollowerCount} followingCount={myFollowingCount} onSubscribePush={subscribeToPush} onUnsubscribePush={unsubscribeFromPush} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} savedRoutes={savedRoutes} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} savedTrips={(() => { const ids = savedTripIds || {}; const pool = [...(allTripReports || []), ...(allTripPlans || [])]; const seen = {}; const out = []; pool.forEach(t => { if (t && t.id && ids[t.id] && !seen[t.id]) { seen[t.id] = true; out.push(t); } }); return out; })()} onUnsaveTrip={requireAuth(toggleSaveTrip)} onOpenSavedTrip={(t) => { if (!t) return; if (t.slug) setPendingTripNav(t.slug); else setDetailTripId(t.id); }} onStartNav={(route) => setActiveNavRoute(route)} myTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} onNewTripPlan={() => requireAuth(() => enterPlanBuilder())()} initialUserName={(currentProfile && currentProfile.full_name) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name) || null} initialUserHandle={(currentProfile && currentProfile.handle) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle) || null} initialUserBio={currentProfile ? currentProfile.bio : null} initialIsPublic={currentProfile ? currentProfile.is_public : null} onSaveProfile={saveProfile} onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={deleteBuild} profilePic={profilePic} onSetProfilePic={handleSetProfilePic} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => deletePost(id)} onEditPost={(id, newText) => updatePost(id, { title: newText })} onUpdateConvoy={(convoyId, updates) => {
               updatePost(convoyId, updates);
               // DM going/maybe responders that the convoy was updated.
               const convoy = feedItemsRef.current.find(p => p.id === convoyId);
@@ -28484,7 +28623,7 @@ export default function Trailhead() {
             {isGuest && screen !== "routes" && <GuestBanner onSignIn={() => setShowGuestPrompt(true)} />}
             {screen === "feed" && renderFeedScopedTo({ hideFilters: false })}
             {screen === "forum" && <ForumScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} isAdmin={isAdmin} isAmbassador={isAmbassador} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentUserName={(currentProfile && currentProfile.full_name) || "You"} currentUserHandle={(currentProfile && currentProfile.handle) || ""} currentUserAvatar={profilePic || (currentProfile && currentProfile.avatar_url) || null} pendingThread={pendingThread} onPendingHandled={() => setPendingThread(null)} pendingForumSubNav={pendingForumSubNav} onConsumePendingForumSubNav={() => setPendingForumSubNav(null)} onAddNotification={requireAuth(addNotification)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onOpenShareCompose={openShareCompose} onOpenShareIntent={openShareIntent} onAddFeedPost={requireAuth((post) => addPost(post))} threadsBySub={forumThreadsBySub} repliesByThread={forumReplies} onAddForumThread={requireAuth(addForumThread)} onUpdateForumThread={requireAuth(updateForumThread)} onDeleteForumThread={requireAuth(deleteForumThread)} onAddForumReply={requireAuth(addForumReply)} onDeleteForumReply={requireAuth(deleteForumReply)} onLoadForumReplies={loadForumReplies} likedForumThreadIds={likedForumThreadIds} forumThreadLikeCounts={forumThreadLikeCounts} onToggleForumThreadLike={requireAuth(toggleForumThreadLike)} likedForumReplyIds={likedForumReplyIds} forumReplyLikeCounts={forumReplyLikeCounts} onToggleForumReplyLike={requireAuth(toggleForumReplyLike)} onBumpForumThreadView={bumpForumThreadView} onAwardPoints={awardPoints} categoriesList={forumCategoriesList} onAddCategory={requireAuth(addForumCategory)} onUpdateCategory={requireAuth(updateForumCategory)} onDeleteCategory={requireAuth(deleteForumCategory)} onAddSubcategory={requireAuth(addForumSubcategory)} onUpdateSubcategory={requireAuth(updateForumSubcategory)} onDeleteSubcategory={requireAuth(deleteForumSubcategory)} />}
-            {screen === "routes" && <RoutesScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} campingSpots={campingSpots} showCampingSpots={showCampingSpots} setShowCampingSpots={setShowCampingSpots} showPublicLands={showPublicLands} setShowPublicLands={setShowPublicLands} showSatellite={showSatellite} setShowSatellite={setShowSatellite} onOpenShareIntent={openShareIntent} tripAuthors={tripAuthors} onLoadRouteData={loadTripRouteData} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} tripReports={allTripReports} showTripReports={showTripReports} setShowTripReports={setShowTripReports} tripPlans={allTripPlans} showTripPlans={showTripPlans} setShowTripPlans={setShowTripPlans} onMapViewportChange={onMapViewportChange} onAddCampingSpot={requireAuth(addCampingSpot)} onUpdateCampingSpot={requireAuth(updateCampingSpot)} onDeleteCampingSpot={requireAuth(deleteCampingSpot)} onLoadCampingSpotPhotos={loadCampingSpotPhotos} onLoadCampingSpotElevation={loadCampingSpotElevation} spotAuthors={spotAuthors} onViewUser={openUserProfile} onStartNav={(route) => setActiveNavRoute(route)} onOpenTripDetail={(slug) => setPendingTripNav(slug)} onOpenTripPlanDraft={(id) => setDetailTripId(id)} onNewTripReport={() => setTripCreatorMode("report")} onNewTripPlan={() => requireAuth(() => enterPlanBuilder())()} pendingSpotNav={pendingSpotNav} onConsumePendingSpotNav={() => setPendingSpotNav(null)} pendingHQOpen={pendingHQOpen} onConsumePendingHQOpen={() => setPendingHQOpen(false)} pendingPlanNav={pendingPlanNav} onConsumePendingPlanNav={() => setPendingPlanNav(null)} onShareCampingSpotToFeed={requireAuth(shareCampingSpotToFeed)} onShareHQToFeed={requireAuth(shareHQToFeed)} onShareTripToFeed={requireAuth(shareTripToFeed)} onShareTripPlanToFeed={requireAuth(shareTripPlanToFeed)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onShowToast={showErrorToast} onOpenShareCompose={openShareCompose} planBuilder={{ active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, editingId: planBuilderEditingId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen, accent: (planBuilderEditingId && (tripReports || []).find(t => t.id === planBuilderEditingId && t.kind === "report")) ? T.purple : T.copper }} />}
+            {screen === "routes" && <RoutesScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} campingSpots={campingSpots} showCampingSpots={showCampingSpots} setShowCampingSpots={setShowCampingSpots} showPublicLands={showPublicLands} setShowPublicLands={setShowPublicLands} showSatellite={showSatellite} setShowSatellite={setShowSatellite} onOpenShareIntent={openShareIntent} tripAuthors={tripAuthors} onLoadRouteData={loadTripRouteData} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} tripReports={allTripReports} showTripReports={showTripReports} setShowTripReports={setShowTripReports} tripPlans={allTripPlans} showTripPlans={showTripPlans} setShowTripPlans={setShowTripPlans} onMapViewportChange={onMapViewportChange} onAddCampingSpot={requireAuth(addCampingSpot)} onUpdateCampingSpot={requireAuth(updateCampingSpot)} onDeleteCampingSpot={requireAuth(deleteCampingSpot)} onLoadCampingSpotPhotos={loadCampingSpotPhotos} onLoadCampingSpotElevation={loadCampingSpotElevation} spotAuthors={spotAuthors} onViewUser={openUserProfile} onStartNav={(route) => setActiveNavRoute(route)} onOpenTripDetail={(slug) => setPendingTripNav(slug)} onOpenTripPlanDraft={(id) => setDetailTripId(id)} onNewTripReport={() => setTripCreatorMode("report")} onNewTripPlan={() => requireAuth(() => enterPlanBuilder())()} pendingSpotNav={pendingSpotNav} onConsumePendingSpotNav={() => setPendingSpotNav(null)} pendingHQOpen={pendingHQOpen} onConsumePendingHQOpen={() => setPendingHQOpen(false)} pendingPlanNav={pendingPlanNav} onConsumePendingPlanNav={() => setPendingPlanNav(null)} onShareCampingSpotToFeed={requireAuth(shareCampingSpotToFeed)} onShareHQToFeed={requireAuth(shareHQToFeed)} onShareTripToFeed={requireAuth(shareTripToFeed)} onShareTripPlanToFeed={requireAuth(shareTripPlanToFeed)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onShowToast={showErrorToast} onOpenShareCompose={openShareCompose} savedTripIds={savedTripIds} onToggleSaveTrip={requireAuth(toggleSaveTrip)} planBuilder={{ active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, editingId: planBuilderEditingId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen, accent: (planBuilderEditingId && (tripReports || []).find(t => t.id === planBuilderEditingId && t.kind === "report")) ? T.purple : T.copper }} />}
             {screen === "builds" && <BuildsScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onViewUser={openUserProfile} userBuilds={userBuilds} allBuilds={allBuilds} onLoadAllBuilds={loadAllBuildsOnce} onLoadBuildById={loadBuildById} allBuildsLoaded={allBuildsLoaded} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} followingIds={followingIds} pendingBuildNav={pendingBuildNav} onConsumePendingBuildNav={() => setPendingBuildNav(null)} onAddBuild={requireAuth(addBuild)} userRoutes={userRoutes} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onOpenShareCompose={openShareCompose} onOpenShareIntent={openShareIntent} onUpdateBuild={requireAuth(updateBuild)} likedBuildIds={likedBuildIds} buildLikeCounts={buildLikeCounts} onToggleBuildLike={requireAuth(toggleBuildLike)} onDeleteBuild={requireAuth(deleteBuild)} onPostBuildToFeed={requireAuth((b, opts) => { const rawBd = b.buildData; const bd = scrubLocalPhotosFromBuildData(rawBd); const isLocalUrl = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:")); const rawHero = b.image || (rawBd && rawBd.mainPhotos && rawBd.mainPhotos[0] && rawBd.mainPhotos[0].url) || null; const cleanHero = isLocalUrl(rawHero) ? ((bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url) || null) : rawHero; const heroImg = isLocalUrl(cleanHero) ? null : cleanHero; const meName = (currentProfile && currentProfile.full_name) || "You"; const myUid = supabaseSession && supabaseSession.user && supabaseSession.user.id; const isReshare = b.userId && myUid && b.userId !== myUid; const ownerHandle = isReshare ? (b.handle || "").replace(/^@/, "") : null; const ownerName = isReshare ? (b.owner || null) : null; addPost({ id: "feedbuild_" + Date.now(), type: "BUILDS", user: meName, initial: meName.charAt(0).toUpperCase(), time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, subtitle: isReshare ? `Shared @${ownerHandle}'s build` : "Added a new build", vehicle: `${b.year} ${b.make} ${b.model}`, photoUrls: heroImg ? [heroImg] : undefined, image: heroImg, likes: 0, comments: 0, buildData: bd, buildRawId: b.rawId != null ? b.rawId : null, sharedFromOwnerHandle: ownerHandle, sharedFromOwnerName: ownerName, _skipBuildIdCol: isReshare }); awardPoints(POINTS.feedPost, "Build Shared"); })} buildComments={buildComments} onLoadBuildComments={loadBuildComments} onAddBuildComment={requireAuth(addBuildComment)} onDeleteBuildComment={deleteBuildComment} likedBuildCommentIds={likedBuildCommentIds} buildCommentLikeCounts={buildCommentLikeCounts} onToggleBuildCommentLike={requireAuth(toggleBuildCommentLike)} currentUserName={(currentProfile && currentProfile.full_name) || ""} currentUserHandle={(currentProfile && currentProfile.handle) ? "@" + currentProfile.handle : ""} currentUserAvatar={(currentProfile && currentProfile.avatar_url) || null} />}
             {screen === "ranks" && (isGuest
               ? <GuestGateScreen title="RANKS REQUIRE AN ACCOUNT" subtitle="Sign in to see the leaderboard and start earning points from your posts, routes and builds." onSignIn={goToLoginFromGuest} />
@@ -28690,6 +28829,8 @@ export default function Trailhead() {
               likeCount={(tripLikeCounts && tripLikeCounts[trip.id]) || 0}
               onToggleLike={requireAuth(toggleTripLike)}
               onShareToFeed={requireAuth((t) => openShareIntent({ kind: t.kind === "plan" ? "plan" : "trip", data: t }))}
+              isSaved={!!(savedTripIds && savedTripIds[trip.id])}
+              onToggleSave={requireAuth(toggleSaveTrip)}
               onStartDirections={requireAuth(startDirectionsTo)}
               onStartNav={requireAuth((route) => setActiveNavRoute(route))}
               onPlanConvoy={requireAuth(startConvoyFromPlan)}
