@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue, memo } from "react";
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback, useDeferredValue, memo } from "react";
 import { createRoot } from "react-dom/client";
-import { Heart, MessageCircle, MapPin, Clock, Mountain, ChevronRight, ChevronLeft, ChevronDown, Search, Plus, Home, Compass, Map, Wrench, Trophy, AlertTriangle, Navigation, Star, Share2, Bookmark, MoreHorizontal, ArrowUp, Users, Radio, CloudSun, CheckCircle, Target, Gift, ChevronUp, ExternalLink, Lock, Globe, Shield, ShieldCheck, UserPlus, UserCheck, Settings, Camera, Eye, EyeOff, X, Bell, ThumbsUp, UserPlus as UserPlusIcon, AtSign, Mail, Send, Image, Smartphone, Trash2, Edit3, Award, Zap, TrendingUp, Flame, DollarSign, Route, Video, Play, Maximize2, Minimize2, LogOut, Binoculars, Layers, Tent, BookOpen, Link2, PlusSquare, Disc, Cog, MoveVertical, CircleDashed, Anchor } from "lucide-react";
+import { Heart, MessageCircle, MapPin, Clock, Mountain, ChevronRight, ChevronLeft, ChevronDown, Search, Plus, Home, Compass, Map, Wrench, Trophy, AlertTriangle, Navigation, Star, Share2, Bookmark, MoreHorizontal, MoreVertical, ArrowUp, Users, Radio, CloudSun, CheckCircle, Target, Gift, ChevronUp, ExternalLink, Lock, Globe, Shield, ShieldCheck, UserPlus, UserCheck, Settings, Camera, Eye, EyeOff, X, Bell, ThumbsUp, UserPlus as UserPlusIcon, AtSign, Mail, Send, Image, Smartphone, Trash2, Edit3, Award, Zap, TrendingUp, Flame, DollarSign, Route, Video, Play, Maximize2, Minimize2, LogOut, Binoculars, Layers, Tent, BookOpen, Link2, PlusSquare, Disc, Cog, MoveVertical, CircleDashed, Anchor, Tag } from "lucide-react";
 import { supabase } from "./supabase-client.js";
 
 // Hard cap for any file uploaded to Supabase Storage. Free tier enforces
@@ -14,6 +14,17 @@ const MAX_UPLOAD_LABEL = "45 MB";
 // lives only on the Edge Function as a Supabase secret). If you ever rotate
 // the key pair, update both this constant and the Edge Function secret.
 const VAPID_PUBLIC_KEY = "BKNmoN_428cxssoAL_Jca5zquLJnTKyfq3QAihVqpeP_4VNin8lxNrHdRvUvzP-4dKa4cbSooK8VC8OxVwgVvsc";
+
+// v2 framework — proximity-triggered recovery arrival confirmation.
+// When a responder's GPS gets within 500m of the requester's coords during
+// turn-by-turn, MapOverlay fires onRecoveryArrived → root opens a confirm
+// modal so the requester can verify and award POINTS.recoveryRespond. The
+// underlying state, GPS watcher, callbacks, and modal are intact — flipping
+// this flag back to `true` re-enables all three UI surfaces:
+//   1. green "You've arrived" banner in the responder's nav view
+//   2. dashed "SIMULATE ARRIVAL (TESTING)" button in the responder's nav view
+//   3. "Responder Arrived" confirm modal on the requester's app
+const RECOVERY_PROXIMITY_CONFIRM_ENABLED = false;
 
 // Convert a base64url VAPID key into the Uint8Array applicationServerKey
 // that PushManager.subscribe() expects.
@@ -548,6 +559,49 @@ function arrayShallowEq(a, b) {
   return a[0] === b[0] && a[a.length - 1] === b[a.length - 1];
 }
 
+/* Merge fresh trip_reports rows from a bulk hydrate with previously-held
+   rows, preserving lazy-loaded heavy fields (route_data jsonb) when
+   present. Hydrate's slim SELECT intentionally omits route_data — without
+   this merge, the route polyline / pin notes vanish from any open trip
+   detail page the moment the background hydrate lands. Also keeps prev
+   entries that aren't in the fresh fetch (e.g. fast-loaded deep links
+   outside the bulk window). */
+function mergeTripRowsPreservingHeavy(fresh, prev) {
+  const prevById = {};
+  (prev || []).forEach(t => { if (t && t.id) prevById[t.id] = t; });
+  const merged = (fresh || []).map(r => {
+    const old = prevById[r.id];
+    if (!old) return r;
+    const out = { ...r };
+    if (old.route_data && !r.route_data) out.route_data = old.route_data;
+    return out;
+  });
+  const freshIds = new Set(merged.map(t => t.id));
+  const extras = (prev || []).filter(t => t && t.id && !freshIds.has(t.id));
+  return [...merged, ...extras];
+}
+
+/* Same pattern for camping_spots — `photos` jsonb is lazy-loaded via
+   loadCampingSpotPhotos when a popup opens, and `elevation_ft` via
+   loadCampingSpotElevation. Bulk hydrate omits both. Without merging
+   them in, an open spot popup loses its photo strip and elevation
+   the moment hydrate lands. */
+function mergeSpotRowsPreservingHeavy(fresh, prev) {
+  const prevById = {};
+  (prev || []).forEach(s => { if (s && s.id) prevById[s.id] = s; });
+  const merged = (fresh || []).map(r => {
+    const old = prevById[r.id];
+    if (!old) return r;
+    const out = { ...r };
+    if (old.photos && !r.photos) out.photos = old.photos;
+    if (old.elevation_ft != null && r.elevation_ft == null) out.elevation_ft = old.elevation_ft;
+    return out;
+  });
+  const freshIds = new Set(merged.map(s => s.id));
+  const extras = (prev || []).filter(s => s && s.id && !freshIds.has(s.id));
+  return [...merged, ...extras];
+}
+
 /* Pull alt text off a photo entry. Photos can be bare URL strings
    (legacy) or `{url, alt, ...}` objects (post-May-2026 uploads — see
    `attachAltTextToPhotos`). Returns "" for entries that lack alt so
@@ -583,22 +637,35 @@ function ContentLoader({ spinnerSize = 22, accent }) {
    The wrapper inherits the surrounding sizing — most callers pass
    width/height via `style`. */
 const LoadingImage = memo(function LoadingImageImpl({ src, alt = "", style, imgStyle, accent, onClick, fallbackIcon, width }) {
+  const imgRef = useRef(null);
   const [state, setState] = useState("loading"); // 'loading' | 'loaded' | 'error'
-  // Reset when src swaps so the same wrapper can render different
-  // images sequentially (e.g. a carousel) without showing the previous
-  // image while the new one loads.
-  useEffect(() => { setState("loading"); }, [src]);
+  // Synchronously detect cached images before paint: when feed pills swap,
+  // most newly-mounted LoadingImages point at URLs the browser already has
+  // in HTTP cache. Without this check they'd flash a loading shell + 200ms
+  // opacity fade even though the bytes are local — making pill switches
+  // feel slower than a fresh remount, which has the exact same cache
+  // advantage but the user perceives it as "the page loaded".
+  useLayoutEffect(() => {
+    const el = imgRef.current;
+    if (el && el.complete && el.naturalWidth > 0) {
+      setState("loaded");
+    } else {
+      setState("loading");
+    }
+  }, [src]);
   const FallbackIcon = fallbackIcon || Mountain;
   const txSrc = width ? txImg(src, width) : src;
   return (
     <div onClick={onClick} style={{ position: "relative", overflow: "hidden", background: T.darkCard, ...style }}>
       {src ? (
         <img
+          ref={imgRef}
           src={txSrc}
           alt={alt}
+          decoding="async"
           onLoad={() => setState("loaded")}
           onError={() => setState("error")}
-          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", opacity: state === "loaded" ? 1 : 0, transition: "opacity 0.2s ease-out", ...imgStyle }}
+          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", opacity: state === "loaded" ? 1 : 0, transition: state === "loaded" ? "none" : "opacity 0.2s ease-out", ...imgStyle }}
         />
       ) : null}
       {state === "loading" && src && <ContentLoader accent={accent} />}
@@ -622,6 +689,71 @@ const LoadingImage = memo(function LoadingImageImpl({ src, alt = "", style, imgS
   prev.alt === next.alt &&
   prev.fallbackIcon === next.fallbackIcon
 ));
+
+/* Horizontally-swipeable feed photo carousel. Renders every entry full-width
+   inside a scroll-snap container so the browser handles the swipe gesture
+   natively (no JS state for the slider position itself). The visible-index
+   tracker is just for the badge + dot indicators. Tap any slide → lightbox
+   opens at that index via onOpenLightbox. Mixed image/video lists are
+   supported — video entries render a <video> in their slide. */
+function FeedPhotoCarousel({ photos, height = 220, onOpenLightbox, accent }) {
+  const scrollRef = useRef(null);
+  const [idx, setIdx] = useState(0);
+  const onScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const slideW = el.clientWidth || 1;
+    const next = Math.round(el.scrollLeft / slideW);
+    if (next !== idx) setIdx(next);
+  };
+  const lightboxImages = (photos || []).filter(p => !(typeof p === "object" && p && p.type === "video")).map(p => typeof p === "string" ? p : p.url);
+  const showDots = (photos || []).length > 1;
+  return (
+    <div style={{ position: "relative" }}>
+      <div
+        ref={scrollRef}
+        onScroll={onScroll}
+        className="th-hscroll"
+        style={{ display: "flex", overflowX: "auto", scrollSnapType: "x mandatory", WebkitOverflowScrolling: "touch", touchAction: "pan-x pan-y" }}
+      >
+        {(photos || []).map((p, i) => {
+          const url = typeof p === "string" ? p : (p && p.url);
+          const isVid = typeof p === "object" && p && p.type === "video";
+          return (
+            <div key={i} style={{ flex: "0 0 100%", scrollSnapAlign: "start", scrollSnapStop: "always", height }}>
+              {isVid ? (
+                <video src={url + "#t=0.001"} preload="metadata" playsInline onLoadedMetadata={(e) => { try { e.currentTarget.currentTime = 0.001; } catch (err) {} }} controls style={{ width: "100%", height: "100%", objectFit: "contain", display: "block", background: "#000" }} />
+              ) : (
+                <LoadingImage src={url} alt={imgAlt(p)} accent={accent} width={480}
+                  onClick={() => {
+                    if (!onOpenLightbox || lightboxImages.length === 0) return;
+                    // Translate carousel index → lightbox index (which skips videos).
+                    const tapped = url;
+                    const lbIdx = Math.max(0, lightboxImages.indexOf(tapped));
+                    onOpenLightbox(lightboxImages, lbIdx);
+                  }}
+                  style={{ width: "100%", height: "100%", cursor: onOpenLightbox ? "pointer" : "default" }} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {showDots && (
+        <>
+          <div style={{ position: "absolute", bottom: 10, right: 10, background: `${T.darkBg}CC`, padding: "4px 10px", borderRadius: 12, display: "flex", alignItems: "center", gap: 4, pointerEvents: "none" }}>
+            <Camera size={11} color={T.warmBg || T.white} />
+            <span style={{ fontFamily: sans, fontSize: 10, color: T.warmBg || T.white }}>{idx + 1} / {photos.length}</span>
+          </div>
+          <div style={{ position: "absolute", bottom: 10, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 5, pointerEvents: "none" }}>
+            {photos.map((_, i) => (
+              <div key={i} style={{ width: 6, height: 6, borderRadius: "50%", background: T.white, opacity: i === idx ? 0.95 : 0.4, transition: "opacity 0.15s" }} />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 /* ─── Thin auto-hiding scrollbar ─── */
 if (!document.querySelector('style[data-trailhead-scroll]')) {
@@ -1466,7 +1598,17 @@ function ShareIntentSheet({ target, onClose, onOpenShareCompose, onShowToast }) 
       case "plan":  return { url: `${origin}/plans/${data.slug}`, title: data.name || "Trip plan",        label: "TRIP PLAN",    accent: T.copper };
       case "hq":    return { url: `${origin}/hq`,                title: (LPO_HQ && LPO_HQ.name) || "Lone Peak HQ", label: "HEADQUARTERS", accent: T.red };
       case "build": return { url: `${origin}/builds/${data.id}`, title: data.name || (data.year && data.make ? `${data.year} ${data.make} ${data.model || ""}`.trim() : "Build"), label: "BUILD", accent: T.copper };
-      case "forum": return { url: `${origin}/forum/${data.id || data.threadId}`, title: data.title || "Thread", label: "FORUM THREAD", accent: T.copper };
+      case "forum": {
+        // Prefer the slug-based SEO URL. Falls back to the legacy id-based
+        // form when called from an older surface that hasn't supplied
+        // slug/subSlug yet.
+        const subSlug = data.subSlug || forumSlugify(data.forumSub || "");
+        const threadSlug = data.slug || (data.title ? slugifyForumTitle(data.title) : null);
+        const url = (subSlug && threadSlug)
+          ? `${origin}/forum/${subSlug}/${threadSlug}`
+          : `${origin}/forum/${data.id || data.threadId}`;
+        return { url, title: data.title || "Thread", label: "FORUM THREAD", accent: T.copper };
+      }
       case "route": return { url: `${origin}/post/${data.id}`,   title: data.title || "Route",            label: "ROUTE",        accent: T.copper };
       case "post":  return { url: `${origin}/post/${data.id}`,   title: data.title || data.body || "Post", label: "POST",        accent: T.copper };
       default:      return { url: origin,                        title: "Trailhead",                       label: "SHARE",        accent: T.copper };
@@ -1944,7 +2086,7 @@ function campingSpotsToGeoJSON(rows) {
 // an unclustered point fires onSelect with the feature properties.
 //
 // Skips silently when map / mapboxgl aren't ready.
-function useCampingSpotsLayer(mapRef, ready, rows, visible, onSelect, refreshKey) {
+function useCampingSpotsLayer(mapRef, ready, rows, visible, onSelect, refreshKey, selectedSpotId) {
   const handlerRef = useRef(onSelect);
   useEffect(() => { handlerRef.current = onSelect; }, [onSelect]);
 
@@ -2004,6 +2146,25 @@ function useCampingSpotsLayer(mapRef, ready, rows, visible, onSelect, refreshKey
             "text-allow-overlap": true,
           },
           paint: { "text-color": T.white },
+        });
+        // Highlight ring — draws a hollow copper circle around the currently
+        // selected spot. Filter starts as "match nothing" and gets bumped
+        // to ["==", ["get", "id"], <id>] via the effect below whenever
+        // selectedSpotId changes. Lives BELOW the main points layer so the
+        // pin sits inside the ring.
+        map.addLayer({
+          id: "camping-spots-halo",
+          type: "circle",
+          source: "camping-spots",
+          filter: ["==", ["get", "id"], "__none__"],
+          paint: {
+            "circle-color": T.copper,
+            "circle-opacity": 0,
+            "circle-radius": 14,
+            "circle-stroke-color": T.copper,
+            "circle-stroke-width": 3,
+            "circle-stroke-opacity": 0.95,
+          },
         });
         // Individual unclustered camping spots — circle layer instead of an
         // emoji symbol so rendering can't fail on missing glyphs, AND so
@@ -2073,14 +2234,27 @@ function useCampingSpotsLayer(mapRef, ready, rows, visible, onSelect, refreshKey
       const src = map.getSource("camping-spots");
       if (src) src.setData(campingSpotsToGeoJSON(rows));
       const vis = visible ? "visible" : "none";
-      ["camping-spots-clusters", "camping-spots-cluster-count", "camping-spots-points"].forEach(id => {
+      ["camping-spots-clusters", "camping-spots-cluster-count", "camping-spots-halo", "camping-spots-points"].forEach(id => {
         if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", vis);
       });
+      // Highlight ring filter — show the ring around the currently-
+      // selected spot, hide it otherwise.
+      if (map.getLayer("camping-spots-halo")) {
+        try {
+          map.setFilter(
+            "camping-spots-halo",
+            selectedSpotId
+              ? ["==", ["get", "id"], selectedSpotId]
+              : ["==", ["get", "id"], "__none__"]
+          );
+        } catch (_) {}
+      }
       // Always lift camping layers to the top of the stack so the public-
       // lands fill (added by a sibling hook in non-deterministic order)
       // can't intercept taps meant for camping spots. moveLayer with no
-      // beforeId moves the layer to the very top — idempotent.
-      ["camping-spots-clusters", "camping-spots-cluster-count", "camping-spots-points"].forEach(id => {
+      // beforeId moves the layer to the very top — idempotent. Halo
+      // comes before points so the pin sits inside the ring visually.
+      ["camping-spots-clusters", "camping-spots-cluster-count", "camping-spots-halo", "camping-spots-points"].forEach(id => {
         if (map.getLayer(id)) { try { map.moveLayer(id); } catch (_) {} }
       });
       // Force a repaint — without this, on a fresh ExploreMap mount the
@@ -2100,7 +2274,7 @@ function useCampingSpotsLayer(mapRef, ready, rows, visible, onSelect, refreshKey
       // the handlers we registered on the first run. The map's own .remove()
       // call (in the parent's unmount path) tears everything down cleanly.
     };
-  }, [mapRef, ready, rows, visible, refreshKey]);
+  }, [mapRef, ready, rows, visible, refreshKey, selectedSpotId]);
 }
 
 // Color palette for public-lands polygons, keyed by PAD-US Mang_Name code.
@@ -2882,15 +3056,15 @@ function MapOverlay({ coords, location, title, onClose, recoveryCtx, onRecoveryS
                 )}
               </div>
             )}
-            {/* Proximity arrived banner */}
-            {recoveryCtx && proximityTriggered && (
+            {/* Proximity arrived banner (gated — see RECOVERY_PROXIMITY_CONFIRM_ENABLED) */}
+            {RECOVERY_PROXIMITY_CONFIRM_ENABLED && recoveryCtx && proximityTriggered && (
               <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", background: `${T.green}15`, borderRadius: 8, border: `1px solid ${T.green}30`, marginBottom: 10 }}>
                 <CheckCircle size={14} color={T.green} />
                 <span style={{ fontFamily: sans, fontSize: 11, color: T.green, fontWeight: 600, flex: 1 }}>You've arrived — {recoveryCtx.author} has been notified</span>
               </div>
             )}
-            {/* Simulate arrival for testing */}
-            {recoveryCtx && !proximityTriggered && (
+            {/* Simulate arrival for testing (gated — see RECOVERY_PROXIMITY_CONFIRM_ENABLED) */}
+            {RECOVERY_PROXIMITY_CONFIRM_ENABLED && recoveryCtx && !proximityTriggered && (
               <button onClick={() => { setProximityTriggered(true); if (onRecoveryArrived) onRecoveryArrived(recoveryCtx); }} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px", borderRadius: 8, background: `${T.green}20`, border: `1px dashed ${T.green}50`, cursor: "pointer", marginBottom: 10 }}>
                 <MapPin size={13} color={T.green} />
                 <span style={{ fontFamily: sans, fontSize: 11, color: T.green, fontWeight: 600, letterSpacing: 0.5 }}>SIMULATE ARRIVAL (TESTING)</span>
@@ -3123,7 +3297,7 @@ function RecoveryNotifPanel({ onClose, onGoToRecovery, alerts, onDismiss, onClea
   );
 }
 
-function UnifiedNotifPanel({ onClose, onViewUser, onGoToPost, onGoToBuild, notifs, onDismissNotif, onClearNotifs, recoveryAlerts, onDismissAlert, onClearAlerts, onGoToRecovery, onOpenMap, onOpenDM, initialTab }) {
+function UnifiedNotifPanel({ onClose, onViewUser, onGoToPost, onGoToBuild, onGoToForumThread, notifs, onDismissNotif, onClearNotifs, recoveryAlerts, onDismissAlert, onClearAlerts, onGoToRecovery, onOpenMap, onOpenDM, initialTab }) {
   const [tab, setTab] = useState(initialTab || "general");
   const urgencyColor = (u) => u === "HIGH" ? T.red : T.copper;
   const tabBtn = (key, label, count, color) => (
@@ -3180,7 +3354,7 @@ function UnifiedNotifPanel({ onClose, onViewUser, onGoToPost, onGoToBuild, notif
           ) : notifs.map((n) => {
             const Icon = n.icon;
             return (
-              <div key={n.id} onClick={() => { if (n.buildId) { onGoToBuild && onGoToBuild(n.buildId, n.target); } else if (n.postId) { onGoToPost && onGoToPost(n.postId); } }} style={{ display: "flex", gap: 10, padding: "12px 16px", borderBottom: `1px solid ${T.charcoal}22`, cursor: "pointer", transition: "background 0.15s", position: "relative" }} onMouseEnter={(e) => e.currentTarget.style.background = `${T.charcoal}` } onMouseLeave={(e) => e.currentTarget.style.background = "transparent" }>
+              <div key={n.id} onClick={() => { if (n.forumThreadId) { onGoToForumThread && onGoToForumThread(n.forumThreadId); } else if (n.buildId) { onGoToBuild && onGoToBuild(n.buildId, n.target); } else if (n.postId) { onGoToPost && onGoToPost(n.postId); } }} style={{ display: "flex", gap: 10, padding: "12px 16px", borderBottom: `1px solid ${T.charcoal}22`, cursor: "pointer", transition: "background 0.15s", position: "relative" }} onMouseEnter={(e) => e.currentTarget.style.background = `${T.charcoal}` } onMouseLeave={(e) => e.currentTarget.style.background = "transparent" }>
                 <div style={{ width: 32, height: 32, borderRadius: "50%", background: `${n.iconColor}18`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2 }}>
                   <Icon size={14} color={n.iconColor} strokeWidth={1.8} />
                 </div>
@@ -3258,7 +3432,7 @@ function UnifiedNotifPanel({ onClose, onViewUser, onGoToPost, onGoToBuild, notif
   );
 }
 
-function TopBar({ onProfile, onBack, showBack, title, onViewUser, onGoToPost, onGoToBuild, onGoToRecovery, onOpenMap, onSearch, onOpenDM, dmUnread, bellNotifs, onDismissNotif, onClearNotifs, profilePic, notifPrefs, recoveryAlerts, setRecoveryAlerts }) {
+function TopBar({ onProfile, onBack, showBack, title, onViewUser, onGoToPost, onGoToBuild, onGoToForumThread, onGoToRecovery, onOpenMap, onSearch, onOpenDM, dmUnread, bellNotifs, onDismissNotif, onClearNotifs, profilePic, notifPrefs, recoveryAlerts, setRecoveryAlerts }) {
   const notifTypeMap = { like: "likes", comment: "comments", reply: "replies", follow: "follows", mention: "mentions" };
   const filteredNotifs = bellNotifs.filter(n => { const pref = notifTypeMap[n.type]; return !pref || (notifPrefs && notifPrefs[pref] !== false); });
   const [openPanel, setOpenPanel] = useState(null); // null | "notif"
@@ -3320,6 +3494,7 @@ function TopBar({ onProfile, onBack, showBack, title, onViewUser, onGoToPost, on
           onViewUser={(u) => { setOpenPanel(null); onViewUser && onViewUser(u); }}
           onGoToPost={(postId) => { setOpenPanel(null); onGoToPost && onGoToPost(postId); }}
           onGoToBuild={(buildId, name) => { setOpenPanel(null); onGoToBuild && onGoToBuild(buildId, name); }}
+          onGoToForumThread={(threadId) => { setOpenPanel(null); onGoToForumThread && onGoToForumThread(threadId); }}
           notifs={filteredNotifs}
           onDismissNotif={onDismissNotif}
           onClearNotifs={onClearNotifs}
@@ -3364,46 +3539,182 @@ const globalSearchRoutes = [
   { name: "Shadow Peak Traverse", difficulty: "Hard", distance: "38.0 MI", region: "Rockies & High Plains" },
 ];
 
-function GlobalSearch({ onClose, onViewUser, onOpenThread, onNavigate, forumUserReplies, forumViewCounts }) {
+function GlobalSearch({
+  onClose,
+  onViewUser,
+  onOpenThread,
+  onOpenTripDetail,
+  onOpenBuild,
+  onOpenSpot,
+  onOpenPost,
+  onNavigate,
+  onSearchUsers,
+  forumThreadsBySub,
+  forumUserReplies,
+  forumViewCounts,
+  feedItems,
+  allTripReports,
+  allTripPlans,
+  allBuilds,
+  campingSpots,
+  forumCategoriesList,
+}) {
   const [query, setQuery] = useState("");
   const [activeTab, setActiveTab] = useState("ALL");
+  const [serverUsers, setServerUsers] = useState([]); // debounced server hits
   const inputRef = useRef(null);
-  const tabs = ["ALL", "THREADS", "USERS", "ROUTES"];
+  const tabs = ["ALL", "USERS", "THREADS", "TRIPS", "BUILDS", "SPOTS", "POSTS"];
 
   useEffect(() => { if (inputRef.current) inputRef.current.focus(); }, []);
 
-  const q = query.trim().toLowerCase();
+  // Deferred query keeps typing snappy — the heavy useMemo filters and the
+  // server fetch read from this lower-priority value so React doesn't block
+  // the input on a re-render that scans every loaded entity.
+  const deferredQuery = useDeferredValue(query);
+  const q = deferredQuery.trim().toLowerCase();
 
-  // Search forum threads
-  const threadResults = q.length > 0 ? (() => {
-    const results = [];
-    forumData.categories.forEach(cat => {
+  // Debounced server-side user search — the local profile cache only carries
+  // people Trailhead has interacted with this session (post authors, thread
+  // authors, etc.). For the long tail we hit profiles.ilike via onSearchUsers.
+  useEffect(() => {
+    if (!q || q.length < 2 || !onSearchUsers) { setServerUsers([]); return; }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      try {
+        const rows = await onSearchUsers(q, 12);
+        if (!cancelled) setServerUsers(Array.isArray(rows) ? rows : []);
+      } catch (e) { /* non-fatal */ }
+    }, 250);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [q]);
+
+  // Forum threads — fan out across every loaded subcategory + match title /
+  // body / author. Subcategory + category names get tacked onto each result
+  // so the navigation callback knows which detail surface to open.
+  const threadResults = useMemo(() => {
+    if (!q) return [];
+    const out = [];
+    (forumCategoriesList || []).forEach(cat => {
       cat.subs.forEach(sub => {
-        (forumData.threads[sub.name] || []).forEach(t => {
-          if (t.title.toLowerCase().includes(q) || (t.body && t.body.toLowerCase().includes(q)) || t.author.toLowerCase().includes(q)) {
-            results.push({ ...t, catName: cat.name, subName: sub.name, cat, sub });
+        ((forumThreadsBySub || {})[sub.name] || []).forEach(t => {
+          const author = (t.author || t.user || "").toLowerCase();
+          const handle = (t.handle || "").toLowerCase();
+          if ((t.title || "").toLowerCase().includes(q)
+              || (t.body && t.body.toLowerCase().includes(q))
+              || author.includes(q)
+              || handle.includes(q)) {
+            out.push({ ...t, catName: cat.name, subName: sub.name, cat, sub });
           }
         });
       });
     });
-    return results;
-  })() : [];
+    return out;
+  }, [q, forumThreadsBySub]);
 
-  // Search users
-  const userResults = q.length > 0 ? globalSearchUsers.filter(u =>
-    u.handle.toLowerCase().includes(q) || u.name.toLowerCase().includes(q)
-  ) : [];
+  // Trip reports + plans (kind = report OR plan). Search name + description +
+  // region + state + terrains + tags. Authors keep their @handle searchable.
+  const tripResults = useMemo(() => {
+    if (!q) return [];
+    const matchTrip = (t) => {
+      if (!t) return false;
+      const fields = [
+        t.name,
+        t.description,
+        t.region,
+        t.state_code,
+        t.difficulty,
+        ...(Array.isArray(t.terrains) ? t.terrains : []),
+        ...(Array.isArray(t.tags) ? t.tags : []),
+      ];
+      return fields.some(f => f && String(f).toLowerCase().includes(q));
+    };
+    const all = [
+      ...(allTripReports || []).map(t => ({ ...t, _kind: "report" })),
+      ...(allTripPlans || []).map(t => ({ ...t, _kind: "plan" })),
+    ];
+    return all.filter(matchTrip);
+  }, [q, allTripReports, allTripPlans]);
 
-  // Search routes
-  const routeResults = q.length > 0 ? globalSearchRoutes.filter(r =>
-    r.name.toLowerCase().includes(q) || r.region.toLowerCase().includes(q) || r.difficulty.toLowerCase().includes(q)
-  ) : [];
+  // Vehicle builds — match name, year, make, model, trim. Hits both the
+  // top-level columns and a flattened "year make model" string.
+  const buildResults = useMemo(() => {
+    if (!q) return [];
+    return (allBuilds || []).filter(b => {
+      if (!b) return false;
+      const combo = [b.name, b.year, b.make, b.model, b.trim].filter(Boolean).join(" ").toLowerCase();
+      return combo.includes(q);
+    });
+  }, [q, allBuilds]);
 
-  const totalResults = threadResults.length + userResults.length + routeResults.length;
+  // Camping spots — match name + description. Spots come in two slices
+  // (owner's own + viewport bbox); dedupe by id. Plain object dict (not
+  // new Map()) because the lucide-react `Map` icon shadows the global
+  // Map constructor at bundle time (esbuild renames it).
+  const spotResults = useMemo(() => {
+    if (!q) return [];
+    const byId = {};
+    (campingSpots || []).forEach(s => { if (s && s.id) byId[s.id] = s; });
+    const matches = [];
+    Object.values(byId).forEach(s => {
+      const fields = [s.name, s.description, s.spot_type, s.fee];
+      if (fields.some(f => f && String(f).toLowerCase().includes(q))) matches.push(s);
+    });
+    return matches;
+  }, [q, campingSpots]);
 
-  const showThreads = (activeTab === "ALL" || activeTab === "THREADS") && threadResults.length > 0;
+  // Feed posts — match title + body + user name. Skip RECOVERY (separate
+  // surface) and FORUM-share rows (the threads tab already covers those).
+  const postResults = useMemo(() => {
+    if (!q) return [];
+    return (feedItems || []).filter(p => {
+      if (!p || p.type === "RECOVERY" || p.type === "FORUM") return false;
+      const fields = [p.title, p.body, p.user, p.vehicle, p.location];
+      return fields.some(f => f && String(f).toLowerCase().includes(q));
+    });
+  }, [q, feedItems]);
+
+  // Users — merge local author maps (instant) + server-side ilike results.
+  // Locally-known users come from post authors / build owners / thread
+  // authors who landed in feedItems / allBuilds / forumThreadsBySub.
+  const userResults = useMemo(() => {
+    if (!q) return [];
+    // Plain object dict (not new Map()) — lucide-react's `Map` icon
+    // shadows the global Map constructor at bundle time.
+    const byId = {};
+    const pushUser = (u) => {
+      if (!u) return;
+      const id = u.id || u.userId || u.user_id || u.handle || u.user;
+      if (!id || byId[id] !== undefined) return;
+      const name = u.full_name || u.user || u.name || "";
+      const handle = u.handle || "";
+      byId[id] = {
+        id: u.id || u.userId || null,
+        handle,
+        name,
+        avatarUrl: u.avatar_url || u.avatarUrl || null,
+        followers: u.followers,
+        badge: u.badge,
+      };
+    };
+    (feedItems || []).forEach(p => p && p.userId && pushUser({ id: p.userId, full_name: p.user, handle: p.handle, avatar_url: p.avatarUrl }));
+    (allBuilds || []).forEach(b => b && b.userId && pushUser({ id: b.userId, full_name: b.owner, handle: (b.handle || "").replace(/^@/, ""), avatar_url: b.avatarUrl }));
+    Object.values(forumThreadsBySub || {}).forEach(list => (list || []).forEach(t => t && t.userId && pushUser({ id: t.userId, full_name: t.user, handle: t.handle, avatar_url: t.avatarUrl })));
+    (serverUsers || []).forEach(u => pushUser(u));
+    const matches = [];
+    Object.values(byId).forEach(u => {
+      if ((u.handle || "").toLowerCase().includes(q) || (u.name || "").toLowerCase().includes(q)) matches.push(u);
+    });
+    return matches;
+  }, [q, feedItems, allBuilds, forumThreadsBySub, serverUsers]);
+
+  const totalResults = userResults.length + threadResults.length + tripResults.length + buildResults.length + spotResults.length + postResults.length;
+
   const showUsers = (activeTab === "ALL" || activeTab === "USERS") && userResults.length > 0;
-  const showRoutes = (activeTab === "ALL" || activeTab === "ROUTES") && routeResults.length > 0;
+  const showThreads = (activeTab === "ALL" || activeTab === "THREADS") && threadResults.length > 0;
+  const showTrips = (activeTab === "ALL" || activeTab === "TRIPS") && tripResults.length > 0;
+  const showBuilds = (activeTab === "ALL" || activeTab === "BUILDS") && buildResults.length > 0;
+  const showSpots = (activeTab === "ALL" || activeTab === "SPOTS") && spotResults.length > 0;
+  const showPosts = (activeTab === "ALL" || activeTab === "POSTS") && postResults.length > 0;
   const limitAll = activeTab === "ALL" ? 3 : 999;
 
   const diffColor = (d) => d === "Expert" ? T.red : d === "Hard" ? T.copper : T.green;
@@ -3419,7 +3730,7 @@ function GlobalSearch({ onClose, onViewUser, onOpenThread, onNavigate, forumUser
           </button>
           <div style={{ flex: 1, display: "flex", alignItems: "center", background: T.darkCard, borderRadius: 8, padding: "10px 14px", border: `1px solid ${T.copper}40` }}>
             <Search size={16} color={T.copper} />
-            <input ref={inputRef} value={query} onChange={e => setQuery(e.target.value)} placeholder="Search threads, @users, routes..." style={{ flex: 1, background: "none", border: "none", outline: "none", color: T.white, fontFamily: serif, fontSize: 13, marginLeft: 8, padding: 0 }} />
+            <input ref={inputRef} value={query} onChange={e => setQuery(e.target.value)} placeholder="Search @users, threads, trips, builds, spots, posts..." style={{ flex: 1, background: "none", border: "none", outline: "none", color: T.white, fontFamily: serif, fontSize: 13, marginLeft: 8, padding: 0 }} />
             {query && (
               <button onClick={() => setQuery("")} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" }}>
                 <X size={14} color={T.tertiary} />
@@ -3443,7 +3754,7 @@ function GlobalSearch({ onClose, onViewUser, onOpenThread, onNavigate, forumUser
           <div style={{ textAlign: "center", padding: "40px 16px" }}>
             <Search size={32} color={T.tertiary} style={{ opacity: 0.3, marginBottom: 12 }} />
             <p style={{ fontFamily: serif, fontSize: 14, color: T.tertiary, margin: "0 0 4px" }}>Search across Trailhead</p>
-            <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: 0 }}>Find threads, users, and routes</p>
+            <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: 0 }}>Users, forum threads, trip reports + plans, builds, camping spots, feed posts</p>
           </div>
         ) : totalResults === 0 ? (
           <div style={{ textAlign: "center", padding: "40px 16px" }}>
@@ -3465,21 +3776,23 @@ function GlobalSearch({ onClose, onViewUser, onOpenThread, onNavigate, forumUser
                   )}
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                  {userResults.slice(0, limitAll).map((u, i) => (
-                    <div key={u.handle} onClick={() => { onClose(); onViewUser && onViewUser(u.handle); }} style={{ background: T.darkCard, padding: "12px 16px", cursor: "pointer", borderRadius: i === 0 ? "8px 8px 0 0" : i === Math.min(limitAll, userResults.length) - 1 ? "0 0 8px 8px" : 0, borderBottom: i < Math.min(limitAll, userResults.length) - 1 ? `1px solid ${T.charcoal}` : "none", display: "flex", alignItems: "center", gap: 12 }}>
-                      <div style={{ width: 40, height: 40, borderRadius: "50%", background: T.charcoal, display: "flex", alignItems: "center", justifyContent: "center", border: `2px solid ${badgeColor(u.badge)}` }}>
-                        <span style={{ fontFamily: sans, fontSize: 15, fontWeight: 700, color: T.white }}>{u.initial}</span>
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, display: "block" }}>@{u.handle}</span>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 2 }}>
-                          <span style={{ fontFamily: sans, fontSize: 10, color: badgeColor(u.badge), background: `${badgeColor(u.badge)}15`, padding: "1px 6px", borderRadius: 3, letterSpacing: 0.5 }}>{u.badge}</span>
-                          <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{u.followers.toLocaleString()} followers</span>
+                  {userResults.slice(0, limitAll).map((u, i) => {
+                    const init = (u.name || u.handle || "U").charAt(0).toUpperCase();
+                    return (
+                      <div key={u.id || u.handle || i} onClick={() => { onClose(); onViewUser && onViewUser(u.handle || u.id); }} style={{ background: T.darkCard, padding: "12px 16px", cursor: "pointer", borderRadius: i === 0 ? "8px 8px 0 0" : i === Math.min(limitAll, userResults.length) - 1 ? "0 0 8px 8px" : 0, borderBottom: i < Math.min(limitAll, userResults.length) - 1 ? `1px solid ${T.charcoal}` : "none", display: "flex", alignItems: "center", gap: 12 }}>
+                        <div style={{ width: 40, height: 40, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 }}>
+                          {u.avatarUrl
+                            ? <img src={txImg(u.avatarUrl, 96)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                            : <span style={{ fontFamily: sans, fontSize: 15, fontWeight: 700, color: T.white }}>{init}</span>}
                         </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          {u.name && <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, display: "block" }}>{u.name}</span>}
+                          {u.handle && <span style={{ fontFamily: sans, fontSize: 11, color: T.copper }}>@{u.handle}</span>}
+                        </div>
+                        <ChevronRight size={14} color={T.tertiary} />
                       </div>
-                      <ChevronRight size={14} color={T.tertiary} />
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -3506,9 +3819,8 @@ function GlobalSearch({ onClose, onViewUser, onOpenThread, onNavigate, forumUser
                       </div>
                       <p style={{ fontFamily: serif, fontSize: 13, color: T.white, margin: "0 0 6px", lineHeight: 1.4 }}>{t.title}</p>
                       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                        <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>@{t.author}</span>
-                        <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{(t.replies || 0) + ((forumUserReplies || {})[t.id] || []).length} replies</span>
-                        <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{(() => { const base = typeof t.views === "string" ? parseFloat(t.views.replace(/[^0-9.]/g, "")) * (t.views.includes("K") ? 1000 : 1) : (t.views || 0); const extra = (forumViewCounts || {})[t.id] || 0; const total = Math.round(base + extra); return total >= 1000 ? (total / 1000).toFixed(1).replace(/\.0$/, "") + "K" : String(total); })()} views</span>
+                        <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{t.user || t.author}</span>
+                        <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{((forumUserReplies || {})[t.id] || []).length} replies</span>
                       </div>
                     </div>
                   ))}
@@ -3516,29 +3828,129 @@ function GlobalSearch({ onClose, onViewUser, onOpenThread, onNavigate, forumUser
               </div>
             )}
 
-            {/* Routes */}
-            {showRoutes && (
+            {/* Trip reports + plans */}
+            {showTrips && (
               <div style={{ marginBottom: 20 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                  <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600 }}>ROUTES ({routeResults.length})</span>
-                  {activeTab === "ALL" && routeResults.length > limitAll && (
-                    <button onClick={() => setActiveTab("ROUTES")} style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                  <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600 }}>TRIPS ({tripResults.length})</span>
+                  {activeTab === "ALL" && tripResults.length > limitAll && (
+                    <button onClick={() => setActiveTab("TRIPS")} style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
                       <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600 }}>SEE ALL</span>
                     </button>
                   )}
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                  {routeResults.slice(0, limitAll).map((r, i) => (
-                    <div key={r.name} onClick={() => { onClose(); onNavigate && onNavigate("routes"); }} style={{ background: T.darkCard, padding: "14px 16px", cursor: "pointer", borderRadius: i === 0 ? "8px 8px 0 0" : i === Math.min(limitAll, routeResults.length) - 1 ? "0 0 8px 8px" : 0, borderBottom: i < Math.min(limitAll, routeResults.length) - 1 ? `1px solid ${T.charcoal}` : "none", display: "flex", alignItems: "center", gap: 12 }}>
-                      <div style={{ width: 40, height: 40, borderRadius: 8, background: `${diffColor(r.difficulty)}15`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <Compass size={18} color={diffColor(r.difficulty)} />
+                  {tripResults.slice(0, limitAll).map((t, i) => {
+                    const accent = t._kind === "plan" ? T.copper : "#8B6FAF";
+                    return (
+                      <div key={t.id} onClick={() => { onClose(); onOpenTripDetail && onOpenTripDetail(t.slug || t.id); }} style={{ background: T.darkCard, padding: "12px 16px", cursor: "pointer", borderRadius: i === 0 ? "8px 8px 0 0" : i === Math.min(limitAll, tripResults.length) - 1 ? "0 0 8px 8px" : 0, borderBottom: i < Math.min(limitAll, tripResults.length) - 1 ? `1px solid ${T.charcoal}` : "none", display: "flex", alignItems: "center", gap: 12 }}>
+                        <div style={{ width: 40, height: 40, borderRadius: 8, background: `${accent}25`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <Route size={18} color={accent} />
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.name}</span>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 2 }}>
+                            <span style={{ fontFamily: sans, fontSize: 9, color: accent, letterSpacing: 0.5, fontWeight: 600 }}>{t._kind === "plan" ? "PLAN" : "TRIP REPORT"}</span>
+                            {t.region && <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{t.region}</span>}
+                            {typeof t.distance_mi === "number" && <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{Number(t.distance_mi).toFixed(1)} mi</span>}
+                          </div>
+                        </div>
+                        <ChevronRight size={14} color={T.tertiary} />
                       </div>
-                      <div style={{ flex: 1 }}>
-                        <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, display: "block" }}>{r.name}</span>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Builds */}
+            {showBuilds && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                  <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600 }}>BUILDS ({buildResults.length})</span>
+                  {activeTab === "ALL" && buildResults.length > limitAll && (
+                    <button onClick={() => setActiveTab("BUILDS")} style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                      <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600 }}>SEE ALL</span>
+                    </button>
+                  )}
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  {buildResults.slice(0, limitAll).map((b, i) => {
+                    const sub = [b.year, b.make, b.model].filter(Boolean).join(" ");
+                    return (
+                      <div key={b.id || b.rawId || i} onClick={() => { onClose(); onOpenBuild && onOpenBuild(b.rawId || b.id, b.name); }} style={{ background: T.darkCard, padding: "12px 16px", cursor: "pointer", borderRadius: i === 0 ? "8px 8px 0 0" : i === Math.min(limitAll, buildResults.length) - 1 ? "0 0 8px 8px" : 0, borderBottom: i < Math.min(limitAll, buildResults.length) - 1 ? `1px solid ${T.charcoal}` : "none", display: "flex", alignItems: "center", gap: 12 }}>
+                        <div style={{ width: 40, height: 40, borderRadius: 8, background: T.charcoal, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 }}>
+                          {b.image
+                            ? <img src={txImg(b.image, 96)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                            : <Wrench size={18} color={T.copper} />}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.name || sub}</span>
+                          {sub && <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{sub}</span>}
+                        </div>
+                        <ChevronRight size={14} color={T.tertiary} />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Camping spots */}
+            {showSpots && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                  <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600 }}>CAMPING SPOTS ({spotResults.length})</span>
+                  {activeTab === "ALL" && spotResults.length > limitAll && (
+                    <button onClick={() => setActiveTab("SPOTS")} style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                      <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600 }}>SEE ALL</span>
+                    </button>
+                  )}
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  {spotResults.slice(0, limitAll).map((s, i) => (
+                    <div key={s.id} onClick={() => { onClose(); onOpenSpot && onOpenSpot(s.id); }} style={{ background: T.darkCard, padding: "12px 16px", cursor: "pointer", borderRadius: i === 0 ? "8px 8px 0 0" : i === Math.min(limitAll, spotResults.length) - 1 ? "0 0 8px 8px" : 0, borderBottom: i < Math.min(limitAll, spotResults.length) - 1 ? `1px solid ${T.charcoal}` : "none", display: "flex", alignItems: "center", gap: 12 }}>
+                      <div style={{ width: 40, height: 40, borderRadius: 8, background: `${T.green}25`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <Tent size={18} color={T.green} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.name}</span>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 2 }}>
-                          <span style={{ fontFamily: sans, fontSize: 10, color: diffColor(r.difficulty), fontWeight: 600 }}>{r.difficulty}</span>
-                          <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{r.distance}</span>
-                          <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{r.region}</span>
+                          {s.spot_type && s.spot_type !== "unknown" && <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{s.spot_type}</span>}
+                          {s.fee && <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{s.fee}</span>}
+                        </div>
+                      </div>
+                      <ChevronRight size={14} color={T.tertiary} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Feed posts */}
+            {showPosts && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                  <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600 }}>POSTS ({postResults.length})</span>
+                  {activeTab === "ALL" && postResults.length > limitAll && (
+                    <button onClick={() => setActiveTab("POSTS")} style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                      <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600 }}>SEE ALL</span>
+                    </button>
+                  )}
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  {postResults.slice(0, limitAll).map((p, i) => (
+                    <div key={p.id} onClick={() => { onClose(); onOpenPost && onOpenPost(p.id); }} style={{ background: T.darkCard, padding: "12px 16px", cursor: "pointer", borderRadius: i === 0 ? "8px 8px 0 0" : i === Math.min(limitAll, postResults.length) - 1 ? "0 0 8px 8px" : 0, borderBottom: i < Math.min(limitAll, postResults.length) - 1 ? `1px solid ${T.charcoal}` : "none", display: "flex", alignItems: "center", gap: 12 }}>
+                      <div style={{ width: 40, height: 40, borderRadius: 8, background: T.charcoal, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 }}>
+                        {p.image
+                          ? <img src={txImg(p.image, 96)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          : <Compass size={18} color={T.copper} />}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.title || (p.body ? p.body.slice(0, 60) : "Post")}</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 2 }}>
+                          <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 0.5 }}>{p.type || "POST"}</span>
+                          {p.user && <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{p.user}</span>}
                         </div>
                       </div>
                       <ChevronRight size={14} color={T.tertiary} />
@@ -3747,14 +4159,19 @@ function ImageCarousel({ images, startIndex, onClose }) {
 // Feed posts are now persisted to public.posts and hydrated on sign-in.
 // The legacy defaultFeedItems seed array was removed once the backend landed.
 
-function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShareCompose, onOpenShareIntent, onViewBuild, onOpenTripDetail, onOpenConvoy, feedItems, onUpdateFeed, onUpdatePost, likedPostIds, onTogglePostLike, postComments, onAddComment, onDeleteComment, likedCommentIds, onToggleCommentLike, currentUserId, currentUserName, currentUserHandle, currentUserAvatar, onDeletePost, onEditPost, onAddNotification, forumUserReplies, forumViewCounts, savedRoutes, onSaveRoute, onUnsaveRoute, onStartNav, onStartDirections, onAwardPoints, isGuest, onGuestTap, pendingPostNav, onConsumePendingPostNav, onSharedPostMissing, convoyRsvps, onRsvpConvoy, onSearchUsers, filterFn, hideFilters, onlineUserIds, tripReports, tripPlans, tripAuthors, onNewTripReport, onOpenTripDraft, onOpenSpotOnMap, onOpenHQOnMap, onLoadMore, hasMore, loadingMore, onLoadTripRouteData }) {
+function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShareCompose, onOpenShareIntent, onViewBuild, onOpenTripDetail, onOpenConvoy, feedItems, onUpdateFeed, onUpdatePost, likedPostIds, onTogglePostLike, postComments, onAddComment, onDeleteComment, likedCommentIds, onToggleCommentLike, currentUserId, currentUserName, currentUserHandle, currentUserAvatar, isAdmin, onDeletePost, onEditPost, onAddNotification, forumUserReplies, forumViewCounts, savedRoutes, onSaveRoute, onUnsaveRoute, onStartNav, onStartDirections, onAwardPoints, isGuest, onGuestTap, pendingPostNav, onConsumePendingPostNav, onSharedPostMissing, convoyRsvps, onRsvpConvoy, onSearchUsers, filterFn, hideFilters, onlineUserIds, tripReports, tripPlans, tripAuthors, onNewTripReport, onOpenTripDraft, onOpenSpotOnMap, onOpenHQOnMap, onLoadMore, hasMore, loadingMore, onLoadTripRouteData, activeFilter: controlledFilter, setActiveFilter: setControlledFilter }) {
   // Infinite-scroll sentinel — bottom of the feed list. When it scrolls
   // into view, ask the root to load the next page. Disabled when the
   // active filter is anything but ALL (filter-narrowed lists don't drive
   // pagination — that's a server query we don't run yet) and during the
   // global expanded-card view.
   const loadMoreSentinelRef = useRef(null);
-  const [activeFilter, setActiveFilter] = useState("ALL");
+  // Filter pill state is controlled from the root so the desktop sidebar
+  // can read + write the same filter. Fall back to local state when no
+  // controller props are passed (e.g. profile-screen scoped feed).
+  const [localFilter, setLocalFilter] = useState("ALL");
+  const activeFilter = controlledFilter != null ? controlledFilter : localFilter;
+  const setActiveFilter = setControlledFilter || setLocalFilter;
   // Deferred copy of the filter — the pill UI reads `activeFilter`
   // (urgent, flips orange the instant you tap), but every consumer
   // below that does heavy work (baseFiltered, the TRIP REPORTS branch
@@ -3775,6 +4192,22 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
   const likedComments = likedCommentIds || {};
   const [openComments, setOpenComments] = useState(null); // post id or null
   const [highlightedPostId, setHighlightedPostId] = useState(null);
+  // Re-scroll guard: when a shared post is fast-loaded, the user sees it
+  // at index 0. The background hydrate then folds in dozens of newer
+  // posts above it, pushing the shared post off-screen. After the first
+  // hydrate-driven feedItems update, re-center the highlighted post so
+  // the user doesn't lose visual track. One-shot per highlight.
+  const rescrolledAfterHydrateRef = useRef(false);
+  useEffect(() => {
+    if (!highlightedPostId) { rescrolledAfterHydrateRef.current = false; return; }
+    if (rescrolledAfterHydrateRef.current) return;
+    if (feedItems.length <= 1) return; // wait for hydrate to land
+    rescrolledAfterHydrateRef.current = true;
+    setTimeout(() => {
+      const el = document.getElementById("feed-post-" + highlightedPostId);
+      if (el && el.scrollIntoView) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+  }, [feedItems, highlightedPostId]);
   const [postMenuOpen, setPostMenuOpen] = useState(null); // post id or null
   const [editingFeedPost, setEditingFeedPost] = useState(null); // post id
   const [editFeedText, setEditFeedText] = useState("");
@@ -3796,7 +4229,11 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
         const el = document.getElementById("feed-post-" + match.id);
         if (el && el.scrollIntoView) el.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 80);
-      setTimeout(() => setHighlightedPostId(null), 2600);
+      // Intentionally NO auto-clear timer — the highlight persists for
+      // the entire feed session so the user keeps visual track of the
+      // shared post when background hydrate folds in the rest of the
+      // feed. Cleared naturally when FeedScreen unmounts (user navigates
+      // to a different screen).
       onConsumePendingPostNav && onConsumePendingPostNav();
       return;
     }
@@ -4031,7 +4468,10 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
 
   // Three-dot overflow menu for the current user's own posts.
   const ownPostMenu = (item) => {
-    if (!currentUserId || item.userId !== currentUserId) return null;
+    // Owner sees the menu; admins see it on every post (for moderation).
+    // Server-side RLS allows the admin override on the actual delete/edit.
+    if (!currentUserId) return null;
+    if (item.userId !== currentUserId && !isAdmin) return null;
     const isOpen = postMenuOpen === item.id;
     return (
       <div style={{ position: "relative", marginLeft: "auto", flexShrink: 0 }}>
@@ -4198,15 +4638,24 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
     }
 
     if (item.type === "RECOVERY") {
+      const isResolved = item.urgency === "RESOLVED";
+      const isRecoveryOwner = !!(currentUserId && item.userId && currentUserId === item.userId);
+      const bannerColor = isResolved ? T.green : T.red;
+      const BannerIcon = isResolved ? CheckCircle : AlertTriangle;
+      const bannerLabel = isResolved ? "RECOVERED" : "RECOVERY NEEDED";
       return (
         <div key={item.id} style={cardStyle}>
-          <div style={{ background: `${T.red}18`, padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ background: `${bannerColor}18`, padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <AlertTriangle size={16} color={T.red} />
-              <span style={{ fontFamily: sans, fontSize: 13, fontWeight: 700, color: T.red, letterSpacing: 0.5 }}>RECOVERY NEEDED</span>
+              <BannerIcon size={16} color={bannerColor} />
+              <span style={{ fontFamily: sans, fontSize: 13, fontWeight: 700, color: bannerColor, letterSpacing: 0.5 }}>{bannerLabel}</span>
             </div>
-            <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{formatPostTime(item.time)}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{formatPostTime(item.time)}</span>
+              {ownPostMenu(item)}
+            </div>
           </div>
+          {feedDeleteConfirm(item)}
           <div style={{ padding: "16px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
               <div style={{ width: 24, height: 24, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -4257,20 +4706,34 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
                 <MapPin size={12} color={T.tertiary} />
                 <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{item.location}</span>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                <AlertTriangle size={12} color={item.urgency === "HIGH" ? T.red : T.copper} />
-                <span style={{ fontFamily: sans, fontSize: 11, color: item.urgency === "HIGH" ? T.red : T.copper, fontWeight: 600 }}>{item.urgency || "HIGH"} URGENCY</span>
-              </div>
+              {!isResolved && (
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <AlertTriangle size={12} color={item.urgency === "HIGH" ? T.red : T.copper} />
+                  <span style={{ fontFamily: sans, fontSize: 11, color: item.urgency === "HIGH" ? T.red : T.copper, fontWeight: 600 }}>{item.urgency || "HIGH"} URGENCY</span>
+                </div>
+              )}
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <div style={{ background: T.charcoal, padding: "6px 10px", borderRadius: 6, display: "flex", alignItems: "center", gap: 4 }}>
                 <Navigation size={12} color={T.tertiary} />
                 <span style={{ fontFamily: serif, fontSize: 11, color: T.tertiary }}>{item.coords}</span>
               </div>
-              <button onClick={() => onOpenMap && onOpenMap(item.coords, item.location, item.title, { author: item.user, alertId: item.id, title: item.title })} style={{ fontFamily: sans, fontSize: 11, color: T.red, background: "none", border: "none", cursor: "pointer", letterSpacing: 0.5 }}>Open in Maps</button>
+              <button onClick={() => onOpenMap && onOpenMap(item.coords, item.location, item.title, { author: item.user, alertId: item.id, title: item.title })} style={{ fontFamily: sans, fontSize: 11, color: bannerColor, background: "none", border: "none", cursor: "pointer", letterSpacing: 0.5 }}>Open in Maps</button>
             </div>
           </div>
-          {actionBar(item, <button onClick={() => { onOpenDM && onOpenDM(item.user, "I'm responding to your recovery request — on my way to help!", { title: `🚨 Recovery: ${item.title}`, user: item.user, initial: item.initial, type: "recovery", location: item.location, urgency: item.urgency }); }} style={{ background: T.red, color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 600, padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", letterSpacing: 0.5 }}>Respond</button>)}
+          {actionBar(item, isResolved ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 6, background: `${T.green}18`, border: `1px solid ${T.green}40` }}>
+              <CheckCircle size={12} color={T.green} />
+              <span style={{ fontFamily: sans, fontSize: 11, color: T.green, fontWeight: 600, letterSpacing: 0.5 }}>RESOLVED</span>
+            </div>
+          ) : isRecoveryOwner ? (
+            <button onClick={() => onUpdatePost && onUpdatePost(item.id, { urgency: "RESOLVED", resolvedAt: Date.now() })} style={{ background: T.green, color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 600, padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", letterSpacing: 0.5, display: "flex", alignItems: "center", gap: 6 }}>
+              <CheckCircle size={12} color={T.white} />
+              MARK RESOLVED
+            </button>
+          ) : (
+            <button onClick={() => { onOpenDM && onOpenDM(item.user, "I'm responding to your recovery request — on my way to help!", { title: `🚨 Recovery: ${item.title}`, user: item.user, initial: item.initial, type: "recovery", location: item.location, urgency: item.urgency }); }} style={{ background: T.red, color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 600, padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", letterSpacing: 0.5 }}>Respond</button>
+          ))}
         </div>
       );
     }
@@ -4850,25 +5313,9 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
           </div>
           {feedEditBar(item)}
           {feedDeleteConfirm(item)}
-          {item.photoUrls && item.photoUrls.length > 0 ? (() => {
-            const firstP = item.photoUrls[0];
-            const firstUrl = typeof firstP === "string" ? firstP : firstP.url;
-            const firstIsVid = typeof firstP === "object" && firstP.type === "video";
-            return (
-            <div style={{ position: "relative" }}>
-              {firstIsVid ? (
-                <video src={firstUrl + "#t=0.001"} preload="metadata" playsInline onLoadedMetadata={(e) => { try { e.currentTarget.currentTime = 0.001; } catch (err) {} }} controls style={{ width: "100%", maxHeight: 300, objectFit: "contain", display: "block", background: "#000" }} />
-              ) : (
-                <LoadingImage src={firstUrl} alt={imgAlt(firstP)} width={480} onClick={() => openCarousel(item.photoUrls.filter(x => (typeof x === "string") || x.type !== "video").map(x => typeof x === "string" ? x : x.url), 0)} style={{ width: "100%", height: 220, cursor: "pointer" }} />
-              )}
-              {item.photoCount > 1 && (
-                <div style={{ position: "absolute", bottom: 10, right: 10, background: `${T.darkBg}CC`, padding: "4px 10px", borderRadius: 12, display: "flex", alignItems: "center", gap: 4 }}>
-                  <Camera size={11} color={T.warmBg} />
-                  <span style={{ fontFamily: sans, fontSize: 10, color: T.warmBg }}>1 / {item.photoCount}</span>
-                </div>
-              )}
-            </div>
-            ); })() : (
+          {item.photoUrls && item.photoUrls.length > 0 ? (
+            <FeedPhotoCarousel photos={item.photoUrls} height={220} onOpenLightbox={openCarousel} />
+          ) : (
             <div style={{ height: 220, background: `linear-gradient(135deg, ${T.charcoal} 0%, ${T.copper}15 100%)`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
               <Camera size={48} color={T.tertiary} strokeWidth={0.5} style={{ opacity: 0.25 }} />
               <div style={{ position: "absolute", bottom: 10, right: 10, background: `${T.darkBg}CC`, padding: "4px 10px", borderRadius: 12, display: "flex", alignItems: "center", gap: 4 }}>
@@ -5106,117 +5553,302 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
 
 /* ─── FORUM SCREEN ─── */
 /* ─── Forum Data ─── */
-const forumData = {
-  categories: [
-    { name: "How-To Guides", color: T.copper, icon: "wrench", subs: [
-      { name: "Suspension & Lift", threads: 86 },
-      { name: "Electrical & Wiring", threads: 64 },
-      { name: "Armor & Protection", threads: 52 },
-      { name: "Camper Installs", threads: 41 },
-      { name: "Recovery Techniques", threads: 38 },
-      { name: "Maintenance & Repair", threads: 61 },
-    ]},
-    { name: "Troubleshooting", color: T.red, icon: "alert", subs: [
-      { name: "Engine & Drivetrain", threads: 74 },
-      { name: "Electrical Issues", threads: 48 },
-      { name: "Suspension & Steering", threads: 39 },
-      { name: "Body & Frame", threads: 28 },
-      { name: "Accessories & Mods", threads: 29 },
-    ]},
-    { name: "Inspiration", color: T.green, icon: "mountain", subs: [
-      { name: "Trip Reports", threads: 198 },
-      { name: "Build Showcases", threads: 142 },
-      { name: "Photography", threads: 127 },
-      { name: "Bucket List Routes", threads: 100 },
-    ]},
-    { name: "Trip Coordination", color: T.copper, icon: "users", subs: [
-      { name: "Convoy Planning", threads: 24 },
-      { name: "Meetups & Events", threads: 31 },
-      { name: "Trail Partners Wanted", threads: 34 },
-    ]},
-    { name: "Regional Groups", color: T.tertiary, icon: "map", subs: [
-      { name: "Pacific Northwest", threads: 42 },
-      { name: "Southwest & Desert", threads: 38 },
-      { name: "Rockies & High Plains", threads: 29 },
-      { name: "Southeast & Appalachia", threads: 21 },
-      { name: "Midwest", threads: 14 },
-      { name: "International", threads: 12 },
-    ]},
-    { name: "Marketplace", color: T.red, icon: "tag", subs: [
-      { name: "Parts For Sale", threads: 186 },
-      { name: "Vehicles For Sale", threads: 89 },
-      { name: "Wanted / ISO", threads: 78 },
-      { name: "Group Buys", threads: 42 },
-      { name: "Free / Trade", threads: 28 },
-    ]},
-  ],
-  threads: {
-    "Suspension & Lift": [
-      { id: 1, title: "Best budget lift kit for 3rd Gen Tacoma?", replies: 47, views: "2.1K", author: "TrailBoss_88", initial: "T", time: "2h ago", pinned: true,
-        body: "Looking at Icon, Bilstein, or OME for my 2020 Tacoma. Budget is around $1,500. Primarily doing fire roads and moderate trails in the PNW. What would you all recommend?",
-        posts: [
-          { author: "SuspensionGuru", initial: "S", time: "1h ago", body: "Icon Stage 2 is hard to beat at that price. I ran it on my 3rd gen for 2 years before upgrading to King coilovers. Great ride quality on and off road.", likes: 24 },
-          { author: "KyleLPO", initial: "K", time: "45m ago", body: "I went Icon Stage 3 on my Tundra and it's been bulletproof. For a Tacoma at $1,500, the Icon Stage 2 or Bilstein 5100s are your best bet. Bilstein if you want set-and-forget, Icon if you want adjustability.", likes: 31 },
-          { author: "DirtRoadDave", initial: "D", time: "30m ago", body: "OME is solid but rides a bit stiff when unloaded. If you're not carrying a lot of weight, go Bilstein 5100 and save the extra for tires.", likes: 12 },
-        ]},
-      { id: 2, title: "2\" vs 3\" lift — real-world pros and cons", replies: 89, views: "5.8K", author: "LiftKing", initial: "L", time: "6h ago", pinned: false,
-        body: "I keep going back and forth. Running 33s now, want to fit 35s. Is 3\" worth the extra cost and potential CV angle issues?",
-        posts: [
-          { author: "AxleWise", initial: "A", time: "5h ago", body: "3\" is the sweet spot for 35s but you'll want to address the CV angles. Budget for diff drop or SPC UCAs at minimum.", likes: 18 },
-        ]},
-      { id: 3, title: "Icon Stage 3 long-term review — 40K miles", replies: 34, views: "3.2K", author: "KyleLPO", initial: "K", time: "1d ago", pinned: false,
-        body: "Just hit 40K on my Icon Stage 3 setup. Here's everything I've learned about maintenance, revalving, and what to expect long-term.",
-        posts: [] },
-      { id: 4, title: "Fox 2.5 Factory Race Series install tips", replies: 56, views: "4.1K", author: "FoxFanatic", initial: "F", time: "2d ago", pinned: false,
-        body: "Just finished installing Fox 2.5 Factory Race on my 4Runner. Sharing some tips that would have saved me hours.",
-        posts: [] },
-    ],
-    "Electrical & Wiring": [
-      { id: 5, title: "How to properly wire auxiliary batteries for dual setups", replies: 124, views: "8.4K", author: "VoltWrangler", initial: "V", time: "6h ago", pinned: true,
-        body: "Complete guide to dual battery setups — isolators, wiring gauges, fusing, and what NOT to do. Learned some hard lessons.",
-        posts: [
-          { author: "WattMaster", initial: "W", time: "4h ago", body: "This is the guide I wish I had 2 years ago. One thing to add — always fuse both sides of your isolator, not just the main feed.", likes: 42 },
-        ]},
-      { id: 6, title: "Solar panel setup for roof-top tent camping", replies: 67, views: "4.9K", author: "SolarTrail", initial: "S", time: "1d ago", pinned: false,
-        body: "Running a 200W panel with Victron MPPT into a 100Ah lithium. Here's my complete setup and wiring diagram.", posts: [] },
-    ],
-    "Convoy Planning": [
-      { id: 7, title: "Planning a Baja convoy — Feb 2027", replies: 31, views: "890", author: "BajaBound", initial: "B", time: "1d ago", pinned: true,
-        body: "Looking for 6-8 rigs for a 2-week Baja trip. Starting in San Diego, heading down to Cabo via the pacific coast. Experience level: intermediate+",
-        posts: [
-          { author: "DesertRat_4x4", initial: "D", time: "18h ago", body: "I'm in! Running a Bronco Sasquatch with full armor. Done the Baja loop twice before. What's the planned route?", likes: 8 },
-          { author: "BajaVet", initial: "B", time: "12h ago", body: "Count me in. I'd recommend hitting Mike's Sky Rancho on the way down. Best tacos you'll ever have.", likes: 15 },
-        ]},
-    ],
-    "Parts For Sale": [
-      { id: 8, title: "Selling: ARB bumper for 200 Series LC — $800", replies: 12, views: "340", author: "GearDump", initial: "G", time: "5h ago", pinned: false,
-        body: "ARB Deluxe front bumper for 200 Series Land Cruiser. Excellent condition, includes fog light mounts. Pickup in Denver or ship at buyer's expense.",
-        posts: [] },
-      { id: 9, title: "CBI rear bumper + swing-out for Tundra — $1,200", replies: 8, views: "210", author: "KyleLPO", initial: "K", time: "2d ago", pinned: false,
-        body: "Upgraded to a custom setup. CBI T-bar rear with dual swing-outs. Fits 2014-2021 Tundra. Includes jerry can mount and tire carrier.", posts: [] },
-    ],
-    "Trip Reports": [
-      { id: 10, title: "Rubicon Trail in a stock 4Runner — full report", replies: 98, views: "7.2K", author: "StockHero", initial: "S", time: "3d ago", pinned: true,
-        body: "They said it couldn't be done. It can, but I don't recommend it. Here's my full trip report with photos, damage assessment, and lessons learned.",
-        posts: [
-          { author: "RubiVet", initial: "R", time: "2d ago", body: "Impressive that you made it through! The Sluice alone would have me sweating in a stock rig. How'd you handle the approach angle on the big rocks?", likes: 22 },
-        ]},
-    ],
-  },
-};
+// Forum categories + subcategories are DB-backed as of Phase 2 — see
+// `forum_categories` + `forum_subcategories` tables. The `Trailhead` root
+// hydrates them into `forumCategoryRows` / `forumSubcategoryRows` and
+// derives the nested `forumCategoriesList` useMemo (same shape the old
+// `forumData.categories` constant had). It's passed down to ForumScreen,
+// GlobalSearch, and the desktop sidebar as a prop.
 
-// Fill in empty thread lists for subcategories without custom data
-forumData.categories.forEach(cat => {
-  cat.subs.forEach(sub => {
-    if (!forumData.threads[sub.name]) {
-      forumData.threads[sub.name] = [
-        { id: Math.random(), title: `Welcome to ${sub.name}`, replies: 3, views: "120", author: "Admin", initial: "A", time: "1w ago", pinned: true, body: `This is the ${sub.name} subcategory under ${cat.name}. Start a thread to share your knowledge!`, posts: [] },
-      ];
-    }
+// Slug helpers — categories/subcategories are still code constants for now
+// (admin CRUD ships later), but the DB stores their SLUGS rather than display
+// names so admins can rename later without orphaning threads.
+function forumSlugify(name) {
+  return (name || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+function slugifyForumTitle(title) {
+  return forumSlugify(title).slice(0, 80) || "thread";
+}
+// O(1) lookups from slug → display name for renderers and OG previews.
+// Phase 2 makes these mutable and DB-driven — `Trailhead` populates them
+// via a useEffect whenever `forumCategoryRows` / `forumSubcategoryRows`
+// change. Module-level callers (dbRowToForumThread, realtime grafts) read
+// from these without needing the React state passed in. Empty until the
+// initial hydrate returns — brief race window where slug → name lookups
+// return null and the renderer falls back to the slug itself.
+const FORUM_CAT_BY_SLUG = {};
+const FORUM_SUB_BY_SLUG = {};
+
+// Walks section body HTML, uploads any inline `<img src="data:...">` (or
+// blob:) to post-photos via the same pipeline as gallery uploads, then
+// swaps in the public URL + the alt text generated by `attachAltTextToPhotos`.
+// Returns the rewritten HTML. Idempotent for already-uploaded http(s)
+// images. Required so inline section images get SEO-quality alt text and
+// don't end up as data-URL blobs persisted into the sections jsonb.
+async function processForumBodyImages(html, uid) {
+  if (!html || typeof html !== "string") return html;
+  if (!uid) return html;
+  try {
+    const container = document.createElement("div");
+    container.innerHTML = html;
+    const imgs = Array.from(container.querySelectorAll("img"));
+    const localImgs = imgs.filter(img => {
+      const s = img.getAttribute("src") || "";
+      return s.startsWith("data:") || s.startsWith("blob:");
+    });
+    if (localImgs.length === 0) return html;
+    const payload = localImgs.map(img => ({ url: img.getAttribute("src") }));
+    const uploaded = await uploadPostPhotoList(payload, uid);
+    localImgs.forEach((img, i) => {
+      const out = uploaded[i];
+      if (!out) return;
+      const publicUrl = typeof out === "string" ? out : out.url;
+      const alt = typeof out === "object" && typeof out.alt === "string" ? out.alt : "";
+      if (publicUrl) img.setAttribute("src", publicUrl);
+      if (alt) img.setAttribute("alt", alt);
+    });
+    return container.innerHTML;
+  } catch (e) {
+    console.warn("[forum] processForumBodyImages failed", e);
+    return html;
+  }
+}
+
+// Concatenates sections into a single HTML string for the legacy `body`
+// column. Each non-empty subheading renders as <h2>; each non-empty body
+// is inserted in document order. Empty sections are skipped. Used for
+// backward compat with renderers that haven't switched to the structured
+// `sections` array yet (and for plain-text excerpts in OG / search).
+function assembleSectionsHtml(sections) {
+  if (!Array.isArray(sections) || sections.length === 0) return "";
+  const parts = [];
+  sections.forEach(s => {
+    if (!s) return;
+    const sub = (s.subheading || "").trim();
+    const body = (s.body || "").trim();
+    if (!sub && !body) return;
+    if (sub) parts.push(`<h2>${sub.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</h2>`);
+    if (body) parts.push(body);
   });
-});
+  return parts.join("\n");
+}
 
-function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpenDM, onOpenShareCompose, onOpenShareIntent, onAddFeedPost, userThreads, setUserThreads, userReplies, setUserReplies, likedForumItems, setLikedForumItems, forumLikeCounts, setForumLikeCounts, forumViewCounts, setForumViewCounts, onAwardPoints, isGuest, onGuestTap, currentUserId }) {
+// Translate a public.forum_threads row into the shape ForumScreen expects.
+// `profile` is the author's profile row (full_name/handle/avatar_url).
+// `posts` is kept as an empty array — replies live separately now in the
+// repliesByThread map.
+function dbRowToForumThread(row, profile) {
+  if (!row) return null;
+  const name = (profile && profile.full_name) || "User";
+  const handle = (profile && profile.handle) || "";
+  const subInfo = FORUM_SUB_BY_SLUG[row.subcategory_slug] || null;
+  const catInfo = FORUM_CAT_BY_SLUG[row.category_slug] || null;
+  return {
+    id: row.id,
+    title: row.title || "",
+    slug: row.slug,
+    body: row.body || null,
+    sections: Array.isArray(row.sections) ? row.sections : [],
+    photos: Array.isArray(row.photos) ? row.photos : [],
+    pinned: !!row.pinned,
+    views: row.view_count || 0,
+    replies: 0, // live count comes from repliesByThread length
+    time: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+    editedAt: row.updated_at && row.created_at && row.updated_at !== row.created_at ? new Date(row.updated_at).getTime() : null,
+    posts: [], // legacy field — replies live in repliesByThread
+    user: name,
+    handle,
+    initial: (name || "U").charAt(0).toUpperCase(),
+    avatarUrl: (profile && profile.avatar_url) || null,
+    userId: row.user_id,
+    author: name, // legacy alias used by existing ForumScreen code
+    categorySlug: row.category_slug,
+    subcategorySlug: row.subcategory_slug,
+    subName: subInfo ? subInfo.name : "",
+    catName: catInfo ? catInfo.name : "",
+  };
+}
+
+function dbRowToForumReply(row, profile) {
+  if (!row) return null;
+  const name = (profile && profile.full_name) || "User";
+  const handle = (profile && profile.handle) || "";
+  return {
+    id: row.id,
+    threadId: row.thread_id,
+    body: row.body || "",
+    photos: Array.isArray(row.photos) ? row.photos : [],
+    parentId: row.parent_id || null,
+    time: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+    author: name,
+    initial: (name || "U").charAt(0).toUpperCase(),
+    avatarUrl: (profile && profile.avatar_url) || null,
+    userId: row.user_id,
+    handle,
+    likes: 0, // not persisted yet — next pass
+  };
+}
+
+/* One section of a forum thread — paragraph-only rich-text body with its
+   own subheading (rendered as <h2> in the published article). h1/h2/h3
+   block-format buttons are deliberately omitted from the toolbar: title is
+   the only h1 and subheading is the only h2 in the published structure, so
+   forcing body to <p> + inline formatting keeps the SEO heading hierarchy
+   intact across every thread. Inline images get alt text added at submit
+   time via `processForumBodyImages`. */
+function ForumSectionEditor({ subheading, onSubheadingChange, value, onChange, onRemove, showRemove, placeholder, autoFocusBody, sectionNumber }) {
+  const bodyRef = useRef(null);
+  const [activeFormats, setActiveFormats] = useState({});
+  const [linkInputOpen, setLinkInputOpen] = useState(false);
+  const [linkUrl, setLinkUrl] = useState("");
+  const savedRange = useRef(null);
+  const initialized = useRef(false);
+  // Seed innerHTML once from the value prop. After that the contenteditable
+  // owns its DOM — onInput pushes changes up via onChange.
+  useEffect(() => {
+    if (initialized.current) return;
+    if (bodyRef.current) {
+      bodyRef.current.innerHTML = value || "";
+      initialized.current = true;
+      if (autoFocusBody) {
+        try { bodyRef.current.focus(); } catch (e) {}
+      }
+    }
+  }, []);
+  const updateActiveFormats = () => {
+    try {
+      setActiveFormats({
+        bold: document.queryCommandState("bold"),
+        italic: document.queryCommandState("italic"),
+        underline: document.queryCommandState("underline"),
+        strikeThrough: document.queryCommandState("strikeThrough"),
+        insertUnorderedList: document.queryCommandState("insertUnorderedList"),
+        insertOrderedList: document.queryCommandState("insertOrderedList"),
+      });
+    } catch (e) { /* ignore */ }
+  };
+  const push = () => {
+    if (bodyRef.current && onChange) onChange(bodyRef.current.innerHTML);
+  };
+  const cmd = (command, arg) => {
+    document.execCommand(command, false, arg || null);
+    push();
+    setTimeout(updateActiveFormats, 0);
+  };
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+        <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600 }}>
+          {sectionNumber ? `SECTION ${sectionNumber}` : "SECTION"}
+        </span>
+        {showRemove && (
+          <button onClick={onRemove} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}30`, cursor: "pointer", color: T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 600 }} title="Remove section">
+            <Trash2 size={11} color={T.tertiary} /> Remove
+          </button>
+        )}
+      </div>
+      <input
+        value={subheading || ""}
+        onChange={e => onSubheadingChange && onSubheadingChange(e.target.value)}
+        placeholder="Subheading (optional)..."
+        style={{ width: "100%", padding: "10px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 16, fontWeight: 600, outline: "none", boxSizing: "border-box", marginBottom: 8 }}
+      />
+      {/* Toolbar — paragraph-only, no h1/h2/h3 */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 2, padding: "6px 8px", background: T.charcoal, borderRadius: "8px 8px 0 0", border: `1px solid ${T.charcoal}`, borderBottom: "none" }}>
+        {[
+          { c: "bold", label: "B", st: { fontWeight: 700 } },
+          { c: "italic", label: "I", st: { fontStyle: "italic" } },
+          { c: "underline", label: "U", st: { textDecoration: "underline" } },
+          { c: "strikeThrough", label: "S", st: { textDecoration: "line-through" } },
+        ].map(btn => {
+          const isActive = !!activeFormats[btn.c];
+          return (
+            <button key={btn.c} onMouseDown={(e) => { e.preventDefault(); cmd(btn.c); }} style={{ width: 30, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: isActive ? `${T.copper}30` : "none", border: isActive ? `1px solid ${T.copper}` : `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", ...btn.st, color: isActive ? T.copper : T.white, fontFamily: serif, fontSize: 13 }}>{btn.label}</button>
+          );
+        })}
+        <div style={{ width: 1, height: 20, background: `${T.tertiary}30`, margin: "4px 4px", alignSelf: "center" }} />
+        <button onMouseDown={(e) => { e.preventDefault(); cmd("insertUnorderedList"); }} style={{ width: 30, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: activeFormats.insertUnorderedList ? `${T.copper}30` : "none", border: activeFormats.insertUnorderedList ? `1px solid ${T.copper}` : `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", color: activeFormats.insertUnorderedList ? T.copper : T.white, fontFamily: sans, fontSize: 11 }} title="Bullet list">•≡</button>
+        <button onMouseDown={(e) => { e.preventDefault(); cmd("insertOrderedList"); }} style={{ width: 30, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: activeFormats.insertOrderedList ? `${T.copper}30` : "none", border: activeFormats.insertOrderedList ? `1px solid ${T.copper}` : `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", color: activeFormats.insertOrderedList ? T.copper : T.white, fontFamily: sans, fontSize: 11 }} title="Numbered list">1.</button>
+        <button onMouseDown={(e) => {
+          e.preventDefault();
+          const selection = window.getSelection();
+          if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
+          savedRange.current = selection.getRangeAt(0).cloneRange();
+          setLinkInputOpen(true);
+          setLinkUrl("");
+        }} style={{ width: 30, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: linkInputOpen ? `${T.copper}30` : "none", border: linkInputOpen ? `1px solid ${T.copper}` : `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", color: T.copper, fontFamily: sans, fontSize: 11, textDecoration: "underline" }} title="Insert link">🔗</button>
+        <div style={{ width: 1, height: 20, background: `${T.tertiary}30`, margin: "4px 4px", alignSelf: "center" }} />
+        <button onMouseDown={(e) => {
+          e.preventDefault();
+          const selection = window.getSelection();
+          if (selection && selection.rangeCount > 0) savedRange.current = selection.getRangeAt(0).cloneRange();
+          const fileInput = document.createElement("input");
+          fileInput.type = "file";
+          fileInput.accept = "image/*";
+          fileInput.multiple = true;
+          fileInput.onchange = (ev) => {
+            const files = Array.from(ev.target.files || []);
+            files.forEach(file => {
+              const reader = new FileReader();
+              reader.onload = (re) => {
+                if (!bodyRef.current) return;
+                bodyRef.current.focus();
+                const sel = window.getSelection();
+                if (savedRange.current) { sel.removeAllRanges(); sel.addRange(savedRange.current); }
+                // Insert inline. Alt is left blank — it gets generated at
+                // submit time via processForumBodyImages.
+                document.execCommand("insertHTML", false, `<div style="margin:8px 0"><img src="${re.target.result}" style="max-width:100%;border-radius:8px;display:block" /></div>`);
+                push();
+                const newSel = window.getSelection();
+                if (newSel.rangeCount > 0) savedRange.current = newSel.getRangeAt(0).cloneRange();
+              };
+              reader.readAsDataURL(file);
+            });
+          };
+          fileInput.click();
+        }} style={{ width: 30, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", color: T.copper, fontFamily: sans, fontSize: 13 }} title="Insert image">📷</button>
+      </div>
+      {linkInputOpen && (
+        <div style={{ display: "flex", gap: 6, padding: "8px 10px", background: T.darkBg, border: `1px solid ${T.copper}`, borderBottom: "none" }}>
+          <input autoFocus value={linkUrl} onChange={e => setLinkUrl(e.target.value)} onKeyDown={e => {
+            if (e.key === "Enter" && linkUrl.trim()) {
+              e.preventDefault();
+              const sel = window.getSelection();
+              if (savedRange.current) { sel.removeAllRanges(); sel.addRange(savedRange.current); }
+              document.execCommand("createLink", false, linkUrl.trim().startsWith("http") ? linkUrl.trim() : "https://" + linkUrl.trim());
+              push();
+              setLinkInputOpen(false); setLinkUrl(""); savedRange.current = null;
+            } else if (e.key === "Escape") { setLinkInputOpen(false); setLinkUrl(""); savedRange.current = null; }
+          }} placeholder="Paste URL and press Enter..." style={{ flex: 1, padding: "6px 10px", borderRadius: 6, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 12, outline: "none" }} />
+          <button onClick={() => { setLinkInputOpen(false); setLinkUrl(""); savedRange.current = null; }} style={{ padding: "6px 8px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}40`, cursor: "pointer" }}>
+            <X size={12} color={T.tertiary} />
+          </button>
+        </div>
+      )}
+      <div
+        ref={bodyRef}
+        contentEditable
+        onInput={() => { push(); updateActiveFormats(); }}
+        onKeyUp={updateActiveFormats}
+        onMouseUp={updateActiveFormats}
+        onSelect={updateActiveFormats}
+        onFocus={updateActiveFormats}
+        onPaste={(e) => { e.preventDefault(); const text = e.clipboardData.getData("text/html") || e.clipboardData.getData("text/plain"); document.execCommand("insertHTML", false, text); push(); }}
+        data-placeholder={placeholder || "Share your knowledge, ask a question, or start a discussion..."}
+        style={{ width: "100%", minHeight: 140, padding: "12px 14px", borderRadius: "0 0 8px 8px", background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none", boxSizing: "border-box", lineHeight: 1.6, overflowY: "auto", maxHeight: 360 }}
+      />
+    </div>
+  );
+}
+
+function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onConsumePendingForumSubNav, onAddNotification, onOpenDM, onOpenShareCompose, onOpenShareIntent, onAddFeedPost, threadsBySub, repliesByThread, onAddForumThread, onUpdateForumThread, onDeleteForumThread, onAddForumReply, onDeleteForumReply, onLoadForumReplies, likedForumThreadIds, forumThreadLikeCounts, onToggleForumThreadLike, likedForumReplyIds, forumReplyLikeCounts, onToggleForumReplyLike, onBumpForumThreadView, onAwardPoints, isGuest, onGuestTap, currentUserId, currentUserName, currentUserHandle, currentUserAvatar, isAdmin, isAmbassador, categoriesList, onAddCategory, onUpdateCategory, onDeleteCategory, onAddSubcategory, onUpdateSubcategory, onDeleteSubcategory }) {
+  // Phase 2 brings cats + subs in from the DB-backed `categoriesList` prop.
+  // The brief race window between mount and the first hydrate returning
+  // shows an empty grid; once hydrate completes the grid populates.
+  const cats = categoriesList || [];
   // Uploads forum thread/reply photos to the post-photos bucket via
   // `uploadPostPhotoList`, which also auto-generates SEO alt text via
   // the `generate-alt-text` Edge Function. Returns the photos in the
@@ -5260,6 +5892,60 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
   const [selectedCat, setSelectedCat] = useState(null);
   const [selectedSub, setSelectedSub] = useState(null);
   const [selectedThread, setSelectedThread] = useState(null);
+  // Admin/ambassador CRUD UI state — modals + dropdown menus for categories
+  // and subcategories. `showCatModal` is { mode: "create" | "edit", cat? }
+  // and `showSubModal` is { mode: "create" | "edit", category_id?, sub? }.
+  const [showCatModal, setShowCatModal] = useState(null);
+  const [showSubModal, setShowSubModal] = useState(null);
+  const [catMenuOpen, setCatMenuOpen] = useState(null);
+  const [subMenuOpen, setSubMenuOpen] = useState(null);
+  const FORUM_COLOR_OPTIONS = [
+    { name: "RED", value: T.red },
+    { name: "COPPER", value: T.copper },
+    { name: "GREEN", value: T.green },
+    { name: "TERTIARY", value: T.tertiary },
+    { name: "BLUE", value: "#5B7C99" },
+    { name: "OCHRE", value: "#B4894F" },
+  ];
+  // Icon name → lucide component for the picker + category row renderer.
+  // Keep names lowercase; persisted in forum_categories.icon as a string.
+  const FORUM_ICON_OPTIONS = [
+    { name: "wrench",   Comp: Wrench },
+    { name: "alert",    Comp: AlertTriangle },
+    { name: "mountain", Comp: Mountain },
+    { name: "users",    Comp: Users },
+    { name: "map",      Comp: Map },
+    { name: "tag",      Comp: Tag },
+    { name: "compass",  Comp: Compass },
+    { name: "tent",     Comp: Tent },
+    { name: "flame",    Comp: Flame },
+    { name: "camera",   Comp: Camera },
+    { name: "award",    Comp: Award },
+    { name: "bookopen", Comp: BookOpen },
+  ];
+  const handleDeleteCategory = async (cat) => {
+    if (!cat || !cat.id || !onDeleteCategory) return;
+    if (!confirm(`Delete category "${cat.name}"?`)) return;
+    const res = await onDeleteCategory(cat.id);
+    if (res && res.error) alert(res.error);
+  };
+  const handleDeleteSubcategory = async (sub) => {
+    if (!sub || !sub.id || !onDeleteSubcategory) return;
+    if (!confirm(`Delete subcategory "${sub.name}"?`)) return;
+    const res = await onDeleteSubcategory(sub.id);
+    if (res && res.error) alert(res.error);
+  };
+  // Whether the viewer can create a subcategory in the currently selected
+  // category (used to show the +SUBCATEGORY button in the subs list view).
+  const canCreateSubcategory = !!(isAdmin || isAmbassador);
+  // Whether the viewer can edit/delete a given subcategory (admin = any;
+  // ambassador = own; user = none).
+  const canManageSub = (sub) => {
+    if (!sub) return false;
+    if (isAdmin) return true;
+    if (isAmbassador && sub.created_by && sub.created_by === currentUserId) return true;
+    return false;
+  };
   const [forumReplyText, setForumReplyText] = useState("");
   const [replyPhotos, setReplyPhotos] = useState([]);
   const replyFileRef = React.useRef(null);
@@ -5279,46 +5965,45 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
     });
     e.target.value = "";
   };
-  // userThreads, userReplies, likedForumItems, forumLikeCounts are now lifted to main app as props
+  // threadsBySub/repliesByThread come from root (DB-backed). likedForumItems
+  // and forumLikeCounts remain client-only this pass (persistence is next).
   const [replyToReply, setReplyToReply] = useState(null); // { author, idx } for replying to a specific reply
   const [forumShareMenu, setForumShareMenu] = useState(null); // "thread_id" or "reply_threadId_idx"
 
-  // Live reply count: seed posts + user replies
-  const getReplyCount = (thread) => {
-    const seedCount = (thread.posts || []).length + (thread.replies || 0);
-    const userCount = (userReplies[thread.id] || []).length;
-    return seedCount + userCount;
-  };
+  // Live reply count from the DB-backed repliesByThread map.
+  const getReplyCount = (thread) => ((repliesByThread || {})[thread.id] || []).length;
 
-  // Live view count: base views + tracked views
+  // Live view count — formatted from the persisted view_count on the
+  // thread row. Bumped via `onBumpForumThreadView` (RPC at the root,
+  // ref-deduped per session + skips owner self-views) which optimistically
+  // increments the row in place so the page count updates immediately.
   const getViewCount = (thread) => {
-    const base = typeof thread.views === "string" ? parseFloat(thread.views.replace(/[^0-9.]/g, "")) * (thread.views.includes("K") ? 1000 : 1) : (thread.views || 0);
-    const extra = forumViewCounts[thread.id] || 0;
-    const total = Math.round(base + extra);
-    return total >= 1000 ? (total / 1000).toFixed(1).replace(/\.0$/, "") + "K" : String(total);
+    const total = typeof thread.views === "number" ? thread.views : (typeof thread.views === "string" ? parseFloat(thread.views.replace(/[^0-9.]/g, "")) * (thread.views.includes("K") ? 1000 : 1) : 0);
+    const n = Math.round(total || 0);
+    return n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, "") + "K" : String(n);
   };
 
-  // Increment view count when opening a thread
+  // Increment view count when opening a thread — delegates to the RPC.
   const trackView = (threadId) => {
-    setForumViewCounts(prev => ({ ...prev, [threadId]: (prev[threadId] || 0) + 1 }));
+    if (onBumpForumThreadView) onBumpForumThreadView(threadId);
   };
 
-  // Deep-link: open a specific thread when navigated from feed
+  // Deep-link: open a specific thread when navigated from feed.
   useEffect(() => {
     if (!pendingThread) return;
     const { threadId, catName, subName } = pendingThread;
-    for (const cat of forumData.categories) {
+    for (const cat of cats) {
       if (cat.name !== catName) continue;
       for (const sub of cat.subs) {
         if (sub.name !== subName) continue;
-        // Search both static threads and user-created threads
-        const allThreads = [...(forumData.threads[sub.name] || []), ...(userThreads[sub.name] || [])];
+        const allThreads = (threadsBySub || {})[sub.name] || [];
         const thread = allThreads.find(t => t.id === threadId);
         if (thread) {
           setSelectedCat(cat);
           setSelectedSub(sub);
           setSelectedThread(thread);
           setView("thread");
+          if (onLoadForumReplies) onLoadForumReplies(thread.id);
           trackView(thread.id);
           onPendingHandled && onPendingHandled();
           return;
@@ -5326,54 +6011,147 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
       }
     }
     onPendingHandled && onPendingHandled();
-  }, [pendingThread]);
-  // Edit thread state
+  }, [pendingThread, threadsBySub]);
+  // Subcategory landing deep-link — `/forum/<sub-slug>` lands here. Walk
+  // forumData.categories to find the matching cat/sub display objects and
+  // jump straight into the threads list for that subcategory.
+  useEffect(() => {
+    if (!pendingForumSubNav) return;
+    const subSlug = pendingForumSubNav;
+    for (const cat of cats) {
+      for (const sub of cat.subs) {
+        if (forumSlugify(sub.name) === subSlug) {
+          setSelectedCat(cat);
+          setSelectedSub(sub);
+          setView("threads");
+          onConsumePendingForumSubNav && onConsumePendingForumSubNav();
+          return;
+        }
+      }
+    }
+    // Unknown slug — clear pending so we don't loop.
+    onConsumePendingForumSubNav && onConsumePendingForumSubNav();
+  }, [pendingForumSubNav]);
+  // Keep the URL bar in sync with the open thread: /forum/<sub-slug>/<thread-slug>
+  // when a thread is open, "/" otherwise. Skips the very first mount if the URL
+  // already matches so we don't insert a duplicate history entry on a deep-link
+  // load. Browser back fires popstate which closes the detail view + restores
+  // the previous view state.
+  const forumUrlBootstrapped = useRef(false);
+  useEffect(() => {
+    try {
+      // Thread detail page = canonical 2-segment URL.
+      if (view === "thread" && selectedThread && selectedSub) {
+        const subSlug = forumSlugify(selectedSub.name);
+        const threadSlug = selectedThread.slug || slugifyForumTitle(selectedThread.title || "");
+        const target = `/forum/${subSlug}/${threadSlug}`;
+        if (window.location.pathname !== target) {
+          if (forumUrlBootstrapped.current) window.history.pushState({ forumSlug: threadSlug }, "", target);
+          else window.history.replaceState({ forumSlug: threadSlug }, "", target);
+        }
+        forumUrlBootstrapped.current = true;
+        return;
+      }
+      // Subcategory threads list = 1-segment URL `/forum/<sub-slug>`.
+      // This is the SEO landing page per topical cluster; URL stays put
+      // when the user is browsing threads in a subcategory.
+      if (view === "threads" && selectedSub) {
+        const subSlug = forumSlugify(selectedSub.name);
+        const target = `/forum/${subSlug}`;
+        if (window.location.pathname !== target) {
+          if (forumUrlBootstrapped.current) window.history.pushState({ forumSub: subSlug }, "", target);
+          else window.history.replaceState({ forumSub: subSlug }, "", target);
+        }
+        forumUrlBootstrapped.current = true;
+        return;
+      }
+      // Any other view (categories / newThread / etc.) clears back to `/`.
+      if (forumUrlBootstrapped.current && window.location.pathname !== "/") {
+        window.history.pushState(null, "", "/");
+      }
+    } catch (e) { /* ignore */ }
+  }, [view, selectedThread, selectedSub]);
+  useEffect(() => {
+    const onPop = () => {
+      const path = window.location.pathname || "";
+      // 2-segment thread URL.
+      const m2 = path.match(/^\/forum\/([^/]+)\/([^/]+)\/?$/);
+      if (m2) {
+        const subInfo = FORUM_SUB_BY_SLUG[m2[1]];
+        if (subInfo) {
+          const sub = cats.flatMap(c => c.subs.map(s => ({ s, c }))).find(({ s }) => s.name === subInfo.name);
+          if (sub) {
+            const list = (threadsBySub || {})[subInfo.name] || [];
+            const t = list.find(x => x.slug === m2[2]);
+            if (t) {
+              setSelectedCat(sub.c);
+              setSelectedSub(sub.s);
+              setSelectedThread(t);
+              setView("thread");
+              if (onLoadForumReplies) onLoadForumReplies(t.id);
+              return;
+            }
+          }
+        }
+      }
+      // 1-segment subcategory URL.
+      const m1 = path.match(/^\/forum\/([^/]+)\/?$/);
+      if (m1) {
+        const subInfo = FORUM_SUB_BY_SLUG[m1[1]];
+        if (subInfo) {
+          const sub = cats.flatMap(c => c.subs.map(s => ({ s, c }))).find(({ s }) => s.name === subInfo.name);
+          if (sub) {
+            setSelectedCat(sub.c);
+            setSelectedSub(sub.s);
+            setSelectedThread(null);
+            setView("threads");
+            return;
+          }
+        }
+      }
+      // No matching forum URL → close detail / step back through the stack.
+      if (view === "thread") setView(selectedSub ? "threads" : "categories");
+      else if (view === "threads") setView("categories");
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [view, selectedSub, threadsBySub]);
+  // Edit thread state — mirrors the new-thread form's section shape.
   const [editingThreadId, setEditingThreadId] = useState(null);
   const [editTitle, setEditTitle] = useState("");
-  const [editBody, setEditBody] = useState("");
-  const editBodyRef = useRef(null);
+  const [editSections, setEditSections] = useState([]);
   const [editPhotos, setEditPhotos] = useState([]);
-  const [editActiveFormats, setEditActiveFormats] = useState({});
-  const editSavedRange = useRef(null);
-  const editInitialized = useRef(null);
-  const [editLinkInput, setEditLinkInput] = useState(false);
-  const [editLinkUrl, setEditLinkUrl] = useState("");
-  const updateEditFormats = () => {
-    const fb = (document.queryCommandValue("formatBlock") || "").toLowerCase();
-    setEditActiveFormats({
-      bold: document.queryCommandState("bold"),
-      italic: document.queryCommandState("italic"),
-      underline: document.queryCommandState("underline"),
-      strikeThrough: document.queryCommandState("strikeThrough"),
-      insertUnorderedList: document.queryCommandState("insertUnorderedList"),
-      insertOrderedList: document.queryCommandState("insertOrderedList"),
-      h1: fb === "h1", h2: fb === "h2", h3: fb === "h3",
-      p: fb === "p" || fb === "" || fb === "div",
-    });
+  // Delete confirmation — gated behind a two-step confirm inside the edit
+  // form so destructive action requires explicit intent.
+  const [editDeleteConfirm, setEditDeleteConfirm] = useState(false);
+  // Populate editing state from a live thread row. Prefers structured
+  // sections; if the row only has legacy `body`, drop it into a single
+  // section so users can still edit existing pre-sections threads.
+  const beginEditThread = (thread) => {
+    if (!thread) return;
+    setEditingThreadId(thread.id);
+    setEditTitle(thread.title || "");
+    const fromSections = Array.isArray(thread.sections) && thread.sections.length > 0
+      ? thread.sections.map(s => ({ id: newSectionId(), subheading: s.subheading || "", body: s.body || "" }))
+      : [{ id: newSectionId(), subheading: "", body: thread.body || "" }];
+    setEditSections(fromSections);
+    setEditPhotos(thread.photos ? thread.photos.map((u, i) => ({ url: u.url || u, id: i, type: u.type || "image", caption: u.caption || "", alt: u.alt || "" })) : []);
+    setEditDeleteConfirm(false);
   };
+  const updateEditSection = (id, patch) => setEditSections(prev => prev.map(s => s.id === id ? { ...s, ...patch } : s));
+  const addEditSection = () => setEditSections(prev => [...prev, { id: newSectionId(), subheading: "", body: "" }]);
+  const removeEditSection = (id) => setEditSections(prev => prev.length > 1 ? prev.filter(s => s.id !== id) : prev);
   // New thread form state
   const [ntTitle, setNtTitle] = useState("");
-  const [ntBody, setNtBody] = useState(""); // stores HTML
-  const ntBodyRef = useRef(null);
-  const [ntLinkInput, setNtLinkInput] = useState(false);
-  const [ntLinkUrl, setNtLinkUrl] = useState("");
-  const ntSavedRange = useRef(null);
-  const [ntActiveFormats, setNtActiveFormats] = useState({}); // { bold: true, italic: true, ... }
-  const updateActiveFormats = () => {
-    const fb = (document.queryCommandValue("formatBlock") || "").toLowerCase();
-    setNtActiveFormats({
-      bold: document.queryCommandState("bold"),
-      italic: document.queryCommandState("italic"),
-      underline: document.queryCommandState("underline"),
-      strikeThrough: document.queryCommandState("strikeThrough"),
-      insertUnorderedList: document.queryCommandState("insertUnorderedList"),
-      insertOrderedList: document.queryCommandState("insertOrderedList"),
-      h1: fb === "h1",
-      h2: fb === "h2",
-      h3: fb === "h3",
-      p: fb === "p" || fb === "" || fb === "div",
-    });
-  };
+  // Sections array drives the multi-section editor. Each section is
+  // { id, subheading, body (html) }. The first section is always present
+  // (cannot be removed). Title becomes <h1> and each subheading becomes
+  // <h2> in the published article — locked-down heading hierarchy for SEO.
+  const newSectionId = () => "sec_" + Math.random().toString(36).slice(2, 8);
+  const [ntSections, setNtSections] = useState([{ id: newSectionId(), subheading: "", body: "" }]);
+  const updateSection = (id, patch) => setNtSections(prev => prev.map(s => s.id === id ? { ...s, ...patch } : s));
+  const addSection = () => setNtSections(prev => [...prev, { id: newSectionId(), subheading: "", body: "" }]);
+  const removeSection = (id) => setNtSections(prev => prev.length > 1 ? prev.filter(s => s.id !== id) : prev);
   const [ntShareToFeed, setNtShareToFeed] = useState(true);
   const [ntPhotos, setNtPhotos] = useState([]);
   const [ntPickCat, setNtPickCat] = useState(null); // for category picker in new thread from home
@@ -5386,9 +6164,9 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
 
   const allThreadsFlat = (() => {
     const results = [];
-    forumData.categories.forEach(cat => {
+    cats.forEach(cat => {
       cat.subs.forEach(sub => {
-        (forumData.threads[sub.name] || []).forEach(t => {
+        ((threadsBySub || {})[sub.name] || []).forEach(t => {
           results.push({ ...t, catName: cat.name, subName: sub.name, cat, sub });
         });
       });
@@ -5399,17 +6177,23 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
   const searchResults = searchQuery.trim().length > 0 ? (() => {
     const q = searchQuery.trim().toLowerCase();
     return allThreadsFlat.filter(t => {
-      if (t.title.toLowerCase().includes(q)) return true;
+      if ((t.title || "").toLowerCase().includes(q)) return true;
       if (t.body && t.body.toLowerCase().includes(q)) return true;
-      if (t.author.toLowerCase().includes(q)) return true;
-      if (t.posts && t.posts.some(p => p.author.toLowerCase().includes(q) || p.body.toLowerCase().includes(q))) return true;
+      if ((t.author || t.user || "").toLowerCase().includes(q)) return true;
+      const replies = (repliesByThread || {})[t.id] || [];
+      if (replies.some(r => (r.author || "").toLowerCase().includes(q) || (r.body || "").toLowerCase().includes(q))) return true;
       return false;
     });
   })() : [];
 
   const openCategory = (cat) => { setSelectedCat(cat); setView("subcategories"); };
   const openSubcategory = (sub) => { setSelectedSub(sub); setView("threads"); };
-  const openThread = (thread) => { setSelectedThread(thread); setView("thread"); trackView(thread.id); };
+  const openThread = (thread) => {
+    setSelectedThread(thread);
+    setView("thread");
+    if (onLoadForumReplies) onLoadForumReplies(thread.id);
+    trackView(thread.id);
+  };
 
   const openNewThreadFromHome = () => {
     if (isGuest) { onGuestTap && onGuestTap(); return; }
@@ -5417,7 +6201,7 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
     setNtPickCat(null);
     setNtPickSub(null);
     setNtTitle("");
-    setNtBody("");
+    setNtSections([{ id: newSectionId(), subheading: "", body: "" }]);
     setNtPhotos([]);
     setNtShareToFeed(true);
     setView("newThread");
@@ -5429,7 +6213,7 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
     setNtPickCat(selectedCat);
     setNtPickSub(selectedSub);
     setNtTitle("");
-    setNtBody("");
+    setNtSections([{ id: newSectionId(), subheading: "", body: "" }]);
     setNtPhotos([]);
     setNtShareToFeed(true);
     setView("newThread");
@@ -5449,73 +6233,86 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
     const submitThread = async () => {
       if (!ntTitle.trim()) return;
       if (ntFromHome && (!ntPickCat || !ntPickSub)) return;
-      const subName = (activeSub || {}).name;
-      // Upload photos + generate alt text up front so the thread payload
-      // carries public URLs + alt (rather than data: blobs).
+      if (!onAddForumThread) return; // guest / not signed in
+      const cat = activeCat || ntPickCat;
+      const sub = activeSub || ntPickSub;
+      const subName = sub.name;
+      const catName = cat.name;
+      const titleText = ntTitle.trim();
+      // Upload the hero photo + generate alt text up front so the thread
+      // payload carries public URLs + alt (rather than data: blobs).
       const photoPayload = await commitForumPhotos(ntPhotos);
-      const newThread = {
-        id: Date.now(),
-        title: ntTitle.trim(),
-        body: (() => { const html = ntBodyRef.current ? ntBodyRef.current.innerHTML : ntBody; console.log("[TRAILHEAD DEBUG] Submitting body HTML:", html); return (html && html.replace(/<[^>]+>/g, "").trim()) ? html : null; })(),
-        replies: 0,
-        views: "0",
-        author: "KyleLPO",
-        initial: "K",
-        time: Date.now(),
-        pinned: false,
-        posts: [],
-        ...(photoPayload.length > 0 ? { photos: photoPayload } : {}),
-      };
-      setUserThreads(prev => ({
-        ...prev,
-        [subName]: [newThread, ...(prev[subName] || [])],
-      }));
-      // Auto-share to feed if toggle is on
+      // Walk each section's body HTML and upload inline images via the
+      // same pipeline (uploadPostPhotoList → attachAltTextToPhotos). This
+      // gives every embedded image a real storage URL and Claude-generated
+      // alt text in one shot.
+      const processedSections = [];
+      for (const s of ntSections) {
+        const subheading = (s.subheading || "").trim();
+        const rawBody = (s.body || "").trim();
+        const processedBody = await processForumBodyImages(rawBody, currentUserId);
+        // Skip totally empty sections (no subheading + no plain-text body).
+        const plain = processedBody.replace(/<[^>]+>/g, "").trim();
+        if (!subheading && !plain) continue;
+        processedSections.push({ subheading, body: processedBody });
+      }
+      // Build the legacy `body` column = concatenated section HTML so old
+      // renderers + the OG description excerpt + full-text search keep
+      // working without needing to assemble from sections.
+      const bodyHtml = assembleSectionsHtml(processedSections) || null;
+      const created = await onAddForumThread({
+        title: titleText,
+        body: bodyHtml,
+        sections: processedSections,
+        photos: photoPayload,
+        categoryName: catName,
+        subcategoryName: subName,
+      });
+      if (!created) return;
+      // Auto-share to feed if toggle is on. Uses the live current user info,
+      // not a hardcoded handle.
       if (ntShareToFeed && onAddFeedPost) {
-        const catName = (activeCat || ntPickCat || {}).name || "";
         onAddFeedPost({
           id: Date.now() + 1,
           type: "FORUM",
-          user: "KyleLPO",
-          initial: "K",
-          title: newThread.title,
+          user: currentUserName || "You",
+          initial: (currentUserName || "Y").charAt(0).toUpperCase(),
+          title: created.title,
           body: null,
-          ...(newThread.photos && newThread.photos.length > 0 ? { image: (newThread.photos[0].url || newThread.photos[0]) } : {}),
+          ...(created.photos && created.photos.length > 0 ? { image: (created.photos[0].url || created.photos[0]) } : {}),
           time: Date.now(),
           likes: 0,
           comments: 0,
           replies: 0,
           views: "0",
-          threadId: newThread.id,
+          threadId: created.id,
           forumCat: catName,
           forumSub: subName,
         });
       }
-      // Send mention notifications
-      const plainBody = ntBody.replace(/<[^>]+>/g, " ");
-      const mentions = extractMentions(ntTitle + " " + plainBody);
+      // Send mention notifications across title + all section bodies.
+      const plainText = titleText + " " + processedSections.map(s => `${s.subheading} ${(s.body || "").replace(/<[^>]+>/g, " ")}`).join(" ");
+      const mentions = extractMentions(plainText);
       mentions.forEach(handle => {
-        if (handle !== "KyleLPO") {
-          onAddNotification && onAddNotification({ type: "mention", user: "KyleLPO", text: "mentioned you in a forum thread", target: ntTitle.trim(), icon: AtSign, iconColor: T.copper });
+        if (handle !== currentUserHandle) {
+          onAddNotification && onAddNotification({ type: "mention", user: currentUserName || "You", text: "mentioned you in a forum thread", target: titleText, icon: AtSign, iconColor: T.copper });
         }
       });
-      // Award points for forum thread
       onAwardPoints && onAwardPoints(25, "Forum Thread");
       if (ntPhotos.length > 0) onAwardPoints && onAwardPoints(5 * ntPhotos.length, "Photos Uploaded");
       setNtTitle("");
-      setNtBody("");
-      if (ntBodyRef.current) ntBodyRef.current.innerHTML = "";
+      setNtSections([{ id: newSectionId(), subheading: "", body: "" }]);
       setNtPhotos([]);
       setNtShareToFeed(true);
       if (ntFromHome) {
-        setSelectedCat(activeCat);
-        setSelectedSub(activeSub);
+        setSelectedCat(cat);
+        setSelectedSub(sub);
         setView("threads");
       } else {
         setView("threads");
       }
     };
-    const canPost = ntTitle.trim() && (!ntFromHome || (ntPickCat && ntPickSub));
+    const canPost = ntTitle.trim() && ntSections.some(s => (s.subheading || "").trim() || (s.body || "").replace(/<[^>]+>/g, "").trim()) && (!ntFromHome || (ntPickCat && ntPickSub));
     return (
       <div style={{ padding: "0 0 16px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px" }}>
@@ -5535,12 +6332,12 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
               <div style={{ marginBottom: 16 }}>
                 <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>CATEGORY *</span>
                 <select value={ntPickCat ? ntPickCat.name : ""} onChange={e => {
-                  const cat = forumData.categories.find(c => c.name === e.target.value);
+                  const cat = cats.find(c => c.name === e.target.value);
                   setNtPickCat(cat || null);
                   setNtPickSub(null);
                 }} style={{ width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, outline: "none", boxSizing: "border-box", appearance: "none", WebkitAppearance: "none", backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238B7D6B' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 14px center" }}>
                   <option value="" disabled style={{ color: T.tertiary }}>Select category...</option>
-                  {forumData.categories.map(cat => (
+                  {cats.map(cat => (
                     <option key={cat.name} value={cat.name} style={{ background: T.darkCard, color: T.white }}>{cat.name}</option>
                   ))}
                 </select>
@@ -5564,185 +6361,44 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
             <input value={ntTitle} onChange={e => setNtTitle(e.target.value)} placeholder="Thread title..." style={{ width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none", boxSizing: "border-box" }} />
           </div>
 
-          <div style={{ marginBottom: 16 }}>
-            <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>BODY</span>
-            {/* Rich text toolbar */}
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 2, padding: "6px 8px", background: T.charcoal, borderRadius: "8px 8px 0 0", border: `1px solid ${T.charcoal}`, borderBottom: "none" }}>
-              {[
-                { cmd: "bold", label: "B", style: { fontWeight: 700 } },
-                { cmd: "italic", label: "I", style: { fontStyle: "italic" } },
-                { cmd: "underline", label: "U", style: { textDecoration: "underline" } },
-                { cmd: "strikeThrough", label: "S", style: { textDecoration: "line-through" } },
-              ].map(btn => {
-                const isActive = ntActiveFormats[btn.cmd];
-                return (
-                <button key={btn.cmd} onMouseDown={(e) => { e.preventDefault(); document.execCommand(btn.cmd, false, null); ntBodyRef.current && setNtBody(ntBodyRef.current.innerHTML); setTimeout(updateActiveFormats, 0); }} style={{ width: 30, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: isActive ? `${T.copper}30` : "none", border: isActive ? `1px solid ${T.copper}` : `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", ...btn.style, color: isActive ? T.copper : T.white, fontFamily: serif, fontSize: 13, transition: "all 0.15s" }}>
-                  {btn.label}
-                </button>
-                );
-              })}
-              <div style={{ width: 1, height: 20, background: `${T.tertiary}30`, margin: "4px 4px", alignSelf: "center" }} />
-              {[
-                { cmd: "formatBlock", arg: "<h1>", label: "H1", key: "h1" },
-                { cmd: "formatBlock", arg: "<h2>", label: "H2", key: "h2" },
-                { cmd: "formatBlock", arg: "<h3>", label: "H3", key: "h3" },
-                { cmd: "formatBlock", arg: "<p>", label: "P", key: "p" },
-              ].map(btn => {
-                const isActive = ntActiveFormats[btn.key];
-                return (
-                <button key={btn.label} onMouseDown={(e) => { e.preventDefault(); document.execCommand(btn.cmd, false, btn.arg); ntBodyRef.current && setNtBody(ntBodyRef.current.innerHTML); setTimeout(updateActiveFormats, 0); }} style={{ minWidth: 28, height: 28, padding: "0 6px", display: "flex", alignItems: "center", justifyContent: "center", background: isActive ? `${T.copper}30` : "none", border: isActive ? `1px solid ${T.copper}` : `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", color: isActive ? T.copper : T.white, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.3, transition: "all 0.15s" }}>
-                  {btn.label}
-                </button>
-                );
-              })}
-              <div style={{ width: 1, height: 20, background: `${T.tertiary}30`, margin: "4px 4px", alignSelf: "center" }} />
-              {(() => { const ulActive = ntActiveFormats.insertUnorderedList; return (
-              <button onMouseDown={(e) => { e.preventDefault(); document.execCommand("insertUnorderedList", false, null); ntBodyRef.current && setNtBody(ntBodyRef.current.innerHTML); setTimeout(updateActiveFormats, 0); }} style={{ width: 30, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: ulActive ? `${T.copper}30` : "none", border: ulActive ? `1px solid ${T.copper}` : `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", color: ulActive ? T.copper : T.white, fontFamily: sans, fontSize: 11, transition: "all 0.15s" }} title="Bullet list">
-                •≡
-              </button>
-              ); })()}
-              {(() => { const olActive = ntActiveFormats.insertOrderedList; return (
-              <button onMouseDown={(e) => { e.preventDefault(); document.execCommand("insertOrderedList", false, null); ntBodyRef.current && setNtBody(ntBodyRef.current.innerHTML); setTimeout(updateActiveFormats, 0); }} style={{ width: 30, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: olActive ? `${T.copper}30` : "none", border: olActive ? `1px solid ${T.copper}` : `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", color: olActive ? T.copper : T.white, fontFamily: sans, fontSize: 11, transition: "all 0.15s" }} title="Numbered list">
-                1.
-              </button>
-              ); })()}
-              {(() => {
-                // Detect if selection is highlighted by checking backColor
-                const sel = window.getSelection && window.getSelection();
-                let isHighlighted = false;
-                if (sel && sel.rangeCount > 0 && sel.anchorNode) {
-                  let node = sel.anchorNode.nodeType === 3 ? sel.anchorNode.parentElement : sel.anchorNode;
-                  while (node && node !== ntBodyRef.current) {
-                    const bg = node.style && node.style.backgroundColor;
-                    if (bg && bg !== "transparent" && bg !== "rgba(0, 0, 0, 0)" && bg !== "") { isHighlighted = true; break; }
-                    node = node.parentElement;
-                  }
-                }
-                return (
-                <button onMouseDown={(e) => {
-                  e.preventDefault();
-                  if (isHighlighted) {
-                    document.execCommand("hiliteColor", false, "transparent");
-                  } else {
-                    document.execCommand("hiliteColor", false, "#C49A6C40");
-                  }
-                  ntBodyRef.current && setNtBody(ntBodyRef.current.innerHTML);
-                }} style={{ width: 30, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: isHighlighted ? `${T.copper}60` : `${T.copper}20`, border: isHighlighted ? `1px solid ${T.copper}` : `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", color: T.copper, fontFamily: sans, fontSize: 10, fontWeight: 700, transition: "all 0.15s" }} title={isHighlighted ? "Remove highlight" : "Highlight"}>
-                  Hi
-                </button>
-                );
-              })()}
-              <button onMouseDown={(e) => {
-                e.preventDefault();
-                const selection = window.getSelection();
-                if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
-                ntSavedRange.current = selection.getRangeAt(0).cloneRange();
-                setNtLinkInput(true);
-                setNtLinkUrl("");
-              }} style={{ width: 30, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: ntLinkInput ? `${T.copper}30` : "none", border: ntLinkInput ? `1px solid ${T.copper}` : `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", color: T.copper, fontFamily: sans, fontSize: 11, textDecoration: "underline", transition: "all 0.15s" }} title="Insert link">
-                🔗
-              </button>
-              <div style={{ width: 1, height: 20, background: `${T.tertiary}30`, margin: "4px 4px", alignSelf: "center" }} />
-              <button onMouseDown={(e) => {
-                e.preventDefault();
-                // Save cursor position before file dialog
-                const selection = window.getSelection();
-                if (selection && selection.rangeCount > 0) {
-                  ntSavedRange.current = selection.getRangeAt(0).cloneRange();
-                }
-                const fileInput = document.createElement("input");
-                fileInput.type = "file";
-                fileInput.accept = "image/*";
-                fileInput.multiple = true;
-                fileInput.onchange = (ev) => {
-                  const files = Array.from(ev.target.files || []);
-                  files.forEach(file => {
-                    const reader = new FileReader();
-                    reader.onload = (re) => {
-                      if (ntBodyRef.current) {
-                        ntBodyRef.current.focus();
-                        // Restore cursor position
-                        const sel = window.getSelection();
-                        if (ntSavedRange.current) { sel.removeAllRanges(); sel.addRange(ntSavedRange.current); }
-                        document.execCommand("insertHTML", false, `<div style="margin:8px 0"><img src="${re.target.result}" style="max-width:100%;border-radius:8px;display:block" /></div>`);
-                        setNtBody(ntBodyRef.current.innerHTML);
-                        // Move cursor after the inserted image
-                        const newSel = window.getSelection();
-                        if (newSel.rangeCount > 0) {
-                          ntSavedRange.current = newSel.getRangeAt(0).cloneRange();
-                        }
-                      }
-                    };
-                    reader.readAsDataURL(file);
-                  });
-                };
-                fileInput.click();
-              }} style={{ width: 30, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", color: T.copper, fontFamily: sans, fontSize: 13, transition: "all 0.15s" }} title="Insert image">
-                📷
-              </button>
-            </div>
-            {/* Link URL input */}
-            {ntLinkInput && (
-              <div style={{ display: "flex", gap: 6, padding: "8px 10px", background: T.darkBg, border: `1px solid ${T.copper}`, borderBottom: "none" }}>
-                <input autoFocus value={ntLinkUrl} onChange={e => setNtLinkUrl(e.target.value)} onKeyDown={e => {
-                  if (e.key === "Enter" && ntLinkUrl.trim()) {
-                    e.preventDefault();
-                    const sel = window.getSelection();
-                    if (ntSavedRange.current) { sel.removeAllRanges(); sel.addRange(ntSavedRange.current); }
-                    document.execCommand("createLink", false, ntLinkUrl.trim().startsWith("http") ? ntLinkUrl.trim() : "https://" + ntLinkUrl.trim());
-                    ntBodyRef.current && setNtBody(ntBodyRef.current.innerHTML);
-                    setNtLinkInput(false); setNtLinkUrl(""); ntSavedRange.current = null;
-                  } else if (e.key === "Escape") { setNtLinkInput(false); setNtLinkUrl(""); ntSavedRange.current = null; }
-                }} placeholder="Paste URL and press Enter..." style={{ flex: 1, padding: "6px 10px", borderRadius: 6, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 12, outline: "none" }} />
-                <button onClick={() => {
-                  if (ntLinkUrl.trim()) {
-                    const sel = window.getSelection();
-                    if (ntSavedRange.current) { sel.removeAllRanges(); sel.addRange(ntSavedRange.current); }
-                    document.execCommand("createLink", false, ntLinkUrl.trim().startsWith("http") ? ntLinkUrl.trim() : "https://" + ntLinkUrl.trim());
-                    ntBodyRef.current && setNtBody(ntBodyRef.current.innerHTML);
-                  }
-                  setNtLinkInput(false); setNtLinkUrl(""); ntSavedRange.current = null;
-                }} style={{ padding: "6px 12px", borderRadius: 6, background: T.copper, border: "none", cursor: "pointer" }}>
-                  <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>Add</span>
-                </button>
-                <button onClick={() => { setNtLinkInput(false); setNtLinkUrl(""); ntSavedRange.current = null; }} style={{ padding: "6px 8px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}40`, cursor: "pointer" }}>
-                  <X size={12} color={T.tertiary} />
-                </button>
-              </div>
-            )}
-            {/* Editable body */}
-            <div
-              ref={ntBodyRef}
-              contentEditable
-              onInput={() => { ntBodyRef.current && setNtBody(ntBodyRef.current.innerHTML); updateActiveFormats(); }}
-              onKeyUp={updateActiveFormats}
-              onMouseUp={updateActiveFormats}
-              onSelect={updateActiveFormats}
-              onFocus={updateActiveFormats}
-              onPaste={(e) => { e.preventDefault(); const text = e.clipboardData.getData("text/html") || e.clipboardData.getData("text/plain"); document.execCommand("insertHTML", false, text); ntBodyRef.current && setNtBody(ntBodyRef.current.innerHTML); }}
-              data-placeholder="Share your knowledge, ask a question, or start a discussion..."
-              style={{ width: "100%", minHeight: 140, padding: "12px 14px", borderRadius: "0 0 8px 8px", background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none", boxSizing: "border-box", lineHeight: 1.6, overflowY: "auto", maxHeight: 300, position: "relative" }}
+          {/* Sections — each is { subheading (h2), body (paragraph + inline) }.
+              Title above is the h1. "+ Add Section" appends an empty section. */}
+          {ntSections.map((s, i) => (
+            <ForumSectionEditor
+              key={s.id}
+              sectionNumber={ntSections.length > 1 ? i + 1 : null}
+              subheading={s.subheading}
+              onSubheadingChange={(v) => updateSection(s.id, { subheading: v })}
+              value={s.body}
+              onChange={(v) => updateSection(s.id, { body: v })}
+              showRemove={ntSections.length > 1}
+              onRemove={() => removeSection(s.id)}
+              autoFocusBody={false}
+              placeholder={i === 0
+                ? "Share your knowledge, ask a question, or start a discussion..."
+                : "Continue the discussion..."}
             />
-            <style>{`
-              [contenteditable][data-placeholder]:empty::before {
-                content: attr(data-placeholder);
-                color: ${T.tertiary};
-                opacity: 0.5;
-                pointer-events: none;
-              }
-              [contenteditable] h1 { font-size: 26px !important; font-weight: 700; color: ${T.white}; margin: 10px 0 6px; font-family: ${sans}; line-height: 1.2; }
-              [contenteditable] h2 { font-size: 21px !important; font-weight: 700; color: ${T.white}; margin: 8px 0 4px; font-family: ${sans}; line-height: 1.3; }
-              [contenteditable] h3 { font-size: 17px !important; font-weight: 600; color: ${T.white}; margin: 6px 0 3px; font-family: ${sans}; line-height: 1.3; }
-              [contenteditable] p { margin: 4px 0; font-size: 14px; }
-              [contenteditable] ul { list-style-type: disc !important; padding-left: 24px !important; margin: 6px 0; }
-              [contenteditable] ol { list-style-type: decimal !important; padding-left: 24px !important; margin: 6px 0; }
-              [contenteditable] li { display: list-item !important; margin: 3px 0; list-style-position: outside !important; }
-              [contenteditable] ul li { list-style-type: disc !important; }
-              [contenteditable] ol li { list-style-type: decimal !important; }
-              [contenteditable] a { color: ${T.copper}; text-decoration: underline; }
-              [contenteditable] img { max-width: 100%; border-radius: 8px; display: block; margin: 8px 0; }
-            `}</style>
-          </div>
+          ))}
+          <button onClick={addSection} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", borderRadius: 8, background: "none", border: `1px dashed ${T.copper}60`, cursor: "pointer", marginBottom: 16, color: T.copper, fontFamily: sans, fontSize: 12, fontWeight: 600, letterSpacing: 0.5 }}>
+            <Plus size={14} color={T.copper} />
+            ADD SECTION
+          </button>
+          <style>{`
+            [contenteditable][data-placeholder]:empty::before {
+              content: attr(data-placeholder);
+              color: ${T.tertiary};
+              opacity: 0.5;
+              pointer-events: none;
+            }
+            [contenteditable] p { margin: 4px 0; font-size: 14px; }
+            [contenteditable] ul { list-style-type: disc !important; padding-left: 24px !important; margin: 6px 0; }
+            [contenteditable] ol { list-style-type: decimal !important; padding-left: 24px !important; margin: 6px 0; }
+            [contenteditable] li { display: list-item !important; margin: 3px 0; list-style-position: outside !important; }
+            [contenteditable] ul li { list-style-type: disc !important; }
+            [contenteditable] ol li { list-style-type: decimal !important; }
+            [contenteditable] a { color: ${T.copper}; text-decoration: underline; }
+            [contenteditable] img { max-width: 100%; border-radius: 8px; display: block; margin: 8px 0; }
+          `}</style>
 
           {/* Hero image */}
           <div style={{ marginBottom: 16 }}>
@@ -5788,16 +6444,16 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
 
   // ─── Thread Detail View ───
   if (view === "thread" && selectedThread) {
-    const threadLikeKey = "thread_" + selectedThread.id;
-    const allPosts = [...(selectedThread.posts || []), ...(userReplies[selectedThread.id] || [])];
+    const allPosts = (repliesByThread || {})[selectedThread.id] || [];
 
-    const toggleForumLike = (key, baseLikes) => {
-      const wasLiked = likedForumItems[key];
-      setLikedForumItems(prev => ({ ...prev, [key]: !wasLiked }));
-      setForumLikeCounts(prev => ({ ...prev, [key]: (prev[key] !== undefined ? prev[key] : baseLikes) + (wasLiked ? -1 : 1) }));
+    const toggleThreadHeart = () => {
+      if (isGuest) { onGuestTap && onGuestTap(); return; }
+      if (onToggleForumThreadLike) onToggleForumThreadLike(selectedThread.id);
     };
-
-    const getForumLikes = (key, baseLikes) => forumLikeCounts[key] !== undefined ? forumLikeCounts[key] : baseLikes;
+    const toggleReplyHeart = (replyId) => {
+      if (isGuest) { onGuestTap && onGuestTap(); return; }
+      if (replyId && onToggleForumReplyLike) onToggleForumReplyLike(replyId);
+    };
 
     const shareToFeed = (title, body, author) => {
       // Route through the compose modal so the user can add a caption
@@ -5822,8 +6478,8 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
       const feedPost = {
         id: "forum_share_" + Date.now(),
         type: "FORUM",
-        user: "KyleLPO",
-        initial: "K",
+        user: currentUserName || "You",
+        initial: (currentUserName || "Y").charAt(0).toUpperCase(),
         time: Date.now(),
         title,
         body: null,
@@ -5861,28 +6517,30 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
     const submitReply = async () => {
       if (isGuest) { onGuestTap && onGuestTap(); return; }
       if (!forumReplyText.trim() && replyPhotos.length === 0) return;
+      if (!onAddForumReply) return;
       const photoPayload = await commitForumPhotos(replyPhotos);
-      const newReply = {
-        author: "KyleLPO",
-        initial: "K",
-        body: (replyToReply ? `@${replyToReply.author} ` : "") + forumReplyText.trim(),
-        time: Date.now(),
-        likes: 0,
-        ...(photoPayload.length > 0 ? { photos: photoPayload } : {}),
-        ...(replyToReply ? { replyTo: replyToReply.author, parentIdx: replyToReply.idx } : {}),
-      };
-      setUserReplies(prev => ({
-        ...prev,
-        [selectedThread.id]: [...(prev[selectedThread.id] || []), newReply],
-      }));
+      // Resolve the parent reply id when this is a sub-reply. replyToReply.idx
+      // is the parent's array position in the current allPosts list. We look
+      // up the actual reply object to get its uuid id for the DB FK.
+      let parentReplyId = null;
+      if (replyToReply && typeof replyToReply.idx === "number") {
+        const parentReply = allPosts[replyToReply.idx];
+        if (parentReply && parentReply.id) parentReplyId = parentReply.id;
+      }
+      const body = (replyToReply ? `@${replyToReply.author} ` : "") + forumReplyText.trim();
+      const created = await onAddForumReply(selectedThread.id, {
+        body,
+        photos: photoPayload,
+        parentId: parentReplyId,
+      });
+      if (!created) return;
       const mentions = extractMentions(forumReplyText);
       if (replyToReply && !mentions.includes(replyToReply.author)) mentions.push(replyToReply.author);
       mentions.forEach(handle => {
-        if (handle !== "KyleLPO") {
-          onAddNotification && onAddNotification({ type: "mention", user: "KyleLPO", text: "mentioned you in a forum reply", target: selectedThread.title, icon: AtSign, iconColor: T.copper });
+        if (handle !== currentUserHandle) {
+          onAddNotification && onAddNotification({ type: "mention", user: currentUserName || "You", text: "mentioned you in a forum reply", target: selectedThread.title, icon: AtSign, iconColor: T.copper });
         }
       });
-      // Award points for forum reply
       onAwardPoints && onAwardPoints(10, "Forum Reply");
       if (replyPhotos.length > 0) onAwardPoints && onAwardPoints(5 * replyPhotos.length, "Photos Uploaded");
       setForumReplyText("");
@@ -5891,15 +6549,16 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
     };
 
     const replyActionBar = (post, idx, rootParentIdx) => {
-      const key = "reply_" + selectedThread.id + "_" + idx;
-      const liked = likedForumItems[key];
-      const likes = getForumLikes(key, post.likes || 0);
-      const showShare = forumShareMenu === key;
-      // When replying to a sub-reply, use the root parent so it nests under the same top-level reply
+      // post is a DB row from repliesByThread — has a uuid id.
+      const replyId = post && post.id;
+      const liked = !!(replyId && likedForumReplyIds && likedForumReplyIds[replyId]);
+      const likes = (replyId && forumReplyLikeCounts && forumReplyLikeCounts[replyId]) || 0;
+      const shareKey = "reply_" + (replyId || idx);
+      const showShare = forumShareMenu === shareKey;
       const replyTargetIdx = typeof rootParentIdx === "number" ? rootParentIdx : idx;
       return (
         <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 6 }}>
-          <button onClick={() => toggleForumLike(key, post.likes || 0)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px 4px 0" }}>
+          <button onClick={() => toggleReplyHeart(replyId)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px 4px 0" }}>
             <Heart size={12} color={liked ? T.red : T.tertiary} strokeWidth={1.5} fill={liked ? T.red : "none"} />
             {likes > 0 && <span style={{ fontFamily: sans, fontSize: 10, color: liked ? T.red : T.tertiary }}>{likes}</span>}
           </button>
@@ -5907,17 +6566,26 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
             <MessageCircle size={12} color={T.tertiary} strokeWidth={1.5} />
             <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>Reply</span>
           </button>
-          <button onClick={() => onOpenShareIntent && onOpenShareIntent({ kind: "forum", data: { id: selectedThread.id, threadId: selectedThread.id, title: selectedThread.title, body: post.body, author: post.author, forumCat: selectedCat?.name || "", forumSub: selectedSub?.name || "", image: (selectedThread.photos && selectedThread.photos[0]) || null } })} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px" }}>
+          <button onClick={() => onOpenShareIntent && onOpenShareIntent({ kind: "forum", data: { id: selectedThread.id, threadId: selectedThread.id, title: selectedThread.title, body: post.body, author: post.author, forumCat: selectedCat?.name || "", forumSub: selectedSub?.name || "", subSlug: forumSlugify(selectedSub?.name || ""), slug: selectedThread.slug, image: (selectedThread.photos && selectedThread.photos[0]) || null } })} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px" }}>
             <Share2 size={12} color={T.tertiary} strokeWidth={1.5} />
           </button>
+          {/* Owner OR admin can delete a reply. Server-side RLS enforces. */}
+          {replyId && ((post.userId && currentUserId === post.userId) || isAdmin) && onDeleteForumReply && (
+            <button onClick={() => onDeleteForumReply(selectedThread.id, replyId)} title="Delete reply" style={{ display: "flex", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", padding: "4px 6px" }}>
+              <Trash2 size={12} color={T.tertiary} strokeWidth={1.5} />
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>Delete</span>
+            </button>
+          )}
         </div>
       );
     };
 
-    const threadLiked = likedForumItems[threadLikeKey];
-    const threadLikes = getForumLikes(threadLikeKey, selectedThread.likes || 0);
-    const threadShareOpen = forumShareMenu === threadLikeKey;
-    const isOwnThread = selectedThread.author === "KyleLPO";
+    const threadLiked = !!(likedForumThreadIds && likedForumThreadIds[selectedThread.id]);
+    const threadLikes = (forumThreadLikeCounts && forumThreadLikeCounts[selectedThread.id]) || 0;
+    const threadShareOpen = forumShareMenu === ("thread_" + selectedThread.id);
+    // Owner OR admin can edit/delete. Server-side RLS enforces the same
+    // (admin-override policy on forum_threads update + delete).
+    const isOwnThread = !!(currentUserId && ((selectedThread.userId && currentUserId === selectedThread.userId) || isAdmin));
 
     // Inline CSS for rich body rendering
     const thRbCSS = `<style>
@@ -5957,7 +6625,7 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
             </button>
             {/* Edit button for own threads */}
             {isOwnThread && (
-              <button onClick={() => { setEditingThreadId(selectedThread.id); setEditTitle(selectedThread.title); setEditBody(selectedThread.body || ""); setEditPhotos(selectedThread.photos ? selectedThread.photos.map((u, i) => ({ url: u.url || u, id: i, type: u.type || "image", caption: u.caption || "" })) : []); }} style={{ position: "absolute", top: 14, right: 14, background: "rgba(0,0,0,0.5)", border: "none", cursor: "pointer", padding: 6, borderRadius: "50%", display: "flex", backdropFilter: "blur(4px)" }}>
+              <button onClick={() => { beginEditThread(selectedThread); }} style={{ position: "absolute", top: 14, right: 14, background: "rgba(0,0,0,0.5)", border: "none", cursor: "pointer", padding: 6, borderRadius: "50%", display: "flex", backdropFilter: "blur(4px)" }}>
                 <Edit3 size={16} color={T.white} strokeWidth={1.5} />
               </button>
             )}
@@ -5981,7 +6649,7 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
                 <span style={{ fontFamily: sans, fontSize: 12, color: T.tertiary }}>{selectedSub?.name}</span>
               </div>
               {isOwnThread && (
-                <button onClick={() => { setEditingThreadId(selectedThread.id); setEditTitle(selectedThread.title); setEditBody(selectedThread.body || ""); setEditPhotos(selectedThread.photos ? selectedThread.photos.map((u, i) => ({ url: u.url || u, id: i, type: u.type || "image", caption: u.caption || "" })) : []); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex" }}>
+                <button onClick={() => { beginEditThread(selectedThread); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex" }}>
                   <Edit3 size={16} color={T.tertiary} strokeWidth={1.5} />
                 </button>
               )}
@@ -5995,25 +6663,47 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
           </>
         )}
 
-        {/* Original post body + meta */}
+        {/* Original post body + meta — author byline emphasizes E-E-A-T:
+            real avatar + full name (linked to profile) + @handle + rank badge
+            + publish date. The byline is the primary signal Google reads to
+            attribute expertise/authority to the thread, so it sits prominently
+            above the body. */}
         <div style={{ margin: "0 16px 12px", background: T.darkCard, borderRadius: 12, padding: 16 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-            <div style={{ width: 32, height: 32, borderRadius: "50%", background: T.charcoal, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <span style={{ fontFamily: sans, fontSize: 13, fontWeight: 700, color: T.copper }}>{selectedThread.initial}</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+            <div onClick={() => onViewUser && onViewUser(selectedThread.handle || selectedThread.userId)} style={{ width: 40, height: 40, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0, cursor: "pointer" }}>
+              {selectedThread.avatarUrl
+                ? <img src={txImg(selectedThread.avatarUrl, 96)} alt={selectedThread.user || "Author"} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                : <span style={{ fontFamily: sans, fontSize: 14, fontWeight: 700, color: T.white }}>{selectedThread.initial}</span>}
             </div>
-            <div>
-              <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>@{selectedThread.author}</span>
-                <RankBadgeWithName points={getPoints(selectedThread.author)} size={10} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                <span onClick={() => onViewUser && onViewUser(selectedThread.handle || selectedThread.userId)} style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, cursor: "pointer" }}>{selectedThread.user || "Author"}</span>
+                <RankBadgeWithName points={getPoints(selectedThread.user || selectedThread.author)} size={11} />
               </div>
-              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, display: "block" }}>{formatPostTime(selectedThread.time)}{selectedThread.editedAt ? " · edited" : ""}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
+                {selectedThread.handle && (
+                  <span onClick={() => onViewUser && onViewUser(selectedThread.handle)} style={{ fontFamily: sans, fontSize: 11, color: T.copper, cursor: "pointer" }}>@{selectedThread.handle}</span>
+                )}
+                {selectedThread.handle && <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>·</span>}
+                <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{formatPostTime(selectedThread.time)}{selectedThread.editedAt ? " · edited" : ""}</span>
+              </div>
             </div>
           </div>
-          {selectedThread.body && (
-            <div style={{ fontFamily: serif, fontSize: 14, color: T.warmStone, lineHeight: 1.6, margin: 0 }} dangerouslySetInnerHTML={{ __html: `${thRbCSS}<div class="th-rb">${selectedThread.body}</div>` }} />
-          )}
+          {(() => {
+            // Prefer the structured sections array (post-May-2026 threads).
+            // Renders title-as-h1 implicit (the page header already shows it),
+            // each section's subheading as <h2>, body as the section's HTML
+            // contents. Falls back to the legacy single `body` blob for older
+            // threads that pre-date the multi-section editor.
+            const hasSections = Array.isArray(selectedThread.sections) && selectedThread.sections.length > 0;
+            if (!hasSections && !selectedThread.body) return null;
+            const html = hasSections ? assembleSectionsHtml(selectedThread.sections) : selectedThread.body;
+            return (
+              <div style={{ fontFamily: serif, fontSize: 14, color: T.warmStone, lineHeight: 1.6, margin: 0 }} dangerouslySetInnerHTML={{ __html: `${thRbCSS}<div class="th-rb">${html}</div>` }} />
+            );
+          })()}
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 14, paddingTop: 12, borderTop: `1px solid ${T.charcoal}` }}>
-            <button onClick={() => toggleForumLike(threadLikeKey, selectedThread.likes || 0)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 8px 4px 0" }}>
+            <button onClick={toggleThreadHeart} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 8px 4px 0" }}>
               <Heart size={14} color={threadLiked ? T.red : T.tertiary} strokeWidth={1.5} fill={threadLiked ? T.red : "none"} />
               {threadLikes > 0 && <span style={{ fontFamily: sans, fontSize: 11, color: threadLiked ? T.red : T.tertiary }}>{threadLikes}</span>}
             </button>
@@ -6025,7 +6715,7 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
               <Eye size={14} color={T.tertiary} />
               <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{getViewCount(selectedThread)} views</span>
             </div>
-            <button onClick={() => onOpenShareIntent && onOpenShareIntent({ kind: "forum", data: { id: selectedThread.id, threadId: selectedThread.id, title: selectedThread.title, body: selectedThread.body, author: selectedThread.author, forumCat: selectedCat?.name || "", forumSub: selectedSub?.name || "", image: (selectedThread.photos && selectedThread.photos[0]) || null } })} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px", marginLeft: "auto" }}>
+            <button onClick={() => onOpenShareIntent && onOpenShareIntent({ kind: "forum", data: { id: selectedThread.id, threadId: selectedThread.id, title: selectedThread.title, body: selectedThread.body, author: selectedThread.author, forumCat: selectedCat?.name || "", forumSub: selectedSub?.name || "", subSlug: forumSlugify(selectedSub?.name || ""), slug: selectedThread.slug, image: (selectedThread.photos && selectedThread.photos[0]) || null } })} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px", marginLeft: "auto" }}>
               <Share2 size={14} color={T.tertiary} strokeWidth={1.5} />
             </button>
           </div>
@@ -6174,24 +6864,35 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
             {/* Header */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", borderBottom: `1px solid ${T.charcoal}`, flexShrink: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <button onClick={() => { setEditingThreadId(null); setEditLinkInput(false); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" }}>
+                <button onClick={() => { setEditingThreadId(null); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" }}>
                   <X size={20} color={T.white} strokeWidth={1.5} />
                 </button>
                 <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700 }}>Edit Thread</span>
               </div>
               <button onClick={async () => {
-                const newBody = editBodyRef.current ? editBodyRef.current.innerHTML : editBody;
-                const cleanBody = (newBody && newBody.replace(/<[^>]+>/g, "").trim()) ? newBody : null;
                 const newPhotos = await commitForumPhotos(editPhotos);
-                const subName = selectedSub?.name;
-                if (subName) {
-                  setUserThreads(prev => {
-                    const threads = prev[subName] || [];
-                    return { ...prev, [subName]: threads.map(t => t.id === selectedThread.id ? { ...t, title: editTitle.trim(), body: cleanBody, photos: newPhotos.length > 0 ? newPhotos : undefined, editedAt: Date.now() } : t) };
-                  });
+                // Run each section's body through the same inline-image
+                // upload + alt-text pipeline used at thread creation, so any
+                // new images dropped in during edit get proper URLs + alt.
+                const processedSections = [];
+                for (const s of editSections) {
+                  const subheading = (s.subheading || "").trim();
+                  const rawBody = (s.body || "").trim();
+                  const processedBody = await processForumBodyImages(rawBody, currentUserId);
+                  const plain = processedBody.replace(/<[^>]+>/g, "").trim();
+                  if (!subheading && !plain) continue;
+                  processedSections.push({ subheading, body: processedBody });
                 }
-                setSelectedThread({ ...selectedThread, title: editTitle.trim(), body: cleanBody, photos: newPhotos.length > 0 ? newPhotos : undefined, editedAt: Date.now() });
-                setEditingThreadId(null); setEditLinkInput(false);
+                const bodyHtml = assembleSectionsHtml(processedSections) || null;
+                const updates = {
+                  title: editTitle.trim(),
+                  body: bodyHtml,
+                  sections: processedSections,
+                  photos: newPhotos.length > 0 ? newPhotos : [],
+                };
+                if (onUpdateForumThread) await onUpdateForumThread(selectedThread.id, updates);
+                setSelectedThread({ ...selectedThread, ...updates, photos: newPhotos.length > 0 ? newPhotos : undefined, editedAt: Date.now() });
+                setEditingThreadId(null);
               }} style={{ padding: "8px 18px", borderRadius: 8, background: editTitle.trim() ? T.red : T.charcoal, border: "none", cursor: editTitle.trim() ? "pointer" : "default", opacity: editTitle.trim() ? 1 : 0.5 }}>
                 <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>SAVE</span>
               </button>
@@ -6203,167 +6904,61 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
                 <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>TITLE *</span>
                 <input value={editTitle} onChange={e => setEditTitle(e.target.value)} style={{ width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none", boxSizing: "border-box" }} />
               </div>
-              {/* Edit body with formatting toolbar */}
-              <div style={{ marginBottom: 16 }}>
-                <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>BODY</span>
-                {/* Formatting toolbar */}
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 2, padding: "6px 8px", background: T.charcoal, borderRadius: "8px 8px 0 0", border: `1px solid ${T.charcoal}`, borderBottom: "none" }}>
-                  {[
-                    { cmd: "bold", label: "B", style: { fontWeight: 700 } },
-                    { cmd: "italic", label: "I", style: { fontStyle: "italic" } },
-                    { cmd: "underline", label: "U", style: { textDecoration: "underline" } },
-                    { cmd: "strikeThrough", label: "S", style: { textDecoration: "line-through" } },
-                  ].map(btn => {
-                    const isActive = editActiveFormats[btn.cmd];
-                    return (
-                    <button key={btn.cmd} onMouseDown={(e) => { e.preventDefault(); document.execCommand(btn.cmd, false, null); editBodyRef.current && setEditBody(editBodyRef.current.innerHTML); setTimeout(updateEditFormats, 0); }} style={{ width: 30, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: isActive ? `${T.copper}30` : "none", border: isActive ? `1px solid ${T.copper}` : `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", ...btn.style, color: isActive ? T.copper : T.white, fontFamily: serif, fontSize: 13, transition: "all 0.15s" }}>
-                      {btn.label}
-                    </button>
-                    );
-                  })}
-                  <div style={{ width: 1, height: 20, background: `${T.tertiary}30`, margin: "4px 4px", alignSelf: "center" }} />
-                  {[
-                    { cmd: "formatBlock", arg: "<h1>", label: "H1", key: "h1" },
-                    { cmd: "formatBlock", arg: "<h2>", label: "H2", key: "h2" },
-                    { cmd: "formatBlock", arg: "<h3>", label: "H3", key: "h3" },
-                    { cmd: "formatBlock", arg: "<p>", label: "P", key: "p" },
-                  ].map(btn => {
-                    const isActive = editActiveFormats[btn.key];
-                    return (
-                    <button key={btn.label} onMouseDown={(e) => { e.preventDefault(); document.execCommand(btn.cmd, false, btn.arg); editBodyRef.current && setEditBody(editBodyRef.current.innerHTML); setTimeout(updateEditFormats, 0); }} style={{ minWidth: 28, height: 28, padding: "0 6px", display: "flex", alignItems: "center", justifyContent: "center", background: isActive ? `${T.copper}30` : "none", border: isActive ? `1px solid ${T.copper}` : `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", color: isActive ? T.copper : T.white, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.3, transition: "all 0.15s" }}>
-                      {btn.label}
-                    </button>
-                    );
-                  })}
-                  <div style={{ width: 1, height: 20, background: `${T.tertiary}30`, margin: "4px 4px", alignSelf: "center" }} />
-                  {(() => { const ulActive = editActiveFormats.insertUnorderedList; return (
-                  <button onMouseDown={(e) => { e.preventDefault(); document.execCommand("insertUnorderedList", false, null); editBodyRef.current && setEditBody(editBodyRef.current.innerHTML); setTimeout(updateEditFormats, 0); }} style={{ width: 30, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: ulActive ? `${T.copper}30` : "none", border: ulActive ? `1px solid ${T.copper}` : `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", color: ulActive ? T.copper : T.white, fontFamily: sans, fontSize: 11, transition: "all 0.15s" }} title="Bullet list">
-                    •≡
-                  </button>
-                  ); })()}
-                  {(() => { const olActive = editActiveFormats.insertOrderedList; return (
-                  <button onMouseDown={(e) => { e.preventDefault(); document.execCommand("insertOrderedList", false, null); editBodyRef.current && setEditBody(editBodyRef.current.innerHTML); setTimeout(updateEditFormats, 0); }} style={{ width: 30, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: olActive ? `${T.copper}30` : "none", border: olActive ? `1px solid ${T.copper}` : `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", color: olActive ? T.copper : T.white, fontFamily: sans, fontSize: 11, transition: "all 0.15s" }} title="Numbered list">
-                    1.
-                  </button>
-                  ); })()}
-                  {/* Highlight */}
-                  {(() => {
-                    const sel = window.getSelection && window.getSelection();
-                    let isHighlighted = false;
-                    if (sel && sel.rangeCount > 0 && sel.anchorNode) {
-                      let node = sel.anchorNode.nodeType === 3 ? sel.anchorNode.parentElement : sel.anchorNode;
-                      while (node && node !== editBodyRef.current) {
-                        const bg = node.style && node.style.backgroundColor;
-                        if (bg && bg !== "transparent" && bg !== "rgba(0, 0, 0, 0)" && bg !== "") { isHighlighted = true; break; }
-                        node = node.parentElement;
-                      }
-                    }
-                    return (
-                    <button onMouseDown={(e) => { e.preventDefault(); document.execCommand("hiliteColor", false, isHighlighted ? "transparent" : "#C49A6C40"); editBodyRef.current && setEditBody(editBodyRef.current.innerHTML); }} style={{ width: 30, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: isHighlighted ? `${T.copper}60` : `${T.copper}20`, border: isHighlighted ? `1px solid ${T.copper}` : `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", color: T.copper, fontFamily: sans, fontSize: 10, fontWeight: 700, transition: "all 0.15s" }} title="Highlight">
-                      Hi
-                    </button>
-                    );
-                  })()}
-                  {/* Link */}
-                  <button onMouseDown={(e) => {
-                    e.preventDefault();
-                    const selection = window.getSelection();
-                    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
-                    editSavedRange.current = selection.getRangeAt(0).cloneRange();
-                    setEditLinkInput(true); setEditLinkUrl("");
-                  }} style={{ width: 30, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: editLinkInput ? `${T.copper}30` : "none", border: editLinkInput ? `1px solid ${T.copper}` : `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", color: T.copper, fontFamily: sans, fontSize: 11, textDecoration: "underline", transition: "all 0.15s" }} title="Insert link">
-                    🔗
-                  </button>
-                  <div style={{ width: 1, height: 20, background: `${T.tertiary}30`, margin: "4px 4px", alignSelf: "center" }} />
-                  {/* Inline image */}
-                  <button onMouseDown={(e) => {
-                    e.preventDefault();
-                    const selection = window.getSelection();
-                    if (selection && selection.rangeCount > 0) editSavedRange.current = selection.getRangeAt(0).cloneRange();
-                    const fileInput = document.createElement("input");
-                    fileInput.type = "file"; fileInput.accept = "image/*"; fileInput.multiple = true;
-                    fileInput.onchange = (ev) => {
-                      Array.from(ev.target.files || []).forEach(file => {
-                        const reader = new FileReader();
-                        reader.onload = (re) => {
-                          if (editBodyRef.current) {
-                            editBodyRef.current.focus();
-                            const sel = window.getSelection();
-                            if (editSavedRange.current) { sel.removeAllRanges(); sel.addRange(editSavedRange.current); }
-                            document.execCommand("insertHTML", false, `<div style="margin:8px 0"><img src="${re.target.result}" style="max-width:100%;border-radius:8px;display:block" /></div>`);
-                            setEditBody(editBodyRef.current.innerHTML);
-                          }
-                        };
-                        reader.readAsDataURL(file);
-                      });
-                    };
-                    fileInput.click();
-                  }} style={{ width: 30, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: `1px solid ${T.tertiary}30`, borderRadius: 4, cursor: "pointer", color: T.copper, fontFamily: sans, fontSize: 13, transition: "all 0.15s" }} title="Insert image">
-                    📷
-                  </button>
-                </div>
-                {/* Link URL input for edit */}
-                {editLinkInput && (
-                  <div style={{ display: "flex", gap: 6, padding: "8px 10px", background: T.darkBg, border: `1px solid ${T.copper}`, borderBottom: "none" }}>
-                    <input autoFocus value={editLinkUrl} onChange={e => setEditLinkUrl(e.target.value)} onKeyDown={e => {
-                      if (e.key === "Enter" && editLinkUrl.trim()) {
-                        e.preventDefault();
-                        const sel = window.getSelection();
-                        if (editSavedRange.current) { sel.removeAllRanges(); sel.addRange(editSavedRange.current); }
-                        document.execCommand("createLink", false, editLinkUrl.trim().startsWith("http") ? editLinkUrl.trim() : "https://" + editLinkUrl.trim());
-                        editBodyRef.current && setEditBody(editBodyRef.current.innerHTML);
-                        setEditLinkInput(false); setEditLinkUrl(""); editSavedRange.current = null;
-                      } else if (e.key === "Escape") { setEditLinkInput(false); setEditLinkUrl(""); editSavedRange.current = null; }
-                    }} placeholder="Paste URL and press Enter..." style={{ flex: 1, padding: "6px 10px", borderRadius: 6, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 12, outline: "none" }} />
-                    <button onClick={() => {
-                      if (editLinkUrl.trim()) {
-                        const sel = window.getSelection();
-                        if (editSavedRange.current) { sel.removeAllRanges(); sel.addRange(editSavedRange.current); }
-                        document.execCommand("createLink", false, editLinkUrl.trim().startsWith("http") ? editLinkUrl.trim() : "https://" + editLinkUrl.trim());
-                        editBodyRef.current && setEditBody(editBodyRef.current.innerHTML);
-                      }
-                      setEditLinkInput(false); setEditLinkUrl(""); editSavedRange.current = null;
-                    }} style={{ padding: "6px 12px", borderRadius: 6, background: T.copper, border: "none", cursor: "pointer" }}>
-                      <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>Add</span>
-                    </button>
-                    <button onClick={() => { setEditLinkInput(false); setEditLinkUrl(""); editSavedRange.current = null; }} style={{ padding: "6px 8px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}40`, cursor: "pointer" }}>
-                      <X size={12} color={T.tertiary} />
-                    </button>
-                  </div>
-                )}
-                {/* Editable body */}
-                <div
-                  ref={(el) => {
-                    editBodyRef.current = el;
-                    if (el && editInitialized.current !== editingThreadId) {
-                      el.innerHTML = editBody;
-                      editInitialized.current = editingThreadId;
-                    }
-                  }}
-                  contentEditable
-                  onInput={() => { editBodyRef.current && setEditBody(editBodyRef.current.innerHTML); updateEditFormats(); }}
-                  onKeyUp={updateEditFormats}
-                  onMouseUp={updateEditFormats}
-                  onSelect={updateEditFormats}
-                  onFocus={updateEditFormats}
-                  onPaste={(e) => { e.preventDefault(); const text = e.clipboardData.getData("text/html") || e.clipboardData.getData("text/plain"); document.execCommand("insertHTML", false, text); editBodyRef.current && setEditBody(editBodyRef.current.innerHTML); }}
-                  style={{ width: "100%", minHeight: 180, padding: "12px 14px", borderRadius: "0 0 8px 8px", background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none", boxSizing: "border-box", lineHeight: 1.6, overflowY: "auto", maxHeight: 400 }}
+              {/* Edit sections — mirror of the new-thread multi-section editor.
+                  Title above is the h1; each subheading becomes <h2>; bodies
+                  are paragraph-only with inline formatting + images. */}
+              {editSections.map((s, i) => (
+                <ForumSectionEditor
+                  key={s.id}
+                  sectionNumber={editSections.length > 1 ? i + 1 : null}
+                  subheading={s.subheading}
+                  onSubheadingChange={(v) => updateEditSection(s.id, { subheading: v })}
+                  value={s.body}
+                  onChange={(v) => updateEditSection(s.id, { body: v })}
+                  showRemove={editSections.length > 1}
+                  onRemove={() => removeEditSection(s.id)}
+                  placeholder={i === 0
+                    ? "Share your knowledge, ask a question, or start a discussion..."
+                    : "Continue the discussion..."}
                 />
-                <style>{`
-                  [contenteditable] h1 { font-size: 26px !important; font-weight: 700; color: ${T.white}; margin: 10px 0 6px; font-family: ${sans}; line-height: 1.2; }
-                  [contenteditable] h2 { font-size: 21px !important; font-weight: 700; color: ${T.white}; margin: 8px 0 4px; font-family: ${sans}; line-height: 1.3; }
-                  [contenteditable] h3 { font-size: 17px !important; font-weight: 600; color: ${T.white}; margin: 6px 0 3px; font-family: ${sans}; line-height: 1.3; }
-                  [contenteditable] img { max-width: 100%; border-radius: 8px; display: block; margin: 8px 0; }
-                  [contenteditable] a { color: ${T.copper}; text-decoration: underline; }
-                  [contenteditable] ul { list-style-type: disc !important; padding-left: 24px !important; }
-                  [contenteditable] ol { list-style-type: decimal !important; padding-left: 24px !important; }
-                  [contenteditable] li { display: list-item !important; }
-                `}</style>
-              </div>
+              ))}
+              <button onClick={addEditSection} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", borderRadius: 8, background: "none", border: `1px dashed ${T.copper}60`, cursor: "pointer", marginBottom: 16, color: T.copper, fontFamily: sans, fontSize: 12, fontWeight: 600, letterSpacing: 0.5 }}>
+                <Plus size={14} color={T.copper} />
+                ADD SECTION
+              </button>
               {/* Edit hero image */}
               <div style={{ marginBottom: 16 }}>
                 <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>HERO IMAGE</span>
                 <PhotoUploader photos={editPhotos} onChange={setEditPhotos} />
+              </div>
+              {/* Danger zone — destructive delete behind a two-step confirm
+                  so the user can't fat-finger their way out of a thread. */}
+              <div style={{ marginTop: 32, paddingTop: 20, borderTop: `1px solid ${T.charcoal}` }}>
+                {!editDeleteConfirm ? (
+                  <button onClick={() => setEditDeleteConfirm(true)} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px", borderRadius: 8, background: "none", border: `1px solid ${T.red}40`, cursor: "pointer", color: T.red, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.5 }}>
+                    <Trash2 size={14} color={T.red} />
+                    DELETE THREAD
+                  </button>
+                ) : (
+                  <div style={{ background: `${T.red}15`, border: `1px solid ${T.red}40`, borderRadius: 8, padding: 14 }}>
+                    <p style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, margin: "0 0 4px" }}>Delete this thread?</p>
+                    <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 12px", lineHeight: 1.5 }}>This can't be undone. All replies and photos will be removed.</p>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={async () => {
+                        const tid = selectedThread.id;
+                        // Close the edit overlay + navigate back to the list
+                        // before the delete resolves so the user doesn't see
+                        // a flicker of the deleted thread.
+                        setEditDeleteConfirm(false);
+                        setEditingThreadId(null);
+                        setSelectedThread(null);
+                        setView("threads");
+                        if (onDeleteForumThread) await onDeleteForumThread(tid);
+                      }} style={{ flex: 1, padding: "10px 14px", borderRadius: 6, background: T.red, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>DELETE</button>
+                      <button onClick={() => setEditDeleteConfirm(false)} style={{ flex: 1, padding: "10px 14px", borderRadius: 6, background: T.charcoal, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 12, color: T.tertiary, fontWeight: 600, letterSpacing: 0.5 }}>CANCEL</button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -6379,7 +6974,7 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
     // a thread will be gated by user role once privileges ship — the pin flag
     // lives on the thread object so enforcement can happen in the mutation
     // handler without any UI re-plumbing.
-    const threads = [...(userThreads[selectedSub.name] || []), ...(forumData.threads[selectedSub.name] || [])]
+    const threads = ((threadsBySub || {})[selectedSub.name] || [])
       .slice()
       .sort((a, b) => {
         const pa = a.pinned ? 0 : 1;
@@ -6445,39 +7040,59 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
         </div>
 
         <div style={{ padding: "0 16px" }}>
+          {canCreateSubcategory && (
+            <button onClick={() => setShowSubModal({ mode: "create", category_id: selectedCat.id })} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 12px", borderRadius: 6, background: isAdmin ? T.red : T.copper, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>
+              <Plus size={12} /> SUBCATEGORY
+            </button>
+          )}
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {selectedCat.subs.map((sub, i) => {
-              const threadCount = (forumData.threads[sub.name] || []).length;
+              const threadCount = ((threadsBySub || {})[sub.name] || []).length;
+              const showMenu = canManageSub(sub);
               return (
-                <div key={sub.name} onClick={() => openSubcategory(sub)} style={{ background: T.darkCard, padding: "16px", cursor: "pointer", borderRadius: i === 0 ? "8px 8px 0 0" : i === selectedCat.subs.length - 1 ? "0 0 8px 8px" : 0, borderBottom: i < selectedCat.subs.length - 1 ? `1px solid ${T.charcoal}` : "none", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div key={sub.id || sub.name} style={{ background: T.darkCard, padding: "16px", cursor: "pointer", borderRadius: i === 0 ? "8px 8px 0 0" : i === selectedCat.subs.length - 1 ? "0 0 8px 8px" : 0, borderBottom: i < selectedCat.subs.length - 1 ? `1px solid ${T.charcoal}` : "none", display: "flex", alignItems: "center", justifyContent: "space-between", position: "relative" }}>
+                  <div onClick={() => openSubcategory(sub)} style={{ display: "flex", alignItems: "center", gap: 12, flex: 1 }}>
                     <div style={{ width: 36, height: 36, borderRadius: 8, background: `${selectedCat.color}15`, display: "flex", alignItems: "center", justifyContent: "center" }}>
                       <MessageCircle size={16} color={selectedCat.color} />
                     </div>
                     <div>
                       <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 600, display: "block" }}>{sub.name}</span>
-                      <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{sub.threads} threads</span>
+                      <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{threadCount} thread{threadCount === 1 ? "" : "s"}</span>
                     </div>
                   </div>
-                  <ChevronRight size={16} color={T.tertiary} />
+                  {showMenu ? (
+                    <button onClick={(e) => { e.stopPropagation(); setSubMenuOpen(subMenuOpen === sub.id ? null : sub.id); }} style={{ background: "none", border: "none", padding: 6, cursor: "pointer" }}>
+                      <MoreVertical size={16} color={T.tertiary} />
+                    </button>
+                  ) : (
+                    <ChevronRight size={16} color={T.tertiary} />
+                  )}
+                  {showMenu && subMenuOpen === sub.id && (
+                    <div onClick={(e) => e.stopPropagation()} style={{ position: "absolute", top: 44, right: 12, background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 6, overflow: "hidden", zIndex: 5, minWidth: 120, boxShadow: "0 4px 12px rgba(0,0,0,0.4)" }}>
+                      <button onClick={() => { setSubMenuOpen(null); setShowSubModal({ mode: "edit", sub }); }} style={{ display: "block", width: "100%", padding: "8px 12px", background: "none", border: "none", cursor: "pointer", textAlign: "left", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>EDIT</button>
+                      <button onClick={() => { setSubMenuOpen(null); handleDeleteSubcategory(sub); }} style={{ display: "block", width: "100%", padding: "8px 12px", background: "none", border: "none", borderTop: `1px solid ${T.charcoal}`, cursor: "pointer", textAlign: "left", fontFamily: sans, fontSize: 11, color: T.red, fontWeight: 600 }}>DELETE</button>
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
         </div>
+        {showCatModal && <ForumCategoryModal modal={showCatModal} onClose={() => setShowCatModal(null)} onAdd={onAddCategory} onUpdate={onUpdateCategory} colorOptions={FORUM_COLOR_OPTIONS} iconOptions={FORUM_ICON_OPTIONS} />}
+        {showSubModal && <ForumSubcategoryModal modal={showSubModal} onClose={() => setShowSubModal(null)} onAdd={onAddSubcategory} onUpdate={onUpdateSubcategory} />}
       </div>
     );
   }
 
   // ─── Categories View (default) ───
-  const totalThreads = (cat) => cat.subs.reduce((sum, s) => sum + s.threads, 0);
+  // Sum of live thread counts across every subcategory in a category.
+  // Reads from the DB-backed threadsBySub map (not the seed integers,
+  // which were placeholder display numbers from the pre-persistence era).
+  const totalThreads = (cat) => cat.subs.reduce((sum, s) => sum + (((threadsBySub || {})[s.name] || []).length), 0);
 
   // Collect the 5 most recent threads across every subcategory for the home
-  // view — includes user-created threads and sorts by real timestamp.
-  const recentThreadsPool = [
-    ...Object.values(forumData.threads).flat(),
-    ...Object.values(userThreads || {}).flat(),
-  ];
+  // view — sorted by real timestamp.
+  const recentThreadsPool = Object.values(threadsBySub || {}).flat();
   const recentThreads = recentThreadsPool
     .slice()
     .sort((a, b) => threadAgeMin(a.time) - threadAgeMin(b.time))
@@ -6568,13 +7183,33 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
       <>
       {/* Categories */}
       <div style={{ padding: "0 16px 16px" }}>
-        <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 10 }}>CATEGORIES</span>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+          <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600 }}>CATEGORIES</span>
+          {isAdmin && (
+            <button onClick={() => setShowCatModal({ mode: "create" })} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 4, background: T.red, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 9, color: T.white, fontWeight: 700, letterSpacing: 1 }}>
+              <Plus size={11} /> CATEGORY
+            </button>
+          )}
+        </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-          {forumData.categories.map((cat) => (
-            <div key={cat.name} onClick={() => openCategory(cat)} style={{ background: T.darkCard, borderRadius: 8, padding: "14px", cursor: "pointer", borderLeft: `3px solid ${cat.color}` }}>
-              <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, display: "block", marginBottom: 4 }}>{cat.name}</span>
-              <span style={{ fontFamily: serif, fontSize: 11, color: T.tertiary }}>{totalThreads(cat)} threads</span>
-              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, display: "block", marginTop: 2 }}>{cat.subs.length} subcategories</span>
+          {cats.map((cat) => (
+            <div key={cat.id || cat.name} style={{ background: T.darkCard, borderRadius: 8, padding: "14px", cursor: "pointer", borderLeft: `3px solid ${cat.color}`, position: "relative" }}>
+              <div onClick={() => openCategory(cat)}>
+                <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, display: "block", marginBottom: 4, paddingRight: isAdmin ? 18 : 0 }}>{cat.name}</span>
+                <span style={{ fontFamily: serif, fontSize: 11, color: T.tertiary }}>{totalThreads(cat)} threads</span>
+                <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, display: "block", marginTop: 2 }}>{cat.subs.length} subcategories</span>
+              </div>
+              {isAdmin && (
+                <button onClick={(e) => { e.stopPropagation(); setCatMenuOpen(catMenuOpen === cat.id ? null : cat.id); }} style={{ position: "absolute", top: 8, right: 8, background: "none", border: "none", padding: 4, cursor: "pointer", borderRadius: 4 }}>
+                  <MoreVertical size={14} color={T.tertiary} />
+                </button>
+              )}
+              {isAdmin && catMenuOpen === cat.id && (
+                <div onClick={(e) => e.stopPropagation()} style={{ position: "absolute", top: 28, right: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 6, overflow: "hidden", zIndex: 5, minWidth: 120, boxShadow: "0 4px 12px rgba(0,0,0,0.4)" }}>
+                  <button onClick={() => { setCatMenuOpen(null); setShowCatModal({ mode: "edit", cat }); }} style={{ display: "block", width: "100%", padding: "8px 12px", background: "none", border: "none", cursor: "pointer", textAlign: "left", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>EDIT</button>
+                  <button onClick={() => { setCatMenuOpen(null); handleDeleteCategory(cat); }} style={{ display: "block", width: "100%", padding: "8px 12px", background: "none", border: "none", borderTop: `1px solid ${T.charcoal}`, cursor: "pointer", textAlign: "left", fontFamily: sans, fontSize: 11, color: T.red, fontWeight: 600 }}>DELETE</button>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -6586,16 +7221,16 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           {recentThreads.map((t, i) => (
             <div key={t.id} onClick={() => {
-              // Find the category and sub for this thread (search both seed + user threads)
-              for (const cat of forumData.categories) {
+              // Find the category and sub for this thread.
+              for (const cat of cats) {
                 for (const sub of cat.subs) {
-                  const seedHit = (forumData.threads[sub.name] || []).find(th => th.id === t.id);
-                  const userHit = (userThreads[sub.name] || []).find(th => th.id === t.id);
-                  if (seedHit || userHit) {
+                  const hit = ((threadsBySub || {})[sub.name] || []).find(th => th.id === t.id);
+                  if (hit) {
                     setSelectedCat(cat);
                     setSelectedSub(sub);
                     setSelectedThread(t);
                     setView("thread");
+                    if (onLoadForumReplies) onLoadForumReplies(t.id);
                     trackView(t.id);
                     return;
                   }
@@ -6625,6 +7260,91 @@ function ForumScreen({ pendingThread, onPendingHandled, onAddNotification, onOpe
       </div>
       </>
       )}
+      {showCatModal && <ForumCategoryModal modal={showCatModal} onClose={() => setShowCatModal(null)} onAdd={onAddCategory} onUpdate={onUpdateCategory} colorOptions={FORUM_COLOR_OPTIONS} iconOptions={FORUM_ICON_OPTIONS} />}
+      {showSubModal && <ForumSubcategoryModal modal={showSubModal} onClose={() => setShowSubModal(null)} onAdd={onAddSubcategory} onUpdate={onUpdateSubcategory} />}
+    </div>
+  );
+}
+
+// Modal for create/edit of a forum category. Admin only — visibility is
+// gated by the caller. Renders a name field, color swatch row, icon row.
+function ForumCategoryModal({ modal, onClose, onAdd, onUpdate, colorOptions, iconOptions }) {
+  const isEdit = modal.mode === "edit";
+  const initial = (isEdit && modal.cat) || {};
+  const [name, setName] = useState(initial.name || "");
+  const [color, setColor] = useState(initial.color || colorOptions[0].value);
+  const [icon, setIcon] = useState(initial.icon || iconOptions[0].name);
+  const [saving, setSaving] = useState(false);
+  const submit = async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    const fn = isEdit ? () => onUpdate(initial.id, { name: name.trim(), color, icon }) : () => onAdd({ name: name.trim(), color, icon });
+    const res = await fn();
+    setSaving(false);
+    if (res && res.error) { alert(res.error); return; }
+    onClose();
+  };
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: T.darkCard, borderRadius: 14, padding: 20, width: "100%", maxWidth: 380, border: `1px solid ${T.charcoal}` }}>
+        <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700, display: "block", marginBottom: 12 }}>{isEdit ? "EDIT CATEGORY" : "NEW CATEGORY"}</span>
+        <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 4 }}>NAME</span>
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. How-To Guides" style={{ width: "100%", padding: "10px 12px", borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, outline: "none", boxSizing: "border-box", marginBottom: 14 }} />
+        <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>COLOR</span>
+        <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+          {colorOptions.map(c => (
+            <button key={c.name} onClick={() => setColor(c.value)} style={{ width: 36, height: 36, borderRadius: 8, background: c.value, border: color === c.value ? `2px solid ${T.white}` : "2px solid transparent", cursor: "pointer" }} aria-label={c.name} />
+          ))}
+        </div>
+        <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>ICON</span>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 18 }}>
+          {iconOptions.map(opt => {
+            const Comp = opt.Comp;
+            const selected = icon === opt.name;
+            return (
+              <button key={opt.name} onClick={() => setIcon(opt.name)} style={{ width: 38, height: 38, borderRadius: 8, background: selected ? color : T.darkBg, border: selected ? "none" : `1px solid ${T.charcoal}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }} aria-label={opt.name}>
+                <Comp size={16} color={selected ? T.white : T.tertiary} />
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: "10px 14px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}40`, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 600, letterSpacing: 0.5 }}>CANCEL</button>
+          <button onClick={submit} disabled={saving || !name.trim()} style={{ flex: 1, padding: "10px 14px", borderRadius: 6, background: name.trim() && !saving ? T.red : T.charcoal, border: "none", cursor: name.trim() && !saving ? "pointer" : "default", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>{saving ? "SAVING…" : (isEdit ? "SAVE" : "CREATE")}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Modal for create/edit of a forum subcategory. Admin OR ambassador for
+// create (ambassador becomes the owner via created_by); admin OR owner
+// ambassador for edit. Just a name field — subs inherit category color.
+function ForumSubcategoryModal({ modal, onClose, onAdd, onUpdate }) {
+  const isEdit = modal.mode === "edit";
+  const initial = (isEdit && modal.sub) || {};
+  const [name, setName] = useState(initial.name || "");
+  const [saving, setSaving] = useState(false);
+  const submit = async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    const fn = isEdit ? () => onUpdate(initial.id, { name: name.trim() }) : () => onAdd({ category_id: modal.category_id, name: name.trim() });
+    const res = await fn();
+    setSaving(false);
+    if (res && res.error) { alert(res.error); return; }
+    onClose();
+  };
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: T.darkCard, borderRadius: 14, padding: 20, width: "100%", maxWidth: 380, border: `1px solid ${T.charcoal}` }}>
+        <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700, display: "block", marginBottom: 12 }}>{isEdit ? "EDIT SUBCATEGORY" : "NEW SUBCATEGORY"}</span>
+        <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 4 }}>NAME</span>
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Suspension & Lift" style={{ width: "100%", padding: "10px 12px", borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, outline: "none", boxSizing: "border-box", marginBottom: 18 }} />
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: "10px 14px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}40`, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 600, letterSpacing: 0.5 }}>CANCEL</button>
+          <button onClick={submit} disabled={saving || !name.trim()} style={{ flex: 1, padding: "10px 14px", borderRadius: 6, background: name.trim() && !saving ? T.copper : T.charcoal, border: "none", cursor: name.trim() && !saving ? "pointer" : "default", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>{saving ? "SAVING…" : (isEdit ? "SAVE" : "CREATE")}</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -11301,14 +12021,86 @@ function ConvoyDetail({ item, linkedPlan, currentUserId, currentUserName, curren
   // Comments — same shape as feed posts (post_comments table). Inline
   // composer at the bottom uses currentUser* for the avatar/handle, and
   // dispatches to onAddComment which inserts into Supabase + echoes
-  // through realtime.
+  // through realtime. Threaded replies via parent_id (depth 1, mirrors
+  // BuildCommentsSection).
   const allComments = postComments && postComments[item.id] ? postComments[item.id] : [];
+  const { tops: topComments, repliesByParent } = allComments.reduce((acc, c) => {
+    if (c.parentId) {
+      const bucket = acc.repliesByParent[c.parentId] || (acc.repliesByParent[c.parentId] = []);
+      bucket.push(c);
+    } else {
+      acc.tops.push(c);
+    }
+    return acc;
+  }, { tops: [], repliesByParent: {} });
   const [commentText, setCommentText] = useState("");
+  const [replyingTo, setReplyingTo] = useState(null); // top-level comment id
+  const [replyDraft, setReplyDraft] = useState("");
   const submitComment = () => {
     const text = commentText.trim();
     if (!text || !onAddComment) return;
     onAddComment(item.id, text);
     setCommentText("");
+  };
+  const submitReply = (parentId) => {
+    const text = replyDraft.trim();
+    if (!text || !onAddComment) return;
+    onAddComment(item.id, text, parentId);
+    setReplyDraft("");
+    setReplyingTo(null);
+  };
+  const renderConvoyComment = (c, isReply) => {
+    const cmtLiked = !!(c && c.id && likedCommentIds && likedCommentIds[c.id]);
+    const cmtLikeCount = c.likes || 0;
+    const isMine = currentUserId && c.userId === currentUserId;
+    return (
+      <div key={c.id} style={{ ...cardStyle, padding: 10, display: "flex", gap: 8, marginLeft: isReply ? 32 : 0 }}>
+        <div onClick={() => onViewUser && onViewUser(c.userId || c.handle)} style={{ width: isReply ? 26 : 30, height: isReply ? 26 : 30, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden", marginTop: 2, cursor: "pointer" }}>
+          {c.avatarUrl
+            ? <img src={txImg(c.avatarUrl, 96)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            : <span style={{ fontFamily: sans, fontSize: 11, fontWeight: 700, color: T.white }}>{c.initial}</span>}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span onClick={() => onViewUser && onViewUser(c.handle || c.userId)} style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, cursor: "pointer" }}>@{c.handle || c.user}</span>
+            <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>{formatPostTime(c.time)}</span>
+          </div>
+          <p style={{ fontFamily: serif, fontSize: 13, color: T.warmStone, margin: "2px 0 0", lineHeight: 1.5 }}>{c.text}</p>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 4 }}>
+            <button onClick={() => onToggleCommentLike && onToggleCommentLike(item.id, c.id)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+              <Heart size={12} color={cmtLiked ? T.red : T.tertiary} strokeWidth={1.5} fill={cmtLiked ? T.red : "none"} />
+              {cmtLikeCount > 0 && <span style={{ fontFamily: sans, fontSize: 10, color: cmtLiked ? T.red : T.tertiary }}>{cmtLikeCount}</span>}
+            </button>
+            {!isReply && (
+              <button onClick={() => { setReplyingTo(replyingTo === c.id ? null : c.id); setReplyDraft(""); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontFamily: sans, fontSize: 10, color: T.tertiary, fontWeight: 600, letterSpacing: 0.5 }}>
+                {replyingTo === c.id ? "CANCEL" : "REPLY"}
+              </button>
+            )}
+            {isMine && onDeleteComment && (
+              <button onClick={() => onDeleteComment(item.id, c.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", gap: 3 }}>
+                <Trash2 size={11} color={T.tertiary} />
+                <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>Delete</span>
+              </button>
+            )}
+          </div>
+          {!isReply && replyingTo === c.id && currentUserId && (
+            <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 8 }}>
+              <input
+                autoFocus
+                value={replyDraft}
+                onChange={(e) => setReplyDraft(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") submitReply(c.id); }}
+                placeholder={`Reply to ${c.user}…`}
+                style={{ flex: 1, padding: "7px 10px", borderRadius: 8, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 12, outline: "none" }}
+              />
+              <button onClick={() => submitReply(c.id)} disabled={!replyDraft.trim()} style={{ padding: "7px 12px", borderRadius: 8, background: replyDraft.trim() ? T.red : T.charcoal, border: "none", color: T.white, cursor: replyDraft.trim() ? "pointer" : "default", fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1 }}>
+                REPLY
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
   };
 
   const handleRsvp = (status) => { onRsvpConvoy && onRsvpConvoy(item.id, status); };
@@ -11565,41 +12357,14 @@ function ConvoyDetail({ item, linkedPlan, currentUserId, currentUserName, curren
       {/* Comments — same shape as feed posts (post_comments table) */}
       <div style={{ padding: "0 16px 16px" }}>
         <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 10 }}>COMMENTS ({allComments.length})</span>
-        {allComments.length > 0 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
-            {allComments.map((c, ci) => {
-              const cmtLiked = !!(c && c.id && likedCommentIds && likedCommentIds[c.id]);
-              const cmtLikeCount = c.likes || 0;
-              const isMine = currentUserId && c.userId === currentUserId;
-              return (
-                <div key={c.id || ci} style={{ ...cardStyle, padding: 10, display: "flex", gap: 8 }}>
-                  <div style={{ width: 30, height: 30, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden", marginTop: 2 }}>
-                    {c.avatarUrl
-                      ? <img src={txImg(c.avatarUrl, 96)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                      : <span style={{ fontFamily: sans, fontSize: 11, fontWeight: 700, color: T.white }}>{c.initial}</span>}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <span onClick={() => onViewUser && onViewUser(c.handle || c.userId)} style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, cursor: "pointer" }}>@{c.handle || c.user}</span>
-                      <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>{formatPostTime(c.time)}</span>
-                    </div>
-                    <p style={{ fontFamily: serif, fontSize: 13, color: T.warmStone, margin: "2px 0 0", lineHeight: 1.5 }}>{c.text}</p>
-                    <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 4 }}>
-                      <button onClick={() => onToggleCommentLike && onToggleCommentLike(item.id, c)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-                        <Heart size={12} color={cmtLiked ? T.red : T.tertiary} strokeWidth={1.5} fill={cmtLiked ? T.red : "none"} />
-                        {cmtLikeCount > 0 && <span style={{ fontFamily: sans, fontSize: 10, color: cmtLiked ? T.red : T.tertiary }}>{cmtLikeCount}</span>}
-                      </button>
-                      {isMine && onDeleteComment && (
-                        <button onClick={() => onDeleteComment(item.id, c.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", gap: 3 }}>
-                          <Trash2 size={11} color={T.tertiary} />
-                          <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>Delete</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+        {topComments.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 12 }}>
+            {topComments.map(c => (
+              <div key={c.id} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {renderConvoyComment(c, false)}
+                {(repliesByParent[c.id] || []).map(r => renderConvoyComment(r, true))}
+              </div>
+            ))}
           </div>
         )}
         {currentUserId ? (
@@ -11629,7 +12394,7 @@ function ConvoyDetail({ item, linkedPlan, currentUserId, currentUserName, curren
   );
 }
 
-function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onLoadCampingSpotPhotos, onLoadCampingSpotElevation, spotAuthors, tripAuthors, onLoadRouteData, onViewUser, onStartNav, onNewTripReport, onNewTripPlan, currentUserId, onMapViewportChange, tripReports, showTripReports, setShowTripReports, tripPlans, showTripPlans, setShowTripPlans, onOpenTripDetail, onOpenTripPlanDraft, pendingSpotNav, onConsumePendingSpotNav, pendingHQOpen, onConsumePendingHQOpen, pendingPlanNav, onConsumePendingPlanNav, onShareCampingSpotToFeed, onShareHQToFeed, onShareTripToFeed, onShareTripPlanToFeed, onOpenDM, onShowToast, onOpenShareCompose, onOpenShareIntent, planBuilder }) {
+function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onLoadCampingSpotPhotos, onLoadCampingSpotElevation, spotAuthors, tripAuthors, onLoadRouteData, onViewUser, onStartNav, onNewTripReport, onNewTripPlan, currentUserId, onMapViewportChange, tripReports, showTripReports, setShowTripReports, tripPlans, showTripPlans, setShowTripPlans, onOpenTripDetail, onOpenTripPlanDraft, pendingSpotNav, onConsumePendingSpotNav, pendingHQOpen, onConsumePendingHQOpen, pendingPlanNav, onConsumePendingPlanNav, onShareCampingSpotToFeed, onShareHQToFeed, onShareTripToFeed, onShareTripPlanToFeed, onOpenDM, onShowToast, onOpenShareCompose, onOpenShareIntent, planBuilder, isGuest, onGuestTap }) {
   const mapRef = useRef(null);
   const mapInst = useRef(null);
   const [mapReady, setMapReady] = useState(false);
@@ -11827,7 +12592,7 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tripPlansCount, mapReady]);
   useSatelliteLayer(mapInst, mapReady, !!showSatellite);
-  useCampingSpotsLayer(mapInst, mapReady, campingSpots, showCampingSpots, (spot) => { clearOtherSelections(); setSelectedSpot(spot); }, layerRefreshTick);
+  useCampingSpotsLayer(mapInst, mapReady, campingSpots, showCampingSpots, (spot) => { clearOtherSelections(); setSelectedSpot(spot); }, layerRefreshTick, selectedSpot && selectedSpot.id);
   usePublicLandsLayer(mapInst, mapReady, showPublicLands, (land) => { clearOtherSelections(); setSelectedLand(land); }, layerRefreshTick);
   useTripReportsLayer(mapInst, mapReady, tripReports || [], showTripReports, (trip) => { clearOtherSelections(); setSelectedTrip(trip); }, selectedTrip && selectedTrip.id, layerRefreshTick);
   useTripPlansLayer(mapInst, mapReady, tripPlans || [], showTripPlans, (plan) => { clearOtherSelections(); setSelectedPlan(plan); }, selectedPlan && selectedPlan.id, layerRefreshTick);
@@ -12221,7 +12986,10 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
         )}
         {/* Search overlay — anchored along the top edge of the map (where
             the layers chip used to sit). Results dropdown floats below the
-            input. zIndex bumped above other map overlays so it sits on top. */}
+            input. zIndex bumped above other map overlays so it sits on top.
+            Hidden for guests — they're only here via /hq or /spots/:id
+            deep links and shouldn't be able to browse the rest of the map. */}
+        {!isGuest && (
         <div style={{ position: "absolute", top: planActive ? 60 : 10, left: 10, right: 10, zIndex: 7 }}>
           <div style={{ display: "flex", alignItems: "center", background: `${T.darkCard}F0`, backdropFilter: "blur(10px)", borderRadius: 10, padding: "10px 14px", border: `1px solid ${searchOpen ? T.copper : T.charcoal}`, boxShadow: "0 4px 12px rgba(0,0,0,0.4)", transition: "border-color 0.15s" }}>
             <Search size={16} color={T.tertiary} />
@@ -12275,7 +13043,12 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
             </div>
           )}
         </div>
+        )}
+        {/* Layer toggle — hidden for guests for the same reason as search:
+            they're only here to view a specific spot/HQ via deep link. */}
+        {!isGuest && (
         <MapLayerToggle showCamping={showCampingSpots} setShowCamping={setShowCampingSpots} showPublicLands={showPublicLands} setShowPublicLands={setShowPublicLands} showTripReports={showTripReports} setShowTripReports={setShowTripReports} showTripPlans={showTripPlans} setShowTripPlans={setShowTripPlans} showSatellite={showSatellite} setShowSatellite={setShowSatellite} />
+        )}
         {/* Add-mode hint banner — visible only while we're waiting for the
             user's next tap, so they know what to do without staring at a
             cursor change. */}
@@ -12288,7 +13061,10 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
             </button>
           </div>
         )}
-        {/* Plus FAB — bottom-right; mirrors the feed's Compose entry point */}
+        {/* Plus FAB — bottom-right; mirrors the feed's Compose entry point.
+            Hidden entirely for guests — every option (Add Spot, New Trip
+            Report, Plan a Trip) requires an account, so no point teasing. */}
+        {!isGuest && (
         <div style={{ position: "absolute", right: 14, bottom: 14, zIndex: 6, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
           {plusOpen && (
             <div onClick={(e) => e.stopPropagation()} style={{ background: `${T.darkCard}F5`, border: `1px solid ${T.charcoal}`, borderRadius: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", overflow: "hidden", minWidth: 220 }}>
@@ -12327,7 +13103,8 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
             <Plus size={24} color={T.white} strokeWidth={2.5} style={{ transform: plusOpen ? "rotate(45deg)" : "none", transition: "transform 0.15s" }} />
           </button>
         </div>
-        {plusOpen && (
+        )}
+        {plusOpen && !isGuest && (
           <div onClick={() => setPlusOpen(false)} style={{ position: "absolute", inset: 0, zIndex: 5 }} />
         )}
       {liveSelectedSpot && !editingSpot && (() => {
@@ -12341,10 +13118,14 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
         const elev = (typeof spot.elevation_ft === "number") ? spot.elevation_ft : null;
         return (
         <div style={{ position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 6, background: `${T.darkCard}F5`, border: `1px solid ${T.charcoal}`, borderRadius: 10, padding: "16px 14px 14px", boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" }}>
-          {/* Close X — absolute so it doesn't disrupt the centered stack. */}
+          {/* Close X — absolute so it doesn't disrupt the centered stack.
+              Hidden for guests so they can't dismiss the popup and use the
+              underlying map as a back-door into spot browsing. */}
+          {!isGuest && (
           <button onClick={() => setSelectedSpot(null)} style={{ position: "absolute", top: 8, right: 8, background: "none", border: "none", cursor: "pointer", padding: 4, color: T.tertiary, zIndex: 1 }}>
             <X size={16} />
           </button>
+          )}
           {/* Centered content stack — icon, title, metadata, author,
               description, photos, buttons. Everything centers on the
               cross-axis so the card reads as a unit. */}
@@ -12427,14 +13208,18 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
                   <Edit3 size={12} />EDIT
                 </button>
               )}
-              <button onClick={() => onOpenShareIntent && onOpenShareIntent({ kind: "spot", data: spot })}
-                      style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 18px", background: T.charcoal, border: `1px solid ${T.tertiary}50`, borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>
-                <Share2 size={12} />SHARE
-              </button>
+              {/* Share + plan are account-bound; hidden entirely for
+                  guests so they don't see disabled-looking buttons. */}
+              {!isGuest && (
+                <button onClick={() => onOpenShareIntent && onOpenShareIntent({ kind: "spot", data: spot })}
+                        style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 18px", background: T.charcoal, border: `1px solid ${T.tertiary}50`, borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>
+                  <Share2 size={12} />SHARE
+                </button>
+              )}
               {/* Add-to-plan / start-trip-here entry. Picker pops up on
                   tap so the user can decide where this point lands in
                   the route order (start, middle, end). */}
-              {planBuilder && (
+              {planBuilder && !isGuest && (
                 <button onClick={() => setPlanInsertTarget({ kind: "spot", data: { lat: spot.lat, lng: spot.lng, type: "camp", label: spot.name, sourceId: spot.id, sourceType: "spot", sourceName: spot.name }, dismissPopup: () => setSelectedSpot(null) })}
                         style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 18px", background: T.copper, border: "none", borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>
                   <Route size={12} />{planActive ? "ADD TO PLAN" : "PLAN A TRIP"}
@@ -12538,11 +13323,13 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
                     <ExternalLink size={12} />OPEN TRIP
                   </button>
                 )}
-                <button onClick={() => onOpenShareIntent && onOpenShareIntent({ kind: "trip", data: t })}
-                        style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "8px 12px", background: T.charcoal, border: `1px solid ${T.tertiary}50`, borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>
-                  <Share2 size={12} />SHARE
-                </button>
-                {planBuilder && t.lat != null && (
+                {!isGuest && (
+                  <button onClick={() => onOpenShareIntent && onOpenShareIntent({ kind: "trip", data: t })}
+                          style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "8px 12px", background: T.charcoal, border: `1px solid ${T.tertiary}50`, borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>
+                    <Share2 size={12} />SHARE
+                  </button>
+                )}
+                {planBuilder && t.lat != null && !isGuest && (
                   <button onClick={() => setPlanInsertTarget({ kind: "trip", data: { lat: t.lat, lng: t.lng, type: "waypoint", label: t.name, sourceId: t.id, sourceType: "trip", sourceName: t.name }, dismissPopup: () => setSelectedTrip(null) })}
                           style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "8px 12px", background: T.copper, border: "none", borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>
                     <Route size={12} />{planActive ? "ADD TO PLAN" : "PLAN A TRIP"}
@@ -12629,10 +13416,12 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
                     <ExternalLink size={12} />OPEN PLAN
                   </button>
                 )}
-                <button onClick={() => onOpenShareIntent && onOpenShareIntent({ kind: "plan", data: p })}
-                        style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "8px 12px", background: T.charcoal, border: `1px solid ${T.tertiary}50`, borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>
-                  <Share2 size={12} />SHARE
-                </button>
+                {!isGuest && (
+                  <button onClick={() => onOpenShareIntent && onOpenShareIntent({ kind: "plan", data: p })}
+                          style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "8px 12px", background: T.charcoal, border: `1px solid ${T.tertiary}50`, borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>
+                    <Share2 size={12} />SHARE
+                  </button>
+                )}
               </div>
             </div>
             <button onClick={() => setSelectedPlan(null)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: T.tertiary }}>
@@ -12656,7 +13445,17 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
               <div style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, marginBottom: 4 }}>{selectedHQ.name}</div>
               <div style={{ fontFamily: serif, fontSize: 12, color: T.warmStone || T.tertiary, lineHeight: 1.4, marginBottom: 10 }}>{selectedHQ.address}</div>
               <div style={{ display: "flex", gap: 6 }}>
-                <button onClick={() => startNavToDestination(selectedHQ.lat, selectedHQ.lng, selectedHQ.name || "Lone Peak HQ")}
+                {/* Directions: signed-in users go into in-app turn-by-turn
+                    nav; guests are kicked to Google Maps in a new tab so
+                    they can still get to HQ without an account. */}
+                <button onClick={() => {
+                          if (isGuest) {
+                            const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(selectedHQ.lat + "," + selectedHQ.lng)}`;
+                            window.open(url, "_blank", "noopener");
+                            return;
+                          }
+                          startNavToDestination(selectedHQ.lat, selectedHQ.lng, selectedHQ.name || "Lone Peak HQ");
+                        }}
                         style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 8px", background: T.green, color: T.white, border: "none", borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, whiteSpace: "nowrap" }}>
                   <Navigation size={12} />DIRECTIONS
                 </button>
@@ -12664,21 +13463,28 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
                    style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 8px", background: T.copper, color: T.white, borderRadius: 6, textDecoration: "none", fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, whiteSpace: "nowrap" }}>
                   <Globe size={12} />WEBSITE
                 </a>
-                <button onClick={() => onOpenShareIntent && onOpenShareIntent({ kind: "hq", data: selectedHQ })}
-                        style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 8px", background: T.charcoal, color: T.white, border: `1px solid ${T.tertiary}50`, borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, whiteSpace: "nowrap" }}>
-                  <Share2 size={12} />SHARE
-                </button>
+                {/* Share is account-bound (creates a feed post or DM
+                    thread). Hidden for guests rather than gated so the
+                    button doesn't tease them. */}
+                {!isGuest && (
+                  <button onClick={() => onOpenShareIntent && onOpenShareIntent({ kind: "hq", data: selectedHQ })}
+                          style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 8px", background: T.charcoal, color: T.white, border: `1px solid ${T.tertiary}50`, borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, whiteSpace: "nowrap" }}>
+                    <Share2 size={12} />SHARE
+                  </button>
+                )}
               </div>
-              {planBuilder && (
+              {planBuilder && !isGuest && (
                 <button onClick={() => setPlanInsertTarget({ kind: "hq", data: { lat: selectedHQ.lat, lng: selectedHQ.lng, type: "waypoint", label: selectedHQ.name, sourceType: "hq", sourceName: selectedHQ.name }, dismissPopup: () => setSelectedHQ(null) })}
                         style={{ width: "100%", marginTop: 6, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 8px", background: T.copper, color: T.white, border: "none", borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5 }}>
                   <Route size={12} />{planActive ? "ADD TO PLAN" : "START A TRIP HERE"}
                 </button>
               )}
             </div>
+            {!isGuest && (
             <button onClick={() => setSelectedHQ(null)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: T.tertiary }}>
               <X size={16} />
             </button>
+            )}
           </div>
         </div>
       )}
@@ -13165,7 +13971,7 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
   );
 }
 
-function RoutesScreen({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, currentUserId, tripReports, showTripReports, setShowTripReports, tripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onLoadCampingSpotPhotos, onLoadCampingSpotElevation, spotAuthors, tripAuthors, onLoadRouteData, onOpenTripDetail, onOpenTripPlanDraft, onNewTripReport, onNewTripPlan, pendingSpotNav, onConsumePendingSpotNav, pendingHQOpen, onConsumePendingHQOpen, pendingPlanNav, onConsumePendingPlanNav, onShareCampingSpotToFeed, onShareHQToFeed, onShareTripToFeed, onShareTripPlanToFeed, onOpenDM, onShowToast, onOpenShareCompose, onOpenShareIntent, onViewUser, onStartNav, planBuilder }) {
+function RoutesScreen({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, currentUserId, tripReports, showTripReports, setShowTripReports, tripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onLoadCampingSpotPhotos, onLoadCampingSpotElevation, spotAuthors, tripAuthors, onLoadRouteData, onOpenTripDetail, onOpenTripPlanDraft, onNewTripReport, onNewTripPlan, pendingSpotNav, onConsumePendingSpotNav, pendingHQOpen, onConsumePendingHQOpen, pendingPlanNav, onConsumePendingPlanNav, onShareCampingSpotToFeed, onShareHQToFeed, onShareTripToFeed, onShareTripPlanToFeed, onOpenDM, onShowToast, onOpenShareCompose, onOpenShareIntent, onViewUser, onStartNav, planBuilder, isGuest, onGuestTap }) {
   // Maps screen — full-height ExploreMap with no chrome. Trip-reports list,
   // create modal, and detail overlay all live at the root now (the list
   // moved to the Feed under the renamed TRIP REPORTS filter; the modal +
@@ -13220,8 +14026,18 @@ function RoutesScreen({ campingSpots, showCampingSpots, setShowCampingSpots, sho
         onOpenShareCompose={onOpenShareCompose}
         onOpenShareIntent={onOpenShareIntent}
         planBuilder={planBuilder}
+        isGuest={isGuest}
+        onGuestTap={onGuestTap}
         fillParent
       />
+      {/* Guest banner — rendered HERE (not inline at the page level) so
+          it overlays the map at the top edge instead of pushing the map
+          down. Without this the user would have to scroll to see a
+          spot/HQ popup at the bottom of the screen. zIndex sits above
+          ExploreMap's hidden-for-guests search bar (z-7). */}
+      {isGuest && (
+        <GuestBanner overlay onSignIn={onGuestTap} />
+      )}
     </div>
   );
 }
@@ -16999,7 +17815,7 @@ function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, init
 }
 
 /* ─── OTHER USER PROFILE (Public view / Follow logic) ─── */
-function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, followingIds, onFollow, onUnfollow, fetchFollowCounts, renderFeedScopedTo, currentProfile, convoyRsvps, onViewBuild, allBuilds, onLoadAllBuilds, onlineUserIds, allTripPlans, onOpenTripPlan }) {
+function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, isAdmin, onAdminUpdateUserRole, onAdminDeclineAmbassador, followingIds, onFollow, onUnfollow, fetchFollowCounts, renderFeedScopedTo, currentProfile, convoyRsvps, onViewBuild, allBuilds, onLoadAllBuilds, onlineUserIds, allTripPlans, onOpenTripPlan }) {
   // Trigger the cross-user builds load — the builds tab below filters
   // allBuilds for the viewed user. Root is idempotent via a ref.
   useEffect(() => { if (typeof onLoadAllBuilds === "function") onLoadAllBuilds(); }, []);
@@ -17071,6 +17887,11 @@ function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, followin
           isPublic: true,
           initial: ((data.full_name || data.handle || "U").charAt(0)).toUpperCase(),
           avatarUrl: data.avatar_url || null,
+          // Role surface for the admin panel — `role` is the current
+          // privilege; `requestedRole` is set when the user applied for
+          // an upgrade at signup that hasn't been reviewed.
+          role: data.role || "user",
+          requestedRole: data.requested_role || null,
           builds: [], trips: [], activity: [],
         });
         // Fetch real builds / posts / RSVP'd convoys in parallel and map to
@@ -17243,6 +18064,44 @@ function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, followin
             <Mail size={14} /> MESSAGE
           </button>
         </div>
+
+        {/* Admin role panel — only visible when the viewer is an admin and
+            they're looking at someone other than themselves. Shows the
+            target user's current role + lets admin set User / Ambassador /
+            Admin. If the user submitted a pending ambassador request, the
+            approve / decline buttons appear first. */}
+        {isAdmin && resolvedTargetId && currentUserId !== resolvedTargetId && (
+          <div style={{ margin: "0 16px 16px", background: T.darkCard, border: `1px solid ${T.red}40`, borderRadius: 12, padding: 14 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+              <Shield size={12} color={T.red} />
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.red, letterSpacing: 1.5, fontWeight: 700 }}>ADMIN CONTROLS</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, fontFamily: sans, fontSize: 12, color: T.warmStone }}>
+              <span>Current role:</span>
+              <span style={{ padding: "2px 8px", borderRadius: 4, background: p.role === "admin" ? T.red : p.role === "ambassador" ? T.copper : T.charcoal, color: T.white, fontWeight: 700, letterSpacing: 1, fontSize: 10 }}>{(p.role || "user").toUpperCase()}</span>
+            </div>
+            {p.requestedRole === "ambassador" && (
+              <div style={{ background: `${T.copper}15`, border: `1px solid ${T.copper}40`, borderRadius: 8, padding: 12, marginBottom: 12 }}>
+                <p style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, margin: "0 0 8px" }}>Ambassador request pending</p>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => onAdminUpdateUserRole && onAdminUpdateUserRole(resolvedTargetId, "ambassador").then((res) => { if (res && res.ok) setDbProfile(prev => prev ? { ...prev, role: "ambassador", requestedRole: null } : prev); else if (res && res.error) alert("Role change failed: " + res.error); })} style={{ flex: 1, padding: "8px 12px", borderRadius: 6, background: T.copper, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>APPROVE</button>
+                  <button onClick={() => onAdminDeclineAmbassador && onAdminDeclineAmbassador(resolvedTargetId).then((res) => { if (res && res.ok) setDbProfile(prev => prev ? { ...prev, requestedRole: null } : prev); else if (res && res.error) alert("Decline failed: " + res.error); })} style={{ flex: 1, padding: "8px 12px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}40`, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 600, letterSpacing: 0.5 }}>DECLINE</button>
+                </div>
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 6 }}>
+              {["user", "ambassador", "admin"].map(r => {
+                const sel = (p.role || "user") === r;
+                const color = r === "admin" ? T.red : r === "ambassador" ? T.copper : T.tertiary;
+                return (
+                  <button key={r} onClick={() => { if (sel) return; if (r === "admin" && !confirm("Promote this user to admin? They'll be able to moderate any content.")) return; if (!sel) onAdminUpdateUserRole && onAdminUpdateUserRole(resolvedTargetId, r).then((res) => { if (res && res.ok) setDbProfile(prev => prev ? { ...prev, role: r, requestedRole: null } : prev); else if (res && res.error) alert("Role change failed: " + res.error); }); }} style={{ flex: 1, padding: "8px 10px", borderRadius: 6, background: sel ? color : "none", border: sel ? "none" : `1px solid ${T.charcoal}`, cursor: sel ? "default" : "pointer", fontFamily: sans, fontSize: 10, color: sel ? T.white : T.tertiary, fontWeight: 700, letterSpacing: 0.8 }}>
+                    {r.toUpperCase()}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Stats Row */}
         <div style={{ display: "flex", justifyContent: "center", gap: 24, marginBottom: 16 }}>
@@ -17905,6 +18764,10 @@ function OnboardingScreen({ session, onComplete, onSetProfilePic, onAddBuild }) 
   const prefillAvatar =
     (session && session.user && session.user.user_metadata && session.user.user_metadata.avatar_url) || null;
   const [handle, setHandle] = useState("");
+  // Role pick at signup — user or ambassador. Admin role is server-side
+  // only (existing admin promotes via SQL); self-signup as admin is
+  // rejected by the profiles_role_guard trigger.
+  const [signupRole, setSignupRole] = useState("user");
   const [buildName, setBuildName] = useState("");
   const [year, setYear] = useState("");
   const [yearMode, setYearMode] = useState("select");
@@ -17977,6 +18840,11 @@ function OnboardingScreen({ session, onComplete, onSetProfilePic, onAddBuild }) 
           const patch = {
             handle: cleanHandle,
             full_name: prefillName || null,
+            // `role` is server-controlled; non-admins can only set 'user'.
+            // The Ambassador checkbox writes `requested_role` which the
+            // admin reviews + approves to promote the actual role.
+            role: "user",
+            requested_role: signupRole === "ambassador" ? "ambassador" : null,
             updated_at: new Date().toISOString(),
           };
           if (!(existing && existing.avatar_url) && prefillAvatar) {
@@ -18050,6 +18918,24 @@ function OnboardingScreen({ session, onComplete, onSetProfilePic, onAddBuild }) 
             <div style={{ position: "relative" }}>
               <span style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", fontFamily: serif, fontSize: 14, color: T.tertiary }}>@</span>
               <input value={handle} onChange={(e) => setHandle(e.target.value)} placeholder="trailname" style={{ ...inputStyle, paddingLeft: 32 }} onFocus={(e) => e.target.style.borderColor = T.copper} onBlur={(e) => e.target.style.borderColor = T.charcoal} />
+            </div>
+          </div>
+
+          {/* Role picker — User (default) or apply for Ambassador. Admin
+              role is server-assigned only. Ambassador requires admin
+              approval — picking it here just files the request; account
+              starts as a regular user until reviewed. */}
+          <div style={{ marginBottom: 20 }}>
+            <label style={labelStyle}>ACCOUNT TYPE</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button type="button" onClick={() => setSignupRole("user")} style={{ flex: 1, padding: "14px 12px", borderRadius: 8, background: signupRole === "user" ? `${T.red}18` : T.darkCard, border: signupRole === "user" ? `1px solid ${T.red}` : `1px solid ${T.charcoal}`, cursor: "pointer", textAlign: "left" }}>
+                <span style={{ fontFamily: sans, fontSize: 12, color: signupRole === "user" ? T.red : T.white, fontWeight: 700, letterSpacing: 0.5, display: "block", marginBottom: 4 }}>USER</span>
+                <span style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, lineHeight: 1.4, display: "block" }}>Browse, post, comment, build your rig.</span>
+              </button>
+              <button type="button" onClick={() => setSignupRole("ambassador")} style={{ flex: 1, padding: "14px 12px", borderRadius: 8, background: signupRole === "ambassador" ? `${T.copper}25` : T.darkCard, border: signupRole === "ambassador" ? `1px solid ${T.copper}` : `1px solid ${T.charcoal}`, cursor: "pointer", textAlign: "left" }}>
+                <span style={{ fontFamily: sans, fontSize: 12, color: signupRole === "ambassador" ? T.copper : T.white, fontWeight: 700, letterSpacing: 0.5, display: "block", marginBottom: 4 }}>REQUEST AMBASSADOR</span>
+                <span style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, lineHeight: 1.4, display: "block" }}>Account starts as a user. Admin reviews + approves Ambassador requests.</span>
+              </button>
             </div>
           </div>
 
@@ -18318,7 +19204,7 @@ function PhotoUploader({ photos, onChange, maxPhotos = 10, compact = false, onUp
 }
 
 /* ─── COMPOSE / CREATE POST SCREEN ─── */
-function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotification, onAddRoute, onOpenDM, onSendDmInvite, userBuilds, currentUserName, currentUserHandle, onSearchUsers, onUploadError, initialConvoy, followingProfiles, onLoadFollowingProfiles, myTripPlans, currentUserId, onPlanNewRouteForConvoy, onUseExistingPlanForConvoy }) {
+function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotification, onAddRoute, onOpenDM, onSendDmInvite, userBuilds, currentUserName, currentUserHandle, onSearchUsers, onUploadError, initialConvoy, followingProfiles, onLoadFollowingProfiles, myTripPlans, currentUserId, onPlanNewRouteForConvoy, onUseExistingPlanForConvoy, onPlanNewRoute, onNewTripReport }) {
   // Trigger the lazy-load of followed-user profiles the first time the
   // compose screen mounts so the convoy invite dropdown has data ready.
   // Root tracks idempotency via a ref, so re-mounts here are no-ops.
@@ -18338,7 +19224,7 @@ function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotificatio
   const [showLocationInput, setShowLocationInput] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
   const [geoMsg, setGeoMsg] = useState("");
-  const [showRouteForm, setShowRouteForm] = useState(false);
+  const [showRoutePicker, setShowRoutePicker] = useState(false);
   const [route, setRoute] = useState({ name: "", distance: "", time: "", elevation: "", difficulty: "Moderate", description: "", photos: [] });
   const [convoy, setConvoy] = useState(() => ({
     title: (initialConvoy && initialConvoy.title) || "",
@@ -18570,18 +19456,10 @@ function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotificatio
         ...(recovery.vehicle ? { vehicle: recovery.vehicle } : {}),
         likes: 0, comments: 0,
       };
-      // Trigger recovery alert for all users
-      onAddRecoveryAlert && onAddRecoveryAlert({
-        id: "rec_" + Date.now(),
-        title: recovery.title,
-        location: recovery.location || "Unknown",
-        coords: recovery.coords || "—",
-        urgency: recovery.urgency,
-        time: Date.now(),
-        vehicle: recovery.vehicle || "",
-        detail: recovery.description || "",
-        author: meHandle || meName,
-      });
+      // The recovery post itself IS the alert — once addPost persists it,
+      // the feed-derived recoveryAlerts memo at root picks it up and it
+      // appears in both the Recovery board and the bell's Recovery tab.
+      // No separate local-only alert push needed.
       onAddNotification && onAddNotification({
         type: "recovery",
         user: "KyleLPO",
@@ -18635,58 +19513,52 @@ function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotificatio
   const [recGeoLoading, setRecGeoLoading] = useState(false);
   const [recGeoMsg, setRecGeoMsg] = useState("");
 
-  // Route form overlay — uses the same RouteDetailsForm as the Routes page
-  if (showRouteForm) {
+  // Route picker — when the user taps "Route" on the post-type picker we
+  // ask whether they want to start a Trip Plan or a Trip Report. Both
+  // dispatch to root-level entry points (enterPlanBuilder for plans,
+  // setTripCreatorMode("report") for reports) and close the compose
+  // screen so the user lands directly in the dedicated flow.
+  if (showRoutePicker) {
     return (
-      <RouteDetailsForm
-        isManual
-        userBuilds={userBuilds}
-        onBack={() => setShowRouteForm(false)}
-        onPublish={(routeData) => {
-          const id = "user_" + Date.now();
-          const newPost = {
-            id, type: "ROUTES", user: "KyleLPO", initial: "K", time: Date.now(),
-            title: routeData.name,
-            body: routeData.desc || null,
-            distance: routeData.distance ? routeData.distance + " MI" : "—",
-            duration: routeData.time || "—",
-            badge: null, verified: 0,
-            likes: 0, comments: 0,
-            difficulty: routeData.difficulty || "Moderate",
-            elevation: routeData.elevGain ? "+" + Number(routeData.elevGain).toLocaleString() + " FT" : "—",
-            location: routeData.location || "",
-            terrains: routeData.terrains || [],
-            tags: routeData.tags || [],
-            photos: routeData.photos || [],
-            pins: routeData.pins || [],
-            points: routeData.points || [],
-          };
-          if (routeData.shareToFeed) {
-            onSubmit && onSubmit(newPost);
-          }
-          onAddRoute && onAddRoute({
-            id,
-            name: routeData.name,
-            desc: routeData.desc || "",
-            difficulty: routeData.difficulty || "Moderate",
-            distance: routeData.distance ? routeData.distance + " MI" : "—",
-            time: routeData.time || "—",
-            elevation: routeData.elevGain ? "+" + Number(routeData.elevGain).toLocaleString() + " FT" : "—",
-            location: routeData.location || "",
-            terrains: routeData.terrains || [],
-            tags: routeData.tags || [],
-            pins: routeData.pins || [],
-            points: routeData.points || [],
-            photos: routeData.photos || [],
-            rating: null,
-            reviews: 0,
-            author: "KyleLPO",
-            createdAt: Date.now(),
-          });
-          setShowRouteForm(false);
-          onClose && onClose();
-        }}
-      />
+      <div style={{ background: T.darkBg, minHeight: "100vh", paddingBottom: 80 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px", borderBottom: `1px solid ${T.charcoal}` }}>
+          <button onClick={() => setShowRoutePicker(false)} style={{ background: "none", border: "none", color: T.tertiary, fontFamily: sans, fontSize: 12, fontWeight: 600, letterSpacing: 1, cursor: "pointer" }}>← BACK</button>
+          <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, letterSpacing: 1 }}>ROUTE</span>
+          <div style={{ width: 50 }} />
+        </div>
+        <div style={{ padding: "16px", display: "flex", flexDirection: "column", gap: 14 }}>
+          <div>
+            <h2 style={{ fontFamily: sans, fontSize: 18, color: T.white, margin: "0 0 4px", fontWeight: 700 }}>What are you sharing?</h2>
+            <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, margin: 0 }}>Plan an upcoming trip or share a completed one with the community.</p>
+          </div>
+          <button
+            onClick={() => { setShowRoutePicker(false); onClose && onClose(); onPlanNewRoute && onPlanNewRoute(); }}
+            style={{ display: "flex", alignItems: "center", gap: 14, background: T.darkCard, borderRadius: 12, padding: "16px", border: "none", cursor: "pointer", textAlign: "left", width: "100%", boxSizing: "border-box" }}
+          >
+            <div style={{ width: 44, height: 44, borderRadius: 10, background: `${T.copper}15`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <MapPin size={20} color={T.copper} strokeWidth={1.5} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ fontFamily: sans, fontSize: 15, color: T.white, fontWeight: 600, display: "block", marginBottom: 2 }}>Plan a Trip</span>
+              <span style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.4 }}>Drop pins on the map to map out a future trip. Save and share when ready.</span>
+            </div>
+            <ChevronRight size={18} color={T.tertiary} />
+          </button>
+          <button
+            onClick={() => { setShowRoutePicker(false); onClose && onClose(); onNewTripReport && onNewTripReport(); }}
+            style={{ display: "flex", alignItems: "center", gap: 14, background: T.darkCard, borderRadius: 12, padding: "16px", border: "none", cursor: "pointer", textAlign: "left", width: "100%", boxSizing: "border-box" }}
+          >
+            <div style={{ width: 44, height: 44, borderRadius: 10, background: `${"#8B6FAF"}15`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <Mountain size={20} color="#8B6FAF" strokeWidth={1.5} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ fontFamily: sans, fontSize: 15, color: T.white, fontWeight: 600, display: "block", marginBottom: 2 }}>Trip Report</span>
+              <span style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.4 }}>Share a completed trip with photos, route, and notes.</span>
+            </div>
+            <ChevronRight size={18} color={T.tertiary} />
+          </button>
+        </div>
+      </div>
     );
   }
 
@@ -18703,7 +19575,7 @@ function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotificatio
             const Icon = t.icon;
             return (
               <button key={t.key} onClick={() => {
-                if (t.key === "route") { setShowRouteForm(true); return; }
+                if (t.key === "route") { setShowRoutePicker(true); return; }
                 if (t.key === "convoy") {
                   // Route-source picker first — user chooses to plan a
                   // new route or pick one of their existing plans.
@@ -19492,19 +20364,17 @@ function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotificatio
 }
 
 /* ─── RECOVERY PAGE (Full screen) ─── */
-function RecoveryScreen({ onOpenMap, onOpenDM }) {
+function RecoveryScreen({ onOpenMap, onOpenDM, recoveryItems, onRequestHelp, currentUserId, onMarkResolved }) {
   const [filter, setFilter] = useState("ALL");
-  const allAlerts = [
-    { title: "Winch Support Required", location: "Black Bear Pass, CO", coords: "37.8106° N, 107.6992° W", urgency: "HIGH", time: "2m ago", vehicle: "Jeep Gladiator on 37s", detail: "High-centered on a shelf. Front locker acting up. Need a heavy rig with at least 12k winch to assist.", responses: 3, author: "DesertRat_4x4" },
-    { title: "Tow Needed — Broken Axle", location: "Rubicon Trail, CA", coords: "38.9764° N, 120.1572° W", urgency: "HIGH", time: "25m ago", vehicle: "2018 Wrangler JL", detail: "Front axle snapped at the birfield. Cannot move under own power. Closest trailhead is 6 miles out.", responses: 7, author: "StockHero" },
-    { title: "Flat Tire Assist", location: "Moab, UT", coords: "38.5733° N, 109.5498° W", urgency: "LOW", time: "1h ago", vehicle: "Toyota 4Runner", detail: "Spare is wrong size. Need 285/70R17 or close. Parked safely off-trail.", responses: 1, author: "DirtRoadDave" },
-    { title: "Overheated Radiator — Stranded", location: "Johnson Valley, CA", coords: "34.3525° N, 116.4572° W", urgency: "HIGH", time: "3h ago", vehicle: "2016 Toyota Tacoma", detail: "Radiator hose blew on the lakebed. No cell service. Spotted via InReach.", responses: 5, author: "FoxFanatic" },
-    { title: "Lost on Trail — Need GPS Guidance", location: "Uwharrie NF, NC", coords: "35.3894° N, 80.0674° W", urgency: "LOW", time: "5h ago", vehicle: "Ford Bronco", detail: "Took a wrong fork and can't find the main trail. No injuries, plenty of fuel.", responses: 12, author: "LiftKing" },
-    { title: "Stuck in Deep Mud", location: "North Fork Crossing, OR", coords: "45.8923° N, 121.3482° W", urgency: "RESOLVED", time: "8h ago", vehicle: "Jeep Gladiator on 37s", detail: "Winch overheating. Vehicle recovered by @Peak_Finder.", responses: 24, author: "BajaBound" },
-  ];
-
+  // Live recovery items from feedItems (filtered to type="RECOVERY" + the
+  // dismiss layer in root). Local urgency filter is layered on top so the
+  // user can narrow to HIGH / LOW / RESOLVED.
+  const allAlerts = recoveryItems || [];
   const filters = ["ALL", "HIGH", "LOW", "RESOLVED"];
-  const filtered = filter === "ALL" ? allAlerts : allAlerts.filter(a => a.urgency === filter);
+  const filtered = filter === "ALL"
+    ? allAlerts.filter(a => a.urgency !== "RESOLVED")
+    : allAlerts.filter(a => a.urgency === filter);
+  const activeCount = allAlerts.filter(a => a.urgency !== "RESOLVED").length;
   const urgencyColor = (u) => u === "HIGH" ? T.red : u === "RESOLVED" ? T.green : T.copper;
 
   return (
@@ -19513,9 +20383,12 @@ function RecoveryScreen({ onOpenMap, onOpenDM }) {
       <div style={{ padding: "16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div>
           <h2 style={{ fontFamily: sans, fontSize: 20, color: T.white, margin: "0 0 4px", fontWeight: 700 }}>Recovery Board</h2>
-          <span style={{ fontFamily: serif, fontSize: 12, color: T.tertiary }}>{allAlerts.filter(a => a.urgency !== "RESOLVED").length} active requests nearby</span>
+          <span style={{ fontFamily: serif, fontSize: 12, color: T.tertiary }}>
+            {activeCount === 0 ? "No active requests right now" : `${activeCount} active request${activeCount === 1 ? "" : "s"}`}
+          </span>
         </div>
-        <button style={{ background: T.red, padding: "10px 16px", borderRadius: 8, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+        <button onClick={() => onRequestHelp && onRequestHelp()}
+                style={{ background: T.red, padding: "10px 16px", borderRadius: 8, border: "none", cursor: onRequestHelp ? "pointer" : "default", display: "flex", alignItems: "center", gap: 6, opacity: onRequestHelp ? 1 : 0.5 }}>
           <AlertTriangle size={14} color={T.white} />
           <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, letterSpacing: 0.5 }}>REQUEST HELP</span>
         </button>
@@ -19529,48 +20402,66 @@ function RecoveryScreen({ onOpenMap, onOpenDM }) {
       </div>
 
       {/* Alert Cards */}
-      <div style={{ padding: "0 16px", display: "flex", flexDirection: "column", gap: 8 }}>
-        {filtered.map((a, i) => (
-          <div key={i} style={{ ...cardStyle, overflow: "hidden" }}>
-            <div style={{ background: `${urgencyColor(a.urgency)}12`, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: urgencyColor(a.urgency), padding: "2px 7px", borderRadius: 3, letterSpacing: 1, fontWeight: 600 }}>{a.urgency}</span>
-                <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{formatPostTime(a.time)}</span>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                <Users size={12} color={T.tertiary} />
-                <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{a.responses} responding</span>
-              </div>
-            </div>
-            <div style={{ padding: 16 }}>
-              <p style={{ fontFamily: sans, fontSize: 15, color: T.white, margin: "0 0 4px", fontWeight: 600 }}>{a.title}</p>
-              <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "0 0 10px", lineHeight: 1.5 }}>{a.detail}</p>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 12 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                  <MapPin size={12} color={T.tertiary} />
-                  <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{a.location}</span>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                  <Navigation size={12} color={T.tertiary} />
-                  <span style={{ fontFamily: serif, fontSize: 11, color: T.tertiary }}>{a.coords}</span>
-                </div>
-                <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{a.vehicle}</span>
-              </div>
-              {a.urgency !== "RESOLVED" ? (
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button onClick={() => onOpenDM && onOpenDM(a.author, "I'm responding to your recovery request — on my way to help!", { title: `🚨 Recovery: ${a.title}`, user: a.author, initial: a.author.charAt(0).toUpperCase(), type: "recovery", location: a.location, urgency: a.urgency })} style={{ background: T.red, color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 600, padding: "9px 18px", borderRadius: 6, border: "none", cursor: "pointer", letterSpacing: 0.5 }}>RESPOND</button>
-                  <button onClick={() => onOpenMap && onOpenMap(a.coords, a.location, a.title, { author: a.author, alertId: "ra_" + i, title: a.title })} style={{ background: "none", color: T.tertiary, fontFamily: sans, fontSize: 11, padding: "9px 18px", borderRadius: 6, border: `1px solid ${T.charcoal}`, cursor: "pointer", letterSpacing: 0.5 }}>VIEW ON MAP</button>
-                </div>
-              ) : (
+      {filtered.length === 0 ? (
+        <div style={{ padding: "48px 24px", textAlign: "center" }}>
+          <AlertTriangle size={36} color={T.tertiary} strokeWidth={0.8} style={{ opacity: 0.3, marginBottom: 12 }} />
+          <p style={{ fontFamily: sans, fontSize: 14, color: T.tertiary, margin: 0 }}>
+            {filter === "ALL" ? "No active recovery requests right now." : `No ${filter.toLowerCase()} requests.`}
+          </p>
+        </div>
+      ) : (
+        <div style={{ padding: "0 16px", display: "flex", flexDirection: "column", gap: 8 }}>
+          {filtered.map((a) => (
+            <div key={a.id} style={{ ...cardStyle, overflow: "hidden" }}>
+              <div style={{ background: `${urgencyColor(a.urgency)}12`, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <CheckCircle size={14} color={T.green} />
-                  <span style={{ fontFamily: sans, fontSize: 11, color: T.green, fontWeight: 600, letterSpacing: 0.5 }}>RESOLVED</span>
+                  <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: urgencyColor(a.urgency), padding: "2px 7px", borderRadius: 3, letterSpacing: 1, fontWeight: 600 }}>{a.urgency}</span>
+                  <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{formatPostTime(a.time)}</span>
                 </div>
-              )}
+              </div>
+              <div style={{ padding: 16 }}>
+                <p style={{ fontFamily: sans, fontSize: 15, color: T.white, margin: "0 0 4px", fontWeight: 600 }}>{a.title}</p>
+                {a.detail && <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "0 0 10px", lineHeight: 1.5 }}>{a.detail}</p>}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 12 }}>
+                  {a.location && a.location !== "Unknown" && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <MapPin size={12} color={T.tertiary} />
+                      <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{a.location}</span>
+                    </div>
+                  )}
+                  {a.coords && a.coords !== "—" && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <Navigation size={12} color={T.tertiary} />
+                      <span style={{ fontFamily: serif, fontSize: 11, color: T.tertiary }}>{a.coords}</span>
+                    </div>
+                  )}
+                  {a.vehicle && <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{a.vehicle}</span>}
+                </div>
+                {a.urgency !== "RESOLVED" ? (
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {currentUserId && a.userId && a.userId === currentUserId ? (
+                      <button onClick={() => onMarkResolved && onMarkResolved(a.id)} style={{ background: T.green, color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 600, padding: "9px 18px", borderRadius: 6, border: "none", cursor: "pointer", letterSpacing: 0.5, display: "flex", alignItems: "center", gap: 6 }}>
+                        <CheckCircle size={12} color={T.white} />
+                        MARK RESOLVED
+                      </button>
+                    ) : (
+                      <button onClick={() => onOpenDM && onOpenDM(a.userId || a.author, "I'm responding to your recovery request — on my way to help!", { title: `🚨 Recovery: ${a.title}`, user: a.author, initial: (a.author || "U").charAt(0).toUpperCase(), type: "recovery", location: a.location, urgency: a.urgency })} style={{ background: T.red, color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 600, padding: "9px 18px", borderRadius: 6, border: "none", cursor: "pointer", letterSpacing: 0.5 }}>RESPOND</button>
+                    )}
+                    {a.coords && a.coords !== "—" && (
+                      <button onClick={() => onOpenMap && onOpenMap(a.coords, a.location, a.title, { author: a.author, alertId: a.id, title: a.title })} style={{ background: "none", color: T.tertiary, fontFamily: sans, fontSize: 11, padding: "9px 18px", borderRadius: 6, border: `1px solid ${T.charcoal}`, cursor: "pointer", letterSpacing: 0.5 }}>VIEW ON MAP</button>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <CheckCircle size={14} color={T.green} />
+                    <span style={{ fontFamily: sans, fontSize: 11, color: T.green, fontWeight: 600, letterSpacing: 0.5 }}>RESOLVED</span>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -20465,14 +21356,24 @@ function DMScreen({ onClose, onViewUser, initialConvId, initialMessage, initialS
 // ─── GUEST MODE ───
 // Small banner shown at the top of view-only screens while browsing as guest.
 // Tap → opens the sign-in prompt modal managed at root level.
-function GuestBanner({ onSignIn }) {
+function GuestBanner({ onSignIn, overlay }) {
+  // Default: inline (takes layout space at the top of a scrolling
+  // screen like Feed/Builds/Forum).
+  // Overlay: position: absolute over the screen — used on the Maps
+  // screen so the banner sits ON the map instead of pushing it down
+  // (which would force the user to scroll to see the spot/HQ popup).
+  const baseStyle = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "10px 14px", background: `${T.copper}EE`, border: `1px solid ${T.copper}60`, borderRadius: 10, cursor: "pointer", backdropFilter: "blur(8px)" };
+  const style = overlay
+    ? { ...baseStyle, position: "absolute", top: 10, left: 10, right: 10, zIndex: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.4)" }
+    : { ...baseStyle, background: `${T.copper}14`, border: `1px solid ${T.copper}30`, margin: "10px 12px 0", backdropFilter: "none" };
+  const textColor = overlay ? T.white : T.copper;
   return (
-    <div onClick={onSignIn} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "10px 14px", margin: "10px 12px 0", background: `${T.copper}14`, border: `1px solid ${T.copper}30`, borderRadius: 10, cursor: "pointer" }}>
+    <div onClick={onSignIn} style={style}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <Eye size={14} color={T.copper} />
-        <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 0.5 }}>BROWSING AS GUEST</span>
+        <Eye size={14} color={textColor} />
+        <span style={{ fontFamily: sans, fontSize: 11, color: textColor, fontWeight: 700, letterSpacing: 0.5 }}>BROWSING AS GUEST</span>
       </div>
-      <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1, fontWeight: 700 }}>SIGN IN →</span>
+      <span style={{ fontFamily: sans, fontSize: 10, color: textColor, letterSpacing: 1, fontWeight: 700 }}>SIGN IN →</span>
     </div>
   );
 }
@@ -20554,9 +21455,27 @@ const __INITIAL_SHARED_LINK = (function() {
       try { window.history.replaceState(null, "", "/"); } catch (e) {}
       return { kind: "spot", id: decodeURIComponent(spotMatch[1]) };
     }
+    const buildMatch = path.match(/^\/builds\/(.+?)\/?$/);
+    if (buildMatch) {
+      try { window.history.replaceState(null, "", "/"); } catch (e) {}
+      return { kind: "build", id: decodeURIComponent(buildMatch[1]) };
+    }
     if (/^\/hq\/?$/.test(path)) {
       try { window.history.replaceState(null, "", "/"); } catch (e) {}
       return { kind: "hq" };
+    }
+    // Forum thread deep link — /forum/<subcategory-slug>/<thread-slug>
+    // Keep the slugged URL visible in the address bar (SEO + share-link copy).
+    const forumMatch = path.match(/^\/forum\/([^/]+)\/([^/]+)\/?$/);
+    if (forumMatch) {
+      return { kind: "forum-thread", subSlug: decodeURIComponent(forumMatch[1]), threadSlug: decodeURIComponent(forumMatch[2]) };
+    }
+    // Forum subcategory landing — /forum/<subcategory-slug>. Topical hub
+    // page that lists threads. The SSR version is served by api/preview;
+    // when the SPA mounts it routes to the in-app threads view.
+    const forumSubMatch = path.match(/^\/forum\/([^/]+)\/?$/);
+    if (forumSubMatch) {
+      return { kind: "forum-sub", subSlug: decodeURIComponent(forumSubMatch[1]) };
     }
   } catch (e) { /* ignore */ }
   return null;
@@ -20668,7 +21587,7 @@ function clientDataToDbBuild(data, userId) {
 // derived client-side from the type field.
 function dbNotifToBell(row) {
   if (!row) return null;
-  const iconMap = { like: { icon: Heart, iconColor: T.red }, comment: { icon: MessageCircle, iconColor: T.copper }, mention: { icon: AtSign, iconColor: T.copper }, reply: { icon: MessageCircle, iconColor: T.copper }, follow: { icon: UserPlus, iconColor: T.green }, rsvp: { icon: Users, iconColor: T.green } };
+  const iconMap = { like: { icon: Heart, iconColor: T.red }, comment: { icon: MessageCircle, iconColor: T.copper }, mention: { icon: AtSign, iconColor: T.copper }, reply: { icon: MessageCircle, iconColor: T.copper }, follow: { icon: UserPlus, iconColor: T.green }, rsvp: { icon: Users, iconColor: T.green }, role: { icon: Shield, iconColor: T.copper } };
   const ic = iconMap[row.type] || { icon: Bell, iconColor: T.tertiary };
   return {
     id: row.id,
@@ -20679,6 +21598,7 @@ function dbNotifToBell(row) {
     target: row.target || null,
     postId: row.post_id || null,
     buildId: row.build_id || null,
+    forumThreadId: row.forum_thread_id || null,
     time: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
     isRead: row.is_read || false,
     icon: ic.icon,
@@ -21026,12 +21946,140 @@ export default function Trailhead() {
   // Profile row from public.profiles, fetched after sign-in. Source of truth
   // for handle / full_name / avatar_url — supersedes user_metadata reads.
   const [currentProfile, setCurrentProfile] = useState(null);
+  // Role derivations live up here (not down near the JSX return) because
+  // downstream useEffects + state initializers reference isAdmin and would
+  // hit a TDZ if it were declared later in render order.
+  const currentRole = (currentProfile && currentProfile.role) || "user";
+  const isAdmin = currentRole === "admin";
+  const isAmbassador = currentRole === "ambassador" || isAdmin;
   // Public-data hydrate for guests (no session). Loads only what RLS lets
   // anon read — posts, builds, public trip reports + plans, camping spots.
   // This is what makes shared links + read-only browsing work for users
   // who land on a deep link without signing in. Mirrors the data slices
   // hydrateUserData populates, minus anything user-scoped (likes, saves,
   // notifications, my routes, my builds, etc.).
+  // Targeted fetch for a single post + its author profile. Used when the
+  // user lands on /post/:id so the post can render almost instantly,
+  // before the much larger 100-post hydrate completes. The shared post
+  // gets dropped into feedItems immediately; later, hydrateGuestData /
+  // hydrateUserData replaces feedItems with the full list (containing
+  // this same post at its true chronological position) and the
+  // pendingPostNav effect re-fires the highlight/scroll.
+  // Fast-load a trip_reports row by slug (covers both /trips/:slug and
+  // /plans/:slug — same table, kind discriminator). Adds to tripReports
+  // so allTripReports memo recomputes and the pendingTripNav effect
+  // resolves it into detailTripId immediately.
+  const loadTripBySlugFast = async (slug) => {
+    if (!slug || typeof slug !== "string") return false;
+    try {
+      const { data: row, error } = await supabase
+        .from("trip_reports")
+        .select("id,user_id,name,slug,description,hero_img,start_lat,start_lng,end_lat,end_lng,route_geom,kind,visibility,status,distance_mi,elev_gain_ft,max_elev_ft,duration_min,region,state_code,terrains,tags,difficulty,planned_start,planned_end,party_size,view_count,created_at,updated_at")
+        .eq("slug", slug)
+        .maybeSingle();
+      if (error || !row) return false;
+      setTripReports(prev => (prev.some(t => t.id === row.id) ? prev : [row, ...prev]));
+      // Also pull the author profile so the detail page shows the name
+      // + avatar without waiting on the full hydrate.
+      if (row.user_id) {
+        try {
+          const { data: prof } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").eq("id", row.user_id).maybeSingle();
+          if (prof) setTripAuthors(prev => ({ ...prev, [row.user_id]: prof }));
+        } catch (e) { /* non-fatal */ }
+      }
+      return true;
+    } catch (e) { console.error("[shared-link] trip fast-load failed", e); }
+    return false;
+  };
+
+  // Fast-load a single camping_spots row by id. Adds to
+  // userCampingSpots so the existing pendingSpotNav effect finds it and
+  // opens the popup on the map without waiting for the bbox fetch.
+  const loadSpotByIdFast = async (id) => {
+    if (!id || typeof id !== "string") return false;
+    try {
+      const { data: row, error } = await supabase
+        .from("camping_spots").select("*")
+        .eq("id", id).eq("visibility", "public").maybeSingle();
+      if (error || !row) return false;
+      setUserCampingSpots(prev => (prev.some(s => s.id === row.id) ? prev : [...prev, row]));
+      if (row.user_id) {
+        try {
+          const { data: prof } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").eq("id", row.user_id).maybeSingle();
+          if (prof) setSpotAuthors(prev => ({ ...prev, [row.user_id]: prof }));
+        } catch (e) { /* non-fatal */ }
+      }
+      return true;
+    } catch (e) { console.error("[shared-link] spot fast-load failed", e); }
+    return false;
+  };
+
+  // Fast-load a forum thread by slug (covers /forum/<sub-slug>/<thread-slug>
+  // deep links). Pulls the thread row + author profile in one round trip so
+  // the splash can unblock without waiting for the full forum hydrate. The
+  // bulk `hydrateForumThreads` runs in the background and merges the rest
+  // of the forum into state.
+  const loadForumThreadBySlugFast = async (threadSlug) => {
+    if (!threadSlug || typeof threadSlug !== "string") return false;
+    try {
+      const { data: row, error } = await supabase
+        .from("forum_threads")
+        .select("*")
+        .eq("slug", threadSlug)
+        .maybeSingle();
+      if (error || !row) return false;
+      let prof = null;
+      if (row.user_id) {
+        try {
+          const { data } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").eq("id", row.user_id).maybeSingle();
+          prof = data;
+        } catch (e) { /* non-fatal */ }
+      }
+      const local = dbRowToForumThread(row, prof);
+      if (local) {
+        setForumThreads(prev => prev.some(t => t.id === local.id) ? prev : [local, ...prev]);
+        if (prof) setForumAuthors(prev => ({ ...prev, [prof.id]: prof }));
+      }
+      // Also kick the replies fetch so they're ready when the user lands
+      // on the thread.
+      try { loadForumReplies(row.id); } catch (e) { /* non-fatal */ }
+      return true;
+    } catch (e) { console.error("[shared-link] forum fast-load failed", e); }
+    return false;
+  };
+
+  const loadSharedPostFast = async (postId) => {
+    if (!postId || typeof postId !== "string") return false;
+    try {
+      const { data: row, error } = await supabase
+        .from("posts").select("*").eq("id", postId).maybeSingle();
+      if (error || !row) return false;
+      let prof = null;
+      if (row.user_id) {
+        try {
+          const { data } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").eq("id", row.user_id).maybeSingle();
+          prof = data;
+        } catch (e) { /* non-fatal */ }
+      }
+      const item = dbRowToFeedItem(row, prof);
+      if (item) {
+        // Merge: don't replace feedItems wholesale. If the background
+        // hydrate happens to win the race, its full list is already in
+        // place — we only need to ensure the shared post is present
+        // (prepend if not). Otherwise the hydrate's setFeedItems would
+        // overwrite our [item] with the full list (good) but if we
+        // overwrite back to [item], we lose the rest of the feed.
+        setFeedItems(prev => {
+          const existing = prev || [];
+          if (existing.some(p => p.id === item.id)) return existing;
+          return [item, ...existing];
+        });
+        return true;
+      }
+    } catch (e) { console.error("[shared-post] fast-load failed", e); }
+    return false;
+  };
+
   const hydrateGuestData = async () => {
     try {
       const { data: postRows, error: postErr } = await supabase
@@ -21052,7 +22100,11 @@ export default function Trailhead() {
             if (Array.isArray(authorProfs)) authorProfs.forEach(p => { authorsById[p.id] = p; });
           } catch (e) { /* non-fatal */ }
         }
-        setFeedItems(postRows.map(r => dbRowToFeedItem(r, authorsById[r.user_id] || null)));
+        // Merge with prev so anything fast-loaded (e.g. a shared post
+        // outside the top 100) isn't clobbered.
+        const fresh = postRows.map(r => dbRowToFeedItem(r, authorsById[r.user_id] || null));
+        const freshIds = new Set(fresh.map(p => p.id));
+        setFeedItems(prev => [...fresh, ...(prev || []).filter(p => !freshIds.has(p.id))]);
       }
     } catch (e) { console.warn("[guest-hydrate] posts fetch failed", e); }
     // Builds gallery — public read.
@@ -21085,8 +22137,20 @@ export default function Trailhead() {
         .eq("status", "published")
         .order("created_at", { ascending: false })
         .limit(100);
-      if (Array.isArray(tripRows)) setTripReports(tripRows);
+      if (Array.isArray(tripRows)) {
+        // Merge so fast-loaded trips aren't lost AND lazy-loaded
+        // route_data from `loadTripRouteData` (called when the detail
+        // page opens) survives — hydrate's bulk SELECT deliberately
+        // omits route_data (it's heavy jsonb), so a naive replace would
+        // wipe the route polyline / pin notes from any open detail.
+        setTripReports(prev => mergeTripRowsPreservingHeavy(tripRows, prev));
+      }
     } catch (e) { console.warn("[guest-hydrate] trip_reports fetch failed", e); }
+    // Forum threads — public SELECT (RLS allows anon). Critical for SEO:
+    // forum content needs to be crawlable on cold load without auth.
+    try { await hydrateForumThreads(); } catch (e) { /* non-fatal */ }
+    try { hydrateForumLikes(); } catch (e) { /* non-fatal */ }
+    try { hydrateForumCategories(); } catch (e) { /* non-fatal */ }
   };
   // Hydrates profile + builds from Supabase for a given signed-in session.
   // Idempotent per-user via hydratedForUidRef — cold boot fires getSession()
@@ -21109,6 +22173,11 @@ export default function Trailhead() {
     // loadAllBuildsOnce is ref-guarded so calling it again from
     // BuildsScreen's mount useEffect is a no-op.
     try { loadAllBuildsOnce(); } catch (e) { /* non-fatal */ }
+    // Same fire-and-forget treatment for forum threads (public read,
+    // important for SEO + cold-boot Forum tab navigation).
+    try { hydrateForumThreads(); } catch (e) { /* non-fatal */ }
+    try { hydrateForumLikes(); } catch (e) { /* non-fatal */ }
+    try { hydrateForumCategories(); } catch (e) { /* non-fatal */ }
 
     // ─── Tier 1 — critical for first paint ───
     // Profile (header avatar/name) + posts (feed list). Both run in
@@ -21149,7 +22218,10 @@ export default function Trailhead() {
         } catch (e) { /* non-fatal */ }
       }
       const mappedItems = postRows.map(r => dbRowToFeedItem(r, authorsById[r.user_id] || null));
-      setFeedItems(mappedItems);
+      // Merge with prev so anything fast-loaded (shared post deep-link
+      // outside the top 30) isn't clobbered.
+      const mappedIds = new Set(mappedItems.map(p => p.id));
+      setFeedItems(prev => [...mappedItems, ...(prev || []).filter(p => !mappedIds.has(p.id))]);
       if (postRows.length === 30) {
         const oldest = postRows[postRows.length - 1];
         if (oldest && oldest.created_at) setFeedCursor(oldest.created_at);
@@ -21246,7 +22318,11 @@ export default function Trailhead() {
       .eq("user_id", uid).order("created_at", { ascending: false }).limit(500)
       .then(({ data: csRows, error: csErr }) => {
         if (csErr) { console.error("[hydrate] camping_spots fetch error", csErr); return; }
-        if (Array.isArray(csRows)) setUserCampingSpots(csRows);
+        if (Array.isArray(csRows)) {
+          // Merge: preserve fast-loaded shared spots + lazy-loaded
+          // photos/elevation on any spot whose popup is currently open.
+          setUserCampingSpots(prev => mergeSpotRowsPreservingHeavy(csRows, prev));
+        }
       });
 
     // Trip reports + per-trip like counts.
@@ -21256,7 +22332,10 @@ export default function Trailhead() {
       .then(({ data: trRows, error: trErr }) => {
         if (trErr) { console.error("[hydrate] trip_reports fetch error", trErr); return; }
         if (!Array.isArray(trRows)) return;
-        setTripReports(trRows);
+        // See guest-hydrate note: this preserves lazy-loaded route_data
+        // jsonb on any trip whose detail page is open while hydrate
+        // lands.
+        setTripReports(prev => mergeTripRowsPreservingHeavy(trRows, prev));
         const tripIds = trRows.map(t => t.id).filter(id => typeof id === "string");
         if (tripIds.length === 0) return;
         supabase.from("trip_report_likes").select("trip_id, user_id").in("trip_id", tripIds)
@@ -21493,6 +22572,16 @@ export default function Trailhead() {
       const session = data && data.session;
       setSupabaseSession(session || null);
       setSessionHydrated(true);
+      // Universal fast-path for any deep link — fetch JUST the targeted
+      // entity first and unblock the splash the moment it returns. The
+      // rest of the data (hydrateGuestData or hydrateUserData) keeps
+      // running in the background. Cuts time-to-shared-content from
+      // ~full-hydrate to ~one round trip across every share kind:
+      // posts, trip reports, trip plans, camping spots, builds. HQ
+      // needs no fetch (static destination) so it skips straight to
+      // setAppReady. Same merge-on-hydrate pattern preserves the
+      // fast-loaded entity if it falls outside the bulk fetch window.
+      const linkKind = initialSharedLink && initialSharedLink.kind;
       if (session && !initialSharedLink) {
         // Skip login screen if already signed in. If this user has no
         // handle yet (e.g. they interrupted OAuth onboarding last time),
@@ -21501,10 +22590,28 @@ export default function Trailhead() {
         setAuthState(hasHandle ? "app" : "onboarding");
         if (hasHandle) hydrateUserData(session); // sets appReady when complete
         else setAppReady(true); // onboarding screen needs no hydrate
+      } else if (initialSharedLink) {
+        // Pick the right fast-loader based on the link kind.
+        let fastLoad = Promise.resolve();
+        if (linkKind === "post") fastLoad = loadSharedPostFast(initialSharedLink.id);
+        else if (linkKind === "trip" || linkKind === "plan") fastLoad = loadTripBySlugFast(initialSharedLink.slug);
+        else if (linkKind === "spot") fastLoad = loadSpotByIdFast(initialSharedLink.id);
+        else if (linkKind === "build") fastLoad = loadBuildById(initialSharedLink.id);
+        else if (linkKind === "forum-thread") fastLoad = loadForumThreadBySlugFast(initialSharedLink.threadSlug);
+        // hq has no DB fetch — splash unblocks immediately.
+        fastLoad.finally(() => setAppReady(true));
+        // Background: full hydrate keeps everything else loading.
+        if (session) {
+          const hasHandle = !!(session.user && session.user.user_metadata && session.user.user_metadata.handle);
+          if (hasHandle) hydrateUserData(session); else setAppReady(true);
+        } else {
+          hydrateGuestData();
+        }
       } else {
-        // No session — guests get a public-data hydrate so shared links
-        // resolve and read-only browsing works (feed, builds gallery,
-        // trip reports). RLS keeps private rows out of the result set.
+        // No session, no targeted deep link — guests get a public-data
+        // hydrate so shared links resolve and read-only browsing works
+        // (feed, builds gallery, trip reports). RLS keeps private rows
+        // out of the result set.
         hydrateGuestData().finally(() => setAppReady(true));
       }
     });
@@ -21741,6 +22848,125 @@ export default function Trailhead() {
         const row = payload.old;
         if (!row || !row.id) return;
         setTripReports(prev => prev.filter(t => t.id !== row.id));
+      })
+      // Forum threads — INSERT/UPDATE/DELETE. Skip own-INSERT (already
+      // patched optimistically by addForumThread). Author profile fetched
+      // on demand for new threads from other users.
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "forum_threads" }, async (payload) => {
+        const row = payload.new;
+        if (!row || !row.id) return;
+        if (row.user_id === uid) return;
+        let prof = forumAuthors[row.user_id] || null;
+        if (!prof) {
+          try {
+            const { data } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").eq("id", row.user_id).single();
+            prof = data || null;
+            if (prof) setForumAuthors(prev => ({ ...prev, [prof.id]: prof }));
+          } catch (e) { /* non-fatal */ }
+        }
+        const local = dbRowToForumThread(row, prof);
+        if (local) setForumThreads(prev => prev.some(t => t.id === local.id) ? prev : [local, ...prev]);
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "forum_threads" }, (payload) => {
+        const row = payload.new;
+        if (!row || !row.id) return;
+        const prof = forumAuthors[row.user_id] || (row.user_id === uid ? currentProfile : null);
+        const local = dbRowToForumThread(row, prof);
+        if (local) setForumThreads(prev => prev.map(t => t.id === local.id ? { ...t, ...local } : t));
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "forum_threads" }, (payload) => {
+        const row = payload.old;
+        if (!row || !row.id) return;
+        setForumThreads(prev => prev.filter(t => t.id !== row.id));
+        setForumReplies(prev => { const next = { ...prev }; delete next[row.id]; return next; });
+      })
+      // Forum replies — INSERT/DELETE. Skip own-INSERT.
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "forum_replies" }, async (payload) => {
+        const row = payload.new;
+        if (!row || !row.thread_id) return;
+        if (row.user_id === uid) return;
+        let prof = forumAuthors[row.user_id] || null;
+        if (!prof) {
+          try {
+            const { data } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").eq("id", row.user_id).single();
+            prof = data || null;
+            if (prof) setForumAuthors(prev => ({ ...prev, [prof.id]: prof }));
+          } catch (e) { /* non-fatal */ }
+        }
+        const local = dbRowToForumReply(row, prof);
+        if (local) {
+          setForumReplies(prev => {
+            const list = prev[row.thread_id] || [];
+            if (list.some(r => r.id === local.id)) return prev;
+            return { ...prev, [row.thread_id]: [...list, local] };
+          });
+        }
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "forum_replies" }, (payload) => {
+        const row = payload.old;
+        if (!row || !row.thread_id) return;
+        setForumReplies(prev => ({ ...prev, [row.thread_id]: (prev[row.thread_id] || []).filter(r => r.id !== row.id) }));
+      })
+      // Forum thread + reply likes — keep counts in sync across viewers.
+      // Skip own mutations (already patched optimistically by toggle helpers).
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "forum_thread_likes" }, (payload) => {
+        const row = payload.new;
+        if (!row || !row.thread_id) return;
+        if (row.user_id === uid) return;
+        setForumThreadLikeCounts(prev => ({ ...prev, [row.thread_id]: (prev[row.thread_id] || 0) + 1 }));
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "forum_thread_likes" }, (payload) => {
+        const row = payload.old;
+        if (!row || !row.thread_id) return;
+        if (row.user_id === uid) return;
+        setForumThreadLikeCounts(prev => ({ ...prev, [row.thread_id]: Math.max((prev[row.thread_id] || 0) - 1, 0) }));
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "forum_reply_likes" }, (payload) => {
+        const row = payload.new;
+        if (!row || !row.reply_id) return;
+        if (row.user_id === uid) return;
+        setForumReplyLikeCounts(prev => ({ ...prev, [row.reply_id]: (prev[row.reply_id] || 0) + 1 }));
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "forum_reply_likes" }, (payload) => {
+        const row = payload.old;
+        if (!row || !row.reply_id) return;
+        if (row.user_id === uid) return;
+        setForumReplyLikeCounts(prev => ({ ...prev, [row.reply_id]: Math.max((prev[row.reply_id] || 0) - 1, 0) }));
+      })
+      // Forum categories + subcategories — admin/ambassador edits propagate
+      // live so every connected client sees new structure without a refresh.
+      // Skip own mutations (already patched optimistically in CRUD helpers).
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "forum_categories" }, (payload) => {
+        const row = payload.new;
+        if (!row || !row.id) return;
+        if (row.created_by === uid) return;
+        setForumCategoryRows(prev => prev.find(c => c.id === row.id) ? prev : [...prev, row]);
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "forum_categories" }, (payload) => {
+        const row = payload.new;
+        if (!row || !row.id) return;
+        setForumCategoryRows(prev => prev.map(c => c.id === row.id ? { ...c, ...row } : c));
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "forum_categories" }, (payload) => {
+        const row = payload.old;
+        if (!row || !row.id) return;
+        setForumCategoryRows(prev => prev.filter(c => c.id !== row.id));
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "forum_subcategories" }, (payload) => {
+        const row = payload.new;
+        if (!row || !row.id) return;
+        if (row.created_by === uid) return;
+        setForumSubcategoryRows(prev => prev.find(s => s.id === row.id) ? prev : [...prev, row]);
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "forum_subcategories" }, (payload) => {
+        const row = payload.new;
+        if (!row || !row.id) return;
+        setForumSubcategoryRows(prev => prev.map(s => s.id === row.id ? { ...s, ...row } : s));
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "forum_subcategories" }, (payload) => {
+        const row = payload.old;
+        if (!row || !row.id) return;
+        setForumSubcategoryRows(prev => prev.filter(s => s.id !== row.id));
       })
       // Camping spots — INSERT/UPDATE/DELETE so user-added spots and edits
       // appear live for everyone. With viewport-driven fetching, INSERT
@@ -22125,6 +23351,33 @@ export default function Trailhead() {
   // editable element has focus, since the user can't see / tap it anyway.
   // Uses focusin/focusout on document so it works across overlays and
   // nested fields without prop-drilling.
+  // Feed filter is controlled at root so the desktop sidebar can read +
+  // write the same pill state as FeedScreen's inline pill row. Falls back
+  // to in-component state for any FeedScreen instance that isn't passed a
+  // controller (e.g. profile-screen activity tabs).
+  const [feedFilter, setFeedFilter] = useState("ALL");
+  const FEED_PILL_FILTERS = ["ALL", "BUILDS", "CONVOYS", "TRIP REPORTS", "PHOTOS", "FORUM"];
+
+  // Desktop layout — Twitter-style centered column (the existing 430px app
+  // shell) flanked by a left nav sidebar + right info sidebar. Activates
+  // when the viewport hits >= 1024px. Mobile/tablet keeps the existing
+  // single-column shell with bottom nav. Triggered via matchMedia listener
+  // so resizes (or browser-window-into-PWA-fullscreen) update immediately.
+  const [isDesktop, setIsDesktop] = useState(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return false;
+    return window.matchMedia("(min-width: 1024px)").matches;
+  });
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const onChange = () => setIsDesktop(mq.matches);
+    if (mq.addEventListener) mq.addEventListener("change", onChange);
+    else mq.addListener(onChange); // Safari < 14 fallback
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener("change", onChange);
+      else mq.removeListener(onChange);
+    };
+  }, []);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -22170,7 +23423,15 @@ export default function Trailhead() {
   const goToLoginFromGuest = () => { setShowGuestPrompt(false); setIsGuest(false); setAuthState("login"); };
   const [screen, setScreen] = useState(() => {
     if (!initialSharedLink) return "feed";
-    if (initialSharedLink.kind === "trip" || initialSharedLink.kind === "spot" || initialSharedLink.kind === "hq" || initialSharedLink.kind === "plan") return "routes";
+    // Trip / plan detail renders as a root-level overlay so the
+    // underlying screen can be anything. Landing on "feed" means: (a)
+    // when the user closes the overlay they see the populated feed,
+    // not a back-door into the gated Maps screen, and (b) the background
+    // hydrate's feedItems is visible to guests as soon as it lands.
+    // Spot/HQ links still need the map (their popup IS the map UI).
+    if (initialSharedLink.kind === "spot" || initialSharedLink.kind === "hq") return "routes";
+    if (initialSharedLink.kind === "build") return "builds";
+    if (initialSharedLink.kind === "forum-thread" || initialSharedLink.kind === "forum-sub") return "forum";
     return "feed";
   });
   const [profileStack, setProfileStack] = useState([]);
@@ -22611,7 +23872,28 @@ export default function Trailhead() {
   // collects metadata the trip editor already owns).
   const [showTripPinFullscreen, setShowTripPinFullscreen] = useState(false);
   const [pendingThread, setPendingThread] = useState(null); // { threadId, catName, subName }
-  const [pendingBuildNav, setPendingBuildNav] = useState(null); // { rawId, name }
+  // Forum slug-based deep link awaiting resolution after the thread row + its
+  // subcategory mapping land in state. Seeded from __INITIAL_SHARED_LINK; the
+  // resolution effect below converts it into the existing pendingThread form
+  // ForumScreen already knows how to consume.
+  const [pendingForumNav, setPendingForumNav] = useState(
+    initialSharedLink && initialSharedLink.kind === "forum-thread"
+      ? { subSlug: initialSharedLink.subSlug, threadSlug: initialSharedLink.threadSlug }
+      : null
+  );
+  // Subcategory landing-page nav — seeded from /forum/<sub-slug> deep link.
+  // Consumed by ForumScreen which jumps straight to the threads list for
+  // that subcategory on mount.
+  const [pendingForumSubNav, setPendingForumSubNav] = useState(
+    initialSharedLink && initialSharedLink.kind === "forum-sub"
+      ? initialSharedLink.subSlug
+      : null
+  );
+  const [pendingBuildNav, setPendingBuildNav] = useState(
+    initialSharedLink && initialSharedLink.kind === "build"
+      ? { rawId: initialSharedLink.id, name: "" }
+      : null
+  ); // { rawId, name }
   // Slug from /trips/<slug> URLs. Resolved to a trip id inside RoutesScreen
   // once the trip_reports list has hydrated.
   // Plans share the same detail surface as reports — both go through
@@ -22739,11 +24021,34 @@ export default function Trailhead() {
   const [buildCommentLikeCounts, setBuildCommentLikeCounts] = useState({}); // { commentId: count }
   // likedCommentIds: set of comment ids the user has liked.
   const [likedCommentIds, setLikedCommentIds] = useState({}); // { commentId: true }
-  const [forumUserThreads, setForumUserThreads] = useState({}); // { subName: [thread, ...] }
-  const [forumUserReplies, setForumUserReplies] = useState({}); // { threadId: [reply, ...] }
-  const [forumLikedItems, setForumLikedItems] = useState({}); // { key: true }
-  const [forumLikeCounts, setForumLikeCounts] = useState({}); // { key: count }
-  const [forumViewCounts, setForumViewCounts] = useState({}); // { threadId: count }
+  // DB-backed forum state. `forumThreads` is a flat array of all hydrated
+  // threads (translated via dbRowToForumThread). `forumReplies` is a map of
+  // threadId → reply[] (translated via dbRowToForumReply, lazy-loaded on
+  // thread open). `forumThreadsBySub` is a derived useMemo below.
+  const [forumThreads, setForumThreads] = useState([]);
+  const [forumReplies, setForumReplies] = useState({});
+  // Author profile cache for forum threads/replies authored by users other
+  // than the viewer — populated during hydrate + on realtime INSERT. Keyed
+  // by userId; values are {full_name, handle, avatar_url}.
+  const [forumAuthors, setForumAuthors] = useState({});
+  // Ref-deduped set of thread ids whose replies have already been lazy-loaded
+  // so we don't re-fetch on every open.
+  const forumRepliesLoadedRef = useRef({});
+  // Forum likes — separate maps for threads vs replies, keyed by uuid.
+  // Backed by public.forum_thread_likes / public.forum_reply_likes.
+  const [likedForumThreadIds, setLikedForumThreadIds] = useState({}); // { threadId: true }
+  const [forumThreadLikeCounts, setForumThreadLikeCounts] = useState({}); // { threadId: count }
+  const [likedForumReplyIds, setLikedForumReplyIds] = useState({}); // { replyId: true }
+  const [forumReplyLikeCounts, setForumReplyLikeCounts] = useState({}); // { replyId: count }
+  // Ref-deduped set of thread ids whose view counter we've already bumped this
+  // session so a tab-switch + return doesn't double-count.
+  const bumpedForumViewIdsRef = useRef({});
+  // DB-backed forum categories + subcategories (Phase 2). Replaces the
+  // module-level `forumData.categories` constant. Hydrated alongside threads
+  // via `hydrateForumCategories` below. Realtime subscriptions in the
+  // feed_realtime channel keep these live for everyone.
+  const [forumCategoryRows, setForumCategoryRows] = useState([]);
+  const [forumSubcategoryRows, setForumSubcategoryRows] = useState([]);
   const [userRoutes, setUserRoutes] = useState([]); // routes created by user
   const [savedRoutes, setSavedRoutes] = useState([]); // routes saved/bookmarked by user
   const [activeNavRoute, setActiveNavRoute] = useState(null); // route data for in-app navigation
@@ -22891,6 +24196,82 @@ export default function Trailhead() {
     const planRows = (tripReports || []).filter(t => t.kind === "plan");
     return mergeTripSlices(planRows, viewportTripPlans);
   }, [tripReports, viewportTripPlans]);
+  // Forum threads grouped by subcategory display name — ForumScreen +
+  // GlobalSearch read from this map (vs the flat forumThreads array which
+  // is the source of truth from DB).
+  const forumThreadsBySub = useMemo(() => {
+    const out = {};
+    (forumThreads || []).forEach(t => {
+      const k = t.subName || "";
+      if (!k) return;
+      if (!out[k]) out[k] = [];
+      out[k].push(t);
+    });
+    return out;
+  }, [forumThreads]);
+  // Threaded view counts derived from the live thread rows — fed into the
+  // feed FORUM card + GlobalSearch result rows so their "X views" text
+  // matches the source of truth without prop drilling the whole array.
+  const forumViewCountsByThreadId = useMemo(() => {
+    const out = {};
+    (forumThreads || []).forEach(t => { if (t.id) out[t.id] = (typeof t.views === "number" ? t.views : 0); });
+    return out;
+  }, [forumThreads]);
+  // Forum categories derived shape (Phase 2). `forumCategoriesList` is the
+  // nested cats+subs structure ForumScreen used to read from the old
+  // `forumData.categories` constant. `forumCatBySlug` + `forumSubBySlug`
+  // replace the old module-level FORUM_*_BY_SLUG maps. All three derive
+  // from the two flat hydrated row arrays.
+  const forumCategoriesList = useMemo(() => {
+    const subsByCat = {};
+    (forumSubcategoryRows || []).forEach(s => {
+      if (!subsByCat[s.category_id]) subsByCat[s.category_id] = [];
+      subsByCat[s.category_id].push(s);
+    });
+    return (forumCategoryRows || []).map(c => ({
+      id: c.id,
+      name: c.name,
+      slug: c.slug,
+      color: c.color,
+      icon: c.icon,
+      sort_order: c.sort_order,
+      created_by: c.created_by,
+      subs: (subsByCat[c.id] || []).map(s => ({
+        id: s.id,
+        name: s.name,
+        slug: s.slug,
+        category_id: s.category_id,
+        sort_order: s.sort_order,
+        created_by: s.created_by,
+      })),
+    }));
+  }, [forumCategoryRows, forumSubcategoryRows]);
+  const forumCatBySlug = useMemo(() => {
+    const out = {};
+    (forumCategoryRows || []).forEach(c => {
+      out[c.slug] = { id: c.id, name: c.name, slug: c.slug, color: c.color, icon: c.icon };
+    });
+    return out;
+  }, [forumCategoryRows]);
+  const forumSubBySlug = useMemo(() => {
+    const out = {};
+    const catById = {};
+    (forumCategoryRows || []).forEach(c => { catById[c.id] = c; });
+    (forumSubcategoryRows || []).forEach(s => {
+      const cat = catById[s.category_id];
+      if (cat) out[s.slug] = { id: s.id, name: s.name, slug: s.slug, catName: cat.name, catSlug: cat.slug, category_id: s.category_id, created_by: s.created_by };
+    });
+    return out;
+  }, [forumCategoryRows, forumSubcategoryRows]);
+  // Mirror derived lookups onto the module-level FORUM_*_BY_SLUG maps so
+  // module-level translators (dbRowToForumThread, realtime grafts) stay
+  // in sync with the live DB rows without prop drilling.
+  useEffect(() => {
+    Object.keys(FORUM_CAT_BY_SLUG).forEach(k => { delete FORUM_CAT_BY_SLUG[k]; });
+    Object.keys(forumCatBySlug).forEach(k => { FORUM_CAT_BY_SLUG[k] = forumCatBySlug[k]; });
+    Object.keys(FORUM_SUB_BY_SLUG).forEach(k => { delete FORUM_SUB_BY_SLUG[k]; });
+    Object.keys(forumSubBySlug).forEach(k => { FORUM_SUB_BY_SLUG[k] = forumSubBySlug[k]; });
+  }, [forumCatBySlug, forumSubBySlug]);
   // Trip detail navigation effects — placed AFTER allTripReports so the
   // dep arrays don't TDZ-crash on the first render.
   //
@@ -22906,6 +24287,19 @@ export default function Trailhead() {
     setDetailTripId(trip.id);
     setPendingTripNav(null);
   }, [pendingTripNav, allTripReports, allTripPlans]);
+  // Forum slug resolution — when forumThreads + the pending slug match,
+  // hand off to ForumScreen's existing pendingThread flow (it already knows
+  // how to navigate categories → subcategories → thread). We translate the
+  // sub-slug → display name via the FORUM_SUB_BY_SLUG lookup map.
+  useEffect(() => {
+    if (!pendingForumNav) return;
+    const subInfo = FORUM_SUB_BY_SLUG[pendingForumNav.subSlug];
+    if (!subInfo) { setPendingForumNav(null); return; } // stale URL
+    const thread = (forumThreads || []).find(t => t.slug === pendingForumNav.threadSlug);
+    if (!thread) return; // wait for hydrate / fast-load to land
+    setPendingThread({ threadId: thread.id, catName: subInfo.catName, subName: subInfo.name });
+    setPendingForumNav(null);
+  }, [pendingForumNav, forumThreads]);
   // 2) Keep the URL bar in sync with the open trip — pushState `/trips/<slug>`
   //    when opening, pop back to `/` when closing. Skips the very first
   //    mount if the URL is already correct so we don't insert a duplicate
@@ -23051,6 +24445,10 @@ export default function Trailhead() {
   // choice sticks across sessions. Both default to ON for the seed-data
   // case so the value of the new feature is visible immediately.
   const [showCampingSpots, setShowCampingSpots] = useState(() => {
+    // If the user landed on a /spots/:id deep link, force the layer on
+    // so the pin is actually visible — otherwise a guest (who can't see
+    // the layer toggle) would land on a blank map with just the popup.
+    if (initialSharedLink && initialSharedLink.kind === "spot") return true;
     try { const v = localStorage.getItem("th_show_camping"); return v === "1"; } catch (_) { return false; }
   });
   const [showPublicLands, setShowPublicLands] = useState(() => {
@@ -23197,6 +24595,104 @@ export default function Trailhead() {
       return { error: "Network error. Try again." };
     }
   };
+
+  // Admin role management. Server-side RLS still enforces: only admins
+  // can update someone else's role (profiles_role_guard trigger). These
+  // helpers are no-op for non-admins (early return).
+  const adminUpdateUserRole = async (targetUid, newRole) => {
+    if (!isAdmin || !targetUid) return { error: "Not authorized" };
+    if (!["user", "ambassador", "admin"].includes(newRole)) return { error: "Invalid role" };
+    const adminUid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (adminUid === targetUid && newRole !== "admin") return { error: "Use a different account to demote yourself." };
+    // Read previous state so the notification can say "approved your
+    // request" vs "promoted you" vs "demoted you" appropriately.
+    let prev = null;
+    try {
+      const { data } = await supabase
+        .from("profiles").select("role, requested_role").eq("id", targetUid).maybeSingle();
+      prev = data;
+    } catch (e) { /* non-fatal */ }
+    try {
+      const { data: rows, error } = await supabase.from("profiles").update({
+        role: newRole,
+        requested_role: null,
+        updated_at: new Date().toISOString(),
+      }).eq("id", targetUid).select("id");
+      if (error) return { error: error.message || "Update failed" };
+      if (!rows || rows.length === 0) return { error: "Update blocked — admin override policy missing on profiles?" };
+      setPendingAmbassadorRequests(prev => (prev || []).filter(p => p.id !== targetUid));
+      // Notify the target user (skip self-actions).
+      if (adminUid && adminUid !== targetUid) {
+        const myName = (currentProfile && currentProfile.full_name) || "Admin";
+        const prevRole = (prev && prev.role) || "user";
+        const wasRequest = prev && prev.requested_role === newRole;
+        let text;
+        if (newRole === "ambassador" && wasRequest) text = "approved your Ambassador request";
+        else if (newRole === "admin") text = "promoted you to Admin";
+        else if (newRole === "ambassador") text = "promoted you to Ambassador";
+        else if (newRole === "user" && prevRole === "admin") text = "removed your Admin role";
+        else if (newRole === "user" && prevRole === "ambassador") text = "removed your Ambassador role";
+        else text = "changed your role to " + newRole.charAt(0).toUpperCase() + newRole.slice(1);
+        supabase.from("notifications").insert({
+          user_id: targetUid,
+          type: "role",
+          actor_id: adminUid,
+          actor_name: myName,
+          text,
+        }).then(({ error: ne }) => { if (ne) console.error("[notif] role-change insert", ne); });
+      }
+      return { ok: true };
+    } catch (e) {
+      console.error("[adminUpdateUserRole] failed", e);
+      return { error: "Network error" };
+    }
+  };
+  const adminDeclineAmbassadorRequest = async (targetUid) => {
+    if (!isAdmin || !targetUid) return { error: "Not authorized" };
+    const adminUid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    try {
+      const { data: rows, error } = await supabase.from("profiles").update({
+        requested_role: null,
+        updated_at: new Date().toISOString(),
+      }).eq("id", targetUid).select("id");
+      if (error) return { error: error.message || "Update failed" };
+      if (!rows || rows.length === 0) return { error: "Update blocked — admin override policy missing on profiles?" };
+      setPendingAmbassadorRequests(prev => (prev || []).filter(p => p.id !== targetUid));
+      if (adminUid && adminUid !== targetUid) {
+        const myName = (currentProfile && currentProfile.full_name) || "Admin";
+        supabase.from("notifications").insert({
+          user_id: targetUid,
+          type: "role",
+          actor_id: adminUid,
+          actor_name: myName,
+          text: "declined your Ambassador request",
+        }).then(({ error: ne }) => { if (ne) console.error("[notif] role-decline insert", ne); });
+      }
+      return { ok: true };
+    } catch (e) {
+      console.error("[adminDeclineAmbassadorRequest] failed", e);
+      return { error: "Network error" };
+    }
+  };
+  // Pending ambassador requests — fetched once when admin lands; cleared
+  // as requests are approved/declined.
+  const [pendingAmbassadorRequests, setPendingAmbassadorRequests] = useState([]);
+  useEffect(() => {
+    if (!isAdmin) { setPendingAmbassadorRequests([]); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("id, full_name, handle, avatar_url, role, requested_role, created_at")
+          .eq("requested_role", "ambassador")
+          .order("created_at", { ascending: false });
+        if (!cancelled && !error) setPendingAmbassadorRequests(data || []);
+      } catch (e) { /* non-fatal */ }
+    })();
+    return () => { cancelled = true; };
+  }, [isAdmin]);
+
   const [notifPrefs, setNotifPrefs] = useState({ likes: true, comments: true, replies: true, follows: true, mentions: true, push: false });
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [showDM, setShowDM] = useState(false);
@@ -23227,11 +24723,43 @@ export default function Trailhead() {
   // setConvoyRsvp below. Keying by user_id (not handle) keeps renames safe.
   const [convoyRsvps, setConvoyRsvps] = useState({}); // { [postId]: { [userId]: { status, name, handle, avatarUrl, initial } } }
 
-  const [recoveryAlerts, setRecoveryAlerts] = useState([
-    { id: "r1", title: "Winch Support Required", location: "Black Bear Pass, CO", coords: "37.8106° N, 107.6992° W", urgency: "HIGH", time: "2m ago", vehicle: "Jeep Gladiator on 37s", detail: "High-centered on a shelf. Front locker acting up.", author: "DesertRat_4x4" },
-    { id: "r2", title: "Tow Needed — Broken Axle", location: "Rubicon Trail, CA", coords: "38.9764° N, 120.1572° W", urgency: "HIGH", time: "25m ago", vehicle: "2018 Wrangler JL", detail: "Front axle snapped at the birfield. Cannot move under own power.", author: "StockHero" },
-    { id: "r3", title: "Flat Tire Assist", location: "Moab, UT", coords: "38.5733° N, 109.5498° W", urgency: "LOW", time: "1h ago", vehicle: "Toyota 4Runner", detail: "Spare is wrong size. Need 285/70R17 or close.", author: "DirtRoadDave" },
-  ]);
+  // Recovery alerts are derived from the live posts feed (type="RECOVERY"
+  // posts that aren't resolved yet). The posts table is the source of
+  // truth — no separate seeded slice — so adding a recovery via Compose
+  // automatically appears in both the Recovery board AND the bell's
+  // Recovery tab without any extra state plumbing. A small dismissed-id
+  // map lets the bell hide entries locally without mutating the post.
+  const [dismissedRecoveryIds, setDismissedRecoveryIds] = useState({}); // { postId: true }
+  const recoveryAlerts = useMemo(() => {
+    return (feedItems || [])
+      .filter(p => p && p.type === "RECOVERY" && p.urgency !== "RESOLVED" && !dismissedRecoveryIds[p.id])
+      .map(p => ({
+        id: p.id,
+        title: p.title || "Recovery Request",
+        location: p.location || "Unknown",
+        coords: p.coords || "—",
+        urgency: p.urgency || "LOW",
+        time: p.time,
+        vehicle: p.vehicle || "",
+        detail: p.body || "",
+        author: p.handle || p.user || "User",
+        userId: p.userId || null,
+        photoUrls: p.photoUrls || null,
+      }));
+  }, [feedItems, dismissedRecoveryIds]);
+  // Bell shim: setRecoveryAlerts(prev => prev.filter(...)) and
+  // setRecoveryAlerts([]) calls (from existing dismiss/clear handlers)
+  // get rerouted to the dismissed-ids set. Functional updates only.
+  const setRecoveryAlerts = (updater) => {
+    if (typeof updater !== "function") return;
+    const kept = updater(recoveryAlerts);
+    const keptIds = new Set((kept || []).map(a => a && a.id).filter(Boolean));
+    setDismissedRecoveryIds(prev => {
+      const next = { ...prev };
+      recoveryAlerts.forEach(a => { if (a && a.id && !keptIds.has(a.id)) next[a.id] = true; });
+      return next;
+    });
+  };
 
   const addNotification = (notif) => {
     setBellNotifs(prev => [{ id: "bn_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6), time: Date.now(), ...notif }, ...prev]);
@@ -24096,9 +25624,11 @@ export default function Trailhead() {
     }
   }, [authState]);
 
-  const addRecoveryAlert = (alert) => {
-    setRecoveryAlerts(prev => [alert, ...prev]);
-  };
+  // addRecoveryAlert removed — recoveryAlerts is now derived from
+  // feedItems (see useMemo above). Recovery posts going through addPost
+  // automatically surface in the Recovery board + the bell's Recovery
+  // tab. ComposeScreen no longer needs a separate alert-side callback.
+  const addRecoveryAlert = () => {};
 
   const [dmKey, setDmKey] = useState(0);
   // Open a DM with another user. Accepts either a handle string or a user
@@ -25426,16 +26956,18 @@ export default function Trailhead() {
   // Adds a comment to a post. Writes to public.post_comments, prepends the
   // returned row into the local postComments[postId] list, and bumps the
   // post's local comment_count. Returns the new comment or null on failure.
-  const addComment = async (postId, text) => {
+  const addComment = async (postId, text, parentId) => {
     const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
     if (!uid) return null;
     if (typeof postId !== "string" || postId.length < 20) return null;
     const trimmed = (text || "").trim();
     if (!trimmed) return null;
     try {
+      const insertRow = { post_id: postId, user_id: uid, body: trimmed };
+      if (typeof parentId === "string" && parentId.length >= 20) insertRow.parent_id = parentId;
       const { data: inserted, error } = await supabase
         .from("post_comments")
-        .insert({ post_id: postId, user_id: uid, body: trimmed })
+        .insert(insertRow)
         .select()
         .single();
       if (error || !inserted) { console.error("[post_comments] insert error", error); return null; }
@@ -25634,6 +27166,526 @@ export default function Trailhead() {
     }
   };
 
+  // ─── Forum CATEGORIES + SUBCATEGORIES (Phase 2; DB-backed)
+  // Public SELECT, fetched in parallel + sorted by sort_order. Cheap query;
+  // runs alongside hydrateForumThreads on both guest + signed-in boot.
+  const hydrateForumCategories = async () => {
+    try {
+      const [catRes, subRes] = await Promise.all([
+        supabase.from("forum_categories").select("*").order("sort_order", { ascending: true }).order("name", { ascending: true }),
+        supabase.from("forum_subcategories").select("*").order("sort_order", { ascending: true }).order("name", { ascending: true }),
+      ]);
+      if (!catRes.error && Array.isArray(catRes.data)) setForumCategoryRows(catRes.data);
+      if (!subRes.error && Array.isArray(subRes.data)) setForumSubcategoryRows(subRes.data);
+    } catch (e) { console.error("[hydrateForumCategories] failed", e); }
+  };
+  // Category CRUD — admin-only (RLS enforces, .select("id") returns zero
+  // rows for non-admin so the client surfaces "blocked"). Slug auto-derived
+  // from name via forumSlugify, with -2/-3 collision retry up to 5 tries.
+  const addForumCategory = async ({ name, color, icon }) => {
+    if (!isAdmin) return { error: "Not authorized" };
+    const baseSlug = forumSlugify(name || "");
+    if (!baseSlug) return { error: "Name required" };
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    const maxOrder = forumCategoryRows.reduce((m, c) => Math.max(m, c.sort_order || 0), 0);
+    for (let i = 0; i < 5; i++) {
+      const slug = i === 0 ? baseSlug : `${baseSlug}-${i + 1}`;
+      const { data, error } = await supabase.from("forum_categories").insert({
+        slug, name, color: color || T.copper, icon: icon || "tag", sort_order: maxOrder + 1, created_by: uid,
+      }).select("*").maybeSingle();
+      if (!error && data) { setForumCategoryRows(prev => [...prev, data]); return { ok: true, row: data }; }
+      if (error && !/duplicate/i.test(error.message || "")) return { error: error.message || "Insert failed" };
+    }
+    return { error: "Slug collision — try a different name" };
+  };
+  const updateForumCategory = async (id, patch) => {
+    if (!isAdmin) return { error: "Not authorized" };
+    if (!id) return { error: "Missing id" };
+    const allowed = ["name", "color", "icon", "sort_order"];
+    const body = {};
+    allowed.forEach(k => { if (k in patch) body[k] = patch[k]; });
+    body.updated_at = new Date().toISOString();
+    const { data: rows, error } = await supabase.from("forum_categories").update(body).eq("id", id).select("*");
+    if (error) return { error: error.message || "Update failed" };
+    if (!rows || rows.length === 0) return { error: "Update blocked — admin override policy missing?" };
+    setForumCategoryRows(prev => prev.map(c => c.id === id ? { ...c, ...rows[0] } : c));
+    return { ok: true };
+  };
+  const deleteForumCategory = async (id) => {
+    if (!isAdmin) return { error: "Not authorized" };
+    if (!id) return { error: "Missing id" };
+    const sub = forumSubcategoryRows.filter(s => s.category_id === id);
+    if (sub.length > 0) {
+      // Count threads under any sub of this cat — block if non-zero.
+      const subSlugs = sub.map(s => s.slug);
+      const { count } = await supabase.from("forum_threads").select("id", { count: "exact", head: true }).in("subcategory_slug", subSlugs);
+      if ((count || 0) > 0) return { error: `Has ${count} thread${count === 1 ? "" : "s"} across ${sub.length} subcategor${sub.length === 1 ? "y" : "ies"} — delete those first.` };
+      // No threads but still has subs → block to avoid silently nuking subs.
+      return { error: `Has ${sub.length} subcategor${sub.length === 1 ? "y" : "ies"} — delete those first.` };
+    }
+    const { error } = await supabase.from("forum_categories").delete().eq("id", id);
+    if (error) return { error: error.message || "Delete failed" };
+    setForumCategoryRows(prev => prev.filter(c => c.id !== id));
+    return { ok: true };
+  };
+  // Subcategory CRUD — admin OR ambassador can INSERT (created_by must be
+  // self per RLS); admin can edit/delete any, ambassador only own.
+  const addForumSubcategory = async ({ category_id, name }) => {
+    if (!isAdmin && !isAmbassador) return { error: "Not authorized" };
+    if (!category_id) return { error: "Missing category" };
+    const baseSlug = forumSlugify(name || "");
+    if (!baseSlug) return { error: "Name required" };
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) return { error: "Not signed in" };
+    const sibMaxOrder = forumSubcategoryRows.filter(s => s.category_id === category_id).reduce((m, s) => Math.max(m, s.sort_order || 0), 0);
+    for (let i = 0; i < 5; i++) {
+      const slug = i === 0 ? baseSlug : `${baseSlug}-${i + 1}`;
+      const { data, error } = await supabase.from("forum_subcategories").insert({
+        category_id, slug, name, sort_order: sibMaxOrder + 1, created_by: uid,
+      }).select("*").maybeSingle();
+      if (!error && data) { setForumSubcategoryRows(prev => [...prev, data]); return { ok: true, row: data }; }
+      if (error && !/duplicate/i.test(error.message || "")) return { error: error.message || "Insert failed" };
+    }
+    return { error: "Slug collision — try a different name" };
+  };
+  const updateForumSubcategory = async (id, patch) => {
+    if (!id) return { error: "Missing id" };
+    const allowed = ["name", "sort_order"];
+    const body = {};
+    allowed.forEach(k => { if (k in patch) body[k] = patch[k]; });
+    body.updated_at = new Date().toISOString();
+    const { data: rows, error } = await supabase.from("forum_subcategories").update(body).eq("id", id).select("*");
+    if (error) return { error: error.message || "Update failed" };
+    if (!rows || rows.length === 0) return { error: "Update blocked — RLS (not owner / not admin)?" };
+    setForumSubcategoryRows(prev => prev.map(s => s.id === id ? { ...s, ...rows[0] } : s));
+    return { ok: true };
+  };
+  const deleteForumSubcategory = async (id) => {
+    if (!id) return { error: "Missing id" };
+    const row = forumSubcategoryRows.find(s => s.id === id);
+    if (row) {
+      const { count } = await supabase.from("forum_threads").select("id", { count: "exact", head: true }).eq("subcategory_slug", row.slug);
+      if ((count || 0) > 0) return { error: `Has ${count} thread${count === 1 ? "" : "s"} — delete or move those first.` };
+    }
+    const { error } = await supabase.from("forum_subcategories").delete().eq("id", id);
+    if (error) return { error: error.message || "Delete failed" };
+    setForumSubcategoryRows(prev => prev.filter(s => s.id !== id));
+    return { ok: true };
+  };
+
+  // ─── Forum threads & replies (public.forum_threads / public.forum_replies)
+  // Hydrate threads — public SELECT (RLS allows anon). Author profiles are
+  // grafted onto each thread row at hydrate time so the renderer doesn't
+  // need to look them up. Realtime new-thread INSERTs fetch the author
+  // profile on demand. Called from both guest + signed-in hydrate paths so
+  // forums are crawlable even before login.
+  const hydrateForumThreads = async () => {
+    try {
+      const { data: rows, error } = await supabase
+        .from("forum_threads")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(500);
+      if (error) throw error;
+      if (!Array.isArray(rows) || rows.length === 0) return;
+      const authorIds = Array.from(new Set(rows.map(r => r.user_id).filter(Boolean)));
+      const authorsById = {};
+      if (authorIds.length > 0) {
+        try {
+          const { data: profs } = await supabase
+            .from("profiles")
+            .select("id, full_name, handle, avatar_url")
+            .in("id", authorIds);
+          if (Array.isArray(profs)) profs.forEach(p => { authorsById[p.id] = p; });
+        } catch (e) { /* non-fatal */ }
+      }
+      const translated = rows.map(r => dbRowToForumThread(r, authorsById[r.user_id] || null)).filter(Boolean);
+      setForumThreads(translated);
+      setForumAuthors(prev => ({ ...prev, ...authorsById }));
+    } catch (e) {
+      console.warn("[forum_threads] hydrate failed", e);
+    }
+  };
+
+  // Lazy-fetch replies for a single thread the first time its detail page
+  // opens. Ref-deduped so re-opens hit the cached list. Author profiles
+  // resolved via a single .in() round trip and grafted via dbRowToForumReply.
+  const loadForumReplies = async (threadId) => {
+    if (!threadId || typeof threadId !== "string") return;
+    if (forumRepliesLoadedRef.current[threadId]) return;
+    forumRepliesLoadedRef.current[threadId] = true;
+    try {
+      const { data: rows, error } = await supabase
+        .from("forum_replies")
+        .select("*")
+        .eq("thread_id", threadId)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      if (!Array.isArray(rows)) return;
+      const authorIds = Array.from(new Set(rows.map(r => r.user_id).filter(Boolean)));
+      const profilesById = {};
+      if (authorIds.length > 0) {
+        try {
+          const { data: profs } = await supabase
+            .from("profiles")
+            .select("id, full_name, handle, avatar_url")
+            .in("id", authorIds);
+          if (Array.isArray(profs)) profs.forEach(p => { profilesById[p.id] = p; });
+        } catch (e) { /* non-fatal */ }
+      }
+      const list = rows.map(r => dbRowToForumReply(r, profilesById[r.user_id])).filter(Boolean);
+      setForumReplies(prev => ({ ...prev, [threadId]: list }));
+      setForumAuthors(prev => ({ ...prev, ...profilesById }));
+    } catch (e) {
+      console.warn("[forum_replies] load failed", e);
+      // Clear dedup ref so a retry is possible.
+      forumRepliesLoadedRef.current[threadId] = false;
+    }
+  };
+
+  // Create a new thread. Auto-generates a unique slug (with -2/-3 collision
+  // retry mirroring trip_reports), optimistically prepends to state, and
+  // returns the translated row so the caller can chain (e.g. auto-share to
+  // feed). RLS gates on auth.uid() = user_id.
+  const addForumThread = async ({ title, body, sections, photos, categoryName, subcategoryName }) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) return null;
+    if (!title || !title.trim()) return null;
+    const trimmed = title.trim();
+    const categorySlug = forumSlugify(categoryName || "");
+    const subcategorySlug = forumSlugify(subcategoryName || "");
+    if (!categorySlug || !subcategorySlug) return null;
+    const baseSlug = slugifyForumTitle(trimmed);
+    let inserted = null;
+    let lastError = null;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const candidateSlug = attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`;
+      const { data, error } = await supabase
+        .from("forum_threads")
+        .insert({
+          user_id: uid,
+          category_slug: categorySlug,
+          subcategory_slug: subcategorySlug,
+          title: trimmed,
+          slug: candidateSlug,
+          body: body || null,
+          sections: Array.isArray(sections) ? sections : [],
+          photos: Array.isArray(photos) ? photos : [],
+        })
+        .select()
+        .single();
+      if (!error) { inserted = data; break; }
+      // 23505 = unique_violation (slug collision). Anything else is fatal.
+      if (error.code !== "23505") { lastError = error; break; }
+      lastError = error;
+    }
+    if (!inserted) {
+      console.error("[forum_threads] insert failed", lastError);
+      return null;
+    }
+    // Per-field fallback chain — currentProfile may be partially populated
+    // (e.g. mid-hydrate) so we OR each field individually instead of
+    // falling back to a stub only when the whole profile is null. Final
+    // fallback is the auth user's signup metadata.
+    const meta = (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata) || {};
+    const prof = {
+      id: uid,
+      full_name: (currentProfile && currentProfile.full_name) || meta.full_name || meta.name || "Author",
+      handle: (currentProfile && currentProfile.handle) || meta.handle || "",
+      avatar_url: (currentProfile && currentProfile.avatar_url) || profilePic || meta.avatar_url || null,
+    };
+    const local = dbRowToForumThread(inserted, prof);
+    setForumThreads(prev => [local, ...prev]);
+    return local;
+  };
+
+  // Owner-only edit. Translates the updated row + replaces in state.
+  const updateForumThread = async (threadId, updates) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid || !threadId) return null;
+    const patch = {};
+    if (typeof updates.title === "string") patch.title = updates.title;
+    if (updates.body !== undefined) patch.body = updates.body;
+    if (Array.isArray(updates.sections)) patch.sections = updates.sections;
+    if (Array.isArray(updates.photos)) patch.photos = updates.photos;
+    if (typeof updates.pinned === "boolean") patch.pinned = updates.pinned;
+    patch.updated_at = new Date().toISOString();
+    try {
+      const { data, error } = await supabase
+        .from("forum_threads")
+        .update(patch)
+        .eq("id", threadId)
+        .eq("user_id", uid)
+        .select()
+        .single();
+      if (error) throw error;
+      const prof = forumAuthors[data.user_id] || (data.user_id === uid ? currentProfile : null);
+      const local = dbRowToForumThread(data, prof);
+      setForumThreads(prev => prev.map(t => t.id === local.id ? { ...t, ...local } : t));
+      return local;
+    } catch (e) {
+      console.error("[forum_threads] updateForumThread failed", e);
+      return null;
+    }
+  };
+
+  // Owner-only delete. Cascades to replies + likes via FKs.
+  const deleteForumThread = async (threadId) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid || !threadId) return;
+    // Optimistic remove.
+    const prevList = forumThreads;
+    const prevReplies = forumReplies;
+    setForumThreads(prev => prev.filter(t => t.id !== threadId));
+    setForumReplies(prev => { const next = { ...prev }; delete next[threadId]; return next; });
+    try {
+      const { error } = await supabase.from("forum_threads").delete().eq("id", threadId).eq("user_id", uid);
+      if (error) throw error;
+    } catch (e) {
+      console.error("[forum_threads] deleteForumThread failed", e);
+      setForumThreads(prevList);
+      setForumReplies(prevReplies);
+    }
+  };
+
+  // Add a reply to a thread. Optional parentId = top-level reply this is
+  // nested under (depth-1 nesting, mirrors build_comments).
+  const addForumReply = async (threadId, { body, photos, parentId }) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid || !threadId || !body || !body.trim()) return null;
+    const insertRow = {
+      thread_id: threadId,
+      user_id: uid,
+      body: body.trim(),
+      photos: Array.isArray(photos) ? photos : [],
+    };
+    if (typeof parentId === "string" && parentId.length >= 20) insertRow.parent_id = parentId;
+    try {
+      const { data, error } = await supabase
+        .from("forum_replies")
+        .insert(insertRow)
+        .select()
+        .single();
+      if (error) throw error;
+      const meta = (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata) || {};
+      const prof = {
+        id: uid,
+        full_name: (currentProfile && currentProfile.full_name) || meta.full_name || meta.name || "Author",
+        handle: (currentProfile && currentProfile.handle) || meta.handle || "",
+        avatar_url: (currentProfile && currentProfile.avatar_url) || profilePic || meta.avatar_url || null,
+      };
+      const local = dbRowToForumReply(data, prof);
+      setForumReplies(prev => ({ ...prev, [threadId]: [...(prev[threadId] || []), local] }));
+      // Notify the right person — parent reply author for sub-replies,
+      // thread author for top-level replies. Skip self-replies.
+      const thread = (forumThreads || []).find(t => t.id === threadId);
+      const threadTitle = (thread && thread.title) || "";
+      const myName = prof.full_name;
+      if (parentId) {
+        // reply-to-reply: notify the parent reply's author.
+        const parentReply = ((forumReplies || {})[threadId] || []).find(r => r.id === parentId);
+        if (parentReply && parentReply.userId && parentReply.userId !== uid) {
+          supabase.from("notifications").insert({
+            user_id: parentReply.userId,
+            type: "reply",
+            actor_id: uid,
+            actor_name: myName,
+            text: "replied to your comment",
+            target: threadTitle,
+            forum_thread_id: threadId,
+          }).then(({ error: ne }) => { if (ne) console.error("[notif] forum-sub-reply insert", ne); });
+        }
+      } else if (thread && thread.userId && thread.userId !== uid) {
+        // top-level reply: notify the thread author.
+        supabase.from("notifications").insert({
+          user_id: thread.userId,
+          type: "reply",
+          actor_id: uid,
+          actor_name: myName,
+          text: "replied to your thread",
+          target: threadTitle,
+          forum_thread_id: threadId,
+        }).then(({ error: ne }) => { if (ne) console.error("[notif] forum-reply insert", ne); });
+      }
+      return local;
+    } catch (e) {
+      console.error("[forum_replies] addForumReply failed", e);
+      return null;
+    }
+  };
+
+  const deleteForumReply = async (threadId, replyId) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid || !replyId) return;
+    const prevList = forumReplies[threadId] || [];
+    setForumReplies(prev => ({ ...prev, [threadId]: (prev[threadId] || []).filter(r => r.id !== replyId) }));
+    try {
+      const { error } = await supabase.from("forum_replies").delete().eq("id", replyId).eq("user_id", uid);
+      if (error) throw error;
+    } catch (e) {
+      console.error("[forum_replies] deleteForumReply failed", e);
+      setForumReplies(prev => ({ ...prev, [threadId]: prevList }));
+    }
+  };
+
+  // Hydrate forum likes — runs alongside hydrateForumThreads. RLS allows
+  // public SELECT on the like tables so guests get counts too (important
+  // for the visible count next to the heart). When signed in, also pulls
+  // the user's own liked ids so the heart renders filled correctly.
+  const hydrateForumLikes = async () => {
+    try {
+      const [tlRes, rlRes] = await Promise.all([
+        supabase.from("forum_thread_likes").select("thread_id, user_id"),
+        supabase.from("forum_reply_likes").select("reply_id, user_id"),
+      ]);
+      const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+      const tlCounts = {};
+      const tlMine = {};
+      (tlRes.data || []).forEach(row => {
+        if (!row.thread_id) return;
+        tlCounts[row.thread_id] = (tlCounts[row.thread_id] || 0) + 1;
+        if (uid && row.user_id === uid) tlMine[row.thread_id] = true;
+      });
+      const rlCounts = {};
+      const rlMine = {};
+      (rlRes.data || []).forEach(row => {
+        if (!row.reply_id) return;
+        rlCounts[row.reply_id] = (rlCounts[row.reply_id] || 0) + 1;
+        if (uid && row.user_id === uid) rlMine[row.reply_id] = true;
+      });
+      setForumThreadLikeCounts(tlCounts);
+      setLikedForumThreadIds(tlMine);
+      setForumReplyLikeCounts(rlCounts);
+      setLikedForumReplyIds(rlMine);
+    } catch (e) {
+      console.warn("[forum_likes] hydrate failed", e);
+    }
+  };
+
+  // Toggle a thread like. Optimistic + DB write, mirrors toggleBuildLike.
+  const toggleForumThreadLike = async (threadId) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid || !threadId) return;
+    const wasLiked = !!likedForumThreadIds[threadId];
+    setLikedForumThreadIds(prev => {
+      const next = { ...prev };
+      if (wasLiked) delete next[threadId]; else next[threadId] = true;
+      return next;
+    });
+    setForumThreadLikeCounts(prev => ({ ...prev, [threadId]: Math.max((prev[threadId] || 0) + (wasLiked ? -1 : 1), 0) }));
+    try {
+      if (wasLiked) {
+        const { error } = await supabase.from("forum_thread_likes").delete().eq("thread_id", threadId).eq("user_id", uid);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("forum_thread_likes").insert({ thread_id: threadId, user_id: uid });
+        if (error) throw error;
+        // Notify the thread author (skip self-likes).
+        const thread = (forumThreads || []).find(t => t.id === threadId);
+        if (thread && thread.userId && thread.userId !== uid) {
+          const myName = (currentProfile && currentProfile.full_name) || "Someone";
+          supabase.from("notifications").insert({
+            user_id: thread.userId,
+            type: "like",
+            actor_id: uid,
+            actor_name: myName,
+            text: "liked your forum thread",
+            target: thread.title || "",
+            forum_thread_id: threadId,
+          }).then(({ error: ne }) => { if (ne) console.error("[notif] forum-thread-like insert", ne); });
+        }
+      }
+    } catch (e) {
+      console.error("[forum_thread_likes] toggle failed", e);
+      // Revert.
+      setLikedForumThreadIds(prev => {
+        const next = { ...prev };
+        if (wasLiked) next[threadId] = true; else delete next[threadId];
+        return next;
+      });
+      setForumThreadLikeCounts(prev => ({ ...prev, [threadId]: Math.max((prev[threadId] || 0) + (wasLiked ? 1 : -1), 0) }));
+    }
+  };
+
+  const toggleForumReplyLike = async (replyId) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid || !replyId) return;
+    const wasLiked = !!likedForumReplyIds[replyId];
+    setLikedForumReplyIds(prev => {
+      const next = { ...prev };
+      if (wasLiked) delete next[replyId]; else next[replyId] = true;
+      return next;
+    });
+    setForumReplyLikeCounts(prev => ({ ...prev, [replyId]: Math.max((prev[replyId] || 0) + (wasLiked ? -1 : 1), 0) }));
+    try {
+      if (wasLiked) {
+        const { error } = await supabase.from("forum_reply_likes").delete().eq("reply_id", replyId).eq("user_id", uid);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("forum_reply_likes").insert({ reply_id: replyId, user_id: uid });
+        if (error) throw error;
+        // Notify the reply author (skip self-likes). Walk forumReplies to
+        // find the reply object + its parent thread for the deep-link.
+        let replyAuthor = null;
+        let parentThreadId = null;
+        let threadTitle = "";
+        for (const [tid, list] of Object.entries(forumReplies || {})) {
+          const r = (list || []).find(x => x.id === replyId);
+          if (r) {
+            replyAuthor = r.userId;
+            parentThreadId = tid;
+            const thread = (forumThreads || []).find(t => t.id === tid);
+            if (thread) threadTitle = thread.title || "";
+            break;
+          }
+        }
+        if (replyAuthor && replyAuthor !== uid && parentThreadId) {
+          const myName = (currentProfile && currentProfile.full_name) || "Someone";
+          supabase.from("notifications").insert({
+            user_id: replyAuthor,
+            type: "like",
+            actor_id: uid,
+            actor_name: myName,
+            text: "liked your reply",
+            target: threadTitle,
+            forum_thread_id: parentThreadId,
+          }).then(({ error: ne }) => { if (ne) console.error("[notif] forum-reply-like insert", ne); });
+        }
+      }
+    } catch (e) {
+      console.error("[forum_reply_likes] toggle failed", e);
+      setLikedForumReplyIds(prev => {
+        const next = { ...prev };
+        if (wasLiked) next[replyId] = true; else delete next[replyId];
+        return next;
+      });
+      setForumReplyLikeCounts(prev => ({ ...prev, [replyId]: Math.max((prev[replyId] || 0) + (wasLiked ? 1 : -1), 0) }));
+    }
+  };
+
+  // Bump the persisted view counter — calls the SECURITY DEFINER RPC so
+  // anon viewers can increment without UPDATE perms. Ref-deduped per
+  // session AND skips the thread's own owner (don't count author views).
+  const bumpForumThreadView = (threadId) => {
+    if (!threadId || bumpedForumViewIdsRef.current[threadId]) return;
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    const thread = (forumThreads || []).find(t => t.id === threadId);
+    if (thread && uid && thread.userId === uid) {
+      // Don't count owner self-views, but still set the ref so we don't
+      // retry every open.
+      bumpedForumViewIdsRef.current[threadId] = true;
+      return;
+    }
+    bumpedForumViewIdsRef.current[threadId] = true;
+    // Optimistic local bump so the count updates immediately on the page.
+    setForumThreads(prev => prev.map(t => t.id === threadId ? { ...t, views: (typeof t.views === "number" ? t.views : 0) + 1 } : t));
+    try {
+      supabase.rpc("bump_forum_thread_view", { p_thread_id: threadId }).then(({ error }) => {
+        if (error) console.warn("[bump_forum_thread_view] rpc failed", error);
+      });
+    } catch (e) { /* non-fatal */ }
+  };
+
   // Toggles a comment like. Optimistically updates the set and the comment's
   // local like count, then writes to public.post_comment_likes.
   const toggleCommentLike = async (postId, commentId) => {
@@ -25681,6 +27733,27 @@ export default function Trailhead() {
     setScreen("forum");
   };
 
+  // Resolve a thread by id alone — used by the bell notification deep-link
+  // (notifications carry forum_thread_id, no category/sub context). Looks
+  // up the thread in local state first; if not loaded yet, fetches it +
+  // its subcategory mapping before setting pendingThread.
+  const openForumThreadById = async (threadId) => {
+    if (!threadId) return;
+    const local = (forumThreads || []).find(t => t.id === threadId);
+    if (local) {
+      setPendingThread({ threadId, catName: local.catName, subName: local.subName });
+      return;
+    }
+    try {
+      const { data: row } = await supabase.from("forum_threads").select("id,slug,subcategory_slug,user_id").eq("id", threadId).maybeSingle();
+      if (!row) return;
+      // Hydrate the thread (with author profile) so ForumScreen can render it.
+      try { loadForumThreadBySlugFast(row.slug); } catch (e) { /* non-fatal */ }
+      const subInfo = FORUM_SUB_BY_SLUG[row.subcategory_slug];
+      if (subInfo) setPendingThread({ threadId, catName: subInfo.catName, subName: subInfo.name });
+    } catch (e) { console.warn("[forum] openForumThreadById failed", e); }
+  };
+
   const handleViewBuild = (nav) => {
     setPendingBuildNav(nav || null);
     setProfileStack([]);
@@ -25698,6 +27771,16 @@ export default function Trailhead() {
   const goBack = () => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); };
 
   const handleNav = (key) => {
+    // Guests can VIEW feed / builds / forum (SEO + read-only browsing
+    // for shared link recipients). Forum is intentionally open for
+    // search-engine discoverability. Interactions inside those screens
+    // are still gated by requireAuth. Maps / Profile / Ranks require
+    // a real account to enter — too much state + actions to support
+    // a useful read-only mode.
+    if (isGuest && key !== "feed" && key !== "builds" && key !== "forum") {
+      setShowGuestPrompt(true);
+      return;
+    }
     setProfileStack([]);
     setShowRecovery(false);
     setShowCompose(false);
@@ -25707,6 +27790,8 @@ export default function Trailhead() {
   const isProfile = profileStack.length > 0;
   const isOtherProfile = profileStack[0] === "user";
   const isOverlay = isProfile || showRecovery || showCompose;
+  // (isAdmin / isAmbassador / currentRole are derived earlier — right after
+  // currentProfile is declared — so downstream useEffects can depend on them.)
 
   // Auth screens
   if (authState === "login") {
@@ -25744,9 +27829,12 @@ export default function Trailhead() {
   };
 
   // App splash — shown on cold boot until the first hydrate completes, so the
-  // user can't navigate around an empty shell while data is mid-flight. Skipped
-  // for guests (no hydrate to wait on).
-  if (authState === "app" && !appReady && !isGuest) {
+  // user can't navigate around an empty shell while data is mid-flight. Also
+  // shown for guests (anonymous viewers) since hydrateGuestData needs to land
+  // before /post/:id, /trips/:slug, etc. deep-links can resolve — without
+  // this gate, guests landing on a shared link see an empty feed before the
+  // post highlight effect can fire.
+  if (authState === "app" && !appReady) {
     return (
       <div style={{ position: "fixed", inset: 0, height: "100dvh", background: T.darkBg, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999 }}>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
@@ -25772,9 +27860,12 @@ export default function Trailhead() {
     <FeedScreen
       isGuest={isGuest}
       onGuestTap={() => setShowGuestPrompt(true)}
+      isAdmin={isAdmin}
       pendingPostNav={pendingPostNav}
       onConsumePendingPostNav={() => setPendingPostNav(null)}
       onSharedPostMissing={() => { setSharedLinkToast("That post couldn't be loaded. It may have been removed or require sign-in."); setTimeout(() => setSharedLinkToast(""), 4500); }}
+      activeFilter={hideFilters ? undefined : feedFilter}
+      setActiveFilter={hideFilters ? undefined : setFeedFilter}
       onViewUser={openUserProfile}
       onOpenMap={openMap}
       onOpenThread={(threadId, catName, subName) => openForumThread(threadId, catName, subName)}
@@ -25809,13 +27900,13 @@ export default function Trailhead() {
       onDeletePost={requireAuth((id) => deletePost(id))}
       onEditPost={requireAuth((id, newText) => updatePost(id, { title: newText }))}
       onAddNotification={requireAuth(addNotification)}
-      forumUserReplies={forumUserReplies}
-      forumViewCounts={forumViewCounts}
+      forumUserReplies={forumReplies}
+      forumViewCounts={forumViewCountsByThreadId}
       savedRoutes={savedRoutes}
       onSaveRoute={requireAuth((route) => setSavedRoutes(prev => prev.some(r => r.id === route.id || r.name === route.name) ? prev : [route, ...prev]))}
       onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))}
-      onStartNav={(route) => setActiveNavRoute(route)}
-      onStartDirections={startDirectionsTo}
+      onStartNav={requireAuth((route) => setActiveNavRoute(route))}
+      onStartDirections={requireAuth(startDirectionsTo)}
       onOpenShareIntent={openShareIntent}
       onAwardPoints={awardPoints}
       filterFn={filterFn}
@@ -25829,8 +27920,167 @@ export default function Trailhead() {
     />
   );
 
-  return (
-    <div style={{ background: T.charcoal, height: "100vh", maxWidth: 430, margin: "0 auto", position: "relative", fontFamily: sans, color: T.white, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+  // Desktop sidebar nav items — same `handleNav` flow as BottomNav so any
+  // routing logic (guest gating, screen-clears, etc.) stays in one place.
+  const desktopNavItems = [
+    { key: "feed", label: "Feed", icon: Home },
+    { key: "forum", label: "Forum", icon: Compass },
+    { key: "routes", label: "Maps", icon: Map },
+    { key: "builds", label: "Builds", icon: Wrench },
+    !isGuest ? { key: "ranks", label: "Ranks", icon: Trophy } : null,
+  ].filter(Boolean);
+  const myFullName = (currentProfile && currentProfile.full_name) || "You";
+  const myHandle = (currentProfile && currentProfile.handle) || "";
+  const myAvatar = profilePic || (currentProfile && currentProfile.avatar_url) || null;
+  const desktopLeftNav = isDesktop && (
+    <aside style={{ width: 260, padding: "20px 16px", display: "flex", flexDirection: "column", gap: 6, flexShrink: 0, background: T.darkBg, borderRight: `1px solid ${T.charcoal}` }}>
+      {/* Brand block */}
+      <div onClick={() => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("feed"); }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", marginBottom: 12, cursor: "pointer" }}>
+        <img src="/lone-peak-flag.png" alt="Trailhead" style={{ width: 32, height: 32, borderRadius: 6 }} />
+        <span style={{ fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>TRAILHEAD</span>
+      </div>
+      {desktopNavItems.map(it => {
+        const Icon = it.icon;
+        const active = !isOverlay && screen === it.key;
+        return (
+          <React.Fragment key={it.key}>
+            <button onClick={() => handleNav(it.key)} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 14px", borderRadius: 24, background: active ? `${T.red}18` : "transparent", border: "none", cursor: "pointer", color: active ? T.red : T.white, fontFamily: sans, fontSize: 15, fontWeight: active ? 700 : 500, textAlign: "left", letterSpacing: 0.3 }}>
+              <Icon size={22} color={active ? T.red : T.tertiary} strokeWidth={active ? 2.2 : 1.6} />
+              {it.label}
+            </button>
+            {/* Feed filter pills nest under the Feed nav row when active —
+                same controlled `feedFilter` the inline pill bar reads. */}
+            {it.key === "feed" && active && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 2, marginLeft: 36, marginRight: 4, marginBottom: 8 }}>
+                {FEED_PILL_FILTERS.map(f => {
+                  const sel = feedFilter === f;
+                  return (
+                    <button key={f} onClick={() => { setFeedFilter(f); }} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 12px", borderRadius: 18, background: sel ? T.red : "transparent", border: "none", cursor: "pointer", color: sel ? T.white : T.tertiary, fontFamily: sans, fontSize: 12, fontWeight: sel ? 700 : 500, letterSpacing: 0.5, textAlign: "left" }}>
+                      <span style={{ display: "inline-block", width: 4, height: 4, borderRadius: "50%", background: sel ? T.white : T.tertiary, opacity: sel ? 1 : 0.4 }} />
+                      {f}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </React.Fragment>
+        );
+      })}
+      {!isGuest && (
+        <button onClick={openProfile} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 14px", borderRadius: 24, background: isProfile ? `${T.red}18` : "transparent", border: "none", cursor: "pointer", color: isProfile ? T.red : T.white, fontFamily: sans, fontSize: 15, fontWeight: isProfile ? 700 : 500, textAlign: "left", letterSpacing: 0.3 }}>
+          <div style={{ width: 22, height: 22, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 }}>
+            {myAvatar
+              ? <img src={txImg(myAvatar, 96)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              : <span style={{ fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.white }}>{(myFullName || "Y").charAt(0).toUpperCase()}</span>}
+          </div>
+          Profile
+        </button>
+      )}
+      {!isGuest && (
+        <button onClick={() => setShowCompose(true)} style={{ marginTop: 12, padding: "14px", borderRadius: 28, background: T.red, color: T.white, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 14, fontWeight: 700, letterSpacing: 0.5, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+          <Plus size={18} color={T.white} strokeWidth={2.4} />
+          POST
+        </button>
+      )}
+      <div style={{ flex: 1 }} />
+      {/* Active user pill at the bottom — clickable to open profile. */}
+      {!isGuest && (
+        <button onClick={openProfile} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 12, background: T.darkCard, border: `1px solid ${T.charcoal}`, cursor: "pointer", textAlign: "left", width: "100%" }}>
+          <div style={{ width: 36, height: 36, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 }}>
+            {myAvatar
+              ? <img src={txImg(myAvatar, 96)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              : <span style={{ fontFamily: sans, fontSize: 14, fontWeight: 700, color: T.white }}>{(myFullName || "Y").charAt(0).toUpperCase()}</span>}
+          </div>
+          <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" }}>{myFullName}</span>
+              {isAdmin && (
+                <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: T.red, padding: "1px 6px", borderRadius: 3, letterSpacing: 1, fontWeight: 700, flexShrink: 0 }}>ADMIN</span>
+              )}
+              {!isAdmin && currentRole === "ambassador" && (
+                <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: T.copper, padding: "1px 6px", borderRadius: 3, letterSpacing: 1, fontWeight: 700, flexShrink: 0 }}>AMB</span>
+              )}
+            </div>
+            {myHandle && <span style={{ display: "block", fontFamily: sans, fontSize: 11, color: T.tertiary, whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" }}>@{myHandle}</span>}
+          </div>
+        </button>
+      )}
+    </aside>
+  );
+  const desktopRightAside = isDesktop && (
+    <aside style={{ width: 340, padding: "20px 16px", display: "flex", flexDirection: "column", gap: 16, flexShrink: 0, background: T.darkBg, borderLeft: `1px solid ${T.charcoal}`, overflowY: "auto" }} className="th-scroll">
+      {isAdmin && pendingAmbassadorRequests.length > 0 && (
+        <div style={{ background: T.darkCard, borderRadius: 14, padding: 16, border: `1px solid ${T.copper}40` }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <Shield size={12} color={T.copper} />
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.5, fontWeight: 700 }}>AMBASSADOR REQUESTS</span>
+            </div>
+            <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, background: `${T.copper}25`, padding: "2px 8px", borderRadius: 10 }}>{pendingAmbassadorRequests.length}</span>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {pendingAmbassadorRequests.slice(0, 5).map(req => {
+              const init = ((req.full_name || req.handle || "U").charAt(0)).toUpperCase();
+              return (
+                <div key={req.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: `1px solid ${T.charcoal}` }}>
+                  <div onClick={() => openUserProfile(req.handle || req.id)} style={{ width: 32, height: 32, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0, cursor: "pointer" }}>
+                    {req.avatar_url
+                      ? <img src={txImg(req.avatar_url, 96)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      : <span style={{ fontFamily: sans, fontSize: 13, fontWeight: 700, color: T.white }}>{init}</span>}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <span onClick={() => openUserProfile(req.handle || req.id)} style={{ display: "block", fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{req.full_name || "User"}</span>
+                    {req.handle && <span style={{ display: "block", fontFamily: sans, fontSize: 10, color: T.copper, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>@{req.handle}</span>}
+                  </div>
+                  <button onClick={() => adminUpdateUserRole(req.id, "ambassador").then((res) => { if (res && res.error) alert("Approve failed: " + res.error); })} title="Approve" style={{ padding: "5px 10px", borderRadius: 6, background: T.copper, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 9, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>APPROVE</button>
+                  <button onClick={() => adminDeclineAmbassadorRequest(req.id).then((res) => { if (res && res.error) alert("Decline failed: " + res.error); })} title="Decline" style={{ padding: "5px 8px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}40`, cursor: "pointer", display: "flex", alignItems: "center" }}>
+                    <X size={11} color={T.tertiary} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          {pendingAmbassadorRequests.length > 5 && (
+            <p style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, margin: "10px 0 0", textAlign: "center" }}>+ {pendingAmbassadorRequests.length - 5} more — open a user's profile to manage.</p>
+          )}
+        </div>
+      )}
+      <div style={{ background: T.darkCard, borderRadius: 14, padding: 16, border: `1px solid ${T.charcoal}` }}>
+        <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.5, fontWeight: 600, display: "block", marginBottom: 8 }}>WELCOME</span>
+        <p style={{ fontFamily: serif, fontSize: 14, color: T.white, margin: "0 0 8px", lineHeight: 1.5 }}>The overlanding community app by Lone Peak Overland.</p>
+        <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "0 0 12px", lineHeight: 1.5 }}>Share trip reports, plan routes, post your build, find camping spots, and connect with overlanders.</p>
+        <a href="https://www.lonepeakoverland.com/" target="_blank" rel="noopener noreferrer" style={{ display: "inline-block", padding: "8px 14px", borderRadius: 8, background: T.copper, color: T.white, textDecoration: "none", fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.8 }}>VISIT LONE PEAK OVERLAND</a>
+      </div>
+      <div style={{ background: T.darkCard, borderRadius: 14, padding: 16, border: `1px solid ${T.charcoal}` }}>
+        <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 600, display: "block", marginBottom: 10 }}>FORUM CATEGORIES</span>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {forumCategoriesList.slice(0, 6).map(cat => (
+            <button key={cat.id || cat.name} onClick={() => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("forum"); }} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, background: "transparent", border: "none", cursor: "pointer", textAlign: "left" }}>
+              <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 500 }}>{cat.name}</span>
+              <ChevronRight size={14} color={T.tertiary} />
+            </button>
+          ))}
+        </div>
+      </div>
+      <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.5, padding: "0 4px", lineHeight: 1.6 }}>
+        Trailhead is in active development. <a href="https://www.lonepeakoverland.com/" style={{ color: T.copper, textDecoration: "none" }}>Lone Peak Overland</a> · 2026
+      </div>
+    </aside>
+  );
+  const desktopShellOpen = (children) => (
+    <div style={{ minHeight: "100vh", height: "100vh", background: T.darkBg, display: "flex", justifyContent: "center", overflow: "hidden", color: T.white, fontFamily: sans }}>
+      <div style={{ display: "flex", maxWidth: 1280, width: "100%", height: "100%" }}>
+        {desktopLeftNav}
+        <div style={{ flex: 1, display: "flex", justifyContent: "center", minWidth: 0, overflow: "hidden" }}>
+          {children}
+        </div>
+        {desktopRightAside}
+      </div>
+    </div>
+  );
+
+  const appShell = (
+    <div style={{ background: T.charcoal, height: "100vh", maxWidth: 430, margin: "0 auto", position: "relative", fontFamily: sans, color: T.white, display: "flex", flexDirection: "column", overflow: "hidden", width: "100%", borderLeft: isDesktop ? `1px solid ${T.charcoal}` : undefined, borderRight: isDesktop ? `1px solid ${T.charcoal}` : undefined }}>
       {/* iOS install hint — Safari on iOS only delivers web push to installed
           PWAs. Banner is sticky-dismissed via localStorage. Shown only when
           we detect Safari on iOS and we're not in standalone mode. */}
@@ -25853,6 +28103,7 @@ export default function Trailhead() {
         onViewUser={openUserProfile}
         onGoToPost={(postId) => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("feed"); setPendingPostNav(postId); }}
         onGoToBuild={(buildId, name) => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("builds"); setPendingBuildNav({ rawId: buildId, name: name || "" }); }}
+        onGoToForumThread={(threadId) => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("forum"); openForumThreadById(threadId); }}
         onGoToRecovery={() => { setShowRecovery(true); setProfileStack([]); }}
         onOpenMap={openMap}
         onSearch={() => setShowGlobalSearch(true)}
@@ -25869,12 +28120,19 @@ export default function Trailhead() {
 
       <div className="th-scroll" style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
         {showCompose ? (
-          <ComposeScreen key={composePrefillConvoy && composePrefillConvoy.planId ? `pre_${composePrefillConvoy.planId}` : "fresh"} userBuilds={myBuildsForLink} currentUserName={(currentProfile && currentProfile.full_name) || "You"} currentUserHandle={(currentProfile && currentProfile.handle) || ""} onSearchUsers={searchUsers} onUploadError={showErrorToast} initialConvoy={composePrefillConvoy} followingProfiles={followingProfiles} onLoadFollowingProfiles={loadFollowingProfilesOnce} myTripPlans={allTripPlans} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} onPlanNewRouteForConvoy={requireAuth(enterPlanBuilderForConvoy)} onUseExistingPlanForConvoy={requireAuth(startConvoyFromPlan)} onClose={() => { setShowCompose(false); setComposePrefillConvoy(null); }} onSubmit={async (newPost) => { const planIdForConvoy = composePrefillConvoy && composePrefillConvoy.planId; if (planIdForConvoy && newPost && newPost.type === "CONVOYS") newPost = { ...newPost, planId: planIdForConvoy }; const created = await addPost(newPost); /* When the convoy was generated from a plan, force the plan public + published so other users can see + RSVP it. RLS already allows owner-only patches; updateTripDraft will be a no-op for non-owners (which won't happen here — only the plan owner can plan a convoy from it). */ if (created && created.type === "CONVOYS" && planIdForConvoy) { try { await updateTripDraft(planIdForConvoy, { visibility: "public", status: "published" }); } catch (e) { console.warn("[plan→convoy] failed to publish plan", e); } } awardPoints(newPost.type === "RECOVERY" ? 0 : POINTS.feedPost, newPost.type === "RECOVERY" ? "" : "Feed Post"); if (newPost.photoUrls && newPost.photoUrls.length > 0) awardPoints(POINTS.photoUploaded * newPost.photoUrls.length, "Photos Uploaded"); /* Convoys: auto-RSVP the host as going. This persists their attendance and triggers ensureConvoyGroupMembership, creating the group DM right away with the host as the first member. Subsequent invitee goings join the same group. */ if (created && created.type === "CONVOYS" && created.id && typeof created.id === "string" && created.id.length > 20 && created.id.includes("-")) { setConvoyRsvp(created.id, "going"); } return created; }} onAddRecoveryAlert={addRecoveryAlert} onAddNotification={addNotification} onAddRoute={(r) => { setUserRoutes(prev => [r, ...prev]); awardPoints(POINTS.routeLogged, "Route Logged"); }} onOpenDM={openDM} onSendDmInvite={sendDmInvite} />
+          <ComposeScreen key={composePrefillConvoy && composePrefillConvoy.planId ? `pre_${composePrefillConvoy.planId}` : "fresh"} userBuilds={myBuildsForLink} currentUserName={(currentProfile && currentProfile.full_name) || "You"} currentUserHandle={(currentProfile && currentProfile.handle) || ""} onSearchUsers={searchUsers} onUploadError={showErrorToast} initialConvoy={composePrefillConvoy} followingProfiles={followingProfiles} onLoadFollowingProfiles={loadFollowingProfilesOnce} myTripPlans={allTripPlans} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} onPlanNewRouteForConvoy={requireAuth(enterPlanBuilderForConvoy)} onUseExistingPlanForConvoy={requireAuth(startConvoyFromPlan)} onPlanNewRoute={requireAuth(() => { setScreen("routes"); enterPlanBuilder(); })} onNewTripReport={requireAuth(() => setTripCreatorMode("report"))} onClose={() => { setShowCompose(false); setComposePrefillConvoy(null); }} onSubmit={async (newPost) => { const planIdForConvoy = composePrefillConvoy && composePrefillConvoy.planId; if (planIdForConvoy && newPost && newPost.type === "CONVOYS") newPost = { ...newPost, planId: planIdForConvoy }; const created = await addPost(newPost); /* When the convoy was generated from a plan, force the plan public + published so other users can see + RSVP it. RLS already allows owner-only patches; updateTripDraft will be a no-op for non-owners (which won't happen here — only the plan owner can plan a convoy from it). */ if (created && created.type === "CONVOYS" && planIdForConvoy) { try { await updateTripDraft(planIdForConvoy, { visibility: "public", status: "published" }); } catch (e) { console.warn("[plan→convoy] failed to publish plan", e); } } awardPoints(newPost.type === "RECOVERY" ? 0 : POINTS.feedPost, newPost.type === "RECOVERY" ? "" : "Feed Post"); if (newPost.photoUrls && newPost.photoUrls.length > 0) awardPoints(POINTS.photoUploaded * newPost.photoUrls.length, "Photos Uploaded"); /* Convoys: auto-RSVP the host as going. This persists their attendance and triggers ensureConvoyGroupMembership, creating the group DM right away with the host as the first member. Subsequent invitee goings join the same group. */ if (created && created.type === "CONVOYS" && created.id && typeof created.id === "string" && created.id.length > 20 && created.id.includes("-")) { setConvoyRsvp(created.id, "going"); } return created; }} onAddRecoveryAlert={addRecoveryAlert} onAddNotification={addNotification} onAddRoute={(r) => { setUserRoutes(prev => [r, ...prev]); awardPoints(POINTS.routeLogged, "Route Logged"); }} onOpenDM={openDM} onSendDmInvite={sendDmInvite} />
         ) : showRecovery ? (
-          <RecoveryScreen onOpenMap={openMap} onOpenDM={openDM} />
+          <RecoveryScreen
+            onOpenMap={openMap}
+            onOpenDM={openDM}
+            recoveryItems={recoveryAlerts}
+            currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id}
+            onMarkResolved={requireAuth((id) => updatePost(id, { urgency: "RESOLVED", resolvedAt: Date.now() }))}
+            onRequestHelp={requireAuth(() => { setShowRecovery(false); setShowCompose(true); })}
+          />
         ) : isProfile ? (
           isOtherProfile ? (
-            <OtherProfileScreen userId={profileStack[1]} onBack={goBack} onMessage={(user) => openDM(user)} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} followingIds={followingIds} onFollow={requireAuth(followUser)} onUnfollow={requireAuth(unfollowUser)} fetchFollowCounts={fetchFollowCounts} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} allBuilds={allBuilds} onLoadAllBuilds={loadAllBuildsOnce} onlineUserIds={onlineUserIds} allTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} />
+            <OtherProfileScreen userId={profileStack[1]} onBack={goBack} onMessage={(user) => openDM(user)} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} onAdminUpdateUserRole={adminUpdateUserRole} onAdminDeclineAmbassador={adminDeclineAmbassadorRequest} followingIds={followingIds} onFollow={requireAuth(followUser)} onUnfollow={requireAuth(unfollowUser)} fetchFollowCounts={fetchFollowCounts} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} allBuilds={allBuilds} onLoadAllBuilds={loadAllBuildsOnce} onlineUserIds={onlineUserIds} allTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} />
           ) : (
             <ProfileScreen currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} convoyRsvps={convoyRsvps} followerCount={myFollowerCount} followingCount={myFollowingCount} onSubscribePush={subscribeToPush} onUnsubscribePush={unsubscribeFromPush} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} savedRoutes={savedRoutes} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} onStartNav={(route) => setActiveNavRoute(route)} myTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} onNewTripPlan={() => requireAuth(() => enterPlanBuilder())()} initialUserName={(currentProfile && currentProfile.full_name) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name) || null} initialUserHandle={(currentProfile && currentProfile.handle) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle) || null} initialUserBio={currentProfile ? currentProfile.bio : null} initialIsPublic={currentProfile ? currentProfile.is_public : null} onSaveProfile={saveProfile} onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={deleteBuild} profilePic={profilePic} onSetProfilePic={handleSetProfilePic} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => deletePost(id)} onEditPost={(id, newText) => updatePost(id, { title: newText })} onUpdateConvoy={(convoyId, updates) => {
               updatePost(convoyId, updates);
@@ -25890,10 +28148,10 @@ export default function Trailhead() {
           )
         ) : (
           <>
-            {isGuest && <GuestBanner onSignIn={() => setShowGuestPrompt(true)} />}
+            {isGuest && screen !== "routes" && <GuestBanner onSignIn={() => setShowGuestPrompt(true)} />}
             {screen === "feed" && renderFeedScopedTo({ hideFilters: false })}
-            {screen === "forum" && <ForumScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} pendingThread={pendingThread} onPendingHandled={() => setPendingThread(null)} onAddNotification={requireAuth(addNotification)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onOpenShareCompose={openShareCompose} onOpenShareIntent={openShareIntent} onAddFeedPost={requireAuth((post) => addPost(post))} userThreads={forumUserThreads} setUserThreads={requireAuth(setForumUserThreads)} userReplies={forumUserReplies} setUserReplies={requireAuth(setForumUserReplies)} likedForumItems={forumLikedItems} setLikedForumItems={requireAuth(setForumLikedItems)} forumLikeCounts={forumLikeCounts} setForumLikeCounts={requireAuth(setForumLikeCounts)} forumViewCounts={forumViewCounts} setForumViewCounts={setForumViewCounts} onAwardPoints={awardPoints} />}
-            {screen === "routes" && <RoutesScreen campingSpots={campingSpots} showCampingSpots={showCampingSpots} setShowCampingSpots={setShowCampingSpots} showPublicLands={showPublicLands} setShowPublicLands={setShowPublicLands} showSatellite={showSatellite} setShowSatellite={setShowSatellite} onOpenShareIntent={openShareIntent} tripAuthors={tripAuthors} onLoadRouteData={loadTripRouteData} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} tripReports={allTripReports} showTripReports={showTripReports} setShowTripReports={setShowTripReports} tripPlans={allTripPlans} showTripPlans={showTripPlans} setShowTripPlans={setShowTripPlans} onMapViewportChange={onMapViewportChange} onAddCampingSpot={requireAuth(addCampingSpot)} onUpdateCampingSpot={requireAuth(updateCampingSpot)} onDeleteCampingSpot={requireAuth(deleteCampingSpot)} onLoadCampingSpotPhotos={loadCampingSpotPhotos} onLoadCampingSpotElevation={loadCampingSpotElevation} spotAuthors={spotAuthors} onViewUser={openUserProfile} onStartNav={(route) => setActiveNavRoute(route)} onOpenTripDetail={(slug) => setPendingTripNav(slug)} onOpenTripPlanDraft={(id) => setDetailTripId(id)} onNewTripReport={() => setTripCreatorMode("report")} onNewTripPlan={() => requireAuth(() => enterPlanBuilder())()} pendingSpotNav={pendingSpotNav} onConsumePendingSpotNav={() => setPendingSpotNav(null)} pendingHQOpen={pendingHQOpen} onConsumePendingHQOpen={() => setPendingHQOpen(false)} pendingPlanNav={pendingPlanNav} onConsumePendingPlanNav={() => setPendingPlanNav(null)} onShareCampingSpotToFeed={requireAuth(shareCampingSpotToFeed)} onShareHQToFeed={requireAuth(shareHQToFeed)} onShareTripToFeed={requireAuth(shareTripToFeed)} onShareTripPlanToFeed={requireAuth(shareTripPlanToFeed)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onShowToast={showErrorToast} onOpenShareCompose={openShareCompose} planBuilder={{ active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, editingId: planBuilderEditingId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen, accent: (planBuilderEditingId && (tripReports || []).find(t => t.id === planBuilderEditingId && t.kind === "report")) ? T.purple : T.copper }} />}
+            {screen === "forum" && <ForumScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} isAdmin={isAdmin} isAmbassador={isAmbassador} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentUserName={(currentProfile && currentProfile.full_name) || "You"} currentUserHandle={(currentProfile && currentProfile.handle) || ""} currentUserAvatar={profilePic || (currentProfile && currentProfile.avatar_url) || null} pendingThread={pendingThread} onPendingHandled={() => setPendingThread(null)} pendingForumSubNav={pendingForumSubNav} onConsumePendingForumSubNav={() => setPendingForumSubNav(null)} onAddNotification={requireAuth(addNotification)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onOpenShareCompose={openShareCompose} onOpenShareIntent={openShareIntent} onAddFeedPost={requireAuth((post) => addPost(post))} threadsBySub={forumThreadsBySub} repliesByThread={forumReplies} onAddForumThread={requireAuth(addForumThread)} onUpdateForumThread={requireAuth(updateForumThread)} onDeleteForumThread={requireAuth(deleteForumThread)} onAddForumReply={requireAuth(addForumReply)} onDeleteForumReply={requireAuth(deleteForumReply)} onLoadForumReplies={loadForumReplies} likedForumThreadIds={likedForumThreadIds} forumThreadLikeCounts={forumThreadLikeCounts} onToggleForumThreadLike={requireAuth(toggleForumThreadLike)} likedForumReplyIds={likedForumReplyIds} forumReplyLikeCounts={forumReplyLikeCounts} onToggleForumReplyLike={requireAuth(toggleForumReplyLike)} onBumpForumThreadView={bumpForumThreadView} onAwardPoints={awardPoints} categoriesList={forumCategoriesList} onAddCategory={requireAuth(addForumCategory)} onUpdateCategory={requireAuth(updateForumCategory)} onDeleteCategory={requireAuth(deleteForumCategory)} onAddSubcategory={requireAuth(addForumSubcategory)} onUpdateSubcategory={requireAuth(updateForumSubcategory)} onDeleteSubcategory={requireAuth(deleteForumSubcategory)} />}
+            {screen === "routes" && <RoutesScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} campingSpots={campingSpots} showCampingSpots={showCampingSpots} setShowCampingSpots={setShowCampingSpots} showPublicLands={showPublicLands} setShowPublicLands={setShowPublicLands} showSatellite={showSatellite} setShowSatellite={setShowSatellite} onOpenShareIntent={openShareIntent} tripAuthors={tripAuthors} onLoadRouteData={loadTripRouteData} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} tripReports={allTripReports} showTripReports={showTripReports} setShowTripReports={setShowTripReports} tripPlans={allTripPlans} showTripPlans={showTripPlans} setShowTripPlans={setShowTripPlans} onMapViewportChange={onMapViewportChange} onAddCampingSpot={requireAuth(addCampingSpot)} onUpdateCampingSpot={requireAuth(updateCampingSpot)} onDeleteCampingSpot={requireAuth(deleteCampingSpot)} onLoadCampingSpotPhotos={loadCampingSpotPhotos} onLoadCampingSpotElevation={loadCampingSpotElevation} spotAuthors={spotAuthors} onViewUser={openUserProfile} onStartNav={(route) => setActiveNavRoute(route)} onOpenTripDetail={(slug) => setPendingTripNav(slug)} onOpenTripPlanDraft={(id) => setDetailTripId(id)} onNewTripReport={() => setTripCreatorMode("report")} onNewTripPlan={() => requireAuth(() => enterPlanBuilder())()} pendingSpotNav={pendingSpotNav} onConsumePendingSpotNav={() => setPendingSpotNav(null)} pendingHQOpen={pendingHQOpen} onConsumePendingHQOpen={() => setPendingHQOpen(false)} pendingPlanNav={pendingPlanNav} onConsumePendingPlanNav={() => setPendingPlanNav(null)} onShareCampingSpotToFeed={requireAuth(shareCampingSpotToFeed)} onShareHQToFeed={requireAuth(shareHQToFeed)} onShareTripToFeed={requireAuth(shareTripToFeed)} onShareTripPlanToFeed={requireAuth(shareTripPlanToFeed)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onShowToast={showErrorToast} onOpenShareCompose={openShareCompose} planBuilder={{ active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, editingId: planBuilderEditingId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen, accent: (planBuilderEditingId && (tripReports || []).find(t => t.id === planBuilderEditingId && t.kind === "report")) ? T.purple : T.copper }} />}
             {screen === "builds" && <BuildsScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onViewUser={openUserProfile} userBuilds={userBuilds} allBuilds={allBuilds} onLoadAllBuilds={loadAllBuildsOnce} onLoadBuildById={loadBuildById} allBuildsLoaded={allBuildsLoaded} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} followingIds={followingIds} pendingBuildNav={pendingBuildNav} onConsumePendingBuildNav={() => setPendingBuildNav(null)} onAddBuild={requireAuth(addBuild)} userRoutes={userRoutes} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onOpenShareCompose={openShareCompose} onOpenShareIntent={openShareIntent} onUpdateBuild={requireAuth(updateBuild)} likedBuildIds={likedBuildIds} buildLikeCounts={buildLikeCounts} onToggleBuildLike={requireAuth(toggleBuildLike)} onDeleteBuild={requireAuth(deleteBuild)} onPostBuildToFeed={requireAuth((b, opts) => { const rawBd = b.buildData; const bd = scrubLocalPhotosFromBuildData(rawBd); const isLocalUrl = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:")); const rawHero = b.image || (rawBd && rawBd.mainPhotos && rawBd.mainPhotos[0] && rawBd.mainPhotos[0].url) || null; const cleanHero = isLocalUrl(rawHero) ? ((bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url) || null) : rawHero; const heroImg = isLocalUrl(cleanHero) ? null : cleanHero; const meName = (currentProfile && currentProfile.full_name) || "You"; const myUid = supabaseSession && supabaseSession.user && supabaseSession.user.id; const isReshare = b.userId && myUid && b.userId !== myUid; const ownerHandle = isReshare ? (b.handle || "").replace(/^@/, "") : null; const ownerName = isReshare ? (b.owner || null) : null; addPost({ id: "feedbuild_" + Date.now(), type: "BUILDS", user: meName, initial: meName.charAt(0).toUpperCase(), time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, subtitle: isReshare ? `Shared @${ownerHandle}'s build` : "Added a new build", vehicle: `${b.year} ${b.make} ${b.model}`, photoUrls: heroImg ? [heroImg] : undefined, image: heroImg, likes: 0, comments: 0, buildData: bd, buildRawId: b.rawId != null ? b.rawId : null, sharedFromOwnerHandle: ownerHandle, sharedFromOwnerName: ownerName, _skipBuildIdCol: isReshare }); awardPoints(POINTS.feedPost, "Build Shared"); })} buildComments={buildComments} onLoadBuildComments={loadBuildComments} onAddBuildComment={requireAuth(addBuildComment)} onDeleteBuildComment={deleteBuildComment} likedBuildCommentIds={likedBuildCommentIds} buildCommentLikeCounts={buildCommentLikeCounts} onToggleBuildCommentLike={requireAuth(toggleBuildCommentLike)} currentUserName={(currentProfile && currentProfile.full_name) || ""} currentUserHandle={(currentProfile && currentProfile.handle) ? "@" + currentProfile.handle : ""} currentUserAvatar={(currentProfile && currentProfile.avatar_url) || null} />}
             {screen === "ranks" && (isGuest
               ? <GuestGateScreen title="RANKS REQUIRE AN ACCOUNT" subtitle="Sign in to see the leaderboard and start earning points from your posts, routes and builds." onSignIn={goToLoginFromGuest} />
@@ -25910,7 +28168,7 @@ export default function Trailhead() {
         </button>
       )}
 
-      {!keyboardOpen && <BottomNav active={isOverlay ? "" : screen} onNav={handleNav} isGuest={isGuest} />}
+      {!keyboardOpen && !isDesktop && <BottomNav active={isOverlay ? "" : screen} onNav={handleNav} isGuest={isGuest} />}
 
       {/* Map Overlay */}
       {mapData && (
@@ -25928,8 +28186,8 @@ export default function Trailhead() {
           }}
         />
       )}
-      {/* Recovery Arrival Confirmation Modal */}
-      {recoveryConfirm && (
+      {/* Recovery Arrival Confirmation Modal (gated — see RECOVERY_PROXIMITY_CONFIRM_ENABLED) */}
+      {RECOVERY_PROXIMITY_CONFIRM_ENABLED && recoveryConfirm && (
         <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
           <div style={{ background: T.darkCard, borderRadius: 16, padding: 24, maxWidth: 340, width: "100%", textAlign: "center", border: `1px solid ${T.charcoal}` }}>
             <div style={{ width: 56, height: 56, borderRadius: "50%", background: `${T.green}18`, border: `2px solid ${T.green}`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
@@ -26097,8 +28355,8 @@ export default function Trailhead() {
               likeCount={(tripLikeCounts && tripLikeCounts[trip.id]) || 0}
               onToggleLike={requireAuth(toggleTripLike)}
               onShareToFeed={requireAuth((t) => openShareIntent({ kind: t.kind === "plan" ? "plan" : "trip", data: t }))}
-              onStartDirections={startDirectionsTo}
-              onStartNav={(route) => setActiveNavRoute(route)}
+              onStartDirections={requireAuth(startDirectionsTo)}
+              onStartNav={requireAuth((route) => setActiveNavRoute(route))}
               onPlanConvoy={requireAuth(startConvoyFromPlan)}
             />
           </div>
@@ -26138,8 +28396,8 @@ export default function Trailhead() {
               onToggleCommentLike={requireAuth(toggleCommentLike)}
               onLoadTripRouteData={loadTripRouteData}
               onShareIntent={openShareIntent}
-              onStartDirections={startDirectionsTo}
-              onStartNav={(route) => setActiveNavRoute(route)}
+              onStartDirections={requireAuth(startDirectionsTo)}
+              onStartNav={requireAuth((route) => setActiveNavRoute(route))}
               onOpenTripDetail={(slug) => { setDetailConvoyId(null); setPendingTripNav(slug); }}
             />
           </div>
@@ -26536,9 +28794,21 @@ export default function Trailhead() {
           onClose={() => setShowGlobalSearch(false)}
           onViewUser={(handle) => { setShowGlobalSearch(false); openUserProfile(handle); }}
           onOpenThread={(threadId, catName, subName) => { setShowGlobalSearch(false); openForumThread(threadId, catName, subName); }}
+          onOpenTripDetail={(slugOrId) => { setShowGlobalSearch(false); setPendingTripNav(slugOrId); }}
+          onOpenBuild={(rawId, name) => { setShowGlobalSearch(false); setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("builds"); setPendingBuildNav({ rawId, name: name || "" }); }}
+          onOpenSpot={(spotId) => { setShowGlobalSearch(false); setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("routes"); setPendingSpotNav(spotId); }}
+          onOpenPost={(postId) => { setShowGlobalSearch(false); setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("feed"); setPendingPostNav(postId); }}
           onNavigate={(s) => { setShowGlobalSearch(false); setScreen(s); }}
-          forumUserReplies={forumUserReplies}
-          forumViewCounts={forumViewCounts}
+          onSearchUsers={searchUsers}
+          forumThreadsBySub={forumThreadsBySub}
+          forumUserReplies={forumReplies}
+          forumViewCounts={forumViewCountsByThreadId}
+          feedItems={feedItems}
+          allTripReports={allTripReports}
+          allTripPlans={allTripPlans}
+          allBuilds={allBuilds}
+          campingSpots={[...(userCampingSpots || []), ...(viewportCampingSpots || [])]}
+          forumCategoriesList={forumCategoriesList}
         />
       )}
       {showDM && (
@@ -26629,6 +28899,10 @@ export default function Trailhead() {
       )}
     </div>
   );
+  // Desktop shell wraps the existing mobile column with left nav + right
+  // info sidebars on viewports >= 1024px. Mobile + tablet keep the bare
+  // app shell so behavior is identical there.
+  return isDesktop ? desktopShellOpen(appShell) : appShell;
 }
 
 /* ─── Mount ─── */

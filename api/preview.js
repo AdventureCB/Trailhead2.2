@@ -39,43 +39,39 @@ const LPO_HQ = {
 // forumData.categories in trailhead-v1.jsx so the OG handler can render
 // breadcrumbs + landing pages without an extra round trip. Keep in sync;
 // when admin category CRUD ships, swap for a DB query.
-const FORUM_SUB_TO_INFO = {
-  // How-To Guides
-  "suspension-lift": { name: "Suspension & Lift", catName: "How-To Guides", catSlug: "how-to-guides" },
-  "electrical-wiring": { name: "Electrical & Wiring", catName: "How-To Guides", catSlug: "how-to-guides" },
-  "armor-protection": { name: "Armor & Protection", catName: "How-To Guides", catSlug: "how-to-guides" },
-  "camper-installs": { name: "Camper Installs", catName: "How-To Guides", catSlug: "how-to-guides" },
-  "recovery-techniques": { name: "Recovery Techniques", catName: "How-To Guides", catSlug: "how-to-guides" },
-  "maintenance-repair": { name: "Maintenance & Repair", catName: "How-To Guides", catSlug: "how-to-guides" },
-  // Troubleshooting
-  "engine-drivetrain": { name: "Engine & Drivetrain", catName: "Troubleshooting", catSlug: "troubleshooting" },
-  "electrical-issues": { name: "Electrical Issues", catName: "Troubleshooting", catSlug: "troubleshooting" },
-  "suspension-steering": { name: "Suspension & Steering", catName: "Troubleshooting", catSlug: "troubleshooting" },
-  "body-frame": { name: "Body & Frame", catName: "Troubleshooting", catSlug: "troubleshooting" },
-  "accessories-mods": { name: "Accessories & Mods", catName: "Troubleshooting", catSlug: "troubleshooting" },
-  // Inspiration
-  "trip-reports": { name: "Trip Reports", catName: "Inspiration", catSlug: "inspiration" },
-  "build-showcases": { name: "Build Showcases", catName: "Inspiration", catSlug: "inspiration" },
-  "photography": { name: "Photography", catName: "Inspiration", catSlug: "inspiration" },
-  "bucket-list-routes": { name: "Bucket List Routes", catName: "Inspiration", catSlug: "inspiration" },
-  // Trip Coordination
-  "convoy-planning": { name: "Convoy Planning", catName: "Trip Coordination", catSlug: "trip-coordination" },
-  "meetups-events": { name: "Meetups & Events", catName: "Trip Coordination", catSlug: "trip-coordination" },
-  "trail-partners-wanted": { name: "Trail Partners Wanted", catName: "Trip Coordination", catSlug: "trip-coordination" },
-  // Regional Groups
-  "pacific-northwest": { name: "Pacific Northwest", catName: "Regional Groups", catSlug: "regional-groups" },
-  "southwest-desert": { name: "Southwest & Desert", catName: "Regional Groups", catSlug: "regional-groups" },
-  "rockies-high-plains": { name: "Rockies & High Plains", catName: "Regional Groups", catSlug: "regional-groups" },
-  "southeast-appalachia": { name: "Southeast & Appalachia", catName: "Regional Groups", catSlug: "regional-groups" },
-  "midwest": { name: "Midwest", catName: "Regional Groups", catSlug: "regional-groups" },
-  "international": { name: "International", catName: "Regional Groups", catSlug: "regional-groups" },
-  // Marketplace
-  "parts-for-sale": { name: "Parts For Sale", catName: "Marketplace", catSlug: "marketplace" },
-  "vehicles-for-sale": { name: "Vehicles For Sale", catName: "Marketplace", catSlug: "marketplace" },
-  "wanted-iso": { name: "Wanted / ISO", catName: "Marketplace", catSlug: "marketplace" },
-  "group-buys": { name: "Group Buys", catName: "Marketplace", catSlug: "marketplace" },
-  "free-trade": { name: "Free / Trade", catName: "Marketplace", catSlug: "marketplace" },
-};
+// Forum subcategory → display info map. Phase 2: backed by DB. Populated
+// lazily by `loadForumSubs()` at handler entry with a 60s in-memory TTL
+// so admin renames + new subs propagate to SSR/OG within a minute without
+// hitting Supabase on every request. Stale-cache fallback if the fetch
+// fails so previews keep working through transient DB hiccups.
+let FORUM_SUB_TO_INFO = {};
+let FORUM_SUBS_LOADED_AT = 0;
+const FORUM_SUBS_TTL_MS = 60_000;
+async function loadForumSubs() {
+  const fresh = Date.now() - FORUM_SUBS_LOADED_AT < FORUM_SUBS_TTL_MS && Object.keys(FORUM_SUB_TO_INFO).length > 0;
+  if (fresh) return;
+  try {
+    const [cats, subs] = await Promise.all([
+      supabaseFetchAll("forum_categories", "select=id,slug,name"),
+      supabaseFetchAll("forum_subcategories", "select=id,category_id,slug,name"),
+    ]);
+    if (!Array.isArray(cats) || !Array.isArray(subs)) return;
+    const catById = {};
+    cats.forEach(c => { catById[c.id] = c; });
+    const next = {};
+    subs.forEach(s => {
+      const cat = catById[s.category_id];
+      if (!cat) return;
+      next[s.slug] = { name: s.name, catName: cat.name, catSlug: cat.slug };
+    });
+    if (Object.keys(next).length > 0) {
+      FORUM_SUB_TO_INFO = next;
+      FORUM_SUBS_LOADED_AT = Date.now();
+    }
+  } catch (e) {
+    // Leave the existing cache (even if empty) — fresher than nothing.
+  }
+}
 
 // Read the SPA shell once at module load. `includeFiles` in vercel.json
 // makes deploy-v2.2/index.html available to the function bundle.
@@ -1097,6 +1093,10 @@ function metaTagsFor({ title, description, image, imageAlt, url, article }) {
 }
 
 module.exports = async function handler(req, res) {
+  // Refresh the DB-backed forum subcategory map if stale. Cheap; cached
+  // 60s. Means admin edits in-app propagate to OG / SSR / JSON-LD within
+  // a minute without a redeploy.
+  await loadForumSubs();
   const proto = req.headers["x-forwarded-proto"] || "https";
   const host = req.headers["x-forwarded-host"] || req.headers.host || "";
   const type = (req.query && req.query.type) || "";

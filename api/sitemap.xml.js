@@ -20,20 +20,9 @@
 const SUPABASE_URL = "https://babbgaziiyjfaqjsaxgd.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_rGrh2oIi8fuBv_9w9ZSneg_H6HdBmk-";
 
-// Forum categories + subcategories — must match forumData.categories in
-// trailhead-v1.jsx. When admin CRUD ships these will move into a DB table.
-const FORUM_CATEGORIES = [
-  { name: "How-To Guides", subs: ["Suspension & Lift", "Electrical & Wiring", "Armor & Protection", "Camper Installs", "Recovery Techniques", "Maintenance & Repair"] },
-  { name: "Troubleshooting", subs: ["Engine & Drivetrain", "Electrical Issues", "Suspension & Steering", "Body & Frame", "Accessories & Mods"] },
-  { name: "Inspiration", subs: ["Trip Reports", "Build Showcases", "Photography", "Bucket List Routes"] },
-  { name: "Trip Coordination", subs: ["Convoy Planning", "Meetups & Events", "Trail Partners Wanted"] },
-  { name: "Regional Groups", subs: ["Pacific Northwest", "Southwest & Desert", "Rockies & High Plains", "Southeast & Appalachia", "Midwest", "International"] },
-  { name: "Marketplace", subs: ["Parts For Sale", "Vehicles For Sale", "Wanted / ISO", "Group Buys", "Free / Trade"] },
-];
-
-function slugify(name) {
-  return (name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-}
+// Forum subcategories are now DB-backed (Phase 2). They're fetched per
+// request from `public.forum_subcategories` instead of mirrored as a
+// constant. Slugs are stored, so we don't need to slugify on the fly here.
 
 async function supabaseFetch(table, queryStr) {
   const url = `${SUPABASE_URL}/rest/v1/${table}?${queryStr}`;
@@ -81,7 +70,8 @@ module.exports = async function handler(req, res) {
   const now = new Date().toISOString();
 
   // Fan out all the fetches in parallel — no single one blocks the others.
-  const [forumThreads, tripReports, builds, campingSpots] = await Promise.all([
+  const [forumSubcategories, forumThreads, tripReports, builds, campingSpots] = await Promise.all([
+    supabaseFetch("forum_subcategories", "select=slug,updated_at,created_at&order=sort_order.asc&limit=2000"),
     supabaseFetch("forum_threads", "select=slug,subcategory_slug,updated_at,created_at&order=updated_at.desc&limit=10000"),
     supabaseFetch("trip_reports", "status=eq.published&select=slug,updated_at,created_at,kind,visibility&order=updated_at.desc&limit=10000"),
     supabaseFetch("builds", "select=id,updated_at,created_at&order=updated_at.desc&limit=10000"),
@@ -95,11 +85,10 @@ module.exports = async function handler(req, res) {
   urls.push(urlEntry(`${origin}/hq`, now, "monthly", "0.6"));
 
   // Forum subcategory landing pages — each is its own topical hub.
-  FORUM_CATEGORIES.forEach(cat => {
-    cat.subs.forEach(subName => {
-      const subSlug = slugify(subName);
-      if (subSlug) urls.push(urlEntry(`${origin}/forum/${subSlug}`, now, "daily", "0.7"));
-    });
+  forumSubcategories.forEach(sub => {
+    if (!sub || !sub.slug) return;
+    const lastmod = sub.updated_at || sub.created_at || now;
+    urls.push(urlEntry(`${origin}/forum/${sub.slug}`, lastmod, "daily", "0.7"));
   });
 
   // Forum threads — the primary indexable surface. Canonical form is the

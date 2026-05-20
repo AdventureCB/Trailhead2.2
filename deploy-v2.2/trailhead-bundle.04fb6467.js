@@ -21736,24 +21736,32 @@
   ];
   var DollarSign = createLucideIcon("dollar-sign", __iconNode18);
 
-  // node_modules/lucide-react/dist/esm/icons/ellipsis.mjs
+  // node_modules/lucide-react/dist/esm/icons/ellipsis-vertical.mjs
   var __iconNode19 = [
+    ["circle", { cx: "12", cy: "12", r: "1", key: "41hilf" }],
+    ["circle", { cx: "12", cy: "5", r: "1", key: "gxeob9" }],
+    ["circle", { cx: "12", cy: "19", r: "1", key: "lyex9k" }]
+  ];
+  var EllipsisVertical = createLucideIcon("ellipsis-vertical", __iconNode19);
+
+  // node_modules/lucide-react/dist/esm/icons/ellipsis.mjs
+  var __iconNode20 = [
     ["circle", { cx: "12", cy: "12", r: "1", key: "41hilf" }],
     ["circle", { cx: "19", cy: "12", r: "1", key: "1wjl8i" }],
     ["circle", { cx: "5", cy: "12", r: "1", key: "1pcz8c" }]
   ];
-  var Ellipsis = createLucideIcon("ellipsis", __iconNode19);
+  var Ellipsis = createLucideIcon("ellipsis", __iconNode20);
 
   // node_modules/lucide-react/dist/esm/icons/external-link.mjs
-  var __iconNode20 = [
+  var __iconNode21 = [
     ["path", { d: "M15 3h6v6", key: "1q9fwt" }],
     ["path", { d: "M10 14 21 3", key: "gplh6r" }],
     ["path", { d: "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6", key: "a6xqqp" }]
   ];
-  var ExternalLink = createLucideIcon("external-link", __iconNode20);
+  var ExternalLink = createLucideIcon("external-link", __iconNode21);
 
   // node_modules/lucide-react/dist/esm/icons/eye-off.mjs
-  var __iconNode21 = [
+  var __iconNode22 = [
     [
       "path",
       {
@@ -21771,10 +21779,10 @@
     ],
     ["path", { d: "m2 2 20 20", key: "1ooewy" }]
   ];
-  var EyeOff = createLucideIcon("eye-off", __iconNode21);
+  var EyeOff = createLucideIcon("eye-off", __iconNode22);
 
   // node_modules/lucide-react/dist/esm/icons/eye.mjs
-  var __iconNode22 = [
+  var __iconNode23 = [
     [
       "path",
       {
@@ -21784,10 +21792,10 @@
     ],
     ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
   ];
-  var Eye = createLucideIcon("eye", __iconNode22);
+  var Eye = createLucideIcon("eye", __iconNode23);
 
   // node_modules/lucide-react/dist/esm/icons/flame.mjs
-  var __iconNode23 = [
+  var __iconNode24 = [
     [
       "path",
       {
@@ -21796,18 +21804,18 @@
       }
     ]
   ];
-  var Flame = createLucideIcon("flame", __iconNode23);
+  var Flame = createLucideIcon("flame", __iconNode24);
 
   // node_modules/lucide-react/dist/esm/icons/globe.mjs
-  var __iconNode24 = [
+  var __iconNode25 = [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["path", { d: "M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20", key: "13o1zl" }],
     ["path", { d: "M2 12h20", key: "9i4pu4" }]
   ];
-  var Globe = createLucideIcon("globe", __iconNode24);
+  var Globe = createLucideIcon("globe", __iconNode25);
 
   // node_modules/lucide-react/dist/esm/icons/heart.mjs
-  var __iconNode25 = [
+  var __iconNode26 = [
     [
       "path",
       {
@@ -21816,10 +21824,10 @@
       }
     ]
   ];
-  var Heart = createLucideIcon("heart", __iconNode25);
+  var Heart = createLucideIcon("heart", __iconNode26);
 
   // node_modules/lucide-react/dist/esm/icons/house.mjs
-  var __iconNode26 = [
+  var __iconNode27 = [
     ["path", { d: "M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8", key: "5wwlr5" }],
     [
       "path",
@@ -21829,18 +21837,18 @@
       }
     ]
   ];
-  var House = createLucideIcon("house", __iconNode26);
+  var House = createLucideIcon("house", __iconNode27);
 
   // node_modules/lucide-react/dist/esm/icons/image.mjs
-  var __iconNode27 = [
+  var __iconNode28 = [
     ["rect", { width: "18", height: "18", x: "3", y: "3", rx: "2", ry: "2", key: "1m3agn" }],
     ["circle", { cx: "9", cy: "9", r: "2", key: "af1f0g" }],
     ["path", { d: "m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21", key: "1xmnt7" }]
   ];
-  var Image = createLucideIcon("image", __iconNode27);
+  var Image = createLucideIcon("image", __iconNode28);
 
   // node_modules/lucide-react/dist/esm/icons/layers.mjs
-  var __iconNode28 = [
+  var __iconNode29 = [
     [
       "path",
       {
@@ -21863,32 +21871,32 @@
       }
     ]
   ];
-  var Layers = createLucideIcon("layers", __iconNode28);
+  var Layers = createLucideIcon("layers", __iconNode29);
 
   // node_modules/lucide-react/dist/esm/icons/link-2.mjs
-  var __iconNode29 = [
+  var __iconNode30 = [
     ["path", { d: "M9 17H7A5 5 0 0 1 7 7h2", key: "8i5ue5" }],
     ["path", { d: "M15 7h2a5 5 0 1 1 0 10h-2", key: "1b9ql8" }],
     ["line", { x1: "8", x2: "16", y1: "12", y2: "12", key: "1jonct" }]
   ];
-  var Link2 = createLucideIcon("link-2", __iconNode29);
+  var Link2 = createLucideIcon("link-2", __iconNode30);
 
   // node_modules/lucide-react/dist/esm/icons/lock.mjs
-  var __iconNode30 = [
+  var __iconNode31 = [
     ["rect", { width: "18", height: "11", x: "3", y: "11", rx: "2", ry: "2", key: "1w4ew1" }],
     ["path", { d: "M7 11V7a5 5 0 0 1 10 0v4", key: "fwvmzm" }]
   ];
-  var Lock = createLucideIcon("lock", __iconNode30);
+  var Lock = createLucideIcon("lock", __iconNode31);
 
   // node_modules/lucide-react/dist/esm/icons/mail.mjs
-  var __iconNode31 = [
+  var __iconNode32 = [
     ["path", { d: "m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7", key: "132q7q" }],
     ["rect", { x: "2", y: "4", width: "20", height: "16", rx: "2", key: "izxlao" }]
   ];
-  var Mail = createLucideIcon("mail", __iconNode31);
+  var Mail = createLucideIcon("mail", __iconNode32);
 
   // node_modules/lucide-react/dist/esm/icons/map-pin.mjs
-  var __iconNode32 = [
+  var __iconNode33 = [
     [
       "path",
       {
@@ -21898,10 +21906,10 @@
     ],
     ["circle", { cx: "12", cy: "10", r: "3", key: "ilqhr7" }]
   ];
-  var MapPin = createLucideIcon("map-pin", __iconNode32);
+  var MapPin = createLucideIcon("map-pin", __iconNode33);
 
   // node_modules/lucide-react/dist/esm/icons/map.mjs
-  var __iconNode33 = [
+  var __iconNode34 = [
     [
       "path",
       {
@@ -21912,19 +21920,19 @@
     ["path", { d: "M15 5.764v15", key: "1pn4in" }],
     ["path", { d: "M9 3.236v15", key: "1uimfh" }]
   ];
-  var Map2 = createLucideIcon("map", __iconNode33);
+  var Map2 = createLucideIcon("map", __iconNode34);
 
   // node_modules/lucide-react/dist/esm/icons/maximize-2.mjs
-  var __iconNode34 = [
+  var __iconNode35 = [
     ["path", { d: "M15 3h6v6", key: "1q9fwt" }],
     ["path", { d: "m21 3-7 7", key: "1l2asr" }],
     ["path", { d: "m3 21 7-7", key: "tjx5ai" }],
     ["path", { d: "M9 21H3v-6", key: "wtvkvv" }]
   ];
-  var Maximize2 = createLucideIcon("maximize-2", __iconNode34);
+  var Maximize2 = createLucideIcon("maximize-2", __iconNode35);
 
   // node_modules/lucide-react/dist/esm/icons/message-circle.mjs
-  var __iconNode35 = [
+  var __iconNode36 = [
     [
       "path",
       {
@@ -21933,29 +21941,29 @@
       }
     ]
   ];
-  var MessageCircle = createLucideIcon("message-circle", __iconNode35);
+  var MessageCircle = createLucideIcon("message-circle", __iconNode36);
 
   // node_modules/lucide-react/dist/esm/icons/minimize-2.mjs
-  var __iconNode36 = [
+  var __iconNode37 = [
     ["path", { d: "m14 10 7-7", key: "oa77jy" }],
     ["path", { d: "M20 10h-6V4", key: "mjg0md" }],
     ["path", { d: "m3 21 7-7", key: "tjx5ai" }],
     ["path", { d: "M4 14h6v6", key: "rmj7iw" }]
   ];
-  var Minimize2 = createLucideIcon("minimize-2", __iconNode36);
+  var Minimize2 = createLucideIcon("minimize-2", __iconNode37);
 
   // node_modules/lucide-react/dist/esm/icons/mountain.mjs
-  var __iconNode37 = [["path", { d: "m8 3 4 8 5-5 5 15H2L8 3z", key: "otkl63" }]];
-  var Mountain = createLucideIcon("mountain", __iconNode37);
+  var __iconNode38 = [["path", { d: "m8 3 4 8 5-5 5 15H2L8 3z", key: "otkl63" }]];
+  var Mountain = createLucideIcon("mountain", __iconNode38);
 
   // node_modules/lucide-react/dist/esm/icons/navigation.mjs
-  var __iconNode38 = [
+  var __iconNode39 = [
     ["polygon", { points: "3 11 22 2 13 21 11 13 3 11", key: "1ltx0t" }]
   ];
-  var Navigation = createLucideIcon("navigation", __iconNode38);
+  var Navigation = createLucideIcon("navigation", __iconNode39);
 
   // node_modules/lucide-react/dist/esm/icons/pen-line.mjs
-  var __iconNode39 = [
+  var __iconNode40 = [
     ["path", { d: "M13 21h8", key: "1jsn5i" }],
     [
       "path",
@@ -21965,10 +21973,10 @@
       }
     ]
   ];
-  var PenLine = createLucideIcon("pen-line", __iconNode39);
+  var PenLine = createLucideIcon("pen-line", __iconNode40);
 
   // node_modules/lucide-react/dist/esm/icons/play.mjs
-  var __iconNode40 = [
+  var __iconNode41 = [
     [
       "path",
       {
@@ -21977,42 +21985,42 @@
       }
     ]
   ];
-  var Play = createLucideIcon("play", __iconNode40);
+  var Play = createLucideIcon("play", __iconNode41);
 
   // node_modules/lucide-react/dist/esm/icons/plus.mjs
-  var __iconNode41 = [
+  var __iconNode42 = [
     ["path", { d: "M5 12h14", key: "1ays0h" }],
     ["path", { d: "M12 5v14", key: "s699le" }]
   ];
-  var Plus = createLucideIcon("plus", __iconNode41);
+  var Plus = createLucideIcon("plus", __iconNode42);
 
   // node_modules/lucide-react/dist/esm/icons/radio.mjs
-  var __iconNode42 = [
+  var __iconNode43 = [
     ["path", { d: "M16.247 7.761a6 6 0 0 1 0 8.478", key: "1fwjs5" }],
     ["path", { d: "M19.075 4.933a10 10 0 0 1 0 14.134", key: "ehdyv1" }],
     ["path", { d: "M4.925 19.067a10 10 0 0 1 0-14.134", key: "1q22gi" }],
     ["path", { d: "M7.753 16.239a6 6 0 0 1 0-8.478", key: "r2q7qm" }],
     ["circle", { cx: "12", cy: "12", r: "2", key: "1c9p78" }]
   ];
-  var Radio = createLucideIcon("radio", __iconNode42);
+  var Radio = createLucideIcon("radio", __iconNode43);
 
   // node_modules/lucide-react/dist/esm/icons/route.mjs
-  var __iconNode43 = [
+  var __iconNode44 = [
     ["circle", { cx: "6", cy: "19", r: "3", key: "1kj8tv" }],
     ["path", { d: "M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15", key: "1d8sl" }],
     ["circle", { cx: "18", cy: "5", r: "3", key: "gq8acd" }]
   ];
-  var Route = createLucideIcon("route", __iconNode43);
+  var Route = createLucideIcon("route", __iconNode44);
 
   // node_modules/lucide-react/dist/esm/icons/search.mjs
-  var __iconNode44 = [
+  var __iconNode45 = [
     ["path", { d: "m21 21-4.34-4.34", key: "14j7rj" }],
     ["circle", { cx: "11", cy: "11", r: "8", key: "4ej97u" }]
   ];
-  var Search = createLucideIcon("search", __iconNode44);
+  var Search = createLucideIcon("search", __iconNode45);
 
   // node_modules/lucide-react/dist/esm/icons/send.mjs
-  var __iconNode45 = [
+  var __iconNode46 = [
     [
       "path",
       {
@@ -22022,10 +22030,10 @@
     ],
     ["path", { d: "m21.854 2.147-10.94 10.939", key: "12cjpa" }]
   ];
-  var Send = createLucideIcon("send", __iconNode45);
+  var Send = createLucideIcon("send", __iconNode46);
 
   // node_modules/lucide-react/dist/esm/icons/settings.mjs
-  var __iconNode46 = [
+  var __iconNode47 = [
     [
       "path",
       {
@@ -22035,20 +22043,20 @@
     ],
     ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
   ];
-  var Settings = createLucideIcon("settings", __iconNode46);
+  var Settings = createLucideIcon("settings", __iconNode47);
 
   // node_modules/lucide-react/dist/esm/icons/share-2.mjs
-  var __iconNode47 = [
+  var __iconNode48 = [
     ["circle", { cx: "18", cy: "5", r: "3", key: "gq8acd" }],
     ["circle", { cx: "6", cy: "12", r: "3", key: "w7nqdw" }],
     ["circle", { cx: "18", cy: "19", r: "3", key: "1xt0gg" }],
     ["line", { x1: "8.59", x2: "15.42", y1: "13.51", y2: "17.49", key: "47mynk" }],
     ["line", { x1: "15.41", x2: "8.59", y1: "6.51", y2: "10.49", key: "1n3mei" }]
   ];
-  var Share2 = createLucideIcon("share-2", __iconNode47);
+  var Share2 = createLucideIcon("share-2", __iconNode48);
 
   // node_modules/lucide-react/dist/esm/icons/shield-check.mjs
-  var __iconNode48 = [
+  var __iconNode49 = [
     [
       "path",
       {
@@ -22058,10 +22066,10 @@
     ],
     ["path", { d: "m9 12 2 2 4-4", key: "dzmm74" }]
   ];
-  var ShieldCheck = createLucideIcon("shield-check", __iconNode48);
+  var ShieldCheck = createLucideIcon("shield-check", __iconNode49);
 
   // node_modules/lucide-react/dist/esm/icons/shield.mjs
-  var __iconNode49 = [
+  var __iconNode50 = [
     [
       "path",
       {
@@ -22070,25 +22078,25 @@
       }
     ]
   ];
-  var Shield = createLucideIcon("shield", __iconNode49);
+  var Shield = createLucideIcon("shield", __iconNode50);
 
   // node_modules/lucide-react/dist/esm/icons/smartphone.mjs
-  var __iconNode50 = [
+  var __iconNode51 = [
     ["rect", { width: "14", height: "20", x: "5", y: "2", rx: "2", ry: "2", key: "1yt0o3" }],
     ["path", { d: "M12 18h.01", key: "mhygvu" }]
   ];
-  var Smartphone = createLucideIcon("smartphone", __iconNode50);
+  var Smartphone = createLucideIcon("smartphone", __iconNode51);
 
   // node_modules/lucide-react/dist/esm/icons/square-plus.mjs
-  var __iconNode51 = [
+  var __iconNode52 = [
     ["rect", { width: "18", height: "18", x: "3", y: "3", rx: "2", key: "afitv7" }],
     ["path", { d: "M8 12h8", key: "1wcyev" }],
     ["path", { d: "M12 8v8", key: "napkw2" }]
   ];
-  var SquarePlus = createLucideIcon("square-plus", __iconNode51);
+  var SquarePlus = createLucideIcon("square-plus", __iconNode52);
 
   // node_modules/lucide-react/dist/esm/icons/star.mjs
-  var __iconNode52 = [
+  var __iconNode53 = [
     [
       "path",
       {
@@ -22097,44 +22105,57 @@
       }
     ]
   ];
-  var Star = createLucideIcon("star", __iconNode52);
+  var Star = createLucideIcon("star", __iconNode53);
+
+  // node_modules/lucide-react/dist/esm/icons/tag.mjs
+  var __iconNode54 = [
+    [
+      "path",
+      {
+        d: "M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z",
+        key: "vktsd0"
+      }
+    ],
+    ["circle", { cx: "7.5", cy: "7.5", r: ".5", fill: "currentColor", key: "kqv944" }]
+  ];
+  var Tag = createLucideIcon("tag", __iconNode54);
 
   // node_modules/lucide-react/dist/esm/icons/target.mjs
-  var __iconNode53 = [
+  var __iconNode55 = [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["circle", { cx: "12", cy: "12", r: "6", key: "1vlfrh" }],
     ["circle", { cx: "12", cy: "12", r: "2", key: "1c9p78" }]
   ];
-  var Target = createLucideIcon("target", __iconNode53);
+  var Target = createLucideIcon("target", __iconNode55);
 
   // node_modules/lucide-react/dist/esm/icons/tent.mjs
-  var __iconNode54 = [
+  var __iconNode56 = [
     ["path", { d: "M3.5 21 14 3", key: "1szst5" }],
     ["path", { d: "M20.5 21 10 3", key: "1310c3" }],
     ["path", { d: "M15.5 21 12 15l-3.5 6", key: "1ddtfw" }],
     ["path", { d: "M2 21h20", key: "1nyx9w" }]
   ];
-  var Tent = createLucideIcon("tent", __iconNode54);
+  var Tent = createLucideIcon("tent", __iconNode56);
 
   // node_modules/lucide-react/dist/esm/icons/trash-2.mjs
-  var __iconNode55 = [
+  var __iconNode57 = [
     ["path", { d: "M10 11v6", key: "nco0om" }],
     ["path", { d: "M14 11v6", key: "outv1u" }],
     ["path", { d: "M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6", key: "miytrc" }],
     ["path", { d: "M3 6h18", key: "d0wm0j" }],
     ["path", { d: "M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2", key: "e791ji" }]
   ];
-  var Trash2 = createLucideIcon("trash-2", __iconNode55);
+  var Trash2 = createLucideIcon("trash-2", __iconNode57);
 
   // node_modules/lucide-react/dist/esm/icons/trending-up.mjs
-  var __iconNode56 = [
+  var __iconNode58 = [
     ["path", { d: "M16 7h6v6", key: "box55l" }],
     ["path", { d: "m22 7-8.5 8.5-5-5L2 17", key: "1t1m79" }]
   ];
-  var TrendingUp = createLucideIcon("trending-up", __iconNode56);
+  var TrendingUp = createLucideIcon("trending-up", __iconNode58);
 
   // node_modules/lucide-react/dist/esm/icons/triangle-alert.mjs
-  var __iconNode57 = [
+  var __iconNode59 = [
     [
       "path",
       {
@@ -22145,10 +22166,10 @@
     ["path", { d: "M12 9v4", key: "juzpu7" }],
     ["path", { d: "M12 17h.01", key: "p32p05" }]
   ];
-  var TriangleAlert = createLucideIcon("triangle-alert", __iconNode57);
+  var TriangleAlert = createLucideIcon("triangle-alert", __iconNode59);
 
   // node_modules/lucide-react/dist/esm/icons/trophy.mjs
-  var __iconNode58 = [
+  var __iconNode60 = [
     ["path", { d: "M10 14.66v1.626a2 2 0 0 1-.976 1.696A5 5 0 0 0 7 21.978", key: "1n3hpd" }],
     ["path", { d: "M14 14.66v1.626a2 2 0 0 0 .976 1.696A5 5 0 0 1 17 21.978", key: "rfe1zi" }],
     ["path", { d: "M18 9h1.5a1 1 0 0 0 0-5H18", key: "7xy6bh" }],
@@ -22156,36 +22177,36 @@
     ["path", { d: "M6 9a6 6 0 0 0 12 0V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1z", key: "1mhfuq" }],
     ["path", { d: "M6 9H4.5a1 1 0 0 1 0-5H6", key: "tex48p" }]
   ];
-  var Trophy = createLucideIcon("trophy", __iconNode58);
+  var Trophy = createLucideIcon("trophy", __iconNode60);
 
   // node_modules/lucide-react/dist/esm/icons/user-check.mjs
-  var __iconNode59 = [
+  var __iconNode61 = [
     ["path", { d: "m16 11 2 2 4-4", key: "9rsbq5" }],
     ["path", { d: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2", key: "1yyitq" }],
     ["circle", { cx: "9", cy: "7", r: "4", key: "nufk8" }]
   ];
-  var UserCheck = createLucideIcon("user-check", __iconNode59);
+  var UserCheck = createLucideIcon("user-check", __iconNode61);
 
   // node_modules/lucide-react/dist/esm/icons/user-plus.mjs
-  var __iconNode60 = [
+  var __iconNode62 = [
     ["path", { d: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2", key: "1yyitq" }],
     ["circle", { cx: "9", cy: "7", r: "4", key: "nufk8" }],
     ["line", { x1: "19", x2: "19", y1: "8", y2: "14", key: "1bvyxn" }],
     ["line", { x1: "22", x2: "16", y1: "11", y2: "11", key: "1shjgl" }]
   ];
-  var UserPlus = createLucideIcon("user-plus", __iconNode60);
+  var UserPlus = createLucideIcon("user-plus", __iconNode62);
 
   // node_modules/lucide-react/dist/esm/icons/users.mjs
-  var __iconNode61 = [
+  var __iconNode63 = [
     ["path", { d: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2", key: "1yyitq" }],
     ["path", { d: "M16 3.128a4 4 0 0 1 0 7.744", key: "16gr8j" }],
     ["path", { d: "M22 21v-2a4 4 0 0 0-3-3.87", key: "kshegd" }],
     ["circle", { cx: "9", cy: "7", r: "4", key: "nufk8" }]
   ];
-  var Users = createLucideIcon("users", __iconNode61);
+  var Users = createLucideIcon("users", __iconNode63);
 
   // node_modules/lucide-react/dist/esm/icons/video.mjs
-  var __iconNode62 = [
+  var __iconNode64 = [
     [
       "path",
       {
@@ -22195,10 +22216,10 @@
     ],
     ["rect", { x: "2", y: "6", width: "14", height: "12", rx: "2", key: "158x01" }]
   ];
-  var Video = createLucideIcon("video", __iconNode62);
+  var Video = createLucideIcon("video", __iconNode64);
 
   // node_modules/lucide-react/dist/esm/icons/wrench.mjs
-  var __iconNode63 = [
+  var __iconNode65 = [
     [
       "path",
       {
@@ -22207,17 +22228,17 @@
       }
     ]
   ];
-  var Wrench = createLucideIcon("wrench", __iconNode63);
+  var Wrench = createLucideIcon("wrench", __iconNode65);
 
   // node_modules/lucide-react/dist/esm/icons/x.mjs
-  var __iconNode64 = [
+  var __iconNode66 = [
     ["path", { d: "M18 6 6 18", key: "1bl5f8" }],
     ["path", { d: "m6 6 12 12", key: "d8bk6v" }]
   ];
-  var X = createLucideIcon("x", __iconNode64);
+  var X = createLucideIcon("x", __iconNode66);
 
   // node_modules/lucide-react/dist/esm/icons/zap.mjs
-  var __iconNode65 = [
+  var __iconNode67 = [
     [
       "path",
       {
@@ -22226,7 +22247,7 @@
       }
     ]
   ];
-  var Zap = createLucideIcon("zap", __iconNode65);
+  var Zap = createLucideIcon("zap", __iconNode67);
 
   // node_modules/tslib/tslib.es6.mjs
   function __rest(s, e) {
@@ -45320,7 +45341,8 @@ ${suffix}`;
     allTripReports,
     allTripPlans,
     allBuilds,
-    campingSpots
+    campingSpots,
+    forumCategoriesList
   }) {
     const [query, setQuery] = (0, import_react4.useState)("");
     const [activeTab, setActiveTab] = (0, import_react4.useState)("ALL");
@@ -45353,7 +45375,7 @@ ${suffix}`;
     const threadResults = (0, import_react4.useMemo)(() => {
       if (!q) return [];
       const out = [];
-      forumData.categories.forEach((cat) => {
+      (forumCategoriesList || []).forEach((cat) => {
         cat.subs.forEach((sub) => {
           ((forumThreadsBySub || {})[sub.name] || []).forEach((t) => {
             const author = (t.author || t.user || "").toLowerCase();
@@ -46160,53 +46182,6 @@ ${suffix}`;
       )))));
     })() : /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "12px 16px 16px", display: "flex", flexDirection: "column", gap: 12 } }, filtered.length === 0 ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "40px 0", textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Compass, { size: 36, color: T.tertiary, strokeWidth: 0.8, style: { opacity: 0.3, marginBottom: 10 } }), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: sans, fontSize: 14, color: T.tertiary, margin: 0 } }, "No ", deferredFilter.toLowerCase(), " posts yet")) : filtered.map((item) => /* @__PURE__ */ import_react4.default.createElement("div", { key: "w_" + item.id, id: "feed-post-" + item.id, style: { scrollMarginTop: 16, outline: highlightedPostId === item.id ? `2px solid ${T.copper}` : "none", outlineOffset: 2, borderRadius: 12, transition: "outline 0.3s ease" } }, renderCard(item))), deferredFilter === "ALL" && typeof filterFn !== "function" && hasMore && /* @__PURE__ */ import_react4.default.createElement("div", { ref: loadMoreSentinelRef, style: { padding: "20px 0 8px", textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.4, fontWeight: 600 } }, loadingMore ? "LOADING MORE\u2026" : "SCROLL FOR MORE"))));
   }
-  var forumData = {
-    categories: [
-      { name: "How-To Guides", color: T.copper, icon: "wrench", subs: [
-        { name: "Suspension & Lift", threads: 86 },
-        { name: "Electrical & Wiring", threads: 64 },
-        { name: "Armor & Protection", threads: 52 },
-        { name: "Camper Installs", threads: 41 },
-        { name: "Recovery Techniques", threads: 38 },
-        { name: "Maintenance & Repair", threads: 61 }
-      ] },
-      { name: "Troubleshooting", color: T.red, icon: "alert", subs: [
-        { name: "Engine & Drivetrain", threads: 74 },
-        { name: "Electrical Issues", threads: 48 },
-        { name: "Suspension & Steering", threads: 39 },
-        { name: "Body & Frame", threads: 28 },
-        { name: "Accessories & Mods", threads: 29 }
-      ] },
-      { name: "Inspiration", color: T.green, icon: "mountain", subs: [
-        { name: "Trip Reports", threads: 198 },
-        { name: "Build Showcases", threads: 142 },
-        { name: "Photography", threads: 127 },
-        { name: "Bucket List Routes", threads: 100 }
-      ] },
-      { name: "Trip Coordination", color: T.copper, icon: "users", subs: [
-        { name: "Convoy Planning", threads: 24 },
-        { name: "Meetups & Events", threads: 31 },
-        { name: "Trail Partners Wanted", threads: 34 }
-      ] },
-      { name: "Regional Groups", color: T.tertiary, icon: "map", subs: [
-        { name: "Pacific Northwest", threads: 42 },
-        { name: "Southwest & Desert", threads: 38 },
-        { name: "Rockies & High Plains", threads: 29 },
-        { name: "Southeast & Appalachia", threads: 21 },
-        { name: "Midwest", threads: 14 },
-        { name: "International", threads: 12 }
-      ] },
-      { name: "Marketplace", color: T.red, icon: "tag", subs: [
-        { name: "Parts For Sale", threads: 186 },
-        { name: "Vehicles For Sale", threads: 89 },
-        { name: "Wanted / ISO", threads: 78 },
-        { name: "Group Buys", threads: 42 },
-        { name: "Free / Trade", threads: 28 }
-      ] }
-    ]
-    // Threads are persisted to public.forum_threads now (no seed). Live data
-    // is hydrated at root and passed down via the `threadsBySub` prop.
-  };
   function forumSlugify(name) {
     return (name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   }
@@ -46215,14 +46190,6 @@ ${suffix}`;
   }
   var FORUM_CAT_BY_SLUG = {};
   var FORUM_SUB_BY_SLUG = {};
-  forumData.categories.forEach((cat) => {
-    const catSlug = forumSlugify(cat.name);
-    FORUM_CAT_BY_SLUG[catSlug] = { name: cat.name, slug: catSlug, color: cat.color, icon: cat.icon };
-    cat.subs.forEach((sub) => {
-      const subSlug = forumSlugify(sub.name);
-      FORUM_SUB_BY_SLUG[subSlug] = { name: sub.name, slug: subSlug, catName: cat.name, catSlug };
-    });
-  });
   async function processForumBodyImages(html, uid) {
     if (!html || typeof html !== "string") return html;
     if (!uid) return html;
@@ -46466,7 +46433,8 @@ ${suffix}`;
       }
     ));
   }
-  function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onConsumePendingForumSubNav, onAddNotification, onOpenDM, onOpenShareCompose, onOpenShareIntent, onAddFeedPost, threadsBySub, repliesByThread, onAddForumThread, onUpdateForumThread, onDeleteForumThread, onAddForumReply, onDeleteForumReply, onLoadForumReplies, likedForumThreadIds, forumThreadLikeCounts, onToggleForumThreadLike, likedForumReplyIds, forumReplyLikeCounts, onToggleForumReplyLike, onBumpForumThreadView, onAwardPoints, isGuest, onGuestTap, currentUserId, currentUserName, currentUserHandle, currentUserAvatar, isAdmin }) {
+  function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onConsumePendingForumSubNav, onAddNotification, onOpenDM, onOpenShareCompose, onOpenShareIntent, onAddFeedPost, threadsBySub, repliesByThread, onAddForumThread, onUpdateForumThread, onDeleteForumThread, onAddForumReply, onDeleteForumReply, onLoadForumReplies, likedForumThreadIds, forumThreadLikeCounts, onToggleForumThreadLike, likedForumReplyIds, forumReplyLikeCounts, onToggleForumReplyLike, onBumpForumThreadView, onAwardPoints, isGuest, onGuestTap, currentUserId, currentUserName, currentUserHandle, currentUserAvatar, isAdmin, isAmbassador, categoriesList, onAddCategory, onUpdateCategory, onDeleteCategory, onAddSubcategory, onUpdateSubcategory, onDeleteSubcategory }) {
+    const cats = categoriesList || [];
     const commitForumPhotos = async (photos) => {
       if (!Array.isArray(photos) || photos.length === 0) return [];
       if (!currentUserId) {
@@ -46498,6 +46466,51 @@ ${suffix}`;
     const [selectedCat, setSelectedCat] = (0, import_react4.useState)(null);
     const [selectedSub, setSelectedSub] = (0, import_react4.useState)(null);
     const [selectedThread, setSelectedThread] = (0, import_react4.useState)(null);
+    const [showCatModal, setShowCatModal] = (0, import_react4.useState)(null);
+    const [showSubModal, setShowSubModal] = (0, import_react4.useState)(null);
+    const [catMenuOpen, setCatMenuOpen] = (0, import_react4.useState)(null);
+    const [subMenuOpen, setSubMenuOpen] = (0, import_react4.useState)(null);
+    const FORUM_COLOR_OPTIONS = [
+      { name: "RED", value: T.red },
+      { name: "COPPER", value: T.copper },
+      { name: "GREEN", value: T.green },
+      { name: "TERTIARY", value: T.tertiary },
+      { name: "BLUE", value: "#5B7C99" },
+      { name: "OCHRE", value: "#B4894F" }
+    ];
+    const FORUM_ICON_OPTIONS = [
+      { name: "wrench", Comp: Wrench },
+      { name: "alert", Comp: TriangleAlert },
+      { name: "mountain", Comp: Mountain },
+      { name: "users", Comp: Users },
+      { name: "map", Comp: Map2 },
+      { name: "tag", Comp: Tag },
+      { name: "compass", Comp: Compass },
+      { name: "tent", Comp: Tent },
+      { name: "flame", Comp: Flame },
+      { name: "camera", Comp: Camera },
+      { name: "award", Comp: Award },
+      { name: "bookopen", Comp: BookOpen }
+    ];
+    const handleDeleteCategory = async (cat) => {
+      if (!cat || !cat.id || !onDeleteCategory) return;
+      if (!confirm(`Delete category "${cat.name}"?`)) return;
+      const res = await onDeleteCategory(cat.id);
+      if (res && res.error) alert(res.error);
+    };
+    const handleDeleteSubcategory = async (sub) => {
+      if (!sub || !sub.id || !onDeleteSubcategory) return;
+      if (!confirm(`Delete subcategory "${sub.name}"?`)) return;
+      const res = await onDeleteSubcategory(sub.id);
+      if (res && res.error) alert(res.error);
+    };
+    const canCreateSubcategory = !!(isAdmin || isAmbassador);
+    const canManageSub = (sub) => {
+      if (!sub) return false;
+      if (isAdmin) return true;
+      if (isAmbassador && sub.created_by && sub.created_by === currentUserId) return true;
+      return false;
+    };
     const [forumReplyText, setForumReplyText] = (0, import_react4.useState)("");
     const [replyPhotos, setReplyPhotos] = (0, import_react4.useState)([]);
     const replyFileRef = import_react4.default.useRef(null);
@@ -46531,7 +46544,7 @@ ${suffix}`;
     (0, import_react4.useEffect)(() => {
       if (!pendingThread) return;
       const { threadId, catName, subName } = pendingThread;
-      for (const cat of forumData.categories) {
+      for (const cat of cats) {
         if (cat.name !== catName) continue;
         for (const sub of cat.subs) {
           if (sub.name !== subName) continue;
@@ -46554,7 +46567,7 @@ ${suffix}`;
     (0, import_react4.useEffect)(() => {
       if (!pendingForumSubNav) return;
       const subSlug = pendingForumSubNav;
-      for (const cat of forumData.categories) {
+      for (const cat of cats) {
         for (const sub of cat.subs) {
           if (forumSlugify(sub.name) === subSlug) {
             setSelectedCat(cat);
@@ -46604,7 +46617,7 @@ ${suffix}`;
         if (m2) {
           const subInfo = FORUM_SUB_BY_SLUG[m2[1]];
           if (subInfo) {
-            const sub = forumData.categories.flatMap((c) => c.subs.map((s) => ({ s, c }))).find(({ s }) => s.name === subInfo.name);
+            const sub = cats.flatMap((c) => c.subs.map((s) => ({ s, c }))).find(({ s }) => s.name === subInfo.name);
             if (sub) {
               const list = (threadsBySub || {})[subInfo.name] || [];
               const t = list.find((x) => x.slug === m2[2]);
@@ -46623,7 +46636,7 @@ ${suffix}`;
         if (m1) {
           const subInfo = FORUM_SUB_BY_SLUG[m1[1]];
           if (subInfo) {
-            const sub = forumData.categories.flatMap((c) => c.subs.map((s) => ({ s, c }))).find(({ s }) => s.name === subInfo.name);
+            const sub = cats.flatMap((c) => c.subs.map((s) => ({ s, c }))).find(({ s }) => s.name === subInfo.name);
             if (sub) {
               setSelectedCat(sub.c);
               setSelectedSub(sub.s);
@@ -46672,7 +46685,7 @@ ${suffix}`;
     const searchInputRef = (0, import_react4.useRef)(null);
     const allThreadsFlat = (() => {
       const results = [];
-      forumData.categories.forEach((cat) => {
+      cats.forEach((cat) => {
         cat.subs.forEach((sub) => {
           ((threadsBySub || {})[sub.name] || []).forEach((t) => {
             results.push({ ...t, catName: cat.name, subName: sub.name, cat, sub });
@@ -46814,10 +46827,10 @@ ${suffix}`;
       };
       const canPost = ntTitle.trim() && ntSections.some((s) => (s.subheading || "").trim() || (s.body || "").replace(/<[^>]+>/g, "").trim()) && (!ntFromHome || ntPickCat && ntPickSub);
       return /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 0 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "14px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: goBack, style: { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" } }, /* @__PURE__ */ import_react4.default.createElement(ChevronLeft, { size: 20, color: T.white, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, display: "block" } }, "New Thread"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, activeSub ? activeSub.name : "Select a category"))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px" } }, ntFromHome && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "CATEGORY *"), /* @__PURE__ */ import_react4.default.createElement("select", { value: ntPickCat ? ntPickCat.name : "", onChange: (e) => {
-        const cat = forumData.categories.find((c) => c.name === e.target.value);
+        const cat = cats.find((c) => c.name === e.target.value);
         setNtPickCat(cat || null);
         setNtPickSub(null);
-      }, style: { width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, outline: "none", boxSizing: "border-box", appearance: "none", WebkitAppearance: "none", backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238B7D6B' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 14px center" } }, /* @__PURE__ */ import_react4.default.createElement("option", { value: "", disabled: true, style: { color: T.tertiary } }, "Select category..."), forumData.categories.map((cat) => /* @__PURE__ */ import_react4.default.createElement("option", { key: cat.name, value: cat.name, style: { background: T.darkCard, color: T.white } }, cat.name)))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "SUBCATEGORY *"), /* @__PURE__ */ import_react4.default.createElement("select", { value: ntPickSub ? ntPickSub.name : "", onChange: (e) => {
+      }, style: { width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, outline: "none", boxSizing: "border-box", appearance: "none", WebkitAppearance: "none", backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238B7D6B' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 14px center" } }, /* @__PURE__ */ import_react4.default.createElement("option", { value: "", disabled: true, style: { color: T.tertiary } }, "Select category..."), cats.map((cat) => /* @__PURE__ */ import_react4.default.createElement("option", { key: cat.name, value: cat.name, style: { background: T.darkCard, color: T.white } }, cat.name)))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "SUBCATEGORY *"), /* @__PURE__ */ import_react4.default.createElement("select", { value: ntPickSub ? ntPickSub.name : "", onChange: (e) => {
         const sub = ntPickCat ? ntPickCat.subs.find((s) => s.name === e.target.value) : null;
         setNtPickSub(sub || null);
       }, disabled: !ntPickCat, style: { width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: ntPickCat ? T.white : T.tertiary, fontFamily: sans, fontSize: 13, outline: "none", boxSizing: "border-box", opacity: ntPickCat ? 1 : 0.5, appearance: "none", WebkitAppearance: "none", backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238B7D6B' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 14px center" } }, /* @__PURE__ */ import_react4.default.createElement("option", { value: "", disabled: true, style: { color: T.tertiary } }, "Select subcategory..."), ntPickCat && ntPickCat.subs.map((sub) => /* @__PURE__ */ import_react4.default.createElement("option", { key: sub.name, value: sub.name, style: { background: T.darkCard, color: T.white } }, sub.name))))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "TITLE *"), /* @__PURE__ */ import_react4.default.createElement("input", { value: ntTitle, onChange: (e) => setNtTitle(e.target.value), placeholder: "Thread title...", style: { width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none", boxSizing: "border-box" } })), ntSections.map((s, i) => /* @__PURE__ */ import_react4.default.createElement(
@@ -47103,10 +47116,20 @@ ${suffix}`;
       return /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 0 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "14px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: goBack, style: { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" } }, /* @__PURE__ */ import_react4.default.createElement(ChevronLeft, { size: 20, color: T.white, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, display: "block" } }, selectedSub.name), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, selectedCat.name)), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: openNewThreadFromSub, style: { display: "flex", alignItems: "center", gap: 5, padding: "8px 14px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 14, color: T.white }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, "NEW"))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 2 } }, threads.map((t, i) => /* @__PURE__ */ import_react4.default.createElement("div", { key: t.id, onClick: () => openThread(t), style: { background: T.darkCard, padding: "14px 16px", cursor: "pointer", borderRadius: i === 0 ? "8px 8px 0 0" : i === threads.length - 1 ? "0 0 8px 8px" : 0, borderBottom: i < threads.length - 1 ? `1px solid ${T.charcoal}` : "none" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 6 } }, t.pinned && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.copper, background: `${T.copper}20`, padding: "2px 6px", borderRadius: 3, letterSpacing: 1 } }, "PINNED")), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 14, color: T.white, margin: "0 0 8px", lineHeight: 1.4 } }, t.title), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 12 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, "@", t.author), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, formatPostTime(t.time))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 10, alignItems: "center" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 3 } }, /* @__PURE__ */ import_react4.default.createElement(MessageCircle, { size: 12, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, getReplyCount(t))), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, getViewCount(t)), /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 14, color: T.tertiary }))))))));
     }
     if (view === "subcategories" && selectedCat) {
-      return /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 0 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "14px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: goBack, style: { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" } }, /* @__PURE__ */ import_react4.default.createElement(ChevronLeft, { size: 20, color: T.white, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700 } }, selectedCat.name)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 2 } }, selectedCat.subs.map((sub, i) => {
+      return /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 0 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "14px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: goBack, style: { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" } }, /* @__PURE__ */ import_react4.default.createElement(ChevronLeft, { size: 20, color: T.white, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700 } }, selectedCat.name)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px" } }, canCreateSubcategory && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setShowSubModal({ mode: "create", category_id: selectedCat.id }), style: { display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 12px", borderRadius: 6, background: isAdmin ? T.red : T.copper, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 700, letterSpacing: 1, marginBottom: 10 } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 12 }), " SUBCATEGORY"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 2 } }, selectedCat.subs.map((sub, i) => {
         const threadCount = ((threadsBySub || {})[sub.name] || []).length;
-        return /* @__PURE__ */ import_react4.default.createElement("div", { key: sub.name, onClick: () => openSubcategory(sub), style: { background: T.darkCard, padding: "16px", cursor: "pointer", borderRadius: i === 0 ? "8px 8px 0 0" : i === selectedCat.subs.length - 1 ? "0 0 8px 8px" : 0, borderBottom: i < selectedCat.subs.length - 1 ? `1px solid ${T.charcoal}` : "none", display: "flex", alignItems: "center", justifyContent: "space-between" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 36, height: 36, borderRadius: 8, background: `${selectedCat.color}15`, display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement(MessageCircle, { size: 16, color: selectedCat.color })), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 600, display: "block" } }, sub.name), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, threadCount, " thread", threadCount === 1 ? "" : "s"))), /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 16, color: T.tertiary }));
-      }))));
+        const showMenu = canManageSub(sub);
+        return /* @__PURE__ */ import_react4.default.createElement("div", { key: sub.id || sub.name, style: { background: T.darkCard, padding: "16px", cursor: "pointer", borderRadius: i === 0 ? "8px 8px 0 0" : i === selectedCat.subs.length - 1 ? "0 0 8px 8px" : 0, borderBottom: i < selectedCat.subs.length - 1 ? `1px solid ${T.charcoal}` : "none", display: "flex", alignItems: "center", justifyContent: "space-between", position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => openSubcategory(sub), style: { display: "flex", alignItems: "center", gap: 12, flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 36, height: 36, borderRadius: 8, background: `${selectedCat.color}15`, display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement(MessageCircle, { size: 16, color: selectedCat.color })), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 600, display: "block" } }, sub.name), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, threadCount, " thread", threadCount === 1 ? "" : "s"))), showMenu ? /* @__PURE__ */ import_react4.default.createElement("button", { onClick: (e) => {
+          e.stopPropagation();
+          setSubMenuOpen(subMenuOpen === sub.id ? null : sub.id);
+        }, style: { background: "none", border: "none", padding: 6, cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(EllipsisVertical, { size: 16, color: T.tertiary })) : /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 16, color: T.tertiary }), showMenu && subMenuOpen === sub.id && /* @__PURE__ */ import_react4.default.createElement("div", { onClick: (e) => e.stopPropagation(), style: { position: "absolute", top: 44, right: 12, background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 6, overflow: "hidden", zIndex: 5, minWidth: 120, boxShadow: "0 4px 12px rgba(0,0,0,0.4)" } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
+          setSubMenuOpen(null);
+          setShowSubModal({ mode: "edit", sub });
+        }, style: { display: "block", width: "100%", padding: "8px 12px", background: "none", border: "none", cursor: "pointer", textAlign: "left", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 } }, "EDIT"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
+          setSubMenuOpen(null);
+          handleDeleteSubcategory(sub);
+        }, style: { display: "block", width: "100%", padding: "8px 12px", background: "none", border: "none", borderTop: `1px solid ${T.charcoal}`, cursor: "pointer", textAlign: "left", fontFamily: sans, fontSize: 11, color: T.red, fontWeight: 600 } }, "DELETE")));
+      }))), showCatModal && /* @__PURE__ */ import_react4.default.createElement(ForumCategoryModal, { modal: showCatModal, onClose: () => setShowCatModal(null), onAdd: onAddCategory, onUpdate: onUpdateCategory, colorOptions: FORUM_COLOR_OPTIONS, iconOptions: FORUM_ICON_OPTIONS }), showSubModal && /* @__PURE__ */ import_react4.default.createElement(ForumSubcategoryModal, { modal: showSubModal, onClose: () => setShowSubModal(null), onAdd: onAddSubcategory, onUpdate: onUpdateSubcategory }));
     }
     const totalThreads = (cat) => cat.subs.reduce((sum, s) => sum + ((threadsBySub || {})[s.name] || []).length, 0);
     const recentThreadsPool = Object.values(threadsBySub || {}).flat();
@@ -47135,8 +47158,17 @@ ${suffix}`;
         setView("thread");
         trackView(t.id);
       }, style: { background: T.darkCard, padding: "14px 16px", cursor: "pointer", borderRadius: i === 0 ? "8px 8px 0 0" : i === searchResults.length - 1 ? "0 0 8px 8px" : 0, borderBottom: i < searchResults.length - 1 ? `1px solid ${T.charcoal}` : "none" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 6 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.copper, background: `${T.copper}15`, padding: "2px 6px", borderRadius: 3, letterSpacing: 0.5 } }, t.catName), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary } }, "\u203A"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.5 } }, t.subName), matchesAuthor && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.green, background: `${T.green}20`, padding: "2px 6px", borderRadius: 3, marginLeft: "auto" } }, "AUTHOR MATCH"), !matchesAuthor && matchesReply && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.green, background: `${T.green}20`, padding: "2px 6px", borderRadius: 3, marginLeft: "auto" } }, "REPLY MATCH")), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 14, color: T.white, margin: "0 0 6px", lineHeight: 1.4 } }, t.title), t.body && /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 8px", lineHeight: 1.4 } }, t.body.length > 80 ? t.body.slice(0, 80) + "..." : t.body), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 12 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: matchesAuthor ? T.green : T.tertiary, fontWeight: matchesAuthor ? 600 : 400 } }, "@", t.author), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, formatPostTime(t.time))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 10, alignItems: "center" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 3 } }, /* @__PURE__ */ import_react4.default.createElement(MessageCircle, { size: 12, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, getReplyCount(t))), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, getViewCount(t)))));
-    }))) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 10 } }, "CATEGORIES"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, forumData.categories.map((cat) => /* @__PURE__ */ import_react4.default.createElement("div", { key: cat.name, onClick: () => openCategory(cat), style: { background: T.darkCard, borderRadius: 8, padding: "14px", cursor: "pointer", borderLeft: `3px solid ${cat.color}` } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, display: "block", marginBottom: 4 } }, cat.name), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 11, color: T.tertiary } }, totalThreads(cat), " threads"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, display: "block", marginTop: 2 } }, cat.subs.length, " subcategories"))))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 10 } }, "RECENT THREADS"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 2 } }, recentThreads.map((t, i) => /* @__PURE__ */ import_react4.default.createElement("div", { key: t.id, onClick: () => {
-      for (const cat of forumData.categories) {
+    }))) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600 } }, "CATEGORIES"), isAdmin && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setShowCatModal({ mode: "create" }), style: { display: "inline-flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 4, background: T.red, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 9, color: T.white, fontWeight: 700, letterSpacing: 1 } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 11 }), " CATEGORY")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, cats.map((cat) => /* @__PURE__ */ import_react4.default.createElement("div", { key: cat.id || cat.name, style: { background: T.darkCard, borderRadius: 8, padding: "14px", cursor: "pointer", borderLeft: `3px solid ${cat.color}`, position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => openCategory(cat) }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, display: "block", marginBottom: 4, paddingRight: isAdmin ? 18 : 0 } }, cat.name), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 11, color: T.tertiary } }, totalThreads(cat), " threads"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, display: "block", marginTop: 2 } }, cat.subs.length, " subcategories")), isAdmin && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: (e) => {
+      e.stopPropagation();
+      setCatMenuOpen(catMenuOpen === cat.id ? null : cat.id);
+    }, style: { position: "absolute", top: 8, right: 8, background: "none", border: "none", padding: 4, cursor: "pointer", borderRadius: 4 } }, /* @__PURE__ */ import_react4.default.createElement(EllipsisVertical, { size: 14, color: T.tertiary })), isAdmin && catMenuOpen === cat.id && /* @__PURE__ */ import_react4.default.createElement("div", { onClick: (e) => e.stopPropagation(), style: { position: "absolute", top: 28, right: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 6, overflow: "hidden", zIndex: 5, minWidth: 120, boxShadow: "0 4px 12px rgba(0,0,0,0.4)" } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
+      setCatMenuOpen(null);
+      setShowCatModal({ mode: "edit", cat });
+    }, style: { display: "block", width: "100%", padding: "8px 12px", background: "none", border: "none", cursor: "pointer", textAlign: "left", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 } }, "EDIT"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
+      setCatMenuOpen(null);
+      handleDeleteCategory(cat);
+    }, style: { display: "block", width: "100%", padding: "8px 12px", background: "none", border: "none", borderTop: `1px solid ${T.charcoal}`, cursor: "pointer", textAlign: "left", fontFamily: sans, fontSize: 11, color: T.red, fontWeight: 600 } }, "DELETE")))))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 10 } }, "RECENT THREADS"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 2 } }, recentThreads.map((t, i) => /* @__PURE__ */ import_react4.default.createElement("div", { key: t.id, onClick: () => {
+      for (const cat of cats) {
         for (const sub of cat.subs) {
           const hit = ((threadsBySub || {})[sub.name] || []).find((th) => th.id === t.id);
           if (hit) {
@@ -47150,7 +47182,51 @@ ${suffix}`;
           }
         }
       }
-    }, style: { background: T.darkCard, padding: "14px 16px", cursor: "pointer", borderRadius: i === 0 ? "8px 8px 0 0" : i === recentThreads.length - 1 ? "0 0 8px 8px" : 0, borderBottom: i < recentThreads.length - 1 ? `1px solid ${T.charcoal}` : "none" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 6 } }, t.pinned && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.copper, background: `${T.copper}20`, padding: "2px 6px", borderRadius: 3, letterSpacing: 1 } }, "PINNED")), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 14, color: T.white, margin: "0 0 8px", lineHeight: 1.4 } }, t.title), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 12 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, "@", t.author), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, formatPostTime(t.time))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 10, alignItems: "center" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 3 } }, /* @__PURE__ */ import_react4.default.createElement(MessageCircle, { size: 12, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, getReplyCount(t))), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, getViewCount(t))))))))));
+    }, style: { background: T.darkCard, padding: "14px 16px", cursor: "pointer", borderRadius: i === 0 ? "8px 8px 0 0" : i === recentThreads.length - 1 ? "0 0 8px 8px" : 0, borderBottom: i < recentThreads.length - 1 ? `1px solid ${T.charcoal}` : "none" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 6 } }, t.pinned && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.copper, background: `${T.copper}20`, padding: "2px 6px", borderRadius: 3, letterSpacing: 1 } }, "PINNED")), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 14, color: T.white, margin: "0 0 8px", lineHeight: 1.4 } }, t.title), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 12 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, "@", t.author), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, formatPostTime(t.time))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 10, alignItems: "center" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 3 } }, /* @__PURE__ */ import_react4.default.createElement(MessageCircle, { size: 12, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, getReplyCount(t))), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, getViewCount(t))))))))), showCatModal && /* @__PURE__ */ import_react4.default.createElement(ForumCategoryModal, { modal: showCatModal, onClose: () => setShowCatModal(null), onAdd: onAddCategory, onUpdate: onUpdateCategory, colorOptions: FORUM_COLOR_OPTIONS, iconOptions: FORUM_ICON_OPTIONS }), showSubModal && /* @__PURE__ */ import_react4.default.createElement(ForumSubcategoryModal, { modal: showSubModal, onClose: () => setShowSubModal(null), onAdd: onAddSubcategory, onUpdate: onUpdateSubcategory }));
+  }
+  function ForumCategoryModal({ modal, onClose, onAdd, onUpdate, colorOptions, iconOptions }) {
+    const isEdit = modal.mode === "edit";
+    const initial = isEdit && modal.cat || {};
+    const [name, setName] = (0, import_react4.useState)(initial.name || "");
+    const [color, setColor] = (0, import_react4.useState)(initial.color || colorOptions[0].value);
+    const [icon, setIcon] = (0, import_react4.useState)(initial.icon || iconOptions[0].name);
+    const [saving, setSaving] = (0, import_react4.useState)(false);
+    const submit = async () => {
+      if (!name.trim()) return;
+      setSaving(true);
+      const fn = isEdit ? () => onUpdate(initial.id, { name: name.trim(), color, icon }) : () => onAdd({ name: name.trim(), color, icon });
+      const res = await fn();
+      setSaving(false);
+      if (res && res.error) {
+        alert(res.error);
+        return;
+      }
+      onClose();
+    };
+    return /* @__PURE__ */ import_react4.default.createElement("div", { onClick: onClose, style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { onClick: (e) => e.stopPropagation(), style: { background: T.darkCard, borderRadius: 14, padding: 20, width: "100%", maxWidth: 380, border: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700, display: "block", marginBottom: 12 } }, isEdit ? "EDIT CATEGORY" : "NEW CATEGORY"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 4 } }, "NAME"), /* @__PURE__ */ import_react4.default.createElement("input", { value: name, onChange: (e) => setName(e.target.value), placeholder: "e.g. How-To Guides", style: { width: "100%", padding: "10px 12px", borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, outline: "none", boxSizing: "border-box", marginBottom: 14 } }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "COLOR"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" } }, colorOptions.map((c) => /* @__PURE__ */ import_react4.default.createElement("button", { key: c.name, onClick: () => setColor(c.value), style: { width: 36, height: 36, borderRadius: 8, background: c.value, border: color === c.value ? `2px solid ${T.white}` : "2px solid transparent", cursor: "pointer" }, "aria-label": c.name }))), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "ICON"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 18 } }, iconOptions.map((opt) => {
+      const Comp = opt.Comp;
+      const selected = icon === opt.name;
+      return /* @__PURE__ */ import_react4.default.createElement("button", { key: opt.name, onClick: () => setIcon(opt.name), style: { width: 38, height: 38, borderRadius: 8, background: selected ? color : T.darkBg, border: selected ? "none" : `1px solid ${T.charcoal}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }, "aria-label": opt.name }, /* @__PURE__ */ import_react4.default.createElement(Comp, { size: 16, color: selected ? T.white : T.tertiary }));
+    })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: onClose, style: { flex: 1, padding: "10px 14px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}40`, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 600, letterSpacing: 0.5 } }, "CANCEL"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: submit, disabled: saving || !name.trim(), style: { flex: 1, padding: "10px 14px", borderRadius: 6, background: name.trim() && !saving ? T.red : T.charcoal, border: "none", cursor: name.trim() && !saving ? "pointer" : "default", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, saving ? "SAVING\u2026" : isEdit ? "SAVE" : "CREATE"))));
+  }
+  function ForumSubcategoryModal({ modal, onClose, onAdd, onUpdate }) {
+    const isEdit = modal.mode === "edit";
+    const initial = isEdit && modal.sub || {};
+    const [name, setName] = (0, import_react4.useState)(initial.name || "");
+    const [saving, setSaving] = (0, import_react4.useState)(false);
+    const submit = async () => {
+      if (!name.trim()) return;
+      setSaving(true);
+      const fn = isEdit ? () => onUpdate(initial.id, { name: name.trim() }) : () => onAdd({ category_id: modal.category_id, name: name.trim() });
+      const res = await fn();
+      setSaving(false);
+      if (res && res.error) {
+        alert(res.error);
+        return;
+      }
+      onClose();
+    };
+    return /* @__PURE__ */ import_react4.default.createElement("div", { onClick: onClose, style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { onClick: (e) => e.stopPropagation(), style: { background: T.darkCard, borderRadius: 14, padding: 20, width: "100%", maxWidth: 380, border: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700, display: "block", marginBottom: 12 } }, isEdit ? "EDIT SUBCATEGORY" : "NEW SUBCATEGORY"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 4 } }, "NAME"), /* @__PURE__ */ import_react4.default.createElement("input", { value: name, onChange: (e) => setName(e.target.value), placeholder: "e.g. Suspension & Lift", style: { width: "100%", padding: "10px 12px", borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, outline: "none", boxSizing: "border-box", marginBottom: 18 } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: onClose, style: { flex: 1, padding: "10px 14px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}40`, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 600, letterSpacing: 0.5 } }, "CANCEL"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: submit, disabled: saving || !name.trim(), style: { flex: 1, padding: "10px 14px", borderRadius: 6, background: name.trim() && !saving ? T.copper : T.charcoal, border: "none", cursor: name.trim() && !saving ? "pointer" : "default", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, saving ? "SAVING\u2026" : isEdit ? "SAVE" : "CREATE"))));
   }
   function RouteRecorder({ onClose, onSave, skipDetailsForm, userBuilds, campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, onAddCampingSpot, onMapViewportChange, tripReports, showTripReports, setShowTripReports, onStartDirections }) {
     const mapRef = (0, import_react4.useRef)(null);
@@ -53432,7 +53508,13 @@ ${suffix}`;
       color: !canFollow ? T.tertiary : isFollowing ? T.green : T.white,
       opacity: canFollow ? 1 : 0.5,
       ...isFollowing ? { border: `1px solid ${T.green}40` } : {}
-    } }, isFollowing ? /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement(UserCheck, { size: 14 }), " FOLLOWING") : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement(UserPlus, { size: 14 }), " FOLLOW")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => onMessage && onMessage(userId), style: { display: "inline-flex", alignItems: "center", gap: 6, padding: "10px 24px", borderRadius: 8, cursor: "pointer", fontFamily: sans, fontSize: 12, fontWeight: 600, letterSpacing: 1, background: T.darkCard, border: `1px solid ${T.copper}40`, color: T.copper, transition: "all 0.2s" } }, /* @__PURE__ */ import_react4.default.createElement(Mail, { size: 14 }), " MESSAGE")), isAdmin && resolvedTargetId && currentUserId !== resolvedTargetId && /* @__PURE__ */ import_react4.default.createElement("div", { style: { margin: "0 16px 16px", background: T.darkCard, border: `1px solid ${T.red}40`, borderRadius: 12, padding: 14 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 10 } }, /* @__PURE__ */ import_react4.default.createElement(Shield, { size: 12, color: T.red }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.red, letterSpacing: 1.5, fontWeight: 700 } }, "ADMIN CONTROLS")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 12, fontFamily: sans, fontSize: 12, color: T.warmStone } }, /* @__PURE__ */ import_react4.default.createElement("span", null, "Current role:"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { padding: "2px 8px", borderRadius: 4, background: p.role === "admin" ? T.red : p.role === "ambassador" ? T.copper : T.charcoal, color: T.white, fontWeight: 700, letterSpacing: 1, fontSize: 10 } }, (p.role || "user").toUpperCase())), p.requestedRole === "ambassador" && /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: `${T.copper}15`, border: `1px solid ${T.copper}40`, borderRadius: 8, padding: 12, marginBottom: 12 } }, /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, margin: "0 0 8px" } }, "Ambassador request pending"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => onAdminUpdateUserRole && onAdminUpdateUserRole(resolvedTargetId, "ambassador").then(() => setDbProfile((prev) => prev ? { ...prev, role: "ambassador", requestedRole: null } : prev)), style: { flex: 1, padding: "8px 12px", borderRadius: 6, background: T.copper, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, "APPROVE"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => onAdminDeclineAmbassador && onAdminDeclineAmbassador(resolvedTargetId).then(() => setDbProfile((prev) => prev ? { ...prev, requestedRole: null } : prev)), style: { flex: 1, padding: "8px 12px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}40`, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 600, letterSpacing: 0.5 } }, "DECLINE"))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6 } }, ["user", "ambassador", "admin"].map((r) => {
+    } }, isFollowing ? /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement(UserCheck, { size: 14 }), " FOLLOWING") : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement(UserPlus, { size: 14 }), " FOLLOW")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => onMessage && onMessage(userId), style: { display: "inline-flex", alignItems: "center", gap: 6, padding: "10px 24px", borderRadius: 8, cursor: "pointer", fontFamily: sans, fontSize: 12, fontWeight: 600, letterSpacing: 1, background: T.darkCard, border: `1px solid ${T.copper}40`, color: T.copper, transition: "all 0.2s" } }, /* @__PURE__ */ import_react4.default.createElement(Mail, { size: 14 }), " MESSAGE")), isAdmin && resolvedTargetId && currentUserId !== resolvedTargetId && /* @__PURE__ */ import_react4.default.createElement("div", { style: { margin: "0 16px 16px", background: T.darkCard, border: `1px solid ${T.red}40`, borderRadius: 12, padding: 14 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 10 } }, /* @__PURE__ */ import_react4.default.createElement(Shield, { size: 12, color: T.red }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.red, letterSpacing: 1.5, fontWeight: 700 } }, "ADMIN CONTROLS")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 12, fontFamily: sans, fontSize: 12, color: T.warmStone } }, /* @__PURE__ */ import_react4.default.createElement("span", null, "Current role:"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { padding: "2px 8px", borderRadius: 4, background: p.role === "admin" ? T.red : p.role === "ambassador" ? T.copper : T.charcoal, color: T.white, fontWeight: 700, letterSpacing: 1, fontSize: 10 } }, (p.role || "user").toUpperCase())), p.requestedRole === "ambassador" && /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: `${T.copper}15`, border: `1px solid ${T.copper}40`, borderRadius: 8, padding: 12, marginBottom: 12 } }, /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, margin: "0 0 8px" } }, "Ambassador request pending"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => onAdminUpdateUserRole && onAdminUpdateUserRole(resolvedTargetId, "ambassador").then((res) => {
+      if (res && res.ok) setDbProfile((prev) => prev ? { ...prev, role: "ambassador", requestedRole: null } : prev);
+      else if (res && res.error) alert("Role change failed: " + res.error);
+    }), style: { flex: 1, padding: "8px 12px", borderRadius: 6, background: T.copper, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, "APPROVE"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => onAdminDeclineAmbassador && onAdminDeclineAmbassador(resolvedTargetId).then((res) => {
+      if (res && res.ok) setDbProfile((prev) => prev ? { ...prev, requestedRole: null } : prev);
+      else if (res && res.error) alert("Decline failed: " + res.error);
+    }), style: { flex: 1, padding: "8px 12px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}40`, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 600, letterSpacing: 0.5 } }, "DECLINE"))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6 } }, ["user", "ambassador", "admin"].map((r) => {
       const sel = (p.role || "user") === r;
       const color = r === "admin" ? T.red : r === "ambassador" ? T.copper : T.tertiary;
       return /* @__PURE__ */ import_react4.default.createElement("button", { key: r, onClick: () => {
@@ -53440,6 +53522,7 @@ ${suffix}`;
         if (r === "admin" && !confirm("Promote this user to admin? They'll be able to moderate any content.")) return;
         if (!sel) onAdminUpdateUserRole && onAdminUpdateUserRole(resolvedTargetId, r).then((res) => {
           if (res && res.ok) setDbProfile((prev) => prev ? { ...prev, role: r, requestedRole: null } : prev);
+          else if (res && res.error) alert("Role change failed: " + res.error);
         });
       }, style: { flex: 1, padding: "8px 10px", borderRadius: 6, background: sel ? color : "none", border: sel ? "none" : `1px solid ${T.charcoal}`, cursor: sel ? "default" : "pointer", fontFamily: sans, fontSize: 10, color: sel ? T.white : T.tertiary, fontWeight: 700, letterSpacing: 0.8 } }, r.toUpperCase());
     }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", justifyContent: "center", gap: 24, marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 18, color: T.white, fontWeight: 700, display: "block" } }, (liveCounts ? liveCounts.followers : p.followers).toLocaleString()), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1 } }, "FOLLOWERS")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 1, background: T.charcoal } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 18, color: T.white, fontWeight: 700, display: "block" } }, (liveCounts ? liveCounts.following : p.following).toLocaleString()), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1 } }, "FOLLOWING")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 1, background: T.charcoal } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 18, color: T.copper, fontWeight: 700, display: "block" } }, p.points.toLocaleString()), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1 } }, "POINTS")))), isPrivateAndNotFollowing ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "40px 16px", textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Lock, { size: 40, color: T.tertiary, strokeWidth: 1, style: { marginBottom: 12, opacity: 0.5 } }), /* @__PURE__ */ import_react4.default.createElement("h3", { style: { fontFamily: sans, fontSize: 16, color: T.white, margin: "0 0 6px" } }, "This Account is Private"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary, margin: 0, lineHeight: 1.6, maxWidth: 280, marginLeft: "auto", marginRight: "auto" } }, "Follow this explorer to see their builds, trips, and activity on Trailhead.")) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", borderBottom: `1px solid ${T.charcoal}`, margin: "0 16px", marginBottom: 16 } }, tabs.map((t) => /* @__PURE__ */ import_react4.default.createElement("button", { key: t, onClick: () => setActiveTab(t), style: { flex: 1, background: "none", border: "none", cursor: "pointer", padding: "12px 0 10px", borderBottom: activeTab === t ? `2px solid ${T.red}` : "2px solid transparent" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: activeTab === t ? T.white : T.tertiary, letterSpacing: 1.5, fontWeight: 600 } }, t.toUpperCase())))), activeTab === "builds" && (allBuilds || []).filter((b) => b.userId === resolvedTargetId).map((b, i) => /* @__PURE__ */ import_react4.default.createElement("div", { key: b.id || i, onClick: () => onViewBuild && onViewBuild({ rawId: b.id || null, name: b.name }), style: { ...cardStyle, margin: "0 16px 12px", overflow: "hidden", cursor: onViewBuild ? "pointer" : "default" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { height: 160, background: b.heroImg ? `#000` : `linear-gradient(135deg, ${T.charcoal} 0%, ${T.tertiary}30 100%)`, position: "relative", display: "flex", flexDirection: "column", justifyContent: "flex-end", overflow: "hidden" } }, b.heroImg ? /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("img", { src: txImg(b.heroImg, 480), alt: "", style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, background: "linear-gradient(transparent 20%, rgba(0,0,0,0.75))", pointerEvents: "none" } })) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Wrench, { size: 60, color: T.tertiary, strokeWidth: 0.2, style: { opacity: 0.08 } })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", padding: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 6 } }, b.tags.map((tag, j) => /* @__PURE__ */ import_react4.default.createElement("span", { key: j, style: { fontFamily: sans, fontSize: 9, color: T.warmBg, background: "#3D3D3A", padding: "3px 8px", borderRadius: 4, letterSpacing: 1 } }, tag))), /* @__PURE__ */ import_react4.default.createElement("h3", { style: { fontFamily: sans, fontSize: 28, color: T.warmBg, margin: 0, fontWeight: 700, letterSpacing: 1 } }, b.name), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary } }, b.vehicle))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", borderTop: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: 12, textAlign: "center", borderRight: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block" } }, "MILES"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 } }, b.miles)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: 12, textAlign: "center", borderRight: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block" } }, "ELEVATION"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 } }, b.elevation)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: 12, textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block" } }, "ROUTES"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 } }, b.routes))))), activeTab === "trips" && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, (() => {
@@ -55742,6 +55825,10 @@ ${suffix}`;
         hydrateForumLikes();
       } catch (e) {
       }
+      try {
+        hydrateForumCategories();
+      } catch (e) {
+      }
     };
     const hydratedForUidRef = (0, import_react4.useRef)(null);
     const hydrateUserData = async (session) => {
@@ -55759,6 +55846,10 @@ ${suffix}`;
       }
       try {
         hydrateForumLikes();
+      } catch (e) {
+      }
+      try {
+        hydrateForumCategories();
       } catch (e) {
       }
       let profileRow = null;
@@ -56414,6 +56505,32 @@ ${suffix}`;
         if (!row || !row.reply_id) return;
         if (row.user_id === uid) return;
         setForumReplyLikeCounts((prev) => ({ ...prev, [row.reply_id]: Math.max((prev[row.reply_id] || 0) - 1, 0) }));
+      }).on("postgres_changes", { event: "INSERT", schema: "public", table: "forum_categories" }, (payload) => {
+        const row = payload.new;
+        if (!row || !row.id) return;
+        if (row.created_by === uid) return;
+        setForumCategoryRows((prev) => prev.find((c) => c.id === row.id) ? prev : [...prev, row]);
+      }).on("postgres_changes", { event: "UPDATE", schema: "public", table: "forum_categories" }, (payload) => {
+        const row = payload.new;
+        if (!row || !row.id) return;
+        setForumCategoryRows((prev) => prev.map((c) => c.id === row.id ? { ...c, ...row } : c));
+      }).on("postgres_changes", { event: "DELETE", schema: "public", table: "forum_categories" }, (payload) => {
+        const row = payload.old;
+        if (!row || !row.id) return;
+        setForumCategoryRows((prev) => prev.filter((c) => c.id !== row.id));
+      }).on("postgres_changes", { event: "INSERT", schema: "public", table: "forum_subcategories" }, (payload) => {
+        const row = payload.new;
+        if (!row || !row.id) return;
+        if (row.created_by === uid) return;
+        setForumSubcategoryRows((prev) => prev.find((s) => s.id === row.id) ? prev : [...prev, row]);
+      }).on("postgres_changes", { event: "UPDATE", schema: "public", table: "forum_subcategories" }, (payload) => {
+        const row = payload.new;
+        if (!row || !row.id) return;
+        setForumSubcategoryRows((prev) => prev.map((s) => s.id === row.id ? { ...s, ...row } : s));
+      }).on("postgres_changes", { event: "DELETE", schema: "public", table: "forum_subcategories" }, (payload) => {
+        const row = payload.old;
+        if (!row || !row.id) return;
+        setForumSubcategoryRows((prev) => prev.filter((s) => s.id !== row.id));
       }).on("postgres_changes", { event: "INSERT", schema: "public", table: "camping_spots" }, (payload) => {
         const row = payload.new;
         if (!row || !row.id) return;
@@ -57185,6 +57302,8 @@ ${suffix}`;
     const [likedForumReplyIds, setLikedForumReplyIds] = (0, import_react4.useState)({});
     const [forumReplyLikeCounts, setForumReplyLikeCounts] = (0, import_react4.useState)({});
     const bumpedForumViewIdsRef = (0, import_react4.useRef)({});
+    const [forumCategoryRows, setForumCategoryRows] = (0, import_react4.useState)([]);
+    const [forumSubcategoryRows, setForumSubcategoryRows] = (0, import_react4.useState)([]);
     const [userRoutes, setUserRoutes] = (0, import_react4.useState)([]);
     const [savedRoutes, setSavedRoutes] = (0, import_react4.useState)([]);
     const [activeNavRoute, setActiveNavRoute] = (0, import_react4.useState)(null);
@@ -57302,6 +57421,63 @@ ${suffix}`;
       });
       return out;
     }, [forumThreads]);
+    const forumCategoriesList = (0, import_react4.useMemo)(() => {
+      const subsByCat = {};
+      (forumSubcategoryRows || []).forEach((s) => {
+        if (!subsByCat[s.category_id]) subsByCat[s.category_id] = [];
+        subsByCat[s.category_id].push(s);
+      });
+      return (forumCategoryRows || []).map((c) => ({
+        id: c.id,
+        name: c.name,
+        slug: c.slug,
+        color: c.color,
+        icon: c.icon,
+        sort_order: c.sort_order,
+        created_by: c.created_by,
+        subs: (subsByCat[c.id] || []).map((s) => ({
+          id: s.id,
+          name: s.name,
+          slug: s.slug,
+          category_id: s.category_id,
+          sort_order: s.sort_order,
+          created_by: s.created_by
+        }))
+      }));
+    }, [forumCategoryRows, forumSubcategoryRows]);
+    const forumCatBySlug = (0, import_react4.useMemo)(() => {
+      const out = {};
+      (forumCategoryRows || []).forEach((c) => {
+        out[c.slug] = { id: c.id, name: c.name, slug: c.slug, color: c.color, icon: c.icon };
+      });
+      return out;
+    }, [forumCategoryRows]);
+    const forumSubBySlug = (0, import_react4.useMemo)(() => {
+      const out = {};
+      const catById = {};
+      (forumCategoryRows || []).forEach((c) => {
+        catById[c.id] = c;
+      });
+      (forumSubcategoryRows || []).forEach((s) => {
+        const cat = catById[s.category_id];
+        if (cat) out[s.slug] = { id: s.id, name: s.name, slug: s.slug, catName: cat.name, catSlug: cat.slug, category_id: s.category_id, created_by: s.created_by };
+      });
+      return out;
+    }, [forumCategoryRows, forumSubcategoryRows]);
+    (0, import_react4.useEffect)(() => {
+      Object.keys(FORUM_CAT_BY_SLUG).forEach((k) => {
+        delete FORUM_CAT_BY_SLUG[k];
+      });
+      Object.keys(forumCatBySlug).forEach((k) => {
+        FORUM_CAT_BY_SLUG[k] = forumCatBySlug[k];
+      });
+      Object.keys(FORUM_SUB_BY_SLUG).forEach((k) => {
+        delete FORUM_SUB_BY_SLUG[k];
+      });
+      Object.keys(forumSubBySlug).forEach((k) => {
+        FORUM_SUB_BY_SLUG[k] = forumSubBySlug[k];
+      });
+    }, [forumCatBySlug, forumSubBySlug]);
     (0, import_react4.useEffect)(() => {
       if (!pendingTripNav) return;
       const trip = (allTripReports || []).find((t) => t.slug === pendingTripNav) || (allTripPlans || []).find((t) => t.slug === pendingTripNav);
@@ -57627,12 +57803,13 @@ ${suffix}`;
       } catch (e) {
       }
       try {
-        const { error } = await supabase.from("profiles").update({
+        const { data: rows, error } = await supabase.from("profiles").update({
           role: newRole,
           requested_role: null,
           updated_at: (/* @__PURE__ */ new Date()).toISOString()
-        }).eq("id", targetUid);
+        }).eq("id", targetUid).select("id");
         if (error) return { error: error.message || "Update failed" };
+        if (!rows || rows.length === 0) return { error: "Update blocked \u2014 admin override policy missing on profiles?" };
         setPendingAmbassadorRequests((prev2) => (prev2 || []).filter((p) => p.id !== targetUid));
         if (adminUid && adminUid !== targetUid) {
           const myName = currentProfile && currentProfile.full_name || "Admin";
@@ -57665,11 +57842,12 @@ ${suffix}`;
       if (!isAdmin || !targetUid) return { error: "Not authorized" };
       const adminUid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
       try {
-        const { error } = await supabase.from("profiles").update({
+        const { data: rows, error } = await supabase.from("profiles").update({
           requested_role: null,
           updated_at: (/* @__PURE__ */ new Date()).toISOString()
-        }).eq("id", targetUid);
+        }).eq("id", targetUid).select("id");
         if (error) return { error: error.message || "Update failed" };
+        if (!rows || rows.length === 0) return { error: "Update blocked \u2014 admin override policy missing on profiles?" };
         setPendingAmbassadorRequests((prev) => (prev || []).filter((p) => p.id !== targetUid));
         if (adminUid && adminUid !== targetUid) {
           const myName = currentProfile && currentProfile.full_name || "Admin";
@@ -59894,6 +60072,123 @@ ${suffix}`;
         setBuildComments((prev) => ({ ...prev, [buildId]: prevList }));
       }
     };
+    const hydrateForumCategories = async () => {
+      try {
+        const [catRes, subRes] = await Promise.all([
+          supabase.from("forum_categories").select("*").order("sort_order", { ascending: true }).order("name", { ascending: true }),
+          supabase.from("forum_subcategories").select("*").order("sort_order", { ascending: true }).order("name", { ascending: true })
+        ]);
+        if (!catRes.error && Array.isArray(catRes.data)) setForumCategoryRows(catRes.data);
+        if (!subRes.error && Array.isArray(subRes.data)) setForumSubcategoryRows(subRes.data);
+      } catch (e) {
+        console.error("[hydrateForumCategories] failed", e);
+      }
+    };
+    const addForumCategory = async ({ name, color, icon }) => {
+      if (!isAdmin) return { error: "Not authorized" };
+      const baseSlug = forumSlugify(name || "");
+      if (!baseSlug) return { error: "Name required" };
+      const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+      const maxOrder = forumCategoryRows.reduce((m, c) => Math.max(m, c.sort_order || 0), 0);
+      for (let i = 0; i < 5; i++) {
+        const slug = i === 0 ? baseSlug : `${baseSlug}-${i + 1}`;
+        const { data, error } = await supabase.from("forum_categories").insert({
+          slug,
+          name,
+          color: color || T.copper,
+          icon: icon || "tag",
+          sort_order: maxOrder + 1,
+          created_by: uid
+        }).select("*").maybeSingle();
+        if (!error && data) {
+          setForumCategoryRows((prev) => [...prev, data]);
+          return { ok: true, row: data };
+        }
+        if (error && !/duplicate/i.test(error.message || "")) return { error: error.message || "Insert failed" };
+      }
+      return { error: "Slug collision \u2014 try a different name" };
+    };
+    const updateForumCategory = async (id, patch) => {
+      if (!isAdmin) return { error: "Not authorized" };
+      if (!id) return { error: "Missing id" };
+      const allowed = ["name", "color", "icon", "sort_order"];
+      const body = {};
+      allowed.forEach((k) => {
+        if (k in patch) body[k] = patch[k];
+      });
+      body.updated_at = (/* @__PURE__ */ new Date()).toISOString();
+      const { data: rows, error } = await supabase.from("forum_categories").update(body).eq("id", id).select("*");
+      if (error) return { error: error.message || "Update failed" };
+      if (!rows || rows.length === 0) return { error: "Update blocked \u2014 admin override policy missing?" };
+      setForumCategoryRows((prev) => prev.map((c) => c.id === id ? { ...c, ...rows[0] } : c));
+      return { ok: true };
+    };
+    const deleteForumCategory = async (id) => {
+      if (!isAdmin) return { error: "Not authorized" };
+      if (!id) return { error: "Missing id" };
+      const sub = forumSubcategoryRows.filter((s) => s.category_id === id);
+      if (sub.length > 0) {
+        const subSlugs = sub.map((s) => s.slug);
+        const { count } = await supabase.from("forum_threads").select("id", { count: "exact", head: true }).in("subcategory_slug", subSlugs);
+        if ((count || 0) > 0) return { error: `Has ${count} thread${count === 1 ? "" : "s"} across ${sub.length} subcategor${sub.length === 1 ? "y" : "ies"} \u2014 delete those first.` };
+        return { error: `Has ${sub.length} subcategor${sub.length === 1 ? "y" : "ies"} \u2014 delete those first.` };
+      }
+      const { error } = await supabase.from("forum_categories").delete().eq("id", id);
+      if (error) return { error: error.message || "Delete failed" };
+      setForumCategoryRows((prev) => prev.filter((c) => c.id !== id));
+      return { ok: true };
+    };
+    const addForumSubcategory = async ({ category_id, name }) => {
+      if (!isAdmin && !isAmbassador) return { error: "Not authorized" };
+      if (!category_id) return { error: "Missing category" };
+      const baseSlug = forumSlugify(name || "");
+      if (!baseSlug) return { error: "Name required" };
+      const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+      if (!uid) return { error: "Not signed in" };
+      const sibMaxOrder = forumSubcategoryRows.filter((s) => s.category_id === category_id).reduce((m, s) => Math.max(m, s.sort_order || 0), 0);
+      for (let i = 0; i < 5; i++) {
+        const slug = i === 0 ? baseSlug : `${baseSlug}-${i + 1}`;
+        const { data, error } = await supabase.from("forum_subcategories").insert({
+          category_id,
+          slug,
+          name,
+          sort_order: sibMaxOrder + 1,
+          created_by: uid
+        }).select("*").maybeSingle();
+        if (!error && data) {
+          setForumSubcategoryRows((prev) => [...prev, data]);
+          return { ok: true, row: data };
+        }
+        if (error && !/duplicate/i.test(error.message || "")) return { error: error.message || "Insert failed" };
+      }
+      return { error: "Slug collision \u2014 try a different name" };
+    };
+    const updateForumSubcategory = async (id, patch) => {
+      if (!id) return { error: "Missing id" };
+      const allowed = ["name", "sort_order"];
+      const body = {};
+      allowed.forEach((k) => {
+        if (k in patch) body[k] = patch[k];
+      });
+      body.updated_at = (/* @__PURE__ */ new Date()).toISOString();
+      const { data: rows, error } = await supabase.from("forum_subcategories").update(body).eq("id", id).select("*");
+      if (error) return { error: error.message || "Update failed" };
+      if (!rows || rows.length === 0) return { error: "Update blocked \u2014 RLS (not owner / not admin)?" };
+      setForumSubcategoryRows((prev) => prev.map((s) => s.id === id ? { ...s, ...rows[0] } : s));
+      return { ok: true };
+    };
+    const deleteForumSubcategory = async (id) => {
+      if (!id) return { error: "Missing id" };
+      const row = forumSubcategoryRows.find((s) => s.id === id);
+      if (row) {
+        const { count } = await supabase.from("forum_threads").select("id", { count: "exact", head: true }).eq("subcategory_slug", row.slug);
+        if ((count || 0) > 0) return { error: `Has ${count} thread${count === 1 ? "" : "s"} \u2014 delete or move those first.` };
+      }
+      const { error } = await supabase.from("forum_subcategories").delete().eq("id", id);
+      if (error) return { error: error.message || "Delete failed" };
+      setForumSubcategoryRows((prev) => prev.filter((s) => s.id !== id));
+      return { ok: true };
+    };
     const hydrateForumThreads = async () => {
       try {
         const { data: rows, error } = await supabase.from("forum_threads").select("*").order("created_at", { ascending: false }).limit(500);
@@ -60494,8 +60789,12 @@ ${suffix}`;
     }), !isGuest && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: openProfile, style: { display: "flex", alignItems: "center", gap: 14, padding: "12px 14px", borderRadius: 24, background: isProfile ? `${T.red}18` : "transparent", border: "none", cursor: "pointer", color: isProfile ? T.red : T.white, fontFamily: sans, fontSize: 15, fontWeight: isProfile ? 700 : 500, textAlign: "left", letterSpacing: 0.3 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 22, height: 22, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 } }, myAvatar ? /* @__PURE__ */ import_react4.default.createElement("img", { src: txImg(myAvatar, 96), alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.white } }, (myFullName || "Y").charAt(0).toUpperCase())), "Profile"), !isGuest && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setShowCompose(true), style: { marginTop: 12, padding: "14px", borderRadius: 28, background: T.red, color: T.white, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 14, fontWeight: 700, letterSpacing: 0.5, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 18, color: T.white, strokeWidth: 2.4 }), "POST"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1 } }), !isGuest && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: openProfile, style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 12, background: T.darkCard, border: `1px solid ${T.charcoal}`, cursor: "pointer", textAlign: "left", width: "100%" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 36, height: 36, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 } }, myAvatar ? /* @__PURE__ */ import_react4.default.createElement("img", { src: txImg(myAvatar, 96), alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 14, fontWeight: 700, color: T.white } }, (myFullName || "Y").charAt(0).toUpperCase())), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0, overflow: "hidden" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" } }, myFullName), isAdmin && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.white, background: T.red, padding: "1px 6px", borderRadius: 3, letterSpacing: 1, fontWeight: 700, flexShrink: 0 } }, "ADMIN"), !isAdmin && currentRole === "ambassador" && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.white, background: T.copper, padding: "1px 6px", borderRadius: 3, letterSpacing: 1, fontWeight: 700, flexShrink: 0 } }, "AMB")), myHandle && /* @__PURE__ */ import_react4.default.createElement("span", { style: { display: "block", fontFamily: sans, fontSize: 11, color: T.tertiary, whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" } }, "@", myHandle))));
     const desktopRightAside = isDesktop && /* @__PURE__ */ import_react4.default.createElement("aside", { style: { width: 340, padding: "20px 16px", display: "flex", flexDirection: "column", gap: 16, flexShrink: 0, background: T.darkBg, borderLeft: `1px solid ${T.charcoal}`, overflowY: "auto" }, className: "th-scroll" }, isAdmin && pendingAmbassadorRequests.length > 0 && /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkCard, borderRadius: 14, padding: 16, border: `1px solid ${T.copper}40` } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ import_react4.default.createElement(Shield, { size: 12, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.5, fontWeight: 700 } }, "AMBASSADOR REQUESTS")), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, background: `${T.copper}25`, padding: "2px 8px", borderRadius: 10 } }, pendingAmbassadorRequests.length)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8 } }, pendingAmbassadorRequests.slice(0, 5).map((req) => {
       const init = (req.full_name || req.handle || "U").charAt(0).toUpperCase();
-      return /* @__PURE__ */ import_react4.default.createElement("div", { key: req.id, style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => openUserProfile(req.handle || req.id), style: { width: 32, height: 32, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0, cursor: "pointer" } }, req.avatar_url ? /* @__PURE__ */ import_react4.default.createElement("img", { src: txImg(req.avatar_url, 96), alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, fontWeight: 700, color: T.white } }, init)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("span", { onClick: () => openUserProfile(req.handle || req.id), style: { display: "block", fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, req.full_name || "User"), req.handle && /* @__PURE__ */ import_react4.default.createElement("span", { style: { display: "block", fontFamily: sans, fontSize: 10, color: T.copper, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, "@", req.handle)), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => adminUpdateUserRole(req.id, "ambassador"), title: "Approve", style: { padding: "5px 10px", borderRadius: 6, background: T.copper, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 9, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, "APPROVE"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => adminDeclineAmbassadorRequest(req.id), title: "Decline", style: { padding: "5px 8px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}40`, cursor: "pointer", display: "flex", alignItems: "center" } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 11, color: T.tertiary })));
-    })), pendingAmbassadorRequests.length > 5 && /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary, margin: "10px 0 0", textAlign: "center" } }, "+ ", pendingAmbassadorRequests.length - 5, " more \u2014 open a user's profile to manage.")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkCard, borderRadius: 14, padding: 16, border: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.5, fontWeight: 600, display: "block", marginBottom: 8 } }, "WELCOME"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 14, color: T.white, margin: "0 0 8px", lineHeight: 1.5 } }, "The overlanding community app by Lone Peak Overland."), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "0 0 12px", lineHeight: 1.5 } }, "Share trip reports, plan routes, post your build, find camping spots, and connect with overlanders."), /* @__PURE__ */ import_react4.default.createElement("a", { href: "https://www.lonepeakoverland.com/", target: "_blank", rel: "noopener noreferrer", style: { display: "inline-block", padding: "8px 14px", borderRadius: 8, background: T.copper, color: T.white, textDecoration: "none", fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.8 } }, "VISIT LONE PEAK OVERLAND")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkCard, borderRadius: 14, padding: 16, border: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 600, display: "block", marginBottom: 10 } }, "FORUM CATEGORIES"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 6 } }, forumData.categories.slice(0, 6).map((cat) => /* @__PURE__ */ import_react4.default.createElement("button", { key: cat.name, onClick: () => {
+      return /* @__PURE__ */ import_react4.default.createElement("div", { key: req.id, style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => openUserProfile(req.handle || req.id), style: { width: 32, height: 32, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0, cursor: "pointer" } }, req.avatar_url ? /* @__PURE__ */ import_react4.default.createElement("img", { src: txImg(req.avatar_url, 96), alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, fontWeight: 700, color: T.white } }, init)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("span", { onClick: () => openUserProfile(req.handle || req.id), style: { display: "block", fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, req.full_name || "User"), req.handle && /* @__PURE__ */ import_react4.default.createElement("span", { style: { display: "block", fontFamily: sans, fontSize: 10, color: T.copper, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, "@", req.handle)), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => adminUpdateUserRole(req.id, "ambassador").then((res) => {
+        if (res && res.error) alert("Approve failed: " + res.error);
+      }), title: "Approve", style: { padding: "5px 10px", borderRadius: 6, background: T.copper, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 9, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, "APPROVE"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => adminDeclineAmbassadorRequest(req.id).then((res) => {
+        if (res && res.error) alert("Decline failed: " + res.error);
+      }), title: "Decline", style: { padding: "5px 8px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}40`, cursor: "pointer", display: "flex", alignItems: "center" } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 11, color: T.tertiary })));
+    })), pendingAmbassadorRequests.length > 5 && /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary, margin: "10px 0 0", textAlign: "center" } }, "+ ", pendingAmbassadorRequests.length - 5, " more \u2014 open a user's profile to manage.")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkCard, borderRadius: 14, padding: 16, border: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.5, fontWeight: 600, display: "block", marginBottom: 8 } }, "WELCOME"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 14, color: T.white, margin: "0 0 8px", lineHeight: 1.5 } }, "The overlanding community app by Lone Peak Overland."), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "0 0 12px", lineHeight: 1.5 } }, "Share trip reports, plan routes, post your build, find camping spots, and connect with overlanders."), /* @__PURE__ */ import_react4.default.createElement("a", { href: "https://www.lonepeakoverland.com/", target: "_blank", rel: "noopener noreferrer", style: { display: "inline-block", padding: "8px 14px", borderRadius: 8, background: T.copper, color: T.white, textDecoration: "none", fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.8 } }, "VISIT LONE PEAK OVERLAND")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkCard, borderRadius: 14, padding: 16, border: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 600, display: "block", marginBottom: 10 } }, "FORUM CATEGORIES"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 6 } }, forumCategoriesList.slice(0, 6).map((cat) => /* @__PURE__ */ import_react4.default.createElement("button", { key: cat.id || cat.name, onClick: () => {
       setProfileStack([]);
       setShowRecovery(false);
       setShowCompose(false);
@@ -60616,7 +60915,7 @@ ${suffix}`;
     }, onGoToPost: (id) => {
       setProfileStack([]);
       setScreen("feed");
-    }, myPoints: myTotalPoints }) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, isGuest && screen !== "routes" && /* @__PURE__ */ import_react4.default.createElement(GuestBanner, { onSignIn: () => setShowGuestPrompt(true) }), screen === "feed" && renderFeedScopedTo({ hideFilters: false }), screen === "forum" && /* @__PURE__ */ import_react4.default.createElement(ForumScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), isAdmin, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, currentUserName: currentProfile && currentProfile.full_name || "You", currentUserHandle: currentProfile && currentProfile.handle || "", currentUserAvatar: profilePic || currentProfile && currentProfile.avatar_url || null, pendingThread, onPendingHandled: () => setPendingThread(null), pendingForumSubNav, onConsumePendingForumSubNav: () => setPendingForumSubNav(null), onAddNotification: requireAuth(addNotification), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onOpenShareCompose: openShareCompose, onOpenShareIntent: openShareIntent, onAddFeedPost: requireAuth((post2) => addPost(post2)), threadsBySub: forumThreadsBySub, repliesByThread: forumReplies, onAddForumThread: requireAuth(addForumThread), onUpdateForumThread: requireAuth(updateForumThread), onDeleteForumThread: requireAuth(deleteForumThread), onAddForumReply: requireAuth(addForumReply), onDeleteForumReply: requireAuth(deleteForumReply), onLoadForumReplies: loadForumReplies, likedForumThreadIds, forumThreadLikeCounts, onToggleForumThreadLike: requireAuth(toggleForumThreadLike), likedForumReplyIds, forumReplyLikeCounts, onToggleForumReplyLike: requireAuth(toggleForumReplyLike), onBumpForumThreadView: bumpForumThreadView, onAwardPoints: awardPoints }), screen === "routes" && /* @__PURE__ */ import_react4.default.createElement(RoutesScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, onOpenShareIntent: openShareIntent, tripAuthors, onLoadRouteData: loadTripRouteData, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, tripReports: allTripReports, showTripReports, setShowTripReports, tripPlans: allTripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot: requireAuth(addCampingSpot), onUpdateCampingSpot: requireAuth(updateCampingSpot), onDeleteCampingSpot: requireAuth(deleteCampingSpot), onLoadCampingSpotPhotos: loadCampingSpotPhotos, onLoadCampingSpotElevation: loadCampingSpotElevation, spotAuthors, onViewUser: openUserProfile, onStartNav: (route) => setActiveNavRoute(route), onOpenTripDetail: (slug) => setPendingTripNav(slug), onOpenTripPlanDraft: (id) => setDetailTripId(id), onNewTripReport: () => setTripCreatorMode("report"), onNewTripPlan: () => requireAuth(() => enterPlanBuilder())(), pendingSpotNav, onConsumePendingSpotNav: () => setPendingSpotNav(null), pendingHQOpen, onConsumePendingHQOpen: () => setPendingHQOpen(false), pendingPlanNav, onConsumePendingPlanNav: () => setPendingPlanNav(null), onShareCampingSpotToFeed: requireAuth(shareCampingSpotToFeed), onShareHQToFeed: requireAuth(shareHQToFeed), onShareTripToFeed: requireAuth(shareTripToFeed), onShareTripPlanToFeed: requireAuth(shareTripPlanToFeed), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onShowToast: showErrorToast, onOpenShareCompose: openShareCompose, planBuilder: { active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, editingId: planBuilderEditingId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen, accent: planBuilderEditingId && (tripReports || []).find((t) => t.id === planBuilderEditingId && t.kind === "report") ? T.purple : T.copper } }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, onLoadAllBuilds: loadAllBuildsOnce, onLoadBuildById: loadBuildById, allBuildsLoaded, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onOpenShareCompose: openShareCompose, onOpenShareIntent: openShareIntent, onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onDeleteBuild: requireAuth(deleteBuild), onPostBuildToFeed: requireAuth((b, opts) => {
+    }, myPoints: myTotalPoints }) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, isGuest && screen !== "routes" && /* @__PURE__ */ import_react4.default.createElement(GuestBanner, { onSignIn: () => setShowGuestPrompt(true) }), screen === "feed" && renderFeedScopedTo({ hideFilters: false }), screen === "forum" && /* @__PURE__ */ import_react4.default.createElement(ForumScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), isAdmin, isAmbassador, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, currentUserName: currentProfile && currentProfile.full_name || "You", currentUserHandle: currentProfile && currentProfile.handle || "", currentUserAvatar: profilePic || currentProfile && currentProfile.avatar_url || null, pendingThread, onPendingHandled: () => setPendingThread(null), pendingForumSubNav, onConsumePendingForumSubNav: () => setPendingForumSubNav(null), onAddNotification: requireAuth(addNotification), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onOpenShareCompose: openShareCompose, onOpenShareIntent: openShareIntent, onAddFeedPost: requireAuth((post2) => addPost(post2)), threadsBySub: forumThreadsBySub, repliesByThread: forumReplies, onAddForumThread: requireAuth(addForumThread), onUpdateForumThread: requireAuth(updateForumThread), onDeleteForumThread: requireAuth(deleteForumThread), onAddForumReply: requireAuth(addForumReply), onDeleteForumReply: requireAuth(deleteForumReply), onLoadForumReplies: loadForumReplies, likedForumThreadIds, forumThreadLikeCounts, onToggleForumThreadLike: requireAuth(toggleForumThreadLike), likedForumReplyIds, forumReplyLikeCounts, onToggleForumReplyLike: requireAuth(toggleForumReplyLike), onBumpForumThreadView: bumpForumThreadView, onAwardPoints: awardPoints, categoriesList: forumCategoriesList, onAddCategory: requireAuth(addForumCategory), onUpdateCategory: requireAuth(updateForumCategory), onDeleteCategory: requireAuth(deleteForumCategory), onAddSubcategory: requireAuth(addForumSubcategory), onUpdateSubcategory: requireAuth(updateForumSubcategory), onDeleteSubcategory: requireAuth(deleteForumSubcategory) }), screen === "routes" && /* @__PURE__ */ import_react4.default.createElement(RoutesScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, onOpenShareIntent: openShareIntent, tripAuthors, onLoadRouteData: loadTripRouteData, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, tripReports: allTripReports, showTripReports, setShowTripReports, tripPlans: allTripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot: requireAuth(addCampingSpot), onUpdateCampingSpot: requireAuth(updateCampingSpot), onDeleteCampingSpot: requireAuth(deleteCampingSpot), onLoadCampingSpotPhotos: loadCampingSpotPhotos, onLoadCampingSpotElevation: loadCampingSpotElevation, spotAuthors, onViewUser: openUserProfile, onStartNav: (route) => setActiveNavRoute(route), onOpenTripDetail: (slug) => setPendingTripNav(slug), onOpenTripPlanDraft: (id) => setDetailTripId(id), onNewTripReport: () => setTripCreatorMode("report"), onNewTripPlan: () => requireAuth(() => enterPlanBuilder())(), pendingSpotNav, onConsumePendingSpotNav: () => setPendingSpotNav(null), pendingHQOpen, onConsumePendingHQOpen: () => setPendingHQOpen(false), pendingPlanNav, onConsumePendingPlanNav: () => setPendingPlanNav(null), onShareCampingSpotToFeed: requireAuth(shareCampingSpotToFeed), onShareHQToFeed: requireAuth(shareHQToFeed), onShareTripToFeed: requireAuth(shareTripToFeed), onShareTripPlanToFeed: requireAuth(shareTripPlanToFeed), onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onShowToast: showErrorToast, onOpenShareCompose: openShareCompose, planBuilder: { active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, editingId: planBuilderEditingId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen, accent: planBuilderEditingId && (tripReports || []).find((t) => t.id === planBuilderEditingId && t.kind === "report") ? T.purple : T.copper } }), screen === "builds" && /* @__PURE__ */ import_react4.default.createElement(BuildsScreen, { isGuest, onGuestTap: () => setShowGuestPrompt(true), onViewUser: openUserProfile, userBuilds, allBuilds, onLoadAllBuilds: loadAllBuildsOnce, onLoadBuildById: loadBuildById, allBuildsLoaded, currentUserId: supabaseSession && supabaseSession.user && supabaseSession.user.id, followingIds, pendingBuildNav, onConsumePendingBuildNav: () => setPendingBuildNav(null), onAddBuild: requireAuth(addBuild), userRoutes, onOpenDM: (user, msg, sp) => openDM(user, msg, sp), onOpenShareCompose: openShareCompose, onOpenShareIntent: openShareIntent, onUpdateBuild: requireAuth(updateBuild), likedBuildIds, buildLikeCounts, onToggleBuildLike: requireAuth(toggleBuildLike), onDeleteBuild: requireAuth(deleteBuild), onPostBuildToFeed: requireAuth((b, opts) => {
       const rawBd = b.buildData;
       const bd = scrubLocalPhotosFromBuildData(rawBd);
       const isLocalUrl = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:"));
@@ -61267,7 +61566,8 @@ ${suffix}`;
         allTripReports,
         allTripPlans,
         allBuilds,
-        campingSpots: [...userCampingSpots || [], ...viewportCampingSpots || []]
+        campingSpots: [...userCampingSpots || [], ...viewportCampingSpots || []],
+        forumCategoriesList
       }
     ), showDM && /* @__PURE__ */ import_react4.default.createElement(
       DMScreen,
@@ -61432,6 +61732,7 @@ lucide-react/dist/esm/icons/clock.mjs:
 lucide-react/dist/esm/icons/cog.mjs:
 lucide-react/dist/esm/icons/compass.mjs:
 lucide-react/dist/esm/icons/dollar-sign.mjs:
+lucide-react/dist/esm/icons/ellipsis-vertical.mjs:
 lucide-react/dist/esm/icons/ellipsis.mjs:
 lucide-react/dist/esm/icons/external-link.mjs:
 lucide-react/dist/esm/icons/eye-off.mjs:
@@ -61466,6 +61767,7 @@ lucide-react/dist/esm/icons/shield.mjs:
 lucide-react/dist/esm/icons/smartphone.mjs:
 lucide-react/dist/esm/icons/square-plus.mjs:
 lucide-react/dist/esm/icons/star.mjs:
+lucide-react/dist/esm/icons/tag.mjs:
 lucide-react/dist/esm/icons/target.mjs:
 lucide-react/dist/esm/icons/tent.mjs:
 lucide-react/dist/esm/icons/trash-2.mjs:
