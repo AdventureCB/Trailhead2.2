@@ -21915,7 +21915,7 @@ Trailhead is provided "as is" without warranty of any kind. To the maximum exten
 We may update these Terms at any time. Continued use of Trailhead after changes constitutes acceptance of the updated Terms.
 
 8. CONTACT US
-Questions about these Terms? Email kyle@lonepeakoverland.com.`;
+Questions about these Terms? Email team@lonepeakoverland.com.`;
 
 function TermsModal({ onClose }) {
   return (
