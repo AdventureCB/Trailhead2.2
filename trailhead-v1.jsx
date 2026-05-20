@@ -22817,41 +22817,8 @@ export default function Trailhead() {
   // Deep-link target for ProfileScreen: when set to "push", profile opens
   // with the settings panel open + scrolled to the push notification toggle.
   const [pendingProfileScroll, setPendingProfileScroll] = useState(null);
-  // Decide which install/push prompt to surface inside the app. Two paths:
-  //   1. Not standalone (browser) + iOS or Android → show install modal
-  //      (unless dismissed within last 3 days). Triggered once when the
-  //      user reaches "app" state.
-  //   2. Standalone (PWA) + push not enabled + haven't seen this prompt
-  //      yet → show push modal. Triggered on first standalone visit.
-  // Both are mutually exclusive — install fires first since you can't
-  // enable push until you're standalone (on iOS at least).
-  useEffect(() => {
-    if (authState !== "app") return;
-    if (isGuest) return;
-    if (typeof window === "undefined") return;
-    const platform = detectInstallPlatform();
-    // Push prompt path — already installed, push not on, not yet prompted.
-    if (platform === "standalone") {
-      try {
-        const seenAt = localStorage.getItem("th_push_prompt_seen_at");
-        if (!seenAt && !notifPrefs.push && typeof Notification !== "undefined" && Notification.permission !== "denied") {
-          // Small delay so the modal doesn't feel like it ambushes the splash.
-          const t = setTimeout(() => setShowPushModal(true), 1200);
-          return () => clearTimeout(t);
-        }
-      } catch (e) {}
-      return;
-    }
-    // Install prompt path — iOS Safari or Android Chrome, not standalone.
-    if (platform !== "ios" && platform !== "android") return;
-    try {
-      const dismissedAt = parseInt(localStorage.getItem("th_install_modal_dismissed_at") || "0", 10);
-      const threeDays = 3 * 24 * 60 * 60 * 1000;
-      if (dismissedAt && Date.now() - dismissedAt < threeDays) return;
-      const t = setTimeout(() => setShowInstallModal(true), 1500);
-      return () => clearTimeout(t);
-    } catch (e) {}
-  }, [authState, isGuest, notifPrefs.push]);
+  // Install/push prompt detection useEffect is declared lower (after the
+  // `isGuest` state) to avoid a TDZ — see right below the isGuest line.
   // Profile row from public.profiles, fetched after sign-in. Source of truth
   // for handle / full_name / avatar_url — supersedes user_metadata reads.
   const [currentProfile, setCurrentProfile] = useState(null);
@@ -24273,6 +24240,37 @@ export default function Trailhead() {
   // Guests are only created by following a shared link without an active
   // session. Normal app use requires sign-in.
   const [isGuest, setIsGuest] = useState(!!initialSharedLink);
+  // Decide which install/push prompt to surface inside the app. Placed
+  // here (after `isGuest` declaration) to avoid a TDZ from referencing it
+  // in the deps array.
+  //   1. Not standalone + iOS/Android → InstallPromptModal (3-day cooldown
+  //      after dismiss)
+  //   2. Standalone + push not enabled + not yet prompted → PushPromptModal
+  // Install fires first since iOS can't enable push until standalone.
+  useEffect(() => {
+    if (authState !== "app") return;
+    if (isGuest) return;
+    if (typeof window === "undefined") return;
+    const platform = detectInstallPlatform();
+    if (platform === "standalone") {
+      try {
+        const seenAt = localStorage.getItem("th_push_prompt_seen_at");
+        if (!seenAt && !notifPrefs.push && typeof Notification !== "undefined" && Notification.permission !== "denied") {
+          const t = setTimeout(() => setShowPushModal(true), 1200);
+          return () => clearTimeout(t);
+        }
+      } catch (e) {}
+      return;
+    }
+    if (platform !== "ios" && platform !== "android") return;
+    try {
+      const dismissedAt = parseInt(localStorage.getItem("th_install_modal_dismissed_at") || "0", 10);
+      const threeDays = 3 * 24 * 60 * 60 * 1000;
+      if (dismissedAt && Date.now() - dismissedAt < threeDays) return;
+      const t = setTimeout(() => setShowInstallModal(true), 1500);
+      return () => clearTimeout(t);
+    } catch (e) {}
+  }, [authState, isGuest, notifPrefs.push]);
   const [showGuestPrompt, setShowGuestPrompt] = useState(false);
   // Keyboard-visibility hint — drives hiding the bottom nav while the user
   // is typing. iOS Safari (especially in standalone PWA mode) refuses to

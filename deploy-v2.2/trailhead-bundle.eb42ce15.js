@@ -56132,32 +56132,6 @@ Questions about these Terms? Email team@lonepeakoverland.com.`;
     const [showInstallModal, setShowInstallModal] = (0, import_react4.useState)(false);
     const [showPushModal, setShowPushModal] = (0, import_react4.useState)(false);
     const [pendingProfileScroll, setPendingProfileScroll] = (0, import_react4.useState)(null);
-    (0, import_react4.useEffect)(() => {
-      if (authState !== "app") return;
-      if (isGuest) return;
-      if (typeof window === "undefined") return;
-      const platform = detectInstallPlatform();
-      if (platform === "standalone") {
-        try {
-          const seenAt = localStorage.getItem("th_push_prompt_seen_at");
-          if (!seenAt && !notifPrefs.push && typeof Notification !== "undefined" && Notification.permission !== "denied") {
-            const t = setTimeout(() => setShowPushModal(true), 1200);
-            return () => clearTimeout(t);
-          }
-        } catch (e) {
-        }
-        return;
-      }
-      if (platform !== "ios" && platform !== "android") return;
-      try {
-        const dismissedAt = parseInt(localStorage.getItem("th_install_modal_dismissed_at") || "0", 10);
-        const threeDays = 3 * 24 * 60 * 60 * 1e3;
-        if (dismissedAt && Date.now() - dismissedAt < threeDays) return;
-        const t = setTimeout(() => setShowInstallModal(true), 1500);
-        return () => clearTimeout(t);
-      } catch (e) {
-      }
-    }, [authState, isGuest, notifPrefs.push]);
     const [currentProfile, setCurrentProfile] = (0, import_react4.useState)(null);
     const currentRole = currentProfile && currentProfile.role || "user";
     const isAdmin = currentRole === "admin";
@@ -57326,6 +57300,32 @@ Questions about these Terms? Email team@lonepeakoverland.com.`;
       };
     }, [supabaseSession && supabaseSession.user && supabaseSession.user.id]);
     const [isGuest, setIsGuest] = (0, import_react4.useState)(!!initialSharedLink);
+    (0, import_react4.useEffect)(() => {
+      if (authState !== "app") return;
+      if (isGuest) return;
+      if (typeof window === "undefined") return;
+      const platform = detectInstallPlatform();
+      if (platform === "standalone") {
+        try {
+          const seenAt = localStorage.getItem("th_push_prompt_seen_at");
+          if (!seenAt && !notifPrefs.push && typeof Notification !== "undefined" && Notification.permission !== "denied") {
+            const t = setTimeout(() => setShowPushModal(true), 1200);
+            return () => clearTimeout(t);
+          }
+        } catch (e) {
+        }
+        return;
+      }
+      if (platform !== "ios" && platform !== "android") return;
+      try {
+        const dismissedAt = parseInt(localStorage.getItem("th_install_modal_dismissed_at") || "0", 10);
+        const threeDays = 3 * 24 * 60 * 60 * 1e3;
+        if (dismissedAt && Date.now() - dismissedAt < threeDays) return;
+        const t = setTimeout(() => setShowInstallModal(true), 1500);
+        return () => clearTimeout(t);
+      } catch (e) {
+      }
+    }, [authState, isGuest, notifPrefs.push]);
     const [showGuestPrompt, setShowGuestPrompt] = (0, import_react4.useState)(false);
     const [feedFilter, setFeedFilter] = (0, import_react4.useState)("ALL");
     const FEED_PILL_FILTERS = ["ALL", "BUILDS", "CONVOYS", "TRIP REPORTS", "PHOTOS", "FORUM"];
