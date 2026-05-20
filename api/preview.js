@@ -739,6 +739,79 @@ async function resolveEntity(type, id) {
       },
     };
   }
+  // User profile (`/users/:handle`). The high-value SEO hub: a Person
+  // entity that links to every piece of content this user has created —
+  // builds, published trip reports/plans, forum threads, public camping
+  // spots. Each link points to an already-indexable detail page, so the
+  // profile becomes a dense internal-link node that flows PageRank
+  // through the user's body of work. Private profiles return null (caller
+  // renders default site meta).
+  if (type === "user") {
+    const handle = String(id || "").replace(/^@/, "");
+    if (!handle) return null;
+    const profile = await supabaseFetch(
+      "profiles",
+      `handle=eq.${encodeURIComponent(handle)}&select=id,full_name,handle,avatar_url,bio,is_public,role,created_at&limit=1`
+    );
+    if (!profile) return null;
+    if (profile.is_public === false) return null;
+    const uid = profile.id;
+    const displayName = profile.full_name || handle;
+    // Fan out the per-content-type queries in parallel. Each capped at 20
+    // items to keep response time reasonable and URL+payload sizes sane.
+    const [builds, trips, threads, spots] = await Promise.all([
+      supabaseFetchAll("builds", `user_id=eq.${encodeURIComponent(uid)}&select=id,name,year,make,model,hero_img,created_at&order=created_at.desc&limit=20`),
+      supabaseFetchAll("trip_reports", `user_id=eq.${encodeURIComponent(uid)}&status=eq.published&select=id,slug,name,description,kind,visibility,hero_img,distance_mi,region,state_code,published_at,created_at&order=published_at.desc&limit=20`),
+      supabaseFetchAll("forum_threads", `user_id=eq.${encodeURIComponent(uid)}&select=id,slug,title,subcategory_slug,created_at,view_count&order=created_at.desc&limit=20`),
+      supabaseFetchAll("camping_spots", `user_id=eq.${encodeURIComponent(uid)}&visibility=eq.public&select=id,name,description,created_at&order=created_at.desc&limit=20`),
+    ]);
+    const tripsPublic = (trips || []).filter(t => !t.kind || t.kind === "report" || t.visibility === "public");
+    const bio = (profile.bio || "").trim();
+    const description = bio
+      ? bio.slice(0, 220)
+      : `${displayName} on Trailhead — ${(builds || []).length} build${(builds || []).length === 1 ? "" : "s"}, ${tripsPublic.length} trip${tripsPublic.length === 1 ? "" : "s"}, ${(threads || []).length} forum thread${(threads || []).length === 1 ? "" : "s"}`;
+    const titleStr = `${displayName} (@${handle}) — Trailhead`;
+    return {
+      title: titleStr,
+      description,
+      image: profile.avatar_url || null,
+      imageAlt: profile.avatar_url ? `${displayName} profile photo` : "",
+      jsonLd: {
+        kind: "PersonProfile",
+        handle,
+        displayName,
+        bio,
+        avatarUrl: profile.avatar_url || null,
+        role: profile.role || "user",
+        createdAt: profile.created_at || null,
+        canonicalUrl: null, // filled in by handler
+        contentCounts: {
+          builds: (builds || []).length,
+          trips: tripsPublic.length,
+          threads: (threads || []).length,
+          spots: (spots || []).length,
+        },
+      },
+      breadcrumb: {
+        items: [
+          { name: "Trailhead", url: null },
+          { name: "Users", url: null },
+          { name: `@${handle}`, url: null },
+        ],
+      },
+      profileSSR: {
+        handle,
+        displayName,
+        bio,
+        avatarUrl: profile.avatar_url || null,
+        role: profile.role || "user",
+        builds: builds || [],
+        trips: tripsPublic,
+        threads: threads || [],
+        spots: spots || [],
+      },
+    };
+  }
   return null;
 }
 
@@ -1092,6 +1165,122 @@ function metaTagsFor({ title, description, image, imageAlt, url, article }) {
     .join("\n");
 }
 
+// User profile SSR hub. Renders bio + four sections (builds / trips /
+// forum threads / camping spots) where every item is an anchor to its
+// canonical detail URL. Each section is a "stop" Google can walk through
+// to discover + crawl the user's entire body of work. The Person entity
+// + this dense link structure is what gives forum threads + builds their
+// E-E-A-T author signal — Google can resolve "who is this person" by
+// following the chain backward from any of their articles.
+function buildProfileSSR(payload, canonicalUrl, origin) {
+  if (!payload || !payload.handle) return "";
+  const handleEsc = escapeHtml(payload.handle);
+  const displayName = escapeHtml(payload.displayName || payload.handle);
+  const bio = escapeHtml(payload.bio || "");
+  const avatar = payload.avatarUrl
+    ? `<img src="${escapeHtml(payload.avatarUrl)}" alt="${displayName} profile photo" width="120" height="120" loading="eager" decoding="async" style="width:120px;height:120px;border-radius:60px;object-fit:cover;display:block;" />`
+    : `<div style="width:120px;height:120px;border-radius:60px;background:#C49A6C;display:flex;align-items:center;justify-content:center;font-family:'Trebuchet MS',sans-serif;font-size:42px;font-weight:700;color:#fff;">${(displayName[0] || "U").toUpperCase()}</div>`;
+  const roleBadge = payload.role === "admin"
+    ? `<span style="display:inline-block;padding:3px 8px;background:#BD472A;color:#fff;border-radius:4px;font-family:'Trebuchet MS',sans-serif;font-size:10px;letter-spacing:1px;font-weight:700;margin-left:8px;">ADMIN</span>`
+    : payload.role === "ambassador"
+    ? `<span style="display:inline-block;padding:3px 8px;background:#C49A6C;color:#fff;border-radius:4px;font-family:'Trebuchet MS',sans-serif;font-size:10px;letter-spacing:1px;font-weight:700;margin-left:8px;">AMBASSADOR</span>`
+    : "";
+  const crumbs = [
+    `<a href="${origin}/" style="color:#C49A6C;text-decoration:none;">Trailhead</a>`,
+    `<span style="color:#fff;">@${handleEsc}</span>`,
+  ].join(' <span style="color:#8B7D6B;">/</span> ');
+  // Helper: section render. Empty sections still emit a skeleton with
+  // explicit "no items yet" so crawlers see all four content surfaces
+  // were considered (Google penalizes pages that look thin only when
+  // structure suggests content was expected but missing).
+  const renderSection = (heading, items, renderItem) => {
+    const inner = items.length === 0
+      ? `<p style="margin:0;font-size:13px;color:#8B7D6B;font-style:italic;">No ${heading.toLowerCase()} yet.</p>`
+      : items.map(renderItem).join("\n");
+    return `
+      <section style="margin:32px 0 0;">
+        <h2 style="margin:0 0 14px;font-size:20px;font-family:'Trebuchet MS','Gill Sans',sans-serif;font-weight:700;color:#fff;letter-spacing:0.5px;">${escapeHtml(heading)}</h2>
+        ${inner}
+      </section>
+    `;
+  };
+  const buildsHtml = renderSection("Builds", payload.builds || [], (b) => {
+    const vehicle = [b.year, b.make, b.model].filter(Boolean).join(" ");
+    const url = `${origin}/builds/${escapeHtml(b.id)}`;
+    return `
+      <article style="padding:12px 0;border-bottom:1px solid #2A2A28;">
+        <h3 style="margin:0 0 4px;font-size:16px;font-family:'Trebuchet MS','Gill Sans',sans-serif;font-weight:600;">
+          <a href="${url}" style="color:#fff;text-decoration:none;">${escapeHtml(b.name || "Build")}</a>
+        </h3>
+        ${vehicle ? `<p style="margin:0;font-size:12px;color:#8B7D6B;">${escapeHtml(vehicle)}</p>` : ""}
+      </article>
+    `;
+  });
+  const tripsHtml = renderSection("Trip Reports", payload.trips || [], (t) => {
+    const url = `${origin}/${t.kind === "plan" ? "plans" : "trips"}/${escapeHtml(t.slug || t.id)}`;
+    const isPlan = t.kind === "plan";
+    const meta = [
+      isPlan ? "PLAN" : null,
+      t.distance_mi != null ? `${Number(t.distance_mi).toFixed(1)} mi` : null,
+      [t.region, t.state_code].filter(Boolean).join(", ") || null,
+    ].filter(Boolean).map(escapeHtml).join(" · ");
+    return `
+      <article style="padding:12px 0;border-bottom:1px solid #2A2A28;">
+        <h3 style="margin:0 0 4px;font-size:16px;font-family:'Trebuchet MS','Gill Sans',sans-serif;font-weight:600;">
+          <a href="${url}" style="color:#fff;text-decoration:none;">${escapeHtml(t.name || "Trip")}</a>
+        </h3>
+        ${meta ? `<p style="margin:0 0 2px;font-size:12px;color:#8B7D6B;">${meta}</p>` : ""}
+        ${t.description ? `<p style="margin:0;font-size:13px;color:#F5F2ED;line-height:1.5;">${escapeHtml(t.description.slice(0, 160))}${t.description.length > 160 ? "…" : ""}</p>` : ""}
+      </article>
+    `;
+  });
+  const threadsHtml = renderSection("Forum Threads", payload.threads || [], (t) => {
+    const subSlug = escapeHtml(t.subcategory_slug || "");
+    const url = `${origin}/forum/${subSlug}/${escapeHtml(t.slug || "")}`;
+    return `
+      <article style="padding:12px 0;border-bottom:1px solid #2A2A28;">
+        <h3 style="margin:0 0 4px;font-size:16px;font-family:'Trebuchet MS','Gill Sans',sans-serif;font-weight:600;">
+          <a href="${url}" style="color:#fff;text-decoration:none;">${escapeHtml(t.title || "Thread")}</a>
+        </h3>
+        ${t.view_count ? `<p style="margin:0;font-size:12px;color:#8B7D6B;">${t.view_count} view${t.view_count === 1 ? "" : "s"}</p>` : ""}
+      </article>
+    `;
+  });
+  const spotsHtml = renderSection("Camping Spots", payload.spots || [], (s) => {
+    const url = `${origin}/spots/${escapeHtml(s.id)}`;
+    return `
+      <article style="padding:12px 0;border-bottom:1px solid #2A2A28;">
+        <h3 style="margin:0 0 4px;font-size:16px;font-family:'Trebuchet MS','Gill Sans',sans-serif;font-weight:600;">
+          <a href="${url}" style="color:#fff;text-decoration:none;">${escapeHtml(s.name || "Spot")}</a>
+        </h3>
+        ${s.description ? `<p style="margin:0;font-size:13px;color:#F5F2ED;line-height:1.5;">${escapeHtml(s.description.slice(0, 160))}${s.description.length > 160 ? "…" : ""}</p>` : ""}
+      </article>
+    `;
+  });
+  return `
+    <main style="max-width:720px;margin:0 auto;padding:32px 20px 80px;color:#fff;background:#111111;min-height:100vh;font-family:'Source Serif 4',Georgia,serif;line-height:1.6;box-sizing:border-box;">
+      <nav style="font-family:'Trebuchet MS',sans-serif;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:24px;color:#8B7D6B;">
+        ${crumbs}
+      </nav>
+      <header style="display:flex;gap:20px;align-items:flex-start;margin-bottom:24px;">
+        ${avatar}
+        <div style="flex:1;min-width:0;">
+          <h1 style="margin:0 0 4px;font-size:28px;font-family:'Trebuchet MS','Gill Sans',sans-serif;font-weight:700;line-height:1.2;color:#fff;">${displayName}${roleBadge}</h1>
+          <p style="margin:0 0 10px;font-size:13px;color:#C49A6C;font-family:'Trebuchet MS',sans-serif;">@${handleEsc}</p>
+          ${bio ? `<p style="margin:0;font-size:14px;color:#F5F2ED;line-height:1.5;">${bio}</p>` : ""}
+        </div>
+      </header>
+      ${buildsHtml}
+      ${tripsHtml}
+      ${threadsHtml}
+      ${spotsHtml}
+      <footer style="margin-top:48px;padding-top:24px;border-top:1px solid #2A2A28;font-family:'Trebuchet MS',sans-serif;font-size:12px;color:#8B7D6B;">
+        ${displayName} on <a href="${origin}/" style="color:#C49A6C;text-decoration:none;">Trailhead</a> — the overlanding community by Lone Peak Overland.
+      </footer>
+    </main>
+  `;
+}
+
 module.exports = async function handler(req, res) {
   // Refresh the DB-backed forum subcategory map if stale. Cheap; cached
   // 60s. Means admin edits in-app propagate to OG / SSR / JSON-LD within
@@ -1105,6 +1294,7 @@ module.exports = async function handler(req, res) {
   // Resolve by slug; the sub segment is used to reconstruct the canonical URL.
   const sub = (req.query && req.query.sub) || "";
   const slug = (req.query && req.query.slug) || "";
+  const handle = (req.query && req.query.handle) || "";
   // Reconstruct the user-facing URL for the canonical og:url tag.
   const prettyPath =
     type === "trip" ? `/trips/${id}` :
@@ -1114,6 +1304,7 @@ module.exports = async function handler(req, res) {
     type === "post" || type === "route" ? `/post/${id}` :
     type === "forum-thread" ? `/forum/${sub}/${slug}` :
     type === "forum-sub" ? `/forum/${sub}` :
+    type === "user" ? `/users/${handle.replace(/^@/, "")}` :
     type === "hq" ? `/hq` : "/";
   const canonicalUrl = `${proto}://${host}${prettyPath}`;
 
@@ -1121,7 +1312,7 @@ module.exports = async function handler(req, res) {
   if (type) {
     // For forum threads the lookup key is the slug, not id. For forum-sub
     // it's the subcategory slug passed as `sub`.
-    const lookupId = type === "forum-thread" ? slug : (type === "forum-sub" ? sub : id);
+    const lookupId = type === "forum-thread" ? slug : (type === "forum-sub" ? sub : (type === "user" ? handle : id));
     const data = await resolveEntity(type, lookupId);
     if (data) meta = data;
   }
@@ -1472,6 +1663,37 @@ module.exports = async function handler(req, res) {
     };
     const clean = Object.fromEntries(Object.entries(ld).filter(([, v]) => v !== undefined));
     jsonLdTag = `<script type="application/ld+json">${JSON.stringify(clean).replace(/</g, "\\u003c")}</script>`;
+  } else if (meta.jsonLd && meta.jsonLd.kind === "PersonProfile") {
+    // ProfilePage wrapping a Person entity. Google + LinkedIn + others
+    // pull author E-E-A-T signals from this schema — name, handle (as
+    // alternateName + identifier), avatar, and a count of contributions.
+    const j = meta.jsonLd;
+    const contentCounts = j.contentCounts || {};
+    const totalItems = (contentCounts.builds || 0) + (contentCounts.trips || 0) + (contentCounts.threads || 0) + (contentCounts.spots || 0);
+    const personNode = Object.fromEntries(Object.entries({
+      "@type": "Person",
+      name: j.displayName || undefined,
+      alternateName: j.handle ? `@${j.handle}` : undefined,
+      identifier: j.handle || undefined,
+      description: j.bio || undefined,
+      image: j.avatarUrl || undefined,
+      url: canonicalUrl,
+    }).filter(([, v]) => v !== undefined));
+    const ld = {
+      "@context": "https://schema.org",
+      "@type": "ProfilePage",
+      url: canonicalUrl,
+      dateCreated: j.createdAt || undefined,
+      isPartOf: { "@type": "WebSite", name: "Trailhead", url: `${origin}/` },
+      mainEntity: personNode,
+      interactionStatistic: totalItems > 0 ? [{
+        "@type": "InteractionCounter",
+        interactionType: { "@type": "WriteAction" },
+        userInteractionCount: totalItems,
+      }] : undefined,
+    };
+    const clean = Object.fromEntries(Object.entries(ld).filter(([, v]) => v !== undefined));
+    jsonLdTag = `<script type="application/ld+json">${JSON.stringify(clean).replace(/</g, "\\u003c")}</script>`;
   }
 
   let html = SPA_HTML;
@@ -1504,6 +1726,8 @@ module.exports = async function handler(req, res) {
     ssrHtml = buildHQSSR(canonicalUrl, origin, meta.image);
   } else if ((type === "post" || type === "route") && meta.article) {
     ssrHtml = buildPostSSR(meta.article, canonicalUrl, origin);
+  } else if (type === "user" && meta.profileSSR) {
+    ssrHtml = buildProfileSSR(meta.profileSSR, canonicalUrl, origin);
   }
   if (ssrHtml) {
     html = html.replace(/(<div id="root"[^>]*>)([\s\S]*?)(<\/div>)/i, `$1${ssrHtml}$3`);

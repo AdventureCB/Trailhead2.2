@@ -11,6 +11,7 @@
     { "source": "/post/:id", "destination": "/api/preview?type=post&id=:id" },
     { "source": "/forum/:sub/:slug", "destination": "/api/preview?type=forum-thread&sub=:sub&slug=:slug" },
     { "source": "/forum/:sub", "destination": "/api/preview?type=forum-sub&sub=:sub" },
+    { "source": "/users/:handle", "destination": "/api/preview?type=user&handle=:handle" },
     { "source": "/hq", "destination": "/api/preview?type=hq" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],

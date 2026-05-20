@@ -70,12 +70,16 @@ module.exports = async function handler(req, res) {
   const now = new Date().toISOString();
 
   // Fan out all the fetches in parallel — no single one blocks the others.
-  const [forumSubcategories, forumThreads, tripReports, builds, campingSpots] = await Promise.all([
+  const [forumSubcategories, forumThreads, tripReports, builds, campingSpots, profiles] = await Promise.all([
     supabaseFetch("forum_subcategories", "select=slug,updated_at,created_at&order=sort_order.asc&limit=2000"),
     supabaseFetch("forum_threads", "select=slug,subcategory_slug,updated_at,created_at&order=updated_at.desc&limit=10000"),
     supabaseFetch("trip_reports", "status=eq.published&select=slug,updated_at,created_at,kind,visibility&order=updated_at.desc&limit=10000"),
     supabaseFetch("builds", "select=id,updated_at,created_at&order=updated_at.desc&limit=10000"),
     supabaseFetch("camping_spots", "visibility=eq.public&select=id,updated_at,created_at&order=updated_at.desc&limit=10000"),
+    // Public profiles with a handle set. Each becomes a /users/<handle>
+    // E-E-A-T hub page linking to all the user's content. Filter
+    // is_public=true so private accounts stay out of search results.
+    supabaseFetch("profiles", "is_public=eq.true&handle=not.is.null&select=handle,updated_at,created_at&order=updated_at.desc&limit=10000"),
   ]);
 
   const urls = [];
@@ -121,6 +125,15 @@ module.exports = async function handler(req, res) {
     if (!row || !row.id) return;
     const lastmod = row.updated_at || row.created_at || now;
     urls.push(urlEntry(`${origin}/spots/${row.id}`, lastmod, "monthly", "0.6"));
+  });
+
+  // User profile hubs — Person/ProfilePage for E-E-A-T anchoring across
+  // every piece of content the user has authored. High priority because
+  // each profile is a dense internal-link node.
+  profiles.forEach(row => {
+    if (!row || !row.handle) return;
+    const lastmod = row.updated_at || row.created_at || now;
+    urls.push(urlEntry(`${origin}/users/${row.handle}`, lastmod, "weekly", "0.7"));
   });
 
   const xml = [

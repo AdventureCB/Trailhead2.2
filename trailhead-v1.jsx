@@ -22432,6 +22432,12 @@ const __INITIAL_SHARED_LINK = (function() {
       try { window.history.replaceState(null, "", "/"); } catch (e) {}
       return { kind: "hq" };
     }
+    // User profile deep link — /users/<handle>. Keep the URL visible so
+    // shares are clean + the address bar matches what's on screen.
+    const userMatch = path.match(/^\/users\/(.+?)\/?$/);
+    if (userMatch) {
+      return { kind: "user", handle: decodeURIComponent(userMatch[1]) };
+    }
     // Forum thread deep link — /forum/<subcategory-slug>/<thread-slug>
     // Keep the slugged URL visible in the address bar (SEO + share-link copy).
     const forumMatch = path.match(/^\/forum\/([^/]+)\/([^/]+)\/?$/);
@@ -23619,6 +23625,12 @@ export default function Trailhead() {
         else if (linkKind === "spot") fastLoad = loadSpotByIdFast(initialSharedLink.id);
         else if (linkKind === "build") fastLoad = loadBuildById(initialSharedLink.id);
         else if (linkKind === "forum-thread") fastLoad = loadForumThreadBySlugFast(initialSharedLink.threadSlug);
+        else if (linkKind === "user") {
+          // User profile: OtherProfileScreen does its own profile fetch
+          // by handle on mount. No fast-loader needed; just open the
+          // profile stack so the screen mounts as soon as appReady fires.
+          setProfileStack(["user", initialSharedLink.handle]);
+        }
         // hq has no DB fetch — splash unblocks immediately.
         fastLoad.finally(() => setAppReady(true));
         // Background: full hydrate keeps everything else loading.
@@ -25405,6 +25417,26 @@ export default function Trailhead() {
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, [allTripReports, allTripPlans]);
+  // Browser back-button handler for `/users/<handle>` URLs — when the URL
+  // matches a profile path, open that profile; otherwise, close any open
+  // user-profile stack so back returns to the previous app surface.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onPop = () => {
+      const path = window.location.pathname || "";
+      const m = path.match(/^\/users\/(.+?)\/?$/);
+      if (m) {
+        const handle = decodeURIComponent(m[1]);
+        setProfileStack(["user", handle]);
+        return;
+      }
+      // URL no longer matches a user profile — clear the user-profile
+      // stack so we don't show a stale profile screen over the feed.
+      setProfileStack(prev => (prev && prev[0] === "user") ? [] : prev);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
   // Deep-link prefetch for camping spots — when /spots/<id> lands on a spot
   // outside the current viewport, fetch it directly and graft into the
   // viewport slice so it shows up in the merged campingSpots set. ExploreMap
@@ -28992,9 +29024,30 @@ export default function Trailhead() {
     if (isGuest) { setShowGuestPrompt(true); return; }
     setProfileStack(["self"]);
   };
-  const openUserProfile = (userId) => setProfileStack(["user", userId]);
+  const openUserProfile = (userId) => {
+    setProfileStack(["user", userId]);
+    // Push /users/<handle> into the URL when the value looks like a handle
+    // (not a uuid). Lets browser back work + makes shares paste a clean URL.
+    try {
+      if (typeof userId === "string" && /^[A-Za-z0-9_]+$/.test(userId) && userId.length <= 64 && typeof window !== "undefined") {
+        const target = `/users/${encodeURIComponent(userId)}`;
+        if (window.location.pathname !== target) {
+          window.history.pushState({ profileHandle: userId }, "", target);
+        }
+      }
+    } catch (e) {}
+  };
   const openMap = (coords, location, title, recoveryCtx) => setMapData({ coords, location, title, recoveryCtx: recoveryCtx || null });
-  const goBack = () => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); };
+  const goBack = () => {
+    setProfileStack([]); setShowRecovery(false); setShowCompose(false);
+    // If we got here via a /users/<handle> URL (pushState in openUserProfile),
+    // pop the URL back to / so the address bar matches the visible screen.
+    try {
+      if (typeof window !== "undefined" && /^\/users\//.test(window.location.pathname || "")) {
+        window.history.pushState({}, "", "/");
+      }
+    } catch (e) {}
+  };
 
   const handleNav = (key) => {
     // Guests can VIEW feed / builds / forum (SEO + read-only browsing
