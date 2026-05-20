@@ -55261,7 +55261,7 @@ ${suffix}`;
   }
   function dbNotifToBell(row) {
     if (!row) return null;
-    const iconMap = { like: { icon: Heart, iconColor: T.red }, comment: { icon: MessageCircle, iconColor: T.copper }, mention: { icon: AtSign, iconColor: T.copper }, reply: { icon: MessageCircle, iconColor: T.copper }, follow: { icon: UserPlus, iconColor: T.green }, rsvp: { icon: Users, iconColor: T.green } };
+    const iconMap = { like: { icon: Heart, iconColor: T.red }, comment: { icon: MessageCircle, iconColor: T.copper }, mention: { icon: AtSign, iconColor: T.copper }, reply: { icon: MessageCircle, iconColor: T.copper }, follow: { icon: UserPlus, iconColor: T.green }, rsvp: { icon: Users, iconColor: T.green }, role: { icon: Shield, iconColor: T.copper } };
     const ic = iconMap[row.type] || { icon: Bell, iconColor: T.tertiary };
     return {
       id: row.id,
@@ -57618,16 +57618,43 @@ ${suffix}`;
     const adminUpdateUserRole = async (targetUid, newRole) => {
       if (!isAdmin || !targetUid) return { error: "Not authorized" };
       if (!["user", "ambassador", "admin"].includes(newRole)) return { error: "Invalid role" };
+      const adminUid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+      if (adminUid === targetUid && newRole !== "admin") return { error: "Use a different account to demote yourself." };
+      let prev = null;
+      try {
+        const { data } = await supabase.from("profiles").select("role, requested_role").eq("id", targetUid).maybeSingle();
+        prev = data;
+      } catch (e) {
+      }
       try {
         const { error } = await supabase.from("profiles").update({
           role: newRole,
-          // Approving / setting a non-user role implicitly clears the
-          // pending request. Same for demotion.
           requested_role: null,
           updated_at: (/* @__PURE__ */ new Date()).toISOString()
         }).eq("id", targetUid);
         if (error) return { error: error.message || "Update failed" };
-        setPendingAmbassadorRequests((prev) => (prev || []).filter((p) => p.id !== targetUid));
+        setPendingAmbassadorRequests((prev2) => (prev2 || []).filter((p) => p.id !== targetUid));
+        if (adminUid && adminUid !== targetUid) {
+          const myName = currentProfile && currentProfile.full_name || "Admin";
+          const prevRole = prev && prev.role || "user";
+          const wasRequest = prev && prev.requested_role === newRole;
+          let text;
+          if (newRole === "ambassador" && wasRequest) text = "approved your Ambassador request";
+          else if (newRole === "admin") text = "promoted you to Admin";
+          else if (newRole === "ambassador") text = "promoted you to Ambassador";
+          else if (newRole === "user" && prevRole === "admin") text = "removed your Admin role";
+          else if (newRole === "user" && prevRole === "ambassador") text = "removed your Ambassador role";
+          else text = "changed your role to " + newRole.charAt(0).toUpperCase() + newRole.slice(1);
+          supabase.from("notifications").insert({
+            user_id: targetUid,
+            type: "role",
+            actor_id: adminUid,
+            actor_name: myName,
+            text
+          }).then(({ error: ne }) => {
+            if (ne) console.error("[notif] role-change insert", ne);
+          });
+        }
         return { ok: true };
       } catch (e) {
         console.error("[adminUpdateUserRole] failed", e);
@@ -57636,6 +57663,7 @@ ${suffix}`;
     };
     const adminDeclineAmbassadorRequest = async (targetUid) => {
       if (!isAdmin || !targetUid) return { error: "Not authorized" };
+      const adminUid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
       try {
         const { error } = await supabase.from("profiles").update({
           requested_role: null,
@@ -57643,6 +57671,18 @@ ${suffix}`;
         }).eq("id", targetUid);
         if (error) return { error: error.message || "Update failed" };
         setPendingAmbassadorRequests((prev) => (prev || []).filter((p) => p.id !== targetUid));
+        if (adminUid && adminUid !== targetUid) {
+          const myName = currentProfile && currentProfile.full_name || "Admin";
+          supabase.from("notifications").insert({
+            user_id: targetUid,
+            type: "role",
+            actor_id: adminUid,
+            actor_name: myName,
+            text: "declined your Ambassador request"
+          }).then(({ error: ne }) => {
+            if (ne) console.error("[notif] role-decline insert", ne);
+          });
+        }
         return { ok: true };
       } catch (e) {
         console.error("[adminDeclineAmbassadorRequest] failed", e);
