@@ -516,38 +516,26 @@ async function resolveEntity(type, id) {
   if (type === "post" || type === "route") {
     const row = await supabaseFetch(
       "posts",
-      `id=eq.${encodeURIComponent(id)}&select=type,title,body,hero_img,photo_urls,data&limit=1`
+      `id=eq.${encodeURIComponent(id)}&select=type,title,body,hero_img,photo_urls,data,user_id,created_at,updated_at&limit=1`
     );
     if (!row) return null;
     // Build the image fallback chain.
     let image = row.hero_img || null;
     if (!image && Array.isArray(row.photo_urls) && row.photo_urls.length > 0) {
-      // First photo URL — already filtered in feedItemToDbRow to skip videos.
       image = row.photo_urls[0];
     }
-    // Lift alt text from the matching photo in data.photoUrls (newer
-    // posts) or fall back to the post title.
     let imageAlt = "";
     if (image && row.data && Array.isArray(row.data.photoUrls)) {
       imageAlt = findPhotoAlt(row.data.photoUrls, image);
     }
-    // ROUTES posts carry pin coords in data.pins or data.points. If we
-    // don't have a hero photo, try to render the route polyline so the
-    // share preview is still informative for route shares.
     if (!image && row.data) {
       const pts = Array.isArray(row.data.points) ? row.data.points
                 : Array.isArray(row.data.pins) ? row.data.pins.map(p => [p.lng, p.lat]).filter(([a, b]) => typeof a === "number" && typeof b === "number")
                 : null;
       if (pts && pts.length >= 2) {
-        // Local data.points may store as [lat, lng] historically — normalize
-        // by sniffing: if the first value's "lng" magnitude is plausible
-        // for latitude we swap. Lats are -90..90; lngs are -180..180. If
-        // either coord exceeds 90 it's definitely lng.
         const sniffed = pts.map(p => {
           const a = Array.isArray(p) ? p[0] : p.lng;
           const b = Array.isArray(p) ? p[1] : p.lat;
-          // If a (the "lng" slot) is in -90..90 AND b is out of that range,
-          // they're probably swapped. Otherwise trust [lng, lat].
           return Math.abs(a) <= 90 && Math.abs(b) > 90 ? [b, a] : [a, b];
         });
         image = staticMapWithPath(sniffed, "BD472A", "BD472A");
@@ -556,11 +544,29 @@ async function resolveEntity(type, id) {
     const isRoute = row.type === "ROUTES";
     const cleanTitle = (row.title || (isRoute ? "Route" : "Trailhead Post")).slice(0, 80);
     const desc = (row.body || (isRoute ? "Overlanding route shared on Trailhead." : "Posted to Trailhead.")).slice(0, 200);
+    // Author profile so the SSR byline can show E-E-A-T signals.
+    let author = null;
+    if (row.user_id) {
+      const prof = await supabaseFetch(
+        "profiles",
+        `id=eq.${encodeURIComponent(row.user_id)}&select=full_name,handle,avatar_url&limit=1`
+      );
+      if (prof) author = { name: prof.full_name || prof.handle || "Author", handle: prof.handle || "", avatarUrl: prof.avatar_url || null };
+    }
     return {
       title: `${cleanTitle}${isRoute ? " · Route" : ""}`,
       description: desc,
       image,
       imageAlt: imageAlt || `${cleanTitle}${isRoute ? " route" : ""} on Trailhead`,
+      article: {
+        title: cleanTitle,
+        body: row.body || "",
+        image,
+        imageAlt: imageAlt || `${cleanTitle}${isRoute ? " route" : ""} on Trailhead`,
+        author,
+        createdAt: row.created_at,
+        type: row.type,
+      },
     };
   }
   // Forum threads — slug-based URLs hit type === "forum-thread" and look
@@ -810,6 +816,238 @@ function buildForumSubSSR(payload, origin) {
       </footer>
     </main>
   `;
+}
+
+// Shared shell for the per-entity SSR builders below. Crawlers + initial-
+// load humans see this article in the SPA root div before React mounts +
+// replaces it on first render. All inputs already escaped/sanitized by
+// the caller; this helper just composes them.
+function ssrArticleShell({ title, crumbs, byline, hero, heroAlt, body, footer, footerLabel, accent }) {
+  const titleHtml = title || "";
+  const crumbsHtml = crumbs || "";
+  const bylineHtml = byline || "";
+  const bodyHtml = body || "";
+  const footerHtml = footer || "";
+  const accentColor = accent || "#C49A6C";
+  const heroHtml = hero
+    ? `<figure style="margin:0 0 24px;border-radius:12px;overflow:hidden;"><img src="${hero}" alt="${heroAlt || ""}" loading="eager" decoding="async" style="width:100%;height:auto;display:block;border-radius:12px;" /></figure>`
+    : "";
+  return `
+    <article style="max-width:720px;margin:0 auto;padding:32px 20px 80px;color:#fff;background:#111111;min-height:100vh;font-family:'Source Serif 4',Georgia,serif;line-height:1.7;box-sizing:border-box;">
+      ${crumbsHtml ? `<nav style="font-family:'Trebuchet MS',sans-serif;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:24px;color:#8B7D6B;">${crumbsHtml}</nav>` : ""}
+      <h1 style="margin:0 0 16px;font-size:32px;font-family:'Trebuchet MS','Gill Sans',sans-serif;line-height:1.2;font-weight:700;color:#fff;">${titleHtml}</h1>
+      ${bylineHtml}
+      ${heroHtml}
+      ${bodyHtml}
+      ${footerHtml || `<footer style="margin-top:48px;padding-top:24px;border-top:1px solid #2A2A28;font-family:'Trebuchet MS',sans-serif;font-size:12px;color:#8B7D6B;">${footerLabel || `Browse more on <a href="/" style="color:${accentColor};text-decoration:none;">Trailhead</a> — the overlanding community app.`}</footer>`}
+    </article>
+  `;
+}
+
+// Author byline block (avatar + name + linked handle + datetime).
+function ssrAuthorByline({ author, date, accent }) {
+  if (!author && !date) return "";
+  const a = author || {};
+  const accentColor = accent || "#C49A6C";
+  const initial = (a.name || "A").charAt(0).toUpperCase();
+  const avatarBlock = a.avatarUrl
+    ? `<img src="${escapeHtml(a.avatarUrl)}" alt="${escapeHtml(a.name || "Author")}" loading="eager" decoding="async" style="width:48px;height:48px;border-radius:50%;object-fit:cover;flex-shrink:0;" />`
+    : `<div style="width:48px;height:48px;border-radius:50%;background:${accentColor};display:flex;align-items:center;justify-content:center;flex-shrink:0;"><span style="font-family:'Trebuchet MS',sans-serif;font-size:18px;font-weight:700;color:#fff;">${escapeHtml(initial)}</span></div>`;
+  const dateIso = date ? new Date(date).toISOString() : "";
+  const dateStr = date ? new Date(date).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : "";
+  return `
+    <div style="display:flex;align-items:center;gap:14px;padding:16px 0 24px;margin-bottom:24px;border-bottom:1px solid #2A2A28;">
+      ${avatarBlock}
+      <div style="display:flex;flex-direction:column;gap:2px;font-family:'Trebuchet MS',sans-serif;">
+        ${a.name ? `<span style="font-size:15px;font-weight:700;color:#fff;">${escapeHtml(a.name)}</span>` : ""}
+        <span style="font-size:12px;color:#8B7D6B;">
+          ${a.handle ? `<span style="color:${accentColor};">@${escapeHtml(a.handle)}</span>${date ? " · " : ""}` : ""}
+          ${dateStr ? `<time datetime="${escapeHtml(dateIso)}">${escapeHtml(dateStr)}</time>` : ""}
+        </span>
+      </div>
+    </div>
+  `;
+}
+
+function ssrCrumbs(items, origin) {
+  return (items || [])
+    .map((it, i, arr) => {
+      const isLast = i === arr.length - 1;
+      const url = it.url || (i === 0 ? `${origin}/` : null);
+      if (isLast || !url) return `<span style="color:#fff;">${escapeHtml(it.name)}</span>`;
+      return `<a href="${url}" style="color:#C49A6C;text-decoration:none;">${escapeHtml(it.name)}</a>`;
+    })
+    .join(' <span style="color:#8B7D6B;">/</span> ');
+}
+
+// Trip report / trip plan SSR. Different accent + breadcrumb label, but
+// the same article shape — title, author byline with publish date, hero
+// (route map static image or photo), description, stats row (distance,
+// elev gain, duration, region, terrains).
+function buildTripArticleSSR(article, canonicalUrl, origin) {
+  if (!article || !article.title) return "";
+  const isReport = article.isReport;
+  const accent = isReport ? "#8B6FAF" : "#C49A6C";
+  const crumbs = ssrCrumbs([
+    { name: "Trailhead", url: `${origin}/` },
+    { name: isReport ? "Trip Reports" : "Trip Plans" },
+    { name: article.title },
+  ], origin);
+  const byline = ssrAuthorByline({ author: article.author, date: article.createdAt, accent });
+  // Build stats row.
+  const stats = [];
+  if (article.distanceMi != null) stats.push(`<strong>${Number(article.distanceMi).toFixed(1)} mi</strong> distance`);
+  if (article.elevGainFt != null) stats.push(`<strong>${Math.round(article.elevGainFt).toLocaleString()} ft</strong> elev gain`);
+  if (article.durationMin != null) stats.push(`<strong>${Math.round(article.durationMin / 60 * 10) / 10} hr</strong> duration`);
+  if (article.region) stats.push(`<strong>${escapeHtml(article.region)}${article.stateCode ? ", " + escapeHtml(article.stateCode) : ""}</strong>`);
+  if (article.difficulty) stats.push(`<strong>${escapeHtml(article.difficulty)}</strong> difficulty`);
+  if (!isReport && article.plannedStart) {
+    const d = new Date(article.plannedStart).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+    stats.push(`Planned start: <strong>${escapeHtml(d)}</strong>`);
+  }
+  const statsRow = stats.length > 0
+    ? `<div style="display:flex;flex-wrap:wrap;gap:16px 24px;padding:16px;background:#1A1A1A;border-radius:10px;margin:0 0 24px;font-family:'Trebuchet MS',sans-serif;font-size:13px;color:#F5F2ED;">${stats.join(' <span style="color:#8B7D6B;">|</span> ')}</div>`
+    : "";
+  // Keywords from terrains + tags surface as visible chips for both
+  // humans + crawlers parsing topical keyword density.
+  const kw = [...(article.terrains || []), ...(article.tags || [])];
+  const kwRow = kw.length > 0
+    ? `<div style="margin:0 0 24px;font-family:'Trebuchet MS',sans-serif;">${kw.map(k => `<span style="display:inline-block;background:${accent}25;color:${accent};font-size:11px;letter-spacing:0.5px;padding:4px 10px;border-radius:14px;margin:0 6px 6px 0;">${escapeHtml(k)}</span>`).join("")}</div>`
+    : "";
+  const desc = article.description
+    ? `<div style="font-size:16px;color:#F5F2ED;margin:0 0 24px;line-height:1.7;">${escapeHtml(article.description)}</div>`
+    : "";
+  const body = statsRow + kwRow + desc;
+  return ssrArticleShell({
+    title: escapeHtml(article.title),
+    crumbs,
+    byline,
+    hero: article.image ? escapeHtml(article.image) : null,
+    heroAlt: article.imageAlt ? escapeHtml(article.imageAlt) : escapeHtml(`${article.title} route map`),
+    body,
+    accent,
+    footerLabel: `${isReport ? "Trip report" : "Trip plan"} on the <a href="${origin}/" style="color:${accent};text-decoration:none;">Trailhead</a> overlanding community.`,
+  });
+}
+
+// Camping spot SSR — name, location, description, key attributes (type, fee).
+function buildCampingSpotSSR(spot, canonicalUrl, origin) {
+  if (!spot || !spot.name) return "";
+  const accent = "#5B8C5A";
+  const crumbs = ssrCrumbs([
+    { name: "Trailhead", url: `${origin}/` },
+    { name: "Camping Spots" },
+    { name: spot.name },
+  ], origin);
+  const attrs = [];
+  if (spot.spotType && spot.spotType !== "unknown") attrs.push(`<strong>${escapeHtml(spot.spotType)}</strong>`);
+  if (spot.fee) attrs.push(`<strong>${escapeHtml(spot.fee)}</strong>`);
+  if (spot.lat != null && spot.lng != null) attrs.push(`<span style="font-family:Source Serif 4,Georgia,serif;">${Number(spot.lat).toFixed(5)}, ${Number(spot.lng).toFixed(5)}</span>`);
+  const attrsRow = attrs.length > 0
+    ? `<div style="display:flex;flex-wrap:wrap;gap:16px;padding:14px 16px;background:#1A1A1A;border-radius:10px;margin:0 0 24px;font-family:'Trebuchet MS',sans-serif;font-size:13px;color:#F5F2ED;">${attrs.join(' <span style="color:#8B7D6B;">|</span> ')}</div>`
+    : "";
+  const desc = spot.description
+    ? `<div style="font-size:16px;color:#F5F2ED;margin:0 0 24px;line-height:1.7;">${escapeHtml(spot.description)}</div>`
+    : "";
+  return ssrArticleShell({
+    title: escapeHtml(spot.name),
+    crumbs,
+    byline: "",
+    hero: spot.image ? escapeHtml(spot.image) : null,
+    heroAlt: escapeHtml(`${spot.name} camping spot`),
+    body: attrsRow + desc,
+    accent,
+    footerLabel: `Camping spot on <a href="${origin}/" style="color:${accent};text-decoration:none;">Trailhead</a> — find more spots, share trip reports, and connect with the overlanding community.`,
+  });
+}
+
+// Build SSR — title (e.g. "Kyle's Tundra"), year/make/model/trim row,
+// author byline, description if present.
+function buildBuildSSR(b, canonicalUrl, origin) {
+  if (!b || !b.name && !b.make) return "";
+  const accent = "#C49A6C";
+  const title = b.name || [b.year, b.make, b.model].filter(Boolean).join(" ");
+  const vehicle = [b.year, b.make, b.model, b.trim].filter(Boolean).join(" ");
+  const crumbs = ssrCrumbs([
+    { name: "Trailhead", url: `${origin}/` },
+    { name: "Builds" },
+    { name: title },
+  ], origin);
+  const byline = ssrAuthorByline({ author: b.author, date: b.createdAt, accent });
+  const vehicleRow = vehicle
+    ? `<div style="font-family:'Trebuchet MS',sans-serif;font-size:14px;color:#F5F2ED;margin:0 0 24px;padding:14px 16px;background:#1A1A1A;border-radius:10px;letter-spacing:0.3px;"><strong>${escapeHtml(vehicle)}</strong></div>`
+    : "";
+  return ssrArticleShell({
+    title: escapeHtml(title),
+    crumbs,
+    byline,
+    hero: b.image ? escapeHtml(b.image) : null,
+    heroAlt: escapeHtml(`${title} overlanding build`),
+    body: vehicleRow,
+    accent,
+    footerLabel: `Overlanding build on <a href="${origin}/" style="color:${accent};text-decoration:none;">Trailhead</a>.`,
+  });
+}
+
+// HQ SSR — address, geo, branded CTAs.
+function buildHQSSR(canonicalUrl, origin, image) {
+  const accent = "#BD472A";
+  const crumbs = ssrCrumbs([
+    { name: "Trailhead", url: `${origin}/` },
+    { name: "HQ" },
+  ], origin);
+  const addressBlock = `
+    <div style="font-family:'Trebuchet MS',sans-serif;font-size:14px;color:#F5F2ED;margin:0 0 24px;padding:16px;background:#1A1A1A;border-radius:10px;">
+      <strong style="font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:${accent};display:block;margin-bottom:4px;">Headquarters</strong>
+      ${escapeHtml(LPO_HQ.address)}<br>
+      <span style="font-family:'Source Serif 4',Georgia,serif;color:#8B7D6B;font-size:13px;">${LPO_HQ.lat.toFixed(5)}, ${LPO_HQ.lng.toFixed(5)}</span>
+    </div>
+  `;
+  const ctas = `
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin:0 0 24px;">
+      <a href="https://www.google.com/maps/dir/?api=1&destination=${LPO_HQ.lat},${LPO_HQ.lng}" style="display:inline-block;padding:12px 20px;background:${accent};color:#fff;text-decoration:none;border-radius:8px;font-family:'Trebuchet MS',sans-serif;font-size:13px;font-weight:700;letter-spacing:0.5px;">DIRECTIONS</a>
+      <a href="https://www.lonepeakoverland.com/" style="display:inline-block;padding:12px 20px;background:transparent;border:1px solid ${accent};color:${accent};text-decoration:none;border-radius:8px;font-family:'Trebuchet MS',sans-serif;font-size:13px;font-weight:700;letter-spacing:0.5px;">WEBSITE</a>
+    </div>
+  `;
+  return ssrArticleShell({
+    title: escapeHtml(LPO_HQ.name),
+    crumbs,
+    byline: "",
+    hero: image ? escapeHtml(image) : null,
+    heroAlt: escapeHtml(`${LPO_HQ.name} location map`),
+    body: addressBlock + ctas,
+    accent,
+    footerLabel: `Home base of <a href="https://www.lonepeakoverland.com/" style="color:${accent};text-decoration:none;">Lone Peak Overland</a> — overlanding gear and the community behind <a href="${origin}/" style="color:${accent};text-decoration:none;">Trailhead</a>.`,
+  });
+}
+
+// Generic feed post SSR (POST / PHOTOS / ROUTES / BUILDS / CONVOYS / FORUM
+// share posts — anything routed through /post/:id). Renders title, byline,
+// hero image, body text. Type-specific chrome (route maps, build cards,
+// convoy details) is intentionally omitted — those views live in the SPA
+// and crawlers get the underlying text + hero photo here.
+function buildPostSSR(post, canonicalUrl, origin) {
+  if (!post || (!post.title && !post.body)) return "";
+  const accent = "#C49A6C";
+  const crumbs = ssrCrumbs([
+    { name: "Trailhead", url: `${origin}/` },
+    { name: post.type === "ROUTES" ? "Routes" : post.type === "BUILDS" ? "Builds" : "Feed" },
+    { name: post.title || "Post" },
+  ], origin);
+  const byline = ssrAuthorByline({ author: post.author, date: post.createdAt, accent });
+  const body = post.body
+    ? `<div style="font-size:16px;color:#F5F2ED;margin:0 0 24px;line-height:1.7;white-space:pre-wrap;">${escapeHtml(post.body)}</div>`
+    : "";
+  return ssrArticleShell({
+    title: escapeHtml(post.title || "Post"),
+    crumbs,
+    byline,
+    hero: post.image ? escapeHtml(post.image) : null,
+    heroAlt: post.imageAlt ? escapeHtml(post.imageAlt) : escapeHtml(post.title || "Post on Trailhead"),
+    body,
+    accent,
+    footerLabel: `Posted on <a href="${origin}/" style="color:${accent};text-decoration:none;">Trailhead</a> — the overlanding community.`,
+  });
 }
 
 const DEFAULT_META = {
@@ -1250,18 +1488,25 @@ module.exports = async function handler(req, res) {
   // the SPA's version. Currently forum threads + subcategory landing
   // pages — extend to other entities when they ship server-rendered
   // article versions.
+  let ssrHtml = "";
   if (type === "forum-thread" && meta.article) {
-    const ssr = buildForumThreadSSR(meta.article, canonicalUrl, origin);
-    if (ssr) {
-      html = html.replace(/(<div id="root"[^>]*>)([\s\S]*?)(<\/div>)/i, `$1${ssr}$3`);
-    }
+    ssrHtml = buildForumThreadSSR(meta.article, canonicalUrl, origin);
   } else if (type === "forum-sub" && meta.article) {
-    // The subInfo carries its own slug for the canonical URL builder.
     const subInfoWithSlug = { ...meta.article.subInfo, slug: sub };
-    const ssr = buildForumSubSSR({ ...meta.article, subInfo: subInfoWithSlug }, origin);
-    if (ssr) {
-      html = html.replace(/(<div id="root"[^>]*>)([\s\S]*?)(<\/div>)/i, `$1${ssr}$3`);
-    }
+    ssrHtml = buildForumSubSSR({ ...meta.article, subInfo: subInfoWithSlug }, origin);
+  } else if ((type === "trip" || type === "plan") && meta.jsonLd && meta.jsonLd.kind === "TripReport") {
+    ssrHtml = buildTripArticleSSR({ ...meta.jsonLd, imageAlt: meta.imageAlt }, canonicalUrl, origin);
+  } else if (type === "spot" && meta.jsonLd && meta.jsonLd.kind === "CampingSpot") {
+    ssrHtml = buildCampingSpotSSR(meta.jsonLd, canonicalUrl, origin);
+  } else if (type === "build" && meta.jsonLd && meta.jsonLd.kind === "Build") {
+    ssrHtml = buildBuildSSR(meta.jsonLd, canonicalUrl, origin);
+  } else if (type === "hq") {
+    ssrHtml = buildHQSSR(canonicalUrl, origin, meta.image);
+  } else if ((type === "post" || type === "route") && meta.article) {
+    ssrHtml = buildPostSSR(meta.article, canonicalUrl, origin);
+  }
+  if (ssrHtml) {
+    html = html.replace(/(<div id="root"[^>]*>)([\s\S]*?)(<\/div>)/i, `$1${ssrHtml}$3`);
   }
 
   res.setHeader("Content-Type", "text/html; charset=utf-8");
