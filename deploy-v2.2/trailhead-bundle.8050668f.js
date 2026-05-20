@@ -46469,6 +46469,7 @@ ${suffix}`;
     const [editTitle, setEditTitle] = (0, import_react4.useState)("");
     const [editSections, setEditSections] = (0, import_react4.useState)([]);
     const [editPhotos, setEditPhotos] = (0, import_react4.useState)([]);
+    const [editDeleteConfirm, setEditDeleteConfirm] = (0, import_react4.useState)(false);
     const beginEditThread = (thread) => {
       if (!thread) return;
       setEditingThreadId(thread.id);
@@ -46476,6 +46477,7 @@ ${suffix}`;
       const fromSections = Array.isArray(thread.sections) && thread.sections.length > 0 ? thread.sections.map((s) => ({ id: newSectionId(), subheading: s.subheading || "", body: s.body || "" })) : [{ id: newSectionId(), subheading: "", body: thread.body || "" }];
       setEditSections(fromSections);
       setEditPhotos(thread.photos ? thread.photos.map((u, i) => ({ url: u.url || u, id: i, type: u.type || "image", caption: u.caption || "", alt: u.alt || "" })) : []);
+      setEditDeleteConfirm(false);
     };
     const updateEditSection = (id, patch) => setEditSections((prev) => prev.map((s) => s.id === id ? { ...s, ...patch } : s));
     const addEditSection = () => setEditSections((prev) => [...prev, { id: newSectionId(), subheading: "", body: "" }]);
@@ -46908,7 +46910,14 @@ ${suffix}`;
           onRemove: () => removeEditSection(s.id),
           placeholder: i === 0 ? "Share your knowledge, ask a question, or start a discussion..." : "Continue the discussion..."
         }
-      )), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: addEditSection, style: { width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", borderRadius: 8, background: "none", border: `1px dashed ${T.copper}60`, cursor: "pointer", marginBottom: 16, color: T.copper, fontFamily: sans, fontSize: 12, fontWeight: 600, letterSpacing: 0.5 } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 14, color: T.copper }), "ADD SECTION"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "HERO IMAGE"), /* @__PURE__ */ import_react4.default.createElement(PhotoUploader, { photos: editPhotos, onChange: setEditPhotos })))));
+      )), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: addEditSection, style: { width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", borderRadius: 8, background: "none", border: `1px dashed ${T.copper}60`, cursor: "pointer", marginBottom: 16, color: T.copper, fontFamily: sans, fontSize: 12, fontWeight: 600, letterSpacing: 0.5 } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 14, color: T.copper }), "ADD SECTION"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "HERO IMAGE"), /* @__PURE__ */ import_react4.default.createElement(PhotoUploader, { photos: editPhotos, onChange: setEditPhotos })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginTop: 32, paddingTop: 20, borderTop: `1px solid ${T.charcoal}` } }, !editDeleteConfirm ? /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setEditDeleteConfirm(true), style: { width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px", borderRadius: 8, background: "none", border: `1px solid ${T.red}40`, cursor: "pointer", color: T.red, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.5 } }, /* @__PURE__ */ import_react4.default.createElement(Trash2, { size: 14, color: T.red }), "DELETE THREAD") : /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: `${T.red}15`, border: `1px solid ${T.red}40`, borderRadius: 8, padding: 14 } }, /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, margin: "0 0 4px" } }, "Delete this thread?"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 12px", lineHeight: 1.5 } }, "This can't be undone. All replies and photos will be removed."), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: async () => {
+        const tid = selectedThread.id;
+        setEditDeleteConfirm(false);
+        setEditingThreadId(null);
+        setSelectedThread(null);
+        setView("threads");
+        if (onDeleteForumThread) await onDeleteForumThread(tid);
+      }, style: { flex: 1, padding: "10px 14px", borderRadius: 6, background: T.red, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, "DELETE"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setEditDeleteConfirm(false), style: { flex: 1, padding: "10px 14px", borderRadius: 6, background: T.charcoal, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 12, color: T.tertiary, fontWeight: 600, letterSpacing: 0.5 } }, "CANCEL")))))));
     }
     if (view === "threads" && selectedSub && selectedCat) {
       const threads = ((threadsBySub || {})[selectedSub.name] || []).slice().sort((a, b) => {
