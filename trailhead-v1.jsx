@@ -18906,6 +18906,10 @@ function SignupScreen({ onSignup, onGoToLogin, onSetProfilePic, onAddBuild, onAw
             handle: form.handle.trim().replace(/^@/, ""),
             terms_accepted_at: new Date().toISOString(),
             terms_version: TRAILHEAD_TOS_VERSION,
+            // wizard_pending is the cross-device flag the root reads to
+            // know this user hasn't finished the onboarding wizard yet.
+            // Cleared once OnboardingScreen.handleFinish runs.
+            wizard_pending: true,
           },
         },
       });
@@ -19316,6 +19320,10 @@ function OnboardingScreen({ session, onComplete, onSetProfilePic, onAddBuild }) 
           // Preserve whatever name we already have from the OAuth provider
           ...(prefillName ? { full_name: prefillName } : {}),
           first_build: buildName || model ? { name: buildName, year, make, model } : null,
+          // Wizard complete — clear the cross-device pending flag so a
+          // future SIGNED_IN routes straight to "app".
+          wizard_pending: false,
+          onboarded_at: new Date().toISOString(),
         },
       });
       // Option A: explicit client-side profile row update so that
@@ -23460,15 +23468,19 @@ export default function Trailhead() {
       // fast-loaded entity if it falls outside the bulk fetch window.
       const linkKind = initialSharedLink && initialSharedLink.kind;
       if (session && !initialSharedLink) {
-        // Skip login screen if already signed in. If this user has no
-        // handle yet (e.g. they interrupted OAuth onboarding last time),
-        // route them into the onboarding flow instead of the app.
-        // Resume any onboarding wizard checkpoint from localStorage so a
-        // refresh mid-flow lands on the same step.
+        // Skip login screen if already signed in. Route decision tree:
+        //   - localStorage `th_onboarding_step` set → resume that step
+        //     (same-device refresh during the wizard)
+        //   - `user_metadata.wizard_pending === true` → start at install-pwa
+        //     (cross-device: user clicked email link on a different device
+        //     than they signed up on, so localStorage is empty)
+        //   - no handle in user_metadata → onboarding (OAuth interrupted)
+        //   - otherwise → app
         const hasHandle = !!(session.user && session.user.user_metadata && session.user.user_metadata.handle);
+        const wizardPending = !!(session.user && session.user.user_metadata && session.user.user_metadata.wizard_pending);
         let resumed = null;
         try { resumed = typeof localStorage !== "undefined" ? localStorage.getItem("th_onboarding_step") : null; } catch (e) {}
-        const next = resumed || (hasHandle ? "app" : "onboarding");
+        const next = resumed || (wizardPending ? "install-pwa" : (hasHandle ? "app" : "onboarding"));
         setAuthState(next);
         if (next === "app" && hasHandle) hydrateUserData(session); // sets appReady when complete
         else setAppReady(true); // wizard screens need no hydrate
@@ -23506,15 +23518,19 @@ export default function Trailhead() {
         //   - mid-signup (email flow) → don't touch; SignupScreen owns transition
         //   - mid-wizard (verify-email, install-pwa, enable-push, onboarding) → stay
         //     where they are; the wizard step handlers own their own next() calls
+        //   - user_metadata.wizard_pending → start install-pwa (cross-device:
+        //     they clicked email verify link on a fresh browser)
         //   - missing handle in user_metadata → onboarding (OAuth new users)
         //   - otherwise → into the app
         const hasHandle = !!(session.user && session.user.user_metadata && session.user.user_metadata.handle);
+        const wizardPending = !!(session.user && session.user.user_metadata && session.user.user_metadata.wizard_pending);
         setAuthState(prev => {
           if (prev === "signup" || prev === "verify-email" || prev === "install-pwa" || prev === "enable-push" || prev === "onboarding") return prev;
+          if (wizardPending) return "install-pwa";
           return hasHandle ? "app" : "onboarding";
         });
         setIsGuest(false);
-        if (hasHandle) hydrateUserData(session);
+        if (hasHandle && !wizardPending) hydrateUserData(session);
       }
       if (event === "SIGNED_OUT") {
         hydratedForUidRef.current = null;

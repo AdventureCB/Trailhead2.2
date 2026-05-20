@@ -53933,7 +53933,11 @@ ${suffix}`;
               full_name: form.name.trim(),
               handle: form.handle.trim().replace(/^@/, ""),
               terms_accepted_at: (/* @__PURE__ */ new Date()).toISOString(),
-              terms_version: TRAILHEAD_TOS_VERSION
+              terms_version: TRAILHEAD_TOS_VERSION,
+              // wizard_pending is the cross-device flag the root reads to
+              // know this user hasn't finished the onboarding wizard yet.
+              // Cleared once OnboardingScreen.handleFinish runs.
+              wizard_pending: true
             }
           }
         });
@@ -54142,7 +54146,11 @@ ${suffix}`;
             handle: cleanHandle,
             // Preserve whatever name we already have from the OAuth provider
             ...prefillName ? { full_name: prefillName } : {},
-            first_build: buildName || model ? { name: buildName, year, make, model } : null
+            first_build: buildName || model ? { name: buildName, year, make, model } : null,
+            // Wizard complete — clear the cross-device pending flag so a
+            // future SIGNED_IN routes straight to "app".
+            wizard_pending: false,
+            onboarded_at: (/* @__PURE__ */ new Date()).toISOString()
           }
         });
         if (session && session.user && session.user.id) {
@@ -56689,12 +56697,13 @@ Questions about these Terms? Email team@lonepeakoverland.com.`;
         const linkKind = initialSharedLink && initialSharedLink.kind;
         if (session && !initialSharedLink) {
           const hasHandle = !!(session.user && session.user.user_metadata && session.user.user_metadata.handle);
+          const wizardPending = !!(session.user && session.user.user_metadata && session.user.user_metadata.wizard_pending);
           let resumed = null;
           try {
             resumed = typeof localStorage !== "undefined" ? localStorage.getItem("th_onboarding_step") : null;
           } catch (e) {
           }
-          const next = resumed || (hasHandle ? "app" : "onboarding");
+          const next = resumed || (wizardPending ? "install-pwa" : hasHandle ? "app" : "onboarding");
           setAuthState(next);
           if (next === "app" && hasHandle) hydrateUserData(session);
           else setAppReady(true);
@@ -56722,12 +56731,14 @@ Questions about these Terms? Email team@lonepeakoverland.com.`;
         setSupabaseSession(session || null);
         if (event === "SIGNED_IN" && session) {
           const hasHandle = !!(session.user && session.user.user_metadata && session.user.user_metadata.handle);
+          const wizardPending = !!(session.user && session.user.user_metadata && session.user.user_metadata.wizard_pending);
           setAuthState((prev) => {
             if (prev === "signup" || prev === "verify-email" || prev === "install-pwa" || prev === "enable-push" || prev === "onboarding") return prev;
+            if (wizardPending) return "install-pwa";
             return hasHandle ? "app" : "onboarding";
           });
           setIsGuest(false);
-          if (hasHandle) hydrateUserData(session);
+          if (hasHandle && !wizardPending) hydrateUserData(session);
         }
         if (event === "SIGNED_OUT") {
           hydratedForUidRef.current = null;
