@@ -72,7 +72,15 @@ const RANK_ICON_MAP = { Compass, Map, Binoculars, Navigation, Flame, Star, Shiel
 function getUserRank(points) {
   return RANK_TIERS.find(r => points >= r.min && points <= r.max) || RANK_TIERS[0];
 }
+// Module-level visibility flag — RankBadge + RankBadgeWithName both no-op
+// when false so we don't have to thread `isAdmin` through every render
+// site (~10 across feed, forum, comments). The `Trailhead` root updates
+// this via a useEffect any time the viewer's role changes. Defaults to
+// false so first render before hydrate doesn't flash a rank icon for
+// non-admins. Ranks is a v2 feature — admin-only until shipped.
+let RANKS_VISIBLE_TO_VIEWER = false;
 function RankBadge({ points, size = 12 }) {
+  if (!RANKS_VISIBLE_TO_VIEWER) return null;
   const rank = getUserRank(points);
   const Icon = RANK_ICON_MAP[rank.icon] || Star;
   return (
@@ -82,6 +90,7 @@ function RankBadge({ points, size = 12 }) {
   );
 }
 function RankBadgeWithName({ points, size = 10 }) {
+  if (!RANKS_VISIBLE_TO_VIEWER) return null;
   const rank = getUserRank(points);
   const Icon = RANK_ICON_MAP[rank.icon] || Star;
   return (
@@ -25901,10 +25910,19 @@ export default function Trailhead() {
     // Update breakdown
     const cat = REASON_TO_BREAKDOWN[reason] || "Other";
     setPointsBreakdown(prev => ({ ...prev, [cat]: (prev[cat] || 0) + amount }));
+    // Toast is gated to admin while Ranks is a v2 feature — points still
+    // accumulate silently so the data is there when Ranks ships for all.
+    if (!isAdmin) return;
     const toastId = Date.now() + Math.random();
     setPointsToasts(prev => [...prev, { id: toastId, amount, reason }]);
     setTimeout(() => setPointsToasts(prev => prev.filter(t => t.id !== toastId)), 2500);
   };
+  // Keep the module-level rank-visibility flag in sync with viewer role.
+  // Set during render (NOT in a useEffect) so the same render pass that
+  // flips isAdmin also shows/hides every RankBadge child component. An
+  // effect would lag one paint behind, briefly hiding badges on admin
+  // login or briefly flashing them after demotion.
+  RANKS_VISIBLE_TO_VIEWER = !!isAdmin;
   // Shared-link URL parsing now happens synchronously via parseInitialSharedLink()
   // above, seeded into initial useState values. This avoids the React reconciliation
   // error (removeChild NotFoundError) that occurred when we swapped LoginScreen for

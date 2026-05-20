@@ -42833,12 +42833,15 @@ ${suffix}`;
   function getUserRank(points) {
     return RANK_TIERS.find((r) => points >= r.min && points <= r.max) || RANK_TIERS[0];
   }
+  var RANKS_VISIBLE_TO_VIEWER = false;
   function RankBadge({ points, size = 12 }) {
+    if (!RANKS_VISIBLE_TO_VIEWER) return null;
     const rank = getUserRank(points);
     const Icon2 = RANK_ICON_MAP[rank.icon] || Star;
     return /* @__PURE__ */ import_react4.default.createElement("span", { title: rank.name, style: { display: "inline-flex", alignItems: "center", gap: 2, flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(Icon2, { size, color: rank.color, strokeWidth: 1.5 }));
   }
   function RankBadgeWithName({ points, size = 10 }) {
+    if (!RANKS_VISIBLE_TO_VIEWER) return null;
     const rank = getUserRank(points);
     const Icon2 = RANK_ICON_MAP[rank.icon] || Star;
     return /* @__PURE__ */ import_react4.default.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: 3, flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(Icon2, { size, color: rank.color, strokeWidth: 1.5 }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: "Trebuchet MS, Gill Sans, sans-serif", fontSize: size - 1, color: rank.color, fontWeight: 600, letterSpacing: 0.3 } }, rank.name));
@@ -58864,10 +58867,12 @@ ${suffix}`;
       USER_POINTS["KyleLPO"] = (USER_POINTS["KyleLPO"] || 12450) + amount;
       const cat = REASON_TO_BREAKDOWN[reason] || "Other";
       setPointsBreakdown((prev) => ({ ...prev, [cat]: (prev[cat] || 0) + amount }));
+      if (!isAdmin) return;
       const toastId = Date.now() + Math.random();
       setPointsToasts((prev) => [...prev, { id: toastId, amount, reason }]);
       setTimeout(() => setPointsToasts((prev) => prev.filter((t) => t.id !== toastId)), 2500);
     };
+    RANKS_VISIBLE_TO_VIEWER = !!isAdmin;
     const loginPointsAwarded = (0, import_react4.useRef)(false);
     (0, import_react4.useEffect)(() => {
       if (!loginPointsAwarded.current && authState === "app") {
