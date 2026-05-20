@@ -46141,7 +46141,10 @@ ${suffix}`;
       }
       if (item.type === "FORUM") {
         const snippet = item.body && item.body.length > 120 ? item.body.slice(0, 120) + "..." : item.body;
-        return /* @__PURE__ */ import_react4.default.createElement("div", { key: item.id, onClick: () => onOpenThread && onOpenThread(item.threadId, item.forumCat, item.forumSub), style: { ...cardStyle, cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "12px 16px", display: "flex", alignItems: "center", gap: 8, borderBottom: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement(MessageCircle, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1, fontWeight: 600 } }, "FORUM THREAD"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, marginLeft: 4 } }, item.forumCat, " > ", item.forumSub), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, marginLeft: "auto" } }, formatPostTime(item.time))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 28, height: 28, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.white } }, item.initial)), /* @__PURE__ */ import_react4.default.createElement("span", { onClick: (e) => {
+        return /* @__PURE__ */ import_react4.default.createElement("div", { key: item.id, onClick: () => onOpenThread && onOpenThread(item.threadId, item.forumCat, item.forumSub), style: { ...cardStyle, cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "12px 16px", display: "flex", alignItems: "center", gap: 8, borderBottom: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement(MessageCircle, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1, fontWeight: 600 } }, "FORUM THREAD"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, marginLeft: 4 } }, item.forumCat, " > ", item.forumSub), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, marginLeft: "auto" } }, formatPostTime(item.time))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 } }, /* @__PURE__ */ import_react4.default.createElement("div", { onClick: (e) => {
+          e.stopPropagation();
+          onViewUser2 && onViewUser2(item.userId || item.handle || item.user.replace(/\s/g, "_"));
+        }, style: { width: 28, height: 28, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", cursor: "pointer", flexShrink: 0 } }, item.avatarUrl ? /* @__PURE__ */ import_react4.default.createElement("img", { src: txImg(item.avatarUrl, 96), alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.white } }, item.initial)), /* @__PURE__ */ import_react4.default.createElement("span", { onClick: (e) => {
           e.stopPropagation();
           onViewUser2 && onViewUser2(item.userId || item.handle || item.user.replace(/\s/g, "_"));
         }, style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, cursor: "pointer" } }, item.user), /* @__PURE__ */ import_react4.default.createElement(RankBadge, { points: getPoints(item.user), size: 11 })), /* @__PURE__ */ import_react4.default.createElement("h3", { style: { fontFamily: serif, fontSize: 15, color: T.white, margin: "0 0 6px", lineHeight: 1.3 } }, item.title), snippet && /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "0 0 12px", lineHeight: 1.5 } }, snippet), item.image && /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 12, borderRadius: 8, overflow: "hidden" } }, /* @__PURE__ */ import_react4.default.createElement("img", { src: txImg(item.image, 480), alt: "", style: { width: "100%", maxHeight: 200, objectFit: "cover", display: "block" } })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 14, marginBottom: 4 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, /* @__PURE__ */ import_react4.default.createElement(Eye, { size: 14, color: T.tertiary, strokeWidth: 1.5 }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, (() => {
@@ -46869,7 +46872,9 @@ ${suffix}`;
             id: Date.now() + 1,
             type: "FORUM",
             user: currentUserName || "You",
+            handle: currentUserHandle || "",
             initial: (currentUserName || "Y").charAt(0).toUpperCase(),
+            avatarUrl: currentUserAvatar || null,
             title: created.title,
             body: null,
             ...created.photos && created.photos.length > 0 ? { image: created.photos[0].url || created.photos[0] } : {},
@@ -46997,7 +47002,9 @@ ${suffix}`;
           id: "forum_share_" + Date.now(),
           type: "FORUM",
           user: currentUserName || "You",
+          handle: currentUserHandle || "",
           initial: (currentUserName || "Y").charAt(0).toUpperCase(),
+          avatarUrl: currentUserAvatar || null,
           time: Date.now(),
           title,
           body: null,
@@ -59673,7 +59680,7 @@ ${suffix}`;
           cardBody: subtitle || `by ${author}`,
           cardImage: data.image || null,
           onSubmit: action === "feed" ? (caption) => {
-            addPost({ id: "shared_forum_" + Date.now(), type: "POST", user: currentProfile && currentProfile.full_name || "You", initial: (currentProfile && currentProfile.full_name || "Y").charAt(0).toUpperCase(), time: Date.now(), title: data.title, body: subtitle, subtitle: "Shared a forum post", caption: (caption || "").trim() || null, image: data.image || null, photoUrls: data.image ? [data.image] : void 0, likes: 0, comments: 0, threadId: data.threadId, forumCat: cat, forumSub: sub });
+            addPost({ id: "shared_forum_" + Date.now(), type: "POST", user: currentProfile && currentProfile.full_name || "You", handle: currentProfile && currentProfile.handle || "", initial: (currentProfile && currentProfile.full_name || "Y").charAt(0).toUpperCase(), avatarUrl: profilePic || currentProfile && currentProfile.avatar_url || null, time: Date.now(), title: data.title, body: subtitle, subtitle: "Shared a forum post", caption: (caption || "").trim() || null, image: data.image || null, photoUrls: data.image ? [data.image] : void 0, likes: 0, comments: 0, threadId: data.threadId, forumCat: cat, forumSub: sub });
             awardPoints(POINTS.feedPost, "Forum Shared");
             showErrorToast("Forum post shared to your feed");
           } : sendDm({ id: data.threadId || data.id, type: "FORUM", title: data.title, user: author, initial: (author[0] || "U").toUpperCase(), threadId: data.threadId, forumCat: cat, forumSub: sub, image: data.image || null })

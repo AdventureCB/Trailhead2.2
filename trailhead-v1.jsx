@@ -5361,8 +5361,10 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
           </div>
           <div style={{ padding: 16 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-              <div style={{ width: 28, height: 28, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <span style={{ fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.white }}>{item.initial}</span>
+              <div onClick={(e) => { e.stopPropagation(); onViewUser && onViewUser(item.userId || item.handle || item.user.replace(/\s/g, "_")); }} style={{ width: 28, height: 28, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", cursor: "pointer", flexShrink: 0 }}>
+                {item.avatarUrl
+                  ? <img src={txImg(item.avatarUrl, 96)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  : <span style={{ fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.white }}>{item.initial}</span>}
               </div>
               <span onClick={(e) => { e.stopPropagation(); onViewUser && onViewUser(item.userId || item.handle || item.user.replace(/\s/g, "_")); }} style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, cursor: "pointer" }}>{item.user}</span>
               <RankBadge points={getPoints(item.user)} size={11} />
@@ -6379,7 +6381,9 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
           id: Date.now() + 1,
           type: "FORUM",
           user: currentUserName || "You",
+          handle: currentUserHandle || "",
           initial: (currentUserName || "Y").charAt(0).toUpperCase(),
+          avatarUrl: currentUserAvatar || null,
           title: created.title,
           body: null,
           ...(created.photos && created.photos.length > 0 ? { image: (created.photos[0].url || created.photos[0]) } : {}),
@@ -6635,7 +6639,9 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
         id: "forum_share_" + Date.now(),
         type: "FORUM",
         user: currentUserName || "You",
+        handle: currentUserHandle || "",
         initial: (currentUserName || "Y").charAt(0).toUpperCase(),
+        avatarUrl: currentUserAvatar || null,
         time: Date.now(),
         title,
         body: null,
@@ -26784,7 +26790,7 @@ export default function Trailhead() {
         cardLabel: "FORUM POST", cardCta: "OPEN THREAD",
         cardTitle: data.title, cardBody: subtitle || `by ${author}`, cardImage: data.image || null,
         onSubmit: action === "feed"
-          ? (caption) => { addPost({ id: "shared_forum_" + Date.now(), type: "POST", user: (currentProfile && currentProfile.full_name) || "You", initial: ((currentProfile && currentProfile.full_name) || "Y").charAt(0).toUpperCase(), time: Date.now(), title: data.title, body: subtitle, subtitle: "Shared a forum post", caption: (caption || "").trim() || null, image: data.image || null, photoUrls: data.image ? [data.image] : undefined, likes: 0, comments: 0, threadId: data.threadId, forumCat: cat, forumSub: sub }); awardPoints(POINTS.feedPost, "Forum Shared"); showErrorToast("Forum post shared to your feed"); }
+          ? (caption) => { addPost({ id: "shared_forum_" + Date.now(), type: "POST", user: (currentProfile && currentProfile.full_name) || "You", handle: (currentProfile && currentProfile.handle) || "", initial: ((currentProfile && currentProfile.full_name) || "Y").charAt(0).toUpperCase(), avatarUrl: profilePic || (currentProfile && currentProfile.avatar_url) || null, time: Date.now(), title: data.title, body: subtitle, subtitle: "Shared a forum post", caption: (caption || "").trim() || null, image: data.image || null, photoUrls: data.image ? [data.image] : undefined, likes: 0, comments: 0, threadId: data.threadId, forumCat: cat, forumSub: sub }); awardPoints(POINTS.feedPost, "Forum Shared"); showErrorToast("Forum post shared to your feed"); }
           : sendDm({ id: data.threadId || data.id, type: "FORUM", title: data.title, user: author, initial: (author[0] || "U").toUpperCase(), threadId: data.threadId, forumCat: cat, forumSub: sub, image: data.image || null }),
       });
       return;
