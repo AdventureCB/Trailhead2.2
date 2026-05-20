@@ -12,7 +12,7 @@ BUNDLE_NAME="trailhead-bundle.${HASH}.js"
 rm -f ${DEPLOY_DIR}/trailhead-bundle.*.js
 
 # Build new bundle
-npx esbuild entry.jsx --bundle --format=iife --loader:.jsx=jsx --outfile=${DEPLOY_DIR}/${BUNDLE_NAME}
+npx esbuild entry.jsx --bundle --format=iife --loader:.jsx=jsx --minify --target=es2020 --outfile=${DEPLOY_DIR}/${BUNDLE_NAME}
 
 # Update index.html to reference new bundle. This shell is what crawlers
 # load when they hit the bare domain (/) — the api/preview function only
