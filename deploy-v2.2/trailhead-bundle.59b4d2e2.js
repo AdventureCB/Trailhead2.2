@@ -61225,7 +61225,13 @@ ${suffix}`;
       if (!t) return;
       if (t.slug) setPendingTripNav(t.slug);
       else setDetailTripId(t.id);
-    }, onStartNav: (route) => setActiveNavRoute(route), myTripPlans: allTripPlans, onOpenTripPlan: (id) => setDetailTripId(id), onNewTripPlan: () => requireAuth(() => enterPlanBuilder())(), initialUserName: currentProfile && currentProfile.full_name || supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name || null, initialUserHandle: currentProfile && currentProfile.handle || supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle || null, initialUserBio: currentProfile ? currentProfile.bio : null, initialIsPublic: currentProfile ? currentProfile.is_public : null, onSaveProfile: saveProfile, onViewUser: openUserProfile, onLogout: async () => {
+    }, onStartNav: (route) => setActiveNavRoute(route), myTripPlans: allTripPlans, onOpenTripPlan: (id) => setDetailTripId(id), onNewTripPlan: requireAuth(() => {
+      setProfileStack([]);
+      setShowRecovery(false);
+      setShowCompose(false);
+      setScreen("routes");
+      enterPlanBuilder();
+    }), initialUserName: currentProfile && currentProfile.full_name || supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name || null, initialUserHandle: currentProfile && currentProfile.handle || supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle || null, initialUserBio: currentProfile ? currentProfile.bio : null, initialIsPublic: currentProfile ? currentProfile.is_public : null, onSaveProfile: saveProfile, onViewUser: openUserProfile, onLogout: async () => {
       try {
         await supabase.auth.signOut();
       } catch (e) {
