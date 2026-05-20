@@ -66,6 +66,14 @@ cat > ${DEPLOY_DIR}/index.html << HTMLEOF
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { background: #111111; overflow-x: hidden; }
   #root { width: 100%; min-height: 100vh; }
+  /* Suppress iOS Safari's auto-zoom on input focus by forcing the form
+     field text size to 16px on touch devices. Inline styles in the app
+     set inputs to 13-14px which trips the zoom heuristic; !important is
+     required to beat per-element inline style specificity. Desktop and
+     non-touch devices keep the designed font sizes. */
+  @media (hover: none) and (pointer: coarse) {
+    input, textarea, select { font-size: 16px !important; }
+  }
 </style>
 <script>
 window.onerror = function(msg, url, line, col, err) {
