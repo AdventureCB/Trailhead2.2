@@ -25171,7 +25171,29 @@ export default function Trailhead() {
     return () => { cancelled = true; };
   }, [isAdmin]);
 
-  const [notifPrefs, setNotifPrefs] = useState({ likes: true, comments: true, replies: true, follows: true, mentions: true, push: false });
+  // Notification toggle preferences. Persisted to localStorage so all
+  // toggles (including push) survive page refreshes. The `push` toggle
+  // is additionally verified against the browser's actual pushManager
+  // subscription state in an effect below — if the user revoked
+  // permission OR the subscription was wiped by the browser (clear-site-
+  // data, PWA reinstall, etc.) we flip `push` back to false on next boot.
+  const NOTIF_PREFS_DEFAULT = { likes: true, comments: true, replies: true, follows: true, mentions: true, push: false };
+  const [notifPrefs, setNotifPrefsState] = useState(() => {
+    if (typeof localStorage === "undefined") return NOTIF_PREFS_DEFAULT;
+    try {
+      const raw = localStorage.getItem("th_notif_prefs");
+      if (!raw) return NOTIF_PREFS_DEFAULT;
+      const parsed = JSON.parse(raw);
+      return { ...NOTIF_PREFS_DEFAULT, ...parsed };
+    } catch (e) { return NOTIF_PREFS_DEFAULT; }
+  });
+  const setNotifPrefs = (updater) => {
+    setNotifPrefsState(prev => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      try { localStorage.setItem("th_notif_prefs", JSON.stringify(next)); } catch (e) { /* quota / privacy mode */ }
+      return next;
+    });
+  };
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [showDM, setShowDM] = useState(false);
   // initialConvId — set after find/create resolves; DMScreen consumes once.
@@ -25590,6 +25612,38 @@ export default function Trailhead() {
 
   // ─── Web Push: subscribe / unsubscribe / status ─────────────────────────
   // Registers /sw.js, asks the browser for notification permission, gets a
+  // Reconcile the persisted `notifPrefs.push` toggle against the browser's
+  // actual pushManager state on boot. Covers four cases:
+  //   1. Toggle persisted = true AND subscription still active → leave alone
+  //   2. Toggle persisted = true BUT subscription gone (revoked / wiped)
+  //      → flip to false so the UI reflects reality
+  //   3. Toggle persisted = false BUT subscription exists (e.g. enabled on
+  //      another device that synced via account-level state — rare) → flip
+  //      to true so the toggle matches what's actually firing
+  //   4. Not supported / no permission → leave false
+  // Runs once on mount.
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") {
+      if (notifPrefs.push) setNotifPrefs(prev => ({ ...prev, push: false }));
+      return;
+    }
+    (async () => {
+      try {
+        const reg = await navigator.serviceWorker.getRegistration("/sw.js");
+        if (!reg) {
+          if (notifPrefs.push) setNotifPrefs(prev => ({ ...prev, push: false }));
+          return;
+        }
+        const sub = await reg.pushManager.getSubscription();
+        const actuallySubscribed = !!sub;
+        if (notifPrefs.push !== actuallySubscribed) {
+          setNotifPrefs(prev => ({ ...prev, push: actuallySubscribed }));
+        }
+      } catch (e) { /* non-fatal */ }
+    })();
+  }, []);
+
   // PushSubscription, and persists it to public.push_subscriptions keyed by
   // endpoint (so re-subscribing on the same device updates instead of adding
   // duplicate rows). Returns true on success, false if the user denied

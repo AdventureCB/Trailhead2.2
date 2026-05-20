@@ -58156,7 +58156,28 @@ ${suffix}`;
         cancelled = true;
       };
     }, [isAdmin]);
-    const [notifPrefs, setNotifPrefs] = (0, import_react4.useState)({ likes: true, comments: true, replies: true, follows: true, mentions: true, push: false });
+    const NOTIF_PREFS_DEFAULT = { likes: true, comments: true, replies: true, follows: true, mentions: true, push: false };
+    const [notifPrefs, setNotifPrefsState] = (0, import_react4.useState)(() => {
+      if (typeof localStorage === "undefined") return NOTIF_PREFS_DEFAULT;
+      try {
+        const raw = localStorage.getItem("th_notif_prefs");
+        if (!raw) return NOTIF_PREFS_DEFAULT;
+        const parsed = JSON.parse(raw);
+        return { ...NOTIF_PREFS_DEFAULT, ...parsed };
+      } catch (e) {
+        return NOTIF_PREFS_DEFAULT;
+      }
+    });
+    const setNotifPrefs = (updater) => {
+      setNotifPrefsState((prev) => {
+        const next = typeof updater === "function" ? updater(prev) : updater;
+        try {
+          localStorage.setItem("th_notif_prefs", JSON.stringify(next));
+        } catch (e) {
+        }
+        return next;
+      });
+    };
     const [showGlobalSearch, setShowGlobalSearch] = (0, import_react4.useState)(false);
     const [showDM, setShowDM] = (0, import_react4.useState)(false);
     const [dmInitialConvId, setDmInitialConvId] = (0, import_react4.useState)(null);
@@ -58532,6 +58553,28 @@ ${suffix}`;
         return null;
       }
     };
+    (0, import_react4.useEffect)(() => {
+      if (typeof navigator === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) return;
+      if (typeof Notification === "undefined" || Notification.permission !== "granted") {
+        if (notifPrefs.push) setNotifPrefs((prev) => ({ ...prev, push: false }));
+        return;
+      }
+      (async () => {
+        try {
+          const reg = await navigator.serviceWorker.getRegistration("/sw.js");
+          if (!reg) {
+            if (notifPrefs.push) setNotifPrefs((prev) => ({ ...prev, push: false }));
+            return;
+          }
+          const sub = await reg.pushManager.getSubscription();
+          const actuallySubscribed = !!sub;
+          if (notifPrefs.push !== actuallySubscribed) {
+            setNotifPrefs((prev) => ({ ...prev, push: actuallySubscribed }));
+          }
+        } catch (e) {
+        }
+      })();
+    }, []);
     const subscribeToPush = async () => {
       const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
       if (!uid) return false;
