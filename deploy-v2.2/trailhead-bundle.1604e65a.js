@@ -55588,6 +55588,9 @@ ${suffix}`;
       }
     });
     const [currentProfile, setCurrentProfile] = (0, import_react4.useState)(null);
+    const currentRole = currentProfile && currentProfile.role || "user";
+    const isAdmin = currentRole === "admin";
+    const isAmbassador = currentRole === "ambassador" || isAdmin;
     const loadTripBySlugFast = async (slug) => {
       if (!slug || typeof slug !== "string") return false;
       try {
@@ -60306,9 +60309,6 @@ ${suffix}`;
     const isProfile = profileStack.length > 0;
     const isOtherProfile = profileStack[0] === "user";
     const isOverlay = isProfile || showRecovery || showCompose;
-    const currentRole = currentProfile && currentProfile.role || "user";
-    const isAdmin = currentRole === "admin";
-    const isAmbassador = currentRole === "ambassador" || isAdmin;
     if (authState === "login") {
       return /* @__PURE__ */ import_react4.default.createElement(
         LoginScreen,
