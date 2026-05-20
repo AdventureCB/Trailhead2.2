@@ -54,6 +54,90 @@ const escapeHtml = (s) =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 
+// Strip script tags + event handlers + javascript: URIs from user-generated
+// HTML before injecting into the SSR shell. Forum body HTML comes from a
+// contenteditable on the client; benign in practice but we belt-and-suspenders
+// it server-side because we're echoing it raw into the initial response.
+function sanitizeForumHtml(html) {
+  if (!html) return "";
+  return String(html)
+    .replace(/<\s*(script|iframe|object|embed|style|link|meta|form)\b[\s\S]*?<\s*\/\s*\1\s*>/gi, "")
+    .replace(/<\s*(script|iframe|object|embed|style|link|meta|form)\b[^>]*\/?\s*>/gi, "")
+    .replace(/\son\w+\s*=\s*"[^"]*"/gi, "")
+    .replace(/\son\w+\s*=\s*'[^']*'/gi, "")
+    .replace(/\son\w+\s*=\s*[^\s>]+/gi, "")
+    .replace(/javascript\s*:/gi, "");
+}
+
+// Build the server-rendered article HTML for a forum thread. Injected into
+// the SPA root div so crawlers (Googlebot, Bingbot) see the actual content
+// in the initial HTML response — no "Loading Trailhead…" stall — and users
+// loading the page over slow connections see the article paint immediately
+// before the React bundle parses. React replaces the root's children on
+// mount, so this content is transient for humans but indexable for bots.
+function buildForumThreadSSR(article, canonicalUrl, origin) {
+  if (!article || !article.title) return "";
+  const titleHtml = escapeHtml(article.title);
+  const author = article.author || {};
+  const authorName = escapeHtml(author.name || "Author");
+  const authorHandle = author.handle ? escapeHtml(author.handle) : "";
+  const authorAvatar = author.avatarUrl ? escapeHtml(author.avatarUrl) : "";
+  const dateStr = article.createdAt
+    ? new Date(article.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
+    : "";
+  // Assemble sections HTML. Each subheading becomes <h2>; bodies are
+  // inserted after sanitization. Falls back to the legacy body blob if no
+  // structured sections exist.
+  let sectionsHtml = "";
+  if (Array.isArray(article.sections) && article.sections.length > 0) {
+    sectionsHtml = article.sections.map(s => {
+      if (!s) return "";
+      const sub = (s.subheading || "").trim();
+      const body = sanitizeForumHtml((s.body || "").trim());
+      if (!sub && !body) return "";
+      const subPart = sub ? `<h2 style="font-size:22px;font-family:'Trebuchet MS',sans-serif;color:#fff;margin:28px 0 10px;line-height:1.3;font-weight:700;">${escapeHtml(sub)}</h2>` : "";
+      const bodyPart = body ? `<div style="font-size:16px;color:#F5F2ED;">${body}</div>` : "";
+      return subPart + bodyPart;
+    }).join("\n");
+  } else if (article.bodyFallback) {
+    sectionsHtml = `<div style="font-size:16px;color:#F5F2ED;">${sanitizeForumHtml(article.bodyFallback)}</div>`;
+  }
+  // Crumbs link the category + subcategory slugs back to canonical-style
+  // URLs (the category/subcategory pages aren't routed yet, but anchors
+  // give Google the topical context).
+  const catSlug = article.categorySlug ? escapeHtml(article.categorySlug) : "";
+  const subSlug = article.subcategorySlug ? escapeHtml(article.subcategorySlug) : "";
+  const crumbs = [
+    `<a href="${origin}/" style="color:#C49A6C;text-decoration:none;">Trailhead</a>`,
+    `<a href="${origin}/" style="color:#C49A6C;text-decoration:none;">Forum</a>`,
+    subSlug ? `<a href="${origin}/forum/${subSlug}" style="color:#C49A6C;text-decoration:none;">${subSlug.replace(/-/g, " ")}</a>` : "",
+  ].filter(Boolean).join(' <span style="color:#8B7D6B;">/</span> ');
+  // Avatar block: real image if available, else copper initial circle.
+  const initial = (author.name || "A").charAt(0).toUpperCase();
+  const avatarBlock = authorAvatar
+    ? `<img src="${authorAvatar}" alt="${authorName}" style="width:48px;height:48px;border-radius:50%;object-fit:cover;flex-shrink:0;" />`
+    : `<div style="width:48px;height:48px;border-radius:50%;background:#C49A6C;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><span style="font-family:'Trebuchet MS',sans-serif;font-size:18px;font-weight:700;color:#fff;">${escapeHtml(initial)}</span></div>`;
+  return `
+    <article style="max-width:720px;margin:0 auto;padding:32px 20px 80px;color:#fff;background:#111111;min-height:100vh;font-family:'Source Serif 4',Georgia,serif;line-height:1.7;box-sizing:border-box;">
+      <nav style="font-family:'Trebuchet MS',sans-serif;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:24px;color:#8B7D6B;">
+        ${crumbs}
+      </nav>
+      <h1 style="margin:0 0 16px;font-size:32px;font-family:'Trebuchet MS','Gill Sans',sans-serif;line-height:1.2;font-weight:700;color:#fff;">${titleHtml}</h1>
+      <div style="display:flex;align-items:center;gap:14px;padding:16px 0 24px;margin-bottom:24px;border-bottom:1px solid #2A2A28;">
+        ${avatarBlock}
+        <div style="display:flex;flex-direction:column;gap:2px;font-family:'Trebuchet MS',sans-serif;">
+          <span style="font-size:15px;font-weight:700;color:#fff;">${authorName}</span>
+          <span style="font-size:12px;color:#8B7D6B;">${authorHandle ? `<span style="color:#C49A6C;">@${authorHandle}</span> · ` : ""}${escapeHtml(dateStr)}</span>
+        </div>
+      </div>
+      ${sectionsHtml}
+      <footer style="margin-top:48px;padding-top:24px;border-top:1px solid #2A2A28;font-family:'Trebuchet MS',sans-serif;font-size:12px;color:#8B7D6B;">
+        Posted by <a href="${origin}/" style="color:#C49A6C;text-decoration:none;">${authorName}</a> ${authorHandle ? `(@${authorHandle})` : ""} on the <a href="${origin}/" style="color:#C49A6C;text-decoration:none;">Trailhead Overlanding Forum</a> — the community for overlanders sharing trips, builds, and trail knowledge.
+      </footer>
+    </article>
+  `;
+}
+
 // Mapbox Static Images — kind-tinted pin centered on the entity. 1200x630
 // is the recommended OG image aspect (1.91:1). Zoom 14 is tuned so the
 // pin reads clearly on iMessage's compact card preview (was 12 — too
@@ -283,7 +367,7 @@ async function resolveEntity(type, id) {
   if (type === "forum-thread") {
     const row = await supabaseFetch(
       "forum_threads",
-      `slug=eq.${encodeURIComponent(id)}&select=id,title,body,photos,category_slug,subcategory_slug,view_count,created_at,user_id&limit=1`
+      `slug=eq.${encodeURIComponent(id)}&select=id,title,body,sections,photos,category_slug,subcategory_slug,view_count,created_at,updated_at,user_id&limit=1`
     );
     if (!row) {
       return {
@@ -303,28 +387,48 @@ async function resolveEntity(type, id) {
       .replace(/\s+/g, " ")
       .trim();
     const description = (plainBody || `Discussion on the Trailhead community forum.`).slice(0, 200);
-    // Lift author handle for JSON-LD if available — single round trip.
-    let authorName = null;
+    // Pull full author profile for E-E-A-T: name + handle + avatar all
+    // feed into the byline + JSON-LD Person schema.
+    let author = null;
     if (row.user_id) {
       const prof = await supabaseFetch(
         "profiles",
-        `id=eq.${encodeURIComponent(row.user_id)}&select=full_name,handle&limit=1`
+        `id=eq.${encodeURIComponent(row.user_id)}&select=full_name,handle,avatar_url,bio&limit=1`
       );
-      if (prof) authorName = prof.full_name || prof.handle || null;
+      if (prof) {
+        author = {
+          name: prof.full_name || prof.handle || "Author",
+          handle: prof.handle || "",
+          avatarUrl: prof.avatar_url || null,
+          bio: prof.bio || null,
+        };
+      }
     }
     return {
       title: `${row.title} · Trailhead Forum`,
       description,
       image: heroUrl,
       imageAlt: heroAlt || `${row.title} discussion on Trailhead Forum`,
-      // Carry extra fields so the caller can emit JSON-LD.
+      // Carry extra fields so the caller can emit JSON-LD + SSR article.
       jsonLd: {
         kind: "DiscussionForumPosting",
         title: row.title,
         body: plainBody,
         createdAt: row.created_at,
-        author: authorName,
+        modifiedAt: row.updated_at && row.updated_at !== row.created_at ? row.updated_at : null,
+        author,
         url: null, // filled in by caller
+      },
+      // SSR article payload — caller injects into the root div so crawlers
+      // + initial-load humans see the actual content instead of "Loading…".
+      article: {
+        title: row.title,
+        sections: Array.isArray(row.sections) ? row.sections : [],
+        bodyFallback: row.body || "",
+        createdAt: row.created_at,
+        author,
+        categorySlug: row.category_slug,
+        subcategorySlug: row.subcategory_slug,
       },
     };
   }
@@ -414,17 +518,41 @@ module.exports = async function handler(req, res) {
 
   // Emit JSON-LD structured data when the resolver returned it. Lets Google
   // index forum threads as DiscussionForumPosting (rich result eligible).
+  // The full Person schema for author carries name + handle + url + image,
+  // which is what Google's E-E-A-T rater pulls expertise/identity signals
+  // from when attributing the article.
   let jsonLdTag = "";
   if (meta.jsonLd && meta.jsonLd.kind === "DiscussionForumPosting") {
+    const a = meta.jsonLd.author || null;
+    const origin = `${proto}://${host}`;
+    const authorNode = a
+      ? Object.fromEntries(Object.entries({
+          "@type": "Person",
+          name: a.name || undefined,
+          alternateName: a.handle ? `@${a.handle}` : undefined,
+          identifier: a.handle || undefined,
+          image: a.avatarUrl || undefined,
+          // Author "url" should resolve to a profile page. We don't have a
+          // public /users/<handle> route yet, so we omit it and add it back
+          // when that ships (see project_seo_blocked_on_domain).
+        }).filter(([, v]) => v !== undefined))
+      : undefined;
     const ld = {
       "@context": "https://schema.org",
       "@type": "DiscussionForumPosting",
       headline: meta.jsonLd.title,
       articleBody: (meta.jsonLd.body || "").slice(0, 5000),
       datePublished: meta.jsonLd.createdAt || undefined,
+      dateModified: meta.jsonLd.modifiedAt || meta.jsonLd.createdAt || undefined,
       url: canonicalUrl,
-      author: meta.jsonLd.author ? { "@type": "Person", name: meta.jsonLd.author } : undefined,
-      publisher: { "@type": "Organization", name: "Trailhead", url: `${proto}://${host}/` },
+      mainEntityOfPage: canonicalUrl,
+      author: authorNode,
+      publisher: {
+        "@type": "Organization",
+        name: "Trailhead",
+        url: `${origin}/`,
+        logo: { "@type": "ImageObject", url: `${origin}/lone-peak-flag.png` },
+      },
     };
     // Strip undefined values so the JSON serializes cleanly.
     const clean = Object.fromEntries(Object.entries(ld).filter(([, v]) => v !== undefined));
@@ -438,6 +566,18 @@ module.exports = async function handler(req, res) {
   // tabs / search results show a meaningful name even before the SPA mounts.
   html = html.replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(meta.title)}</title>`);
   html = html.replace("</head>", `${tags}${jsonLdTag ? "\n" + jsonLdTag : ""}\n</head>`);
+  // SSR article: inject the article HTML into the SPA root div so crawlers
+  // see real content in the initial HTML response (not "Loading Trailhead").
+  // React's createRoot.render() replaces the root's children on mount, so
+  // human visitors see the article paint immediately then transition to
+  // the SPA's version. Currently only forum threads — extend to other
+  // entities when they ship server-rendered article versions.
+  if (type === "forum-thread" && meta.article) {
+    const ssr = buildForumThreadSSR(meta.article, canonicalUrl, `${proto}://${host}`);
+    if (ssr) {
+      html = html.replace(/(<div id="root"[^>]*>)([\s\S]*?)(<\/div>)/i, `$1${ssr}$3`);
+    }
+  }
 
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   // Short edge cache so updated entities propagate within minutes.
