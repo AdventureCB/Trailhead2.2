@@ -24,7 +24,7 @@ cat > ${DEPLOY_DIR}/index.html << HTMLEOF
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Trailhead — The Overlanding Community App by Lone Peak Overland</title>
 <meta name="description" content="Trailhead is the social app for overlanders. Discover camping spots, share trip reports, plan trips, post your build, and connect with the overlanding community.">
 <meta name="author" content="Lone Peak Overland">
