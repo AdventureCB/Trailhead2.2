@@ -54087,7 +54087,8 @@ ${suffix}`;
   function OnboardingScreen({ session, onComplete, onSetProfilePic, onAddBuild }) {
     const prefillName = session && session.user && session.user.user_metadata && (session.user.user_metadata.full_name || session.user.user_metadata.name) || "";
     const prefillAvatar = session && session.user && session.user.user_metadata && session.user.user_metadata.avatar_url || null;
-    const [handle, setHandle] = (0, import_react4.useState)("");
+    const prefillHandle = session && session.user && session.user.user_metadata && session.user.user_metadata.handle || "";
+    const [handle, setHandle] = (0, import_react4.useState)(prefillHandle);
     const [signupRole, setSignupRole] = (0, import_react4.useState)("user");
     const [buildName, setBuildName] = (0, import_react4.useState)("");
     const [year, setYear] = (0, import_react4.useState)("");
@@ -54147,9 +54148,15 @@ ${suffix}`;
             // Preserve whatever name we already have from the OAuth provider
             ...prefillName ? { full_name: prefillName } : {},
             first_build: buildName || model ? { name: buildName, year, make, model } : null,
-            // Wizard complete — clear the cross-device pending flag so a
-            // future SIGNED_IN routes straight to "app".
+            // Browser-phase wizard complete. Two follow-on flags:
+            //   wizard_pending=false → cross-device flag cleared; future
+            //     SIGNED_IN no longer routes to install-pwa
+            //   wizard_pwa_pending=true → tells the in-app detection effect
+            //     to fire PushPromptModal → WelcomeStartModal sequentially
+            //     the first time this user opens the app in standalone (PWA)
+            //     mode. Cleared once the welcome modal dismisses.
             wizard_pending: false,
+            wizard_pwa_pending: true,
             onboarded_at: (/* @__PURE__ */ new Date()).toISOString()
           }
         });
@@ -54208,7 +54215,7 @@ ${suffix}`;
       setLoading(false);
       onComplete();
     };
-    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.charcoal, height: "100vh", maxWidth: 430, margin: "0 auto", display: "flex", flexDirection: "column", overflow: "hidden" } }, /* @__PURE__ */ import_react4.default.createElement("div", { className: "th-scroll", style: { flex: 1, overflowY: "auto", minHeight: 0, display: "flex", flexDirection: "column" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "40px 24px 24px", textAlign: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 8 } }, /* @__PURE__ */ import_react4.default.createElement(Mountain, { size: 24, color: T.red, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("h1", { style: { fontFamily: sans, fontSize: 22, color: T.white, margin: "0 0 4px", fontWeight: 700, letterSpacing: 3 } }, "SET UP YOUR PROFILE"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "8px auto 0", maxWidth: 300, lineHeight: 1.5 } }, prefillName ? `Welcome, ${prefillName.split(" ")[0]}. ` : "", "Pick a username and add your rig to join the community.")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 24px 32px", flex: 1 } }, error && /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: `${T.red}15`, border: `1px solid ${T.red}30`, borderRadius: 8, padding: "10px 14px", marginBottom: 16, display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement(TriangleAlert, { size: 14, color: T.red }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 13, color: T.red } }, error)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 20 } }, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "USERNAME"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", fontFamily: serif, fontSize: 14, color: T.tertiary } }, "@"), /* @__PURE__ */ import_react4.default.createElement("input", { value: handle, onChange: (e) => setHandle(e.target.value), placeholder: "trailname", style: { ...inputStyle, paddingLeft: 32 }, onFocus: (e) => e.target.style.borderColor = T.copper, onBlur: (e) => e.target.style.borderColor = T.charcoal }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 20 } }, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "ACCOUNT TYPE"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("button", { type: "button", onClick: () => setSignupRole("user"), style: { flex: 1, padding: "14px 12px", borderRadius: 8, background: signupRole === "user" ? `${T.red}18` : T.darkCard, border: signupRole === "user" ? `1px solid ${T.red}` : `1px solid ${T.charcoal}`, cursor: "pointer", textAlign: "left" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: signupRole === "user" ? T.red : T.white, fontWeight: 700, letterSpacing: 0.5, display: "block", marginBottom: 4 } }, "USER"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 11, color: T.tertiary, lineHeight: 1.4, display: "block" } }, "Browse, post, comment, build your rig.")), /* @__PURE__ */ import_react4.default.createElement("button", { type: "button", onClick: () => setSignupRole("ambassador"), style: { flex: 1, padding: "14px 12px", borderRadius: 8, background: signupRole === "ambassador" ? `${T.copper}25` : T.darkCard, border: signupRole === "ambassador" ? `1px solid ${T.copper}` : `1px solid ${T.charcoal}`, cursor: "pointer", textAlign: "left" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: signupRole === "ambassador" ? T.copper : T.white, fontWeight: 700, letterSpacing: 0.5, display: "block", marginBottom: 4 } }, "REQUEST AMBASSADOR"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 11, color: T.tertiary, lineHeight: 1.4, display: "block" } }, "Account starts as a user. Admin reviews + approves Ambassador requests.")))), /* @__PURE__ */ import_react4.default.createElement("input", { ref: signupPicRef, type: "file", accept: "image/*", onChange: handlePicUpload, style: { display: "none" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkCard, borderRadius: 12, padding: 20, marginBottom: 20, textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", display: "inline-block", marginBottom: 12 } }, signupPic ? /* @__PURE__ */ import_react4.default.createElement("img", { src: txImg(signupPic, 160), alt: "", style: { width: 80, height: 80, borderRadius: "50%", objectFit: "cover", border: `3px solid ${T.copper}` } }) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 80, height: 80, borderRadius: "50%", background: T.charcoal, display: "flex", alignItems: "center", justifyContent: "center", border: `3px dashed ${T.copper}40` } }, /* @__PURE__ */ import_react4.default.createElement(Camera, { size: 28, color: T.copper, strokeWidth: 1.2, style: { opacity: 0.5 } })), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => signupPicRef.current && signupPicRef.current.click(), style: { position: "absolute", bottom: -2, right: -2, width: 28, height: 28, borderRadius: "50%", background: T.copper, border: `2px solid ${T.darkCard}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 14, color: T.white }))), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, display: "block", marginBottom: 2 } }, "Profile Photo"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 11, color: T.tertiary } }, "Help others recognize you on the trail")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkCard, borderRadius: 12, padding: 20, marginBottom: 20 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 40, height: 40, borderRadius: 10, background: `${T.red}15`, display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Wrench, { size: 18, color: T.red })), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 600, display: "block" } }, "Your First Build"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 11, color: T.tertiary } }, "Optional \u2014 you can add more vehicles later"))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "BUILD NAME"), /* @__PURE__ */ import_react4.default.createElement("input", { value: buildName, onChange: (e) => setBuildName(e.target.value), placeholder: 'e.g. "The Highlander"', style: inputStyle, onFocus: (e) => e.target.style.borderColor = T.copper, onBlur: (e) => e.target.style.borderColor = T.charcoal })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "YEAR"), yearMode === "select" ? /* @__PURE__ */ import_react4.default.createElement(
+    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.charcoal, height: "100vh", maxWidth: 430, margin: "0 auto", display: "flex", flexDirection: "column", overflow: "hidden" } }, /* @__PURE__ */ import_react4.default.createElement("div", { className: "th-scroll", style: { flex: 1, overflowY: "auto", minHeight: 0, display: "flex", flexDirection: "column" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "40px 24px 24px", textAlign: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 8 } }, /* @__PURE__ */ import_react4.default.createElement(Mountain, { size: 24, color: T.red, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("h1", { style: { fontFamily: sans, fontSize: 22, color: T.white, margin: "0 0 4px", fontWeight: 700, letterSpacing: 3 } }, "SET UP YOUR PROFILE"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "8px auto 0", maxWidth: 300, lineHeight: 1.5 } }, prefillName ? `Welcome, ${prefillName.split(" ")[0]}. ` : "", "Pick a username and add your rig to join the community.")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 24px 32px", flex: 1 } }, error && /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: `${T.red}15`, border: `1px solid ${T.red}30`, borderRadius: 8, padding: "10px 14px", marginBottom: 16, display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement(TriangleAlert, { size: 14, color: T.red }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 13, color: T.red } }, error)), !prefillHandle && /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 20 } }, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "USERNAME"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", fontFamily: serif, fontSize: 14, color: T.tertiary } }, "@"), /* @__PURE__ */ import_react4.default.createElement("input", { value: handle, onChange: (e) => setHandle(e.target.value), placeholder: "trailname", style: { ...inputStyle, paddingLeft: 32 }, onFocus: (e) => e.target.style.borderColor = T.copper, onBlur: (e) => e.target.style.borderColor = T.charcoal }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 20 } }, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "ACCOUNT TYPE"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("button", { type: "button", onClick: () => setSignupRole("user"), style: { flex: 1, padding: "14px 12px", borderRadius: 8, background: signupRole === "user" ? `${T.red}18` : T.darkCard, border: signupRole === "user" ? `1px solid ${T.red}` : `1px solid ${T.charcoal}`, cursor: "pointer", textAlign: "left" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: signupRole === "user" ? T.red : T.white, fontWeight: 700, letterSpacing: 0.5, display: "block", marginBottom: 4 } }, "USER"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 11, color: T.tertiary, lineHeight: 1.4, display: "block" } }, "Browse, post, comment, build your rig.")), /* @__PURE__ */ import_react4.default.createElement("button", { type: "button", onClick: () => setSignupRole("ambassador"), style: { flex: 1, padding: "14px 12px", borderRadius: 8, background: signupRole === "ambassador" ? `${T.copper}25` : T.darkCard, border: signupRole === "ambassador" ? `1px solid ${T.copper}` : `1px solid ${T.charcoal}`, cursor: "pointer", textAlign: "left" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: signupRole === "ambassador" ? T.copper : T.white, fontWeight: 700, letterSpacing: 0.5, display: "block", marginBottom: 4 } }, "REQUEST AMBASSADOR"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 11, color: T.tertiary, lineHeight: 1.4, display: "block" } }, "Account starts as a user. Admin reviews + approves Ambassador requests.")))), /* @__PURE__ */ import_react4.default.createElement("input", { ref: signupPicRef, type: "file", accept: "image/*", onChange: handlePicUpload, style: { display: "none" } }), /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkCard, borderRadius: 12, padding: 20, marginBottom: 20, textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "relative", display: "inline-block", marginBottom: 12 } }, signupPic ? /* @__PURE__ */ import_react4.default.createElement("img", { src: txImg(signupPic, 160), alt: "", style: { width: 80, height: 80, borderRadius: "50%", objectFit: "cover", border: `3px solid ${T.copper}` } }) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 80, height: 80, borderRadius: "50%", background: T.charcoal, display: "flex", alignItems: "center", justifyContent: "center", border: `3px dashed ${T.copper}40` } }, /* @__PURE__ */ import_react4.default.createElement(Camera, { size: 28, color: T.copper, strokeWidth: 1.2, style: { opacity: 0.5 } })), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => signupPicRef.current && signupPicRef.current.click(), style: { position: "absolute", bottom: -2, right: -2, width: 28, height: 28, borderRadius: "50%", background: T.copper, border: `2px solid ${T.darkCard}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 14, color: T.white }))), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, display: "block", marginBottom: 2 } }, "Profile Photo"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 11, color: T.tertiary } }, "Help others recognize you on the trail")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkCard, borderRadius: 12, padding: 20, marginBottom: 20 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 40, height: 40, borderRadius: 10, background: `${T.red}15`, display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Wrench, { size: 18, color: T.red })), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 600, display: "block" } }, "Your First Build"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: serif, fontSize: 11, color: T.tertiary } }, "Optional \u2014 you can add more vehicles later"))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "BUILD NAME"), /* @__PURE__ */ import_react4.default.createElement("input", { value: buildName, onChange: (e) => setBuildName(e.target.value), placeholder: 'e.g. "The Highlander"', style: inputStyle, onFocus: (e) => e.target.style.borderColor = T.copper, onBlur: (e) => e.target.style.borderColor = T.charcoal })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ import_react4.default.createElement("label", { style: labelStyle }, "YEAR"), yearMode === "select" ? /* @__PURE__ */ import_react4.default.createElement(
       "select",
       {
         value: year,
@@ -54269,16 +54276,7 @@ ${suffix}`;
     ) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("input", { value: model, onChange: (e) => setModel(e.target.value), placeholder: "Enter model", style: { ...inputStyle, flex: 1 } }), modelOptions.length > 0 && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
       setModelMode("select");
       setModel("");
-    }, style: { padding: "0 14px", borderRadius: 8, background: "transparent", border: `1px solid ${T.charcoal}`, color: T.tertiary, fontFamily: sans, fontSize: 10, letterSpacing: 1, cursor: "pointer" } }, "BACK")))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkCard, borderRadius: 12, padding: 18, border: `1px solid ${T.copper}30`, marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.5, fontWeight: 700, display: "block", marginBottom: 12 } }, "WELCOME \u2014 HERE'S WHERE TO START"), [
-      { icon: Wrench, title: "Add your build", body: "Document your rig with photos + a full mods breakdown. Other users can like, comment, and share." },
-      { icon: Map2, title: "Explore the map", body: "See community trip reports, plans, and camping spots near you. Save the ones you want to do." },
-      { icon: Route, title: "Plan a trip", body: "Drop pins on the map to chart out a route. Bring others along by turning a plan into a convoy." },
-      { icon: Compass, title: "Browse the forum", body: "How-to guides, troubleshooting, regional groups, and the marketplace are all in there." },
-      { icon: Users, title: "Find your people", body: "Follow other overlanders, join convoys, and DM when you need a buddy on the trail." }
-    ].map((it, i, arr) => {
-      const Icon2 = it.icon;
-      return /* @__PURE__ */ import_react4.default.createElement("div", { key: i, style: { display: "flex", gap: 12, paddingBottom: i < arr.length - 1 ? 12 : 0, marginBottom: i < arr.length - 1 ? 12 : 0, borderBottom: i < arr.length - 1 ? `1px solid ${T.charcoal}` : "none" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 32, height: 32, borderRadius: 8, background: `${T.copper}18`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(Icon2, { size: 16, color: T.copper, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: sans, fontSize: 13, color: T.white, margin: "0 0 2px", fontWeight: 600 } }, it.title), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, margin: 0, lineHeight: 1.5 } }, it.body)));
-    })), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: handleFinish, disabled: loading, style: { width: "100%", padding: "14px 0", borderRadius: 8, background: T.red, border: "none", cursor: loading ? "wait" : "pointer", marginBottom: 12, opacity: loading ? 0.7 : 1 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, fontWeight: 600, color: T.white, letterSpacing: 1.5 } }, loading ? "SAVING..." : "ENTER TRAILHEAD")))));
+    }, style: { padding: "0 14px", borderRadius: 8, background: "transparent", border: `1px solid ${T.charcoal}`, color: T.tertiary, fontFamily: sans, fontSize: 10, letterSpacing: 1, cursor: "pointer" } }, "BACK")))), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: handleFinish, disabled: loading, style: { width: "100%", padding: "14px 0", borderRadius: 8, background: T.red, border: "none", cursor: loading ? "wait" : "pointer", marginBottom: 12, opacity: loading ? 0.7 : 1 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, fontWeight: 600, color: T.white, letterSpacing: 1.5 } }, loading ? "SAVING..." : "ENTER TRAILHEAD")))));
   }
   function fmtBytes(bytes) {
     if (!bytes && bytes !== 0) return "";
@@ -55584,13 +55582,16 @@ Questions about these Terms? Email team@lonepeakoverland.com.`;
   function InstallPWAScreen({ onContinue, onSkip }) {
     const platform = detectInstallPlatform();
     (0, import_react4.useEffect)(() => {
-      if (platform === "standalone" || platform === "desktop" || platform === "other") {
-        onContinue();
-      }
+      if (platform === "standalone") onContinue();
     }, [platform]);
-    if (platform === "standalone" || platform === "desktop" || platform === "other") return null;
+    if (platform === "standalone") return null;
     const isIOS = platform === "ios";
-    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { minHeight: "100vh", display: "flex", flexDirection: "column", background: T.darkBg, padding: 24, justifyContent: "center", alignItems: "center" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: "100%", maxWidth: 380 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 64, height: 64, borderRadius: "50%", background: `${T.green}15`, border: `2px solid ${T.green}`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" } }, /* @__PURE__ */ import_react4.default.createElement(Smartphone, { size: 28, color: T.green, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("h2", { style: { fontFamily: sans, fontSize: 22, color: T.white, margin: "0 0 8px", fontWeight: 700, letterSpacing: 0.5, textAlign: "center" } }, "INSTALL TRAILHEAD"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 14, color: T.tertiary, textAlign: "center", margin: "0 0 24px", lineHeight: 1.6 } }, "Add Trailhead to your home screen to get push notifications, offline map caching, and an app-like experience."), isIOS ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkCard, borderRadius: 12, padding: 18, border: `1px solid ${T.charcoal}`, marginBottom: 18 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700, display: "block", marginBottom: 12 } }, "ON IPHONE / IPAD (SAFARI)"), /* @__PURE__ */ import_react4.default.createElement("ol", { style: { margin: 0, paddingLeft: 20, fontFamily: serif, fontSize: 14, color: T.white, lineHeight: 1.8 } }, /* @__PURE__ */ import_react4.default.createElement("li", null, "Tap the ", /* @__PURE__ */ import_react4.default.createElement("strong", { style: { color: T.copper } }, "Share"), " button at the bottom of Safari (the square with an arrow pointing up)"), /* @__PURE__ */ import_react4.default.createElement("li", null, "Scroll down and tap ", /* @__PURE__ */ import_react4.default.createElement("strong", { style: { color: T.copper } }, "Add to Home Screen")), /* @__PURE__ */ import_react4.default.createElement("li", null, "Tap ", /* @__PURE__ */ import_react4.default.createElement("strong", { style: { color: T.copper } }, "Add"), " in the top right"), /* @__PURE__ */ import_react4.default.createElement("li", null, "Open Trailhead from your home screen icon"))) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkCard, borderRadius: 12, padding: 18, border: `1px solid ${T.charcoal}`, marginBottom: 18 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700, display: "block", marginBottom: 12 } }, "ON ANDROID (CHROME / EDGE)"), /* @__PURE__ */ import_react4.default.createElement("ol", { style: { margin: 0, paddingLeft: 20, fontFamily: serif, fontSize: 14, color: T.white, lineHeight: 1.8 } }, /* @__PURE__ */ import_react4.default.createElement("li", null, "Tap the ", /* @__PURE__ */ import_react4.default.createElement("strong", { style: { color: T.copper } }, "\u22EE menu"), " in the top-right corner of Chrome"), /* @__PURE__ */ import_react4.default.createElement("li", null, "Tap ", /* @__PURE__ */ import_react4.default.createElement("strong", { style: { color: T.copper } }, "Install app"), ' (or "Add to Home screen")'), /* @__PURE__ */ import_react4.default.createElement("li", null, "Tap ", /* @__PURE__ */ import_react4.default.createElement("strong", { style: { color: T.copper } }, "Install"), " to confirm"), /* @__PURE__ */ import_react4.default.createElement("li", null, "Open Trailhead from your home screen"))), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: onContinue, style: { width: "100%", padding: "14px 16px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 1.5, marginBottom: 10 } }, "I'VE INSTALLED IT"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: onSkip, style: { width: "100%", padding: "10px 16px", background: "transparent", border: "none", cursor: "pointer", fontFamily: sans, fontSize: 12, color: T.tertiary, letterSpacing: 0.5 } }, "Skip for now")));
+    const isAndroid = platform === "android";
+    const isMobile = isIOS || isAndroid;
+    if (!isMobile) {
+      return /* @__PURE__ */ import_react4.default.createElement("div", { style: { minHeight: "100vh", display: "flex", flexDirection: "column", background: T.darkBg, padding: 24, justifyContent: "center", alignItems: "center" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: "100%", maxWidth: 380 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 64, height: 64, borderRadius: "50%", background: `${T.green}15`, border: `2px solid ${T.green}`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" } }, /* @__PURE__ */ import_react4.default.createElement(CircleCheckBig, { size: 28, color: T.green, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("h2", { style: { fontFamily: sans, fontSize: 22, color: T.white, margin: "0 0 8px", fontWeight: 700, letterSpacing: 0.5, textAlign: "center" } }, "YOU'RE ALL SET"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 14, color: T.tertiary, textAlign: "center", margin: "0 0 24px", lineHeight: 1.6 } }, "Your profile is ready. Welcome to the Trailhead community."), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: onContinue, style: { width: "100%", padding: "14px 16px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 1.5 } }, "CONTINUE TO TRAILHEAD")));
+    }
+    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { minHeight: "100vh", display: "flex", flexDirection: "column", background: T.darkBg, padding: 24, justifyContent: "center", alignItems: "center" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: "100%", maxWidth: 380 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 64, height: 64, borderRadius: "50%", background: `${T.green}15`, border: `2px solid ${T.green}`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" } }, /* @__PURE__ */ import_react4.default.createElement(Smartphone, { size: 28, color: T.green, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("h2", { style: { fontFamily: sans, fontSize: 22, color: T.white, margin: "0 0 8px", fontWeight: 700, letterSpacing: 0.5, textAlign: "center" } }, "SAVE AS APP"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 14, color: T.tertiary, textAlign: "center", margin: "0 0 24px", lineHeight: 1.6 } }, "Install Trailhead on your home screen to get push notifications, faster loads, and a full-screen experience."), isIOS ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkCard, borderRadius: 12, padding: 18, border: `1px solid ${T.charcoal}`, marginBottom: 18 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700, display: "block", marginBottom: 12 } }, "ON IPHONE / IPAD (SAFARI)"), /* @__PURE__ */ import_react4.default.createElement("ol", { style: { margin: 0, paddingLeft: 20, fontFamily: serif, fontSize: 14, color: T.white, lineHeight: 1.8 } }, /* @__PURE__ */ import_react4.default.createElement("li", null, "Tap the ", /* @__PURE__ */ import_react4.default.createElement("strong", { style: { color: T.copper } }, "Share"), " button at the bottom of Safari (square with an arrow \u2191)"), /* @__PURE__ */ import_react4.default.createElement("li", null, "Scroll down and tap ", /* @__PURE__ */ import_react4.default.createElement("strong", { style: { color: T.copper } }, "Add to Home Screen")), /* @__PURE__ */ import_react4.default.createElement("li", null, "Tap ", /* @__PURE__ */ import_react4.default.createElement("strong", { style: { color: T.copper } }, "Add"), " in the top right"), /* @__PURE__ */ import_react4.default.createElement("li", null, "Open Trailhead from your home screen \u2014 you'll be prompted to enable push notifications next"))) : /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkCard, borderRadius: 12, padding: 18, border: `1px solid ${T.charcoal}`, marginBottom: 18 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700, display: "block", marginBottom: 12 } }, "ON ANDROID (CHROME / EDGE)"), /* @__PURE__ */ import_react4.default.createElement("ol", { style: { margin: 0, paddingLeft: 20, fontFamily: serif, fontSize: 14, color: T.white, lineHeight: 1.8 } }, /* @__PURE__ */ import_react4.default.createElement("li", null, "Tap the ", /* @__PURE__ */ import_react4.default.createElement("strong", { style: { color: T.copper } }, "\u22EE menu"), " in the top-right corner of Chrome"), /* @__PURE__ */ import_react4.default.createElement("li", null, "Tap ", /* @__PURE__ */ import_react4.default.createElement("strong", { style: { color: T.copper } }, "Install app"), ' (or "Add to Home screen")'), /* @__PURE__ */ import_react4.default.createElement("li", null, "Tap ", /* @__PURE__ */ import_react4.default.createElement("strong", { style: { color: T.copper } }, "Install"), " to confirm"), /* @__PURE__ */ import_react4.default.createElement("li", null, "Open Trailhead from your home screen \u2014 you'll be prompted to enable push notifications next"))), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: onContinue, style: { width: "100%", padding: "14px 16px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 1.5, marginBottom: 10 } }, "I'VE INSTALLED IT"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: onSkip, style: { width: "100%", padding: "10px 16px", background: "transparent", border: "none", cursor: "pointer", fontFamily: sans, fontSize: 12, color: T.tertiary, letterSpacing: 0.5 } }, "Skip for now")));
   }
   function InstallPromptModal({ onClose }) {
     const platform = detectInstallPlatform();
@@ -55610,39 +55611,17 @@ Questions about these Terms? Email team@lonepeakoverland.com.`;
       return /* @__PURE__ */ import_react4.default.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderBottom: i < arr.length - 1 ? `1px solid ${T.charcoal}` : "none" } }, /* @__PURE__ */ import_react4.default.createElement(Icon2, { size: 13, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white } }, it.label));
     })), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: onGoToSettings, style: { width: "100%", padding: "13px 16px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 1.5, marginBottom: 8 } }, "ENABLE NOTIFICATIONS"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: onSkip, style: { width: "100%", padding: "10px 16px", borderRadius: 8, background: "transparent", border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 600, letterSpacing: 1 } }, "MAYBE LATER")));
   }
-  function EnablePushScreen({ onSubscribe, onSkip }) {
-    const [subscribing, setSubscribing] = (0, import_react4.useState)(false);
-    const [error, setError] = (0, import_react4.useState)("");
-    const platform = detectInstallPlatform();
-    const iosBrowserNotPwa = typeof navigator !== "undefined" && /iPad|iPhone|iPod/.test(navigator.userAgent) && platform !== "standalone";
-    const handleEnable = async () => {
-      setError("");
-      setSubscribing(true);
-      try {
-        const ok = await onSubscribe();
-        if (!ok) {
-          setError("Notifications were not enabled. You can turn them on later in Profile \u2192 Settings.");
-          setSubscribing(false);
-          return;
-        }
-      } catch (e) {
-        setError("Could not enable notifications. Try again later.");
-        setSubscribing(false);
-        return;
-      }
-      setSubscribing(false);
-    };
-    return /* @__PURE__ */ import_react4.default.createElement("div", { style: { minHeight: "100vh", display: "flex", flexDirection: "column", background: T.darkBg, padding: 24, justifyContent: "center", alignItems: "center" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: "100%", maxWidth: 380 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 64, height: 64, borderRadius: "50%", background: `${T.red}15`, border: `2px solid ${T.red}`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" } }, /* @__PURE__ */ import_react4.default.createElement(Bell, { size: 26, color: T.red, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("h2", { style: { fontFamily: sans, fontSize: 22, color: T.white, margin: "0 0 8px", fontWeight: 700, letterSpacing: 0.5, textAlign: "center" } }, "STAY IN THE LOOP"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 14, color: T.tertiary, textAlign: "center", margin: "0 0 22px", lineHeight: 1.6 } }, "Turn on push notifications to get alerts when:"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: T.darkCard, borderRadius: 12, padding: 16, border: `1px solid ${T.charcoal}`, marginBottom: 18 } }, [
-      { icon: Heart, label: "Someone likes your post or build" },
-      { icon: MessageCircle, label: "Someone comments or replies" },
-      { icon: UserPlus, label: "Someone follows you" },
-      { icon: AtSign, label: "You're mentioned in a thread" },
-      { icon: Users, label: "A convoy you joined posts an update" },
-      { icon: TriangleAlert, label: "Nearby recovery requests" }
-    ].map((it, i) => {
+  function WelcomeStartModal({ onClose }) {
+    return /* @__PURE__ */ import_react4.default.createElement("div", { onClick: onClose, style: { position: "fixed", inset: 0, zIndex: 11e3, background: "rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { onClick: (e) => e.stopPropagation(), style: { background: T.darkCard, borderRadius: 14, padding: 22, maxWidth: 400, width: "100%", maxHeight: "90vh", overflowY: "auto", border: `1px solid ${T.copper}40`, position: "relative" } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: onClose, style: { position: "absolute", top: 12, right: 12, background: "none", border: "none", cursor: "pointer", padding: 6, display: "flex" } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 18, color: T.tertiary })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 56, height: 56, borderRadius: "50%", background: `${T.copper}18`, border: `2px solid ${T.copper}`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" } }, /* @__PURE__ */ import_react4.default.createElement(Mountain, { size: 26, color: T.copper, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("h2", { style: { fontFamily: sans, fontSize: 18, color: T.white, margin: "0 0 6px", fontWeight: 700, textAlign: "center", letterSpacing: 0.5 } }, "WELCOME TO TRAILHEAD"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary, textAlign: "center", margin: "0 0 18px", lineHeight: 1.5 } }, "Here are a few good places to start."), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 18 } }, [
+      { icon: Wrench, title: "Add your build", body: "Document your rig with photos + a full mods breakdown. Others can like, comment, and share." },
+      { icon: Map2, title: "Explore the map", body: "See community trip reports, plans, and camping spots near you. Save the ones you want to do." },
+      { icon: Route, title: "Plan a trip", body: "Drop pins on the map to chart a route. Turn a plan into a convoy to bring others along." },
+      { icon: Compass, title: "Browse the forum", body: "How-to guides, troubleshooting, regional groups, and the marketplace are all in there." },
+      { icon: Users, title: "Find your people", body: "Follow other overlanders, join convoys, and DM when you need a buddy on the trail." }
+    ].map((it, i, arr) => {
       const Icon2 = it.icon;
-      return /* @__PURE__ */ import_react4.default.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: i < 5 ? `1px solid ${T.charcoal}` : "none" } }, /* @__PURE__ */ import_react4.default.createElement(Icon2, { size: 14, color: T.copper }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, color: T.white } }, it.label));
-    })), iosBrowserNotPwa && /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: `${T.copper}15`, border: `1px solid ${T.copper}40`, padding: 12, borderRadius: 8, marginBottom: 14, fontFamily: serif, fontSize: 12, color: T.copper, lineHeight: 1.5 } }, "iOS only supports push when Trailhead is installed as an app. Install first, then enable here."), error && /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: `${T.red}15`, border: `1px solid ${T.red}40`, padding: 12, borderRadius: 8, marginBottom: 14, fontFamily: sans, fontSize: 12, color: T.red } }, error), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: handleEnable, disabled: subscribing || iosBrowserNotPwa, style: { width: "100%", padding: "14px 16px", borderRadius: 8, background: iosBrowserNotPwa ? T.charcoal : T.red, border: "none", cursor: iosBrowserNotPwa ? "default" : "pointer", fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 1.5, marginBottom: 10, opacity: iosBrowserNotPwa ? 0.5 : 1 } }, subscribing ? "ENABLING\u2026" : "ENABLE NOTIFICATIONS"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: onSkip, style: { width: "100%", padding: "10px 16px", background: "transparent", border: "none", cursor: "pointer", fontFamily: sans, fontSize: 12, color: T.tertiary, letterSpacing: 0.5 } }, "Skip for now")));
+      return /* @__PURE__ */ import_react4.default.createElement("div", { key: i, style: { display: "flex", gap: 12, paddingBottom: i < arr.length - 1 ? 12 : 0, marginBottom: i < arr.length - 1 ? 12 : 0, borderBottom: i < arr.length - 1 ? `1px solid ${T.charcoal}` : "none" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 32, height: 32, borderRadius: 8, background: `${T.copper}18`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement(Icon2, { size: 16, color: T.copper, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: sans, fontSize: 13, color: T.white, margin: "0 0 2px", fontWeight: 600 } }, it.title), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, margin: 0, lineHeight: 1.5 } }, it.body)));
+    })), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: onClose, style: { width: "100%", padding: "13px 16px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 1.5 } }, "START EXPLORING")));
   }
   function GuestGateScreen({ title, subtitle, onSignIn }) {
     return /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "48px 24px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", minHeight: "60vh", justifyContent: "center" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { width: 64, height: 64, borderRadius: "50%", background: `${T.red}15`, border: `2px solid ${T.red}50`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 18 } }, /* @__PURE__ */ import_react4.default.createElement(Lock, { size: 26, color: T.red, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("h2", { style: { fontFamily: sans, fontSize: 20, color: T.white, margin: "0 0 8px", fontWeight: 700, letterSpacing: 1 } }, title || "SIGN IN REQUIRED"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "0 0 24px", maxWidth: 280, lineHeight: 1.6 } }, subtitle || "Create an account or sign in to access this part of Trailhead."), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: onSignIn, style: { padding: "12px 28px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 1.5 } }, "SIGN IN TO TRAILHEAD")));
@@ -56118,7 +56097,7 @@ Questions about these Terms? Email team@lonepeakoverland.com.`;
     (0, import_react4.useEffect)(() => {
       if (typeof localStorage === "undefined") return;
       try {
-        if (authState === "verify-email" || authState === "install-pwa" || authState === "enable-push" || authState === "onboarding") {
+        if (authState === "verify-email" || authState === "onboarding" || authState === "install-pwa") {
           localStorage.setItem("th_onboarding_step", authState);
         } else if (authState === "app") {
           localStorage.removeItem("th_onboarding_step");
@@ -56139,6 +56118,7 @@ Questions about these Terms? Email team@lonepeakoverland.com.`;
     });
     const [showInstallModal, setShowInstallModal] = (0, import_react4.useState)(false);
     const [showPushModal, setShowPushModal] = (0, import_react4.useState)(false);
+    const [showWelcomeModal, setShowWelcomeModal] = (0, import_react4.useState)(false);
     const [pendingProfileScroll, setPendingProfileScroll] = (0, import_react4.useState)(null);
     const [currentProfile, setCurrentProfile] = (0, import_react4.useState)(null);
     const currentRole = currentProfile && currentProfile.role || "user";
@@ -56703,7 +56683,7 @@ Questions about these Terms? Email team@lonepeakoverland.com.`;
             resumed = typeof localStorage !== "undefined" ? localStorage.getItem("th_onboarding_step") : null;
           } catch (e) {
           }
-          const next = resumed || (wizardPending ? "install-pwa" : hasHandle ? "app" : "onboarding");
+          const next = resumed || (wizardPending ? "onboarding" : hasHandle ? "app" : "onboarding");
           setAuthState(next);
           if (next === "app" && hasHandle) hydrateUserData(session);
           else setAppReady(true);
@@ -56733,8 +56713,8 @@ Questions about these Terms? Email team@lonepeakoverland.com.`;
           const hasHandle = !!(session.user && session.user.user_metadata && session.user.user_metadata.handle);
           const wizardPending = !!(session.user && session.user.user_metadata && session.user.user_metadata.wizard_pending);
           setAuthState((prev) => {
-            if (prev === "signup" || prev === "verify-email" || prev === "install-pwa" || prev === "enable-push" || prev === "onboarding") return prev;
-            if (wizardPending) return "install-pwa";
+            if (prev === "signup" || prev === "verify-email" || prev === "onboarding" || prev === "install-pwa") return prev;
+            if (wizardPending) return "onboarding";
             return hasHandle ? "app" : "onboarding";
           });
           setIsGuest(false);
@@ -58411,6 +58391,15 @@ Questions about these Terms? Email team@lonepeakoverland.com.`;
       if (typeof window === "undefined") return;
       const platform = detectInstallPlatform();
       if (platform === "standalone") {
+        const wizardPwaPending = !!(supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.wizard_pwa_pending);
+        if (wizardPwaPending) {
+          if (!notifPrefs.push && typeof Notification !== "undefined" && Notification.permission !== "denied") {
+            const t2 = setTimeout(() => setShowPushModal(true), 1200);
+            return () => clearTimeout(t2);
+          }
+          const t = setTimeout(() => setShowWelcomeModal(true), 1200);
+          return () => clearTimeout(t);
+        }
         try {
           const seenAt = localStorage.getItem("th_push_prompt_seen_at");
           if (!seenAt && !notifPrefs.push && typeof Notification !== "undefined" && Notification.permission !== "denied") {
@@ -58430,7 +58419,13 @@ Questions about these Terms? Email team@lonepeakoverland.com.`;
         return () => clearTimeout(t);
       } catch (e) {
       }
-    }, [authState, isGuest, notifPrefs.push]);
+    }, [authState, isGuest, notifPrefs.push, supabaseSession]);
+    const clearWizardPwaPending = async () => {
+      try {
+        await supabase.auth.updateUser({ data: { wizard_pwa_pending: false } });
+      } catch (e) {
+      }
+    };
     const [showGlobalSearch, setShowGlobalSearch] = (0, import_react4.useState)(false);
     const [showDM, setShowDM] = (0, import_react4.useState)(false);
     const [dmInitialConvId, setDmInitialConvId] = (0, import_react4.useState)(null);
@@ -61290,7 +61285,7 @@ Questions about these Terms? Email team@lonepeakoverland.com.`;
       return /* @__PURE__ */ import_react4.default.createElement(
         SignupScreen,
         {
-          onSignup: () => setAuthState("install-pwa"),
+          onSignup: () => setAuthState("onboarding"),
           onGoToLogin: () => setAuthState("login"),
           onSetProfilePic: handleSetProfilePic,
           onAddBuild: addBuild,
@@ -61311,7 +61306,7 @@ Questions about these Terms? Email team@lonepeakoverland.com.`;
         {
           session: supabaseSession,
           email: pendingVerifyEmail,
-          onContinue: () => setAuthState("install-pwa"),
+          onContinue: () => setAuthState("onboarding"),
           onCancel: () => {
             setPendingVerifyEmail("");
             try {
@@ -61323,29 +61318,6 @@ Questions about these Terms? Email team@lonepeakoverland.com.`;
         }
       );
     }
-    if (authState === "install-pwa") {
-      return /* @__PURE__ */ import_react4.default.createElement(
-        InstallPWAScreen,
-        {
-          onContinue: () => setAuthState("enable-push"),
-          onSkip: () => setAuthState("enable-push")
-        }
-      );
-    }
-    if (authState === "enable-push") {
-      return /* @__PURE__ */ import_react4.default.createElement(
-        EnablePushScreen,
-        {
-          onSubscribe: async () => {
-            const ok = await subscribeToPush();
-            if (ok) setNotifPrefs((prev) => ({ ...prev, push: true }));
-            setAuthState("onboarding");
-            return ok;
-          },
-          onSkip: () => setAuthState("onboarding")
-        }
-      );
-    }
     if (authState === "onboarding") {
       return /* @__PURE__ */ import_react4.default.createElement(
         OnboardingScreen,
@@ -61353,7 +61325,16 @@ Questions about these Terms? Email team@lonepeakoverland.com.`;
           session: supabaseSession,
           onSetProfilePic: handleSetProfilePic,
           onAddBuild: addBuild,
-          onComplete: () => setAuthState("app")
+          onComplete: () => setAuthState("install-pwa")
+        }
+      );
+    }
+    if (authState === "install-pwa") {
+      return /* @__PURE__ */ import_react4.default.createElement(
+        InstallPWAScreen,
+        {
+          onContinue: () => setAuthState("app"),
+          onSkip: () => setAuthState("app")
         }
       );
     }
@@ -61501,6 +61482,8 @@ Questions about these Terms? Email team@lonepeakoverland.com.`;
           }
           setProfileStack(["self"]);
           setPendingProfileScroll("push");
+          const wizardPwaPending = !!(supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.wizard_pwa_pending);
+          if (wizardPwaPending) setTimeout(() => setShowWelcomeModal(true), 800);
         },
         onSkip: () => {
           setShowPushModal(false);
@@ -61508,9 +61491,14 @@ Questions about these Terms? Email team@lonepeakoverland.com.`;
             localStorage.setItem("th_push_prompt_seen_at", String(Date.now()));
           } catch (e) {
           }
+          const wizardPwaPending = !!(supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.wizard_pwa_pending);
+          if (wizardPwaPending) setTimeout(() => setShowWelcomeModal(true), 400);
         }
       }
-    ), /* @__PURE__ */ import_react4.default.createElement(
+    ), showWelcomeModal && /* @__PURE__ */ import_react4.default.createElement(WelcomeStartModal, { onClose: () => {
+      setShowWelcomeModal(false);
+      clearWizardPwaPending();
+    } }), /* @__PURE__ */ import_react4.default.createElement(
       TopBar,
       {
         onProfile: openProfile,

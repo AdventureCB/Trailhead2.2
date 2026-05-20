@@ -19262,7 +19262,12 @@ function OnboardingScreen({ session, onComplete, onSetProfilePic, onAddBuild }) 
     (session && session.user && session.user.user_metadata && (session.user.user_metadata.full_name || session.user.user_metadata.name)) || "";
   const prefillAvatar =
     (session && session.user && session.user.user_metadata && session.user.user_metadata.avatar_url) || null;
-  const [handle, setHandle] = useState("");
+  // Handle is set during SignupScreen for email signups → pre-fill from
+  // user_metadata + hide the field. OAuth (Google) signups have no handle
+  // yet, so the field stays visible until they pick one.
+  const prefillHandle =
+    (session && session.user && session.user.user_metadata && session.user.user_metadata.handle) || "";
+  const [handle, setHandle] = useState(prefillHandle);
   // Role pick at signup — user or ambassador. Admin role is server-side
   // only (existing admin promotes via SQL); self-signup as admin is
   // rejected by the profiles_role_guard trigger.
@@ -19320,9 +19325,15 @@ function OnboardingScreen({ session, onComplete, onSetProfilePic, onAddBuild }) 
           // Preserve whatever name we already have from the OAuth provider
           ...(prefillName ? { full_name: prefillName } : {}),
           first_build: buildName || model ? { name: buildName, year, make, model } : null,
-          // Wizard complete — clear the cross-device pending flag so a
-          // future SIGNED_IN routes straight to "app".
+          // Browser-phase wizard complete. Two follow-on flags:
+          //   wizard_pending=false → cross-device flag cleared; future
+          //     SIGNED_IN no longer routes to install-pwa
+          //   wizard_pwa_pending=true → tells the in-app detection effect
+          //     to fire PushPromptModal → WelcomeStartModal sequentially
+          //     the first time this user opens the app in standalone (PWA)
+          //     mode. Cleared once the welcome modal dismisses.
           wizard_pending: false,
+          wizard_pwa_pending: true,
           onboarded_at: new Date().toISOString(),
         },
       });
@@ -19415,14 +19426,17 @@ function OnboardingScreen({ session, onComplete, onSetProfilePic, onAddBuild }) 
             </div>
           )}
 
-          {/* Username — required */}
-          <div style={{ marginBottom: 20 }}>
-            <label style={labelStyle}>USERNAME</label>
-            <div style={{ position: "relative" }}>
-              <span style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", fontFamily: serif, fontSize: 14, color: T.tertiary }}>@</span>
-              <input value={handle} onChange={(e) => setHandle(e.target.value)} placeholder="trailname" style={{ ...inputStyle, paddingLeft: 32 }} onFocus={(e) => e.target.style.borderColor = T.copper} onBlur={(e) => e.target.style.borderColor = T.charcoal} />
+          {/* Username — only shown for OAuth signups (no handle in
+              user_metadata yet). Email signups picked one at signup. */}
+          {!prefillHandle && (
+            <div style={{ marginBottom: 20 }}>
+              <label style={labelStyle}>USERNAME</label>
+              <div style={{ position: "relative" }}>
+                <span style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", fontFamily: serif, fontSize: 14, color: T.tertiary }}>@</span>
+                <input value={handle} onChange={(e) => setHandle(e.target.value)} placeholder="trailname" style={{ ...inputStyle, paddingLeft: 32 }} onFocus={(e) => e.target.style.borderColor = T.copper} onBlur={(e) => e.target.style.borderColor = T.charcoal} />
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Role picker — User (default) or apply for Ambassador. Admin
               role is server-assigned only. Ambassador requires admin
@@ -19552,34 +19566,6 @@ function OnboardingScreen({ session, onComplete, onSetProfilePic, onAddBuild }) 
                 </div>
               )}
             </div>
-          </div>
-
-          {/* Where to start — quick orientation card so first-timers
-              aren't dropped on an empty feed without a sense of what to
-              do. Each item is informational only; the actual screens are
-              one tap away after onboarding completes. */}
-          <div style={{ background: T.darkCard, borderRadius: 12, padding: 18, border: `1px solid ${T.copper}30`, marginBottom: 16 }}>
-            <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.5, fontWeight: 700, display: "block", marginBottom: 12 }}>WELCOME — HERE'S WHERE TO START</span>
-            {[
-              { icon: Wrench, title: "Add your build", body: "Document your rig with photos + a full mods breakdown. Other users can like, comment, and share." },
-              { icon: Map, title: "Explore the map", body: "See community trip reports, plans, and camping spots near you. Save the ones you want to do." },
-              { icon: Route, title: "Plan a trip", body: "Drop pins on the map to chart out a route. Bring others along by turning a plan into a convoy." },
-              { icon: Compass, title: "Browse the forum", body: "How-to guides, troubleshooting, regional groups, and the marketplace are all in there." },
-              { icon: Users, title: "Find your people", body: "Follow other overlanders, join convoys, and DM when you need a buddy on the trail." },
-            ].map((it, i, arr) => {
-              const Icon = it.icon;
-              return (
-                <div key={i} style={{ display: "flex", gap: 12, paddingBottom: i < arr.length - 1 ? 12 : 0, marginBottom: i < arr.length - 1 ? 12 : 0, borderBottom: i < arr.length - 1 ? `1px solid ${T.charcoal}` : "none" }}>
-                  <div style={{ width: 32, height: 32, borderRadius: 8, background: `${T.copper}18`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                    <Icon size={16} color={T.copper} strokeWidth={1.5} />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <p style={{ fontFamily: sans, fontSize: 13, color: T.white, margin: "0 0 2px", fontWeight: 600 }}>{it.title}</p>
-                    <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: 0, lineHeight: 1.5 }}>{it.body}</p>
-                  </div>
-                </div>
-              );
-            })}
           </div>
 
           <button onClick={handleFinish} disabled={loading} style={{ width: "100%", padding: "14px 0", borderRadius: 8, background: T.red, border: "none", cursor: loading ? "wait" : "pointer", marginBottom: 12, opacity: loading ? 0.7 : 1 }}>
@@ -22043,31 +22029,48 @@ function VerifyEmailScreen({ session, email, onContinue, onCancel }) {
 
 function InstallPWAScreen({ onContinue, onSkip }) {
   const platform = detectInstallPlatform();
-  // Already installed / desktop / unknown → no useful install action,
-  // auto-advance the user past this step on mount.
+  // Already standalone (the PWA is open) → nothing to install, auto-advance.
   useEffect(() => {
-    if (platform === "standalone" || platform === "desktop" || platform === "other") {
-      onContinue();
-    }
+    if (platform === "standalone") onContinue();
   }, [platform]);
-  if (platform === "standalone" || platform === "desktop" || platform === "other") return null;
+  if (platform === "standalone") return null;
   const isIOS = platform === "ios";
+  const isAndroid = platform === "android";
+  const isMobile = isIOS || isAndroid;
+  // Desktop / unknown platform → no install path that matters. Surface a
+  // single "Continue to Trailhead" button instead of install instructions.
+  // PWA-only follow-ups (push prompt + welcome guide) never fire on
+  // desktop because the standalone check gates them.
+  if (!isMobile) {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: T.darkBg, padding: 24, justifyContent: "center", alignItems: "center" }}>
+        <div style={{ width: "100%", maxWidth: 380 }}>
+          <div style={{ width: 64, height: 64, borderRadius: "50%", background: `${T.green}15`, border: `2px solid ${T.green}`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
+            <CheckCircle size={28} color={T.green} strokeWidth={1.5} />
+          </div>
+          <h2 style={{ fontFamily: sans, fontSize: 22, color: T.white, margin: "0 0 8px", fontWeight: 700, letterSpacing: 0.5, textAlign: "center" }}>YOU'RE ALL SET</h2>
+          <p style={{ fontFamily: serif, fontSize: 14, color: T.tertiary, textAlign: "center", margin: "0 0 24px", lineHeight: 1.6 }}>Your profile is ready. Welcome to the Trailhead community.</p>
+          <button onClick={onContinue} style={{ width: "100%", padding: "14px 16px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 1.5 }}>CONTINUE TO TRAILHEAD</button>
+        </div>
+      </div>
+    );
+  }
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: T.darkBg, padding: 24, justifyContent: "center", alignItems: "center" }}>
       <div style={{ width: "100%", maxWidth: 380 }}>
         <div style={{ width: 64, height: 64, borderRadius: "50%", background: `${T.green}15`, border: `2px solid ${T.green}`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
           <Smartphone size={28} color={T.green} strokeWidth={1.5} />
         </div>
-        <h2 style={{ fontFamily: sans, fontSize: 22, color: T.white, margin: "0 0 8px", fontWeight: 700, letterSpacing: 0.5, textAlign: "center" }}>INSTALL TRAILHEAD</h2>
-        <p style={{ fontFamily: serif, fontSize: 14, color: T.tertiary, textAlign: "center", margin: "0 0 24px", lineHeight: 1.6 }}>Add Trailhead to your home screen to get push notifications, offline map caching, and an app-like experience.</p>
+        <h2 style={{ fontFamily: sans, fontSize: 22, color: T.white, margin: "0 0 8px", fontWeight: 700, letterSpacing: 0.5, textAlign: "center" }}>SAVE AS APP</h2>
+        <p style={{ fontFamily: serif, fontSize: 14, color: T.tertiary, textAlign: "center", margin: "0 0 24px", lineHeight: 1.6 }}>Install Trailhead on your home screen to get push notifications, faster loads, and a full-screen experience.</p>
         {isIOS ? (
           <div style={{ background: T.darkCard, borderRadius: 12, padding: 18, border: `1px solid ${T.charcoal}`, marginBottom: 18 }}>
             <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700, display: "block", marginBottom: 12 }}>ON IPHONE / IPAD (SAFARI)</span>
             <ol style={{ margin: 0, paddingLeft: 20, fontFamily: serif, fontSize: 14, color: T.white, lineHeight: 1.8 }}>
-              <li>Tap the <strong style={{ color: T.copper }}>Share</strong> button at the bottom of Safari (the square with an arrow pointing up)</li>
+              <li>Tap the <strong style={{ color: T.copper }}>Share</strong> button at the bottom of Safari (square with an arrow ↑)</li>
               <li>Scroll down and tap <strong style={{ color: T.copper }}>Add to Home Screen</strong></li>
               <li>Tap <strong style={{ color: T.copper }}>Add</strong> in the top right</li>
-              <li>Open Trailhead from your home screen icon</li>
+              <li>Open Trailhead from your home screen — you'll be prompted to enable push notifications next</li>
             </ol>
           </div>
         ) : (
@@ -22077,7 +22080,7 @@ function InstallPWAScreen({ onContinue, onSkip }) {
               <li>Tap the <strong style={{ color: T.copper }}>⋮ menu</strong> in the top-right corner of Chrome</li>
               <li>Tap <strong style={{ color: T.copper }}>Install app</strong> (or "Add to Home screen")</li>
               <li>Tap <strong style={{ color: T.copper }}>Install</strong> to confirm</li>
-              <li>Open Trailhead from your home screen</li>
+              <li>Open Trailhead from your home screen — you'll be prompted to enable push notifications next</li>
             </ol>
           </div>
         )}
@@ -22169,6 +22172,51 @@ function PushPromptModal({ onGoToSettings, onSkip }) {
         </div>
         <button onClick={onGoToSettings} style={{ width: "100%", padding: "13px 16px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 1.5, marginBottom: 8 }}>ENABLE NOTIFICATIONS</button>
         <button onClick={onSkip} style={{ width: "100%", padding: "10px 16px", borderRadius: 8, background: "transparent", border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 600, letterSpacing: 1 }}>MAYBE LATER</button>
+      </div>
+    </div>
+  );
+}
+
+// Welcome / where-to-start modal — fires once after a new user opens
+// Trailhead in standalone (PWA) mode for the first time, immediately
+// after the PushPromptModal resolves. Gated by user_metadata
+// wizard_pwa_pending, which OnboardingScreen sets on finish and this
+// modal clears on dismiss.
+function WelcomeStartModal({ onClose }) {
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 11000, background: "rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: T.darkCard, borderRadius: 14, padding: 22, maxWidth: 400, width: "100%", maxHeight: "90vh", overflowY: "auto", border: `1px solid ${T.copper}40`, position: "relative" }}>
+        <button onClick={onClose} style={{ position: "absolute", top: 12, right: 12, background: "none", border: "none", cursor: "pointer", padding: 6, display: "flex" }}>
+          <X size={18} color={T.tertiary} />
+        </button>
+        <div style={{ width: 56, height: 56, borderRadius: "50%", background: `${T.copper}18`, border: `2px solid ${T.copper}`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
+          <Mountain size={26} color={T.copper} strokeWidth={1.5} />
+        </div>
+        <h2 style={{ fontFamily: sans, fontSize: 18, color: T.white, margin: "0 0 6px", fontWeight: 700, textAlign: "center", letterSpacing: 0.5 }}>WELCOME TO TRAILHEAD</h2>
+        <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, textAlign: "center", margin: "0 0 18px", lineHeight: 1.5 }}>Here are a few good places to start.</p>
+        <div style={{ marginBottom: 18 }}>
+          {[
+            { icon: Wrench, title: "Add your build", body: "Document your rig with photos + a full mods breakdown. Others can like, comment, and share." },
+            { icon: Map, title: "Explore the map", body: "See community trip reports, plans, and camping spots near you. Save the ones you want to do." },
+            { icon: Route, title: "Plan a trip", body: "Drop pins on the map to chart a route. Turn a plan into a convoy to bring others along." },
+            { icon: Compass, title: "Browse the forum", body: "How-to guides, troubleshooting, regional groups, and the marketplace are all in there." },
+            { icon: Users, title: "Find your people", body: "Follow other overlanders, join convoys, and DM when you need a buddy on the trail." },
+          ].map((it, i, arr) => {
+            const Icon = it.icon;
+            return (
+              <div key={i} style={{ display: "flex", gap: 12, paddingBottom: i < arr.length - 1 ? 12 : 0, marginBottom: i < arr.length - 1 ? 12 : 0, borderBottom: i < arr.length - 1 ? `1px solid ${T.charcoal}` : "none" }}>
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: `${T.copper}18`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <Icon size={16} color={T.copper} strokeWidth={1.5} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontFamily: sans, fontSize: 13, color: T.white, margin: "0 0 2px", fontWeight: 600 }}>{it.title}</p>
+                  <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: 0, lineHeight: 1.5 }}>{it.body}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <button onClick={onClose} style={{ width: "100%", padding: "13px 16px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 1.5 }}>START EXPLORING</button>
       </div>
     </div>
   );
@@ -22791,7 +22839,7 @@ export default function Trailhead() {
   useEffect(() => {
     if (typeof localStorage === "undefined") return;
     try {
-      if (authState === "verify-email" || authState === "install-pwa" || authState === "enable-push" || authState === "onboarding") {
+      if (authState === "verify-email" || authState === "onboarding" || authState === "install-pwa") {
         localStorage.setItem("th_onboarding_step", authState);
       } else if (authState === "app") {
         localStorage.removeItem("th_onboarding_step");
@@ -22822,6 +22870,10 @@ export default function Trailhead() {
   // Push prompt modal — fires once when a user opens Trailhead in
   // standalone mode for the first time and push isn't enabled yet.
   const [showPushModal, setShowPushModal] = useState(false);
+  // Welcome / where-to-start modal — PWA-only follow-up after push prompt
+  // resolves. Gated by user_metadata.wizard_pwa_pending so it only fires
+  // for genuinely-new signups, not existing PWA users.
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   // Deep-link target for ProfileScreen: when set to "push", profile opens
   // with the settings panel open + scrolled to the push notification toggle.
   const [pendingProfileScroll, setPendingProfileScroll] = useState(null);
@@ -23480,7 +23532,10 @@ export default function Trailhead() {
         const wizardPending = !!(session.user && session.user.user_metadata && session.user.user_metadata.wizard_pending);
         let resumed = null;
         try { resumed = typeof localStorage !== "undefined" ? localStorage.getItem("th_onboarding_step") : null; } catch (e) {}
-        const next = resumed || (wizardPending ? "install-pwa" : (hasHandle ? "app" : "onboarding"));
+        // Wizard order: signup → verify-email → onboarding → install-pwa → app.
+        // wizardPending fires on cross-device resume → land at onboarding,
+        // which is the first browser step after verification.
+        const next = resumed || (wizardPending ? "onboarding" : (hasHandle ? "app" : "onboarding"));
         setAuthState(next);
         if (next === "app" && hasHandle) hydrateUserData(session); // sets appReady when complete
         else setAppReady(true); // wizard screens need no hydrate
@@ -23525,8 +23580,8 @@ export default function Trailhead() {
         const hasHandle = !!(session.user && session.user.user_metadata && session.user.user_metadata.handle);
         const wizardPending = !!(session.user && session.user.user_metadata && session.user.user_metadata.wizard_pending);
         setAuthState(prev => {
-          if (prev === "signup" || prev === "verify-email" || prev === "install-pwa" || prev === "enable-push" || prev === "onboarding") return prev;
-          if (wizardPending) return "install-pwa";
+          if (prev === "signup" || prev === "verify-email" || prev === "onboarding" || prev === "install-pwa") return prev;
+          if (wizardPending) return "onboarding";
           return hasHandle ? "app" : "onboarding";
         });
         setIsGuest(false);
@@ -25642,7 +25697,10 @@ export default function Trailhead() {
   // Install/push prompt detection — placed AFTER both isGuest and
   // notifPrefs declarations to avoid TDZ in the deps array.
   //   1. Not standalone + iOS/Android → InstallPromptModal (3-day cooldown)
-  //   2. Standalone + push not enabled + not yet prompted → PushPromptModal
+  //   2. Standalone + wizard_pwa_pending → PushPromptModal → then
+  //      WelcomeStartModal (sequential PWA-onboarding) → clear flag
+  //   3. Standalone + push not enabled + not yet prompted (existing PWA
+  //      users without wizard_pwa_pending) → PushPromptModal only
   // Install fires first since iOS can't enable push until standalone.
   useEffect(() => {
     if (authState !== "app") return;
@@ -25650,6 +25708,19 @@ export default function Trailhead() {
     if (typeof window === "undefined") return;
     const platform = detectInstallPlatform();
     if (platform === "standalone") {
+      const wizardPwaPending = !!(supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.wizard_pwa_pending);
+      // Cross-device new-signup path → fire push prompt first; welcome
+      // chains after dismissal via the handlers below.
+      if (wizardPwaPending) {
+        if (!notifPrefs.push && typeof Notification !== "undefined" && Notification.permission !== "denied") {
+          const t = setTimeout(() => setShowPushModal(true), 1200);
+          return () => clearTimeout(t);
+        }
+        // Push already on (or unavailable) → skip straight to welcome.
+        const t = setTimeout(() => setShowWelcomeModal(true), 1200);
+        return () => clearTimeout(t);
+      }
+      // Existing PWA users — push prompt only, gated by seen-at flag.
       try {
         const seenAt = localStorage.getItem("th_push_prompt_seen_at");
         if (!seenAt && !notifPrefs.push && typeof Notification !== "undefined" && Notification.permission !== "denied") {
@@ -25667,7 +25738,13 @@ export default function Trailhead() {
       const t = setTimeout(() => setShowInstallModal(true), 1500);
       return () => clearTimeout(t);
     } catch (e) {}
-  }, [authState, isGuest, notifPrefs.push]);
+  }, [authState, isGuest, notifPrefs.push, supabaseSession]);
+  // Helper to clear wizard_pwa_pending in user_metadata once the welcome
+  // modal dismisses. Best-effort; failure is non-fatal (modal already
+  // closed, localStorage gates further fires within this session).
+  const clearWizardPwaPending = async () => {
+    try { await supabase.auth.updateUser({ data: { wizard_pwa_pending: false } }); } catch (e) { /* non-fatal */ }
+  };
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [showDM, setShowDM] = useState(false);
   // initialConvId — set after find/create resolves; DMScreen consumes once.
@@ -28880,7 +28957,7 @@ export default function Trailhead() {
   }
   if (authState === "signup") {
     return <SignupScreen
-      onSignup={() => setAuthState("install-pwa")}
+      onSignup={() => setAuthState("onboarding")}
       onGoToLogin={() => setAuthState("login")}
       onSetProfilePic={handleSetProfilePic}
       onAddBuild={addBuild}
@@ -28895,28 +28972,8 @@ export default function Trailhead() {
     return <VerifyEmailScreen
       session={supabaseSession}
       email={pendingVerifyEmail}
-      onContinue={() => setAuthState("install-pwa")}
+      onContinue={() => setAuthState("onboarding")}
       onCancel={() => { setPendingVerifyEmail(""); try { localStorage.removeItem("th_pending_verify_email"); } catch (e) {} setAuthState("signup"); }}
-    />;
-  }
-  if (authState === "install-pwa") {
-    return <InstallPWAScreen
-      onContinue={() => setAuthState("enable-push")}
-      onSkip={() => setAuthState("enable-push")}
-    />;
-  }
-  if (authState === "enable-push") {
-    // Push subscribe needs an authed session; if somehow we're here
-    // without one, fall through to onboarding so login retries via the
-    // post-onboarding flow.
-    return <EnablePushScreen
-      onSubscribe={async () => {
-        const ok = await subscribeToPush();
-        if (ok) setNotifPrefs(prev => ({ ...prev, push: true }));
-        setAuthState("onboarding");
-        return ok;
-      }}
-      onSkip={() => setAuthState("onboarding")}
     />;
   }
   if (authState === "onboarding") {
@@ -28924,7 +28981,13 @@ export default function Trailhead() {
       session={supabaseSession}
       onSetProfilePic={handleSetProfilePic}
       onAddBuild={addBuild}
-      onComplete={() => setAuthState("app")}
+      onComplete={() => setAuthState("install-pwa")}
+    />;
+  }
+  if (authState === "install-pwa") {
+    return <InstallPWAScreen
+      onContinue={() => setAuthState("app")}
+      onSkip={() => setAuthState("app")}
     />;
   }
 
@@ -29212,12 +29275,25 @@ export default function Trailhead() {
             try { localStorage.setItem("th_push_prompt_seen_at", String(Date.now())); } catch (e) {}
             setProfileStack(["self"]);
             setPendingProfileScroll("push");
+            // For new-signup PWA path: chain into welcome after a moment
+            // so they see both prompts. For existing users (no wizard
+            // flag), this is a no-op since wizard_pwa_pending is undef.
+            const wizardPwaPending = !!(supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.wizard_pwa_pending);
+            if (wizardPwaPending) setTimeout(() => setShowWelcomeModal(true), 800);
           }}
           onSkip={() => {
             setShowPushModal(false);
             try { localStorage.setItem("th_push_prompt_seen_at", String(Date.now())); } catch (e) {}
+            const wizardPwaPending = !!(supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.wizard_pwa_pending);
+            if (wizardPwaPending) setTimeout(() => setShowWelcomeModal(true), 400);
           }}
         />
+      )}
+      {showWelcomeModal && (
+        <WelcomeStartModal onClose={() => {
+          setShowWelcomeModal(false);
+          clearWizardPwaPending();
+        }} />
       )}
       <TopBar
         onProfile={openProfile}
