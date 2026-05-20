@@ -340,7 +340,7 @@ async function resolveEntity(type, id) {
     const want = type === "plan" ? "plan" : "report";
     const row = await supabaseFetch(
       "trip_reports",
-      `slug=eq.${encodeURIComponent(id)}&select=name,slug,description,hero_img,start_lat,start_lng,kind,distance_mi,route_geom,route_data&limit=1`
+      `slug=eq.${encodeURIComponent(id)}&select=name,slug,description,hero_img,start_lat,start_lng,kind,distance_mi,elev_gain_ft,duration_min,region,state_code,terrains,tags,difficulty,planned_start,planned_end,route_geom,route_data,created_at,updated_at,user_id&limit=1`
     );
     if (!row) return null;
     if (row.kind && row.kind !== want) return null;
@@ -354,8 +354,6 @@ async function resolveEntity(type, id) {
       : null;
     const stat = row.distance_mi != null ? ` · ${Number(row.distance_mi).toFixed(1)} mi` : "";
     const image = routeMap || row.hero_img || pinMap;
-    // For photo heroes, lift the matching photo's alt. For map-image
-    // heroes (route polylines / pin maps) describe the route itself.
     let imageAlt = "";
     if (image && image === row.hero_img) {
       const photos = row.route_data && Array.isArray(row.route_data.photos) ? row.route_data.photos : [];
@@ -364,6 +362,15 @@ async function resolveEntity(type, id) {
     if (!imageAlt) {
       imageAlt = `${row.name} ${isReport ? "trip report" : "trip plan"} route map on Trailhead`;
     }
+    // Author profile for E-E-A-T Person schema.
+    let author = null;
+    if (row.user_id) {
+      const prof = await supabaseFetch(
+        "profiles",
+        `id=eq.${encodeURIComponent(row.user_id)}&select=full_name,handle,avatar_url&limit=1`
+      );
+      if (prof) author = { name: prof.full_name || prof.handle || "Author", handle: prof.handle || "", avatarUrl: prof.avatar_url || null };
+    }
     return {
       title: `${row.name}${isReport ? " · Trip Report" : " · Trip Plan"}`,
       description:
@@ -371,41 +378,121 @@ async function resolveEntity(type, id) {
         `${isReport ? "Overlanding trip report" : "Planned overlanding trip"}${stat} on Trailhead.`,
       image,
       imageAlt,
+      jsonLd: {
+        kind: "TripReport",
+        isReport,
+        title: row.name,
+        description: row.description || "",
+        image,
+        createdAt: row.created_at,
+        modifiedAt: row.updated_at && row.updated_at !== row.created_at ? row.updated_at : null,
+        author,
+        startLat: row.start_lat,
+        startLng: row.start_lng,
+        region: row.region,
+        stateCode: row.state_code,
+        terrains: Array.isArray(row.terrains) ? row.terrains : [],
+        tags: Array.isArray(row.tags) ? row.tags : [],
+        difficulty: row.difficulty,
+        distanceMi: row.distance_mi,
+        elevGainFt: row.elev_gain_ft,
+        durationMin: row.duration_min,
+        plannedStart: row.planned_start,
+        plannedEnd: row.planned_end,
+      },
+      breadcrumb: {
+        items: [
+          { name: "Trailhead", url: null }, // url filled in handler with origin
+          { name: isReport ? "Trip Reports" : "Trip Plans", url: null },
+          { name: row.name, url: null },
+        ],
+      },
     };
   }
   if (type === "spot") {
     const row = await supabaseFetch(
       "camping_spots",
-      `id=eq.${encodeURIComponent(id)}&visibility=eq.public&select=name,description,lat,lng,spot_type,photos&limit=1`
+      `id=eq.${encodeURIComponent(id)}&visibility=eq.public&select=name,description,lat,lng,spot_type,fee,source,photos,created_at,updated_at&limit=1`
     );
     if (!row) return null;
     // Spot OG image is currently always a Mapbox static map (no photo
     // hero). Describe the location for accessibility.
     const firstPhotoAlt = row.photos && row.photos[0] && typeof row.photos[0].alt === "string" ? row.photos[0].alt : "";
+    const firstPhotoUrl = row.photos && row.photos[0]
+      ? (typeof row.photos[0] === "string" ? row.photos[0] : row.photos[0].url)
+      : null;
+    const image = firstPhotoUrl || (row.lng != null && row.lat != null ? staticMap(row.lng, row.lat, "5B8C5A", "circle") : null);
     return {
       title: `${row.name} · Camping Spot`,
       description:
         row.description ||
         `Camping spot on Trailhead${row.spot_type && row.spot_type !== "unknown" ? ` · ${row.spot_type}` : ""}.`,
-      image: row.lng != null && row.lat != null ? staticMap(row.lng, row.lat, "5B8C5A", "circle") : null,
+      image,
       imageAlt: firstPhotoAlt || `${row.name} camping spot location map`,
+      jsonLd: {
+        kind: "CampingSpot",
+        name: row.name,
+        description: row.description || "",
+        image,
+        lat: row.lat,
+        lng: row.lng,
+        spotType: row.spot_type,
+        fee: row.fee,
+        source: row.source,
+        createdAt: row.created_at,
+        modifiedAt: row.updated_at && row.updated_at !== row.created_at ? row.updated_at : null,
+      },
+      breadcrumb: {
+        items: [
+          { name: "Trailhead", url: null },
+          { name: "Camping Spots", url: null },
+          { name: row.name, url: null },
+        ],
+      },
     };
   }
   if (type === "build") {
     const row = await supabaseFetch(
       "builds",
-      `id=eq.${encodeURIComponent(id)}&select=name,year,make,model,hero_img,build_data&limit=1`
+      `id=eq.${encodeURIComponent(id)}&select=name,year,make,model,trim,hero_img,build_data,created_at,updated_at,user_id&limit=1`
     );
     if (!row) return null;
-    const sub = [row.year, row.make, row.model].filter(Boolean).join(" ");
+    const sub = [row.year, row.make, row.model, row.trim].filter(Boolean).join(" ");
     const image = row.hero_img || null;
     const mainPhotos = row.build_data && Array.isArray(row.build_data.mainPhotos) ? row.build_data.mainPhotos : [];
     const heroAlt = findPhotoAlt(mainPhotos, image);
+    let author = null;
+    if (row.user_id) {
+      const prof = await supabaseFetch(
+        "profiles",
+        `id=eq.${encodeURIComponent(row.user_id)}&select=full_name,handle,avatar_url&limit=1`
+      );
+      if (prof) author = { name: prof.full_name || prof.handle || "Owner", handle: prof.handle || "", avatarUrl: prof.avatar_url || null };
+    }
     return {
       title: `${row.name || sub || "Build"} · Trailhead`,
       description: sub ? `${sub} · Overlanding build on Trailhead.` : "Overlanding build on Trailhead.",
       image,
       imageAlt: heroAlt || `${row.name || sub} overlanding build photo`,
+      jsonLd: {
+        kind: "Build",
+        name: row.name,
+        year: row.year,
+        make: row.make,
+        model: row.model,
+        trim: row.trim,
+        image,
+        createdAt: row.created_at,
+        modifiedAt: row.updated_at && row.updated_at !== row.created_at ? row.updated_at : null,
+        author,
+      },
+      breadcrumb: {
+        items: [
+          { name: "Trailhead", url: null },
+          { name: "Builds", url: null },
+          { name: row.name || sub, url: null },
+        ],
+      },
     };
   }
   if (type === "hq") {
@@ -414,6 +501,13 @@ async function resolveEntity(type, id) {
       description: `${LPO_HQ.address} · The home base of the Lone Peak Overland community.`,
       image: staticMap(LPO_HQ.lng, LPO_HQ.lat, "BD472A", "star"),
       imageAlt: `${LPO_HQ.name} location map in ${LPO_HQ.address}`,
+      jsonLd: { kind: "HQ" },
+      breadcrumb: {
+        items: [
+          { name: "Trailhead", url: null },
+          { name: "HQ", url: null },
+        ],
+      },
     };
   }
   // Generic feed posts (and route posts which share the /post/:id URL).
@@ -824,45 +918,49 @@ module.exports = async function handler(req, res) {
   const canonicalTag = `<link rel="canonical" href="${escapeHtml(canonicalUrl)}">`;
 
   // BreadcrumbList JSON-LD — gives Google the navigation hierarchy so
-  // SERPs show "Trailhead › Forum › Suspension & Lift › <thread title>"
-  // instead of the raw URL. Emitted for forum threads + subcategory
-  // pages; other entity types could add this too as a future improvement.
+  // SERPs show "Trailhead › Forum › <subcategory> › <thread title>" (or
+  // the appropriate hierarchy for the entity type) instead of the raw URL.
   let breadcrumbLdTag = "";
+  let breadcrumbItems = null;
   if (type === "forum-thread" && meta.article && meta.article.subcategorySlug) {
     const subInfo = FORUM_SUB_TO_INFO[meta.article.subcategorySlug];
-    const items = [
+    breadcrumbItems = [
       { name: "Trailhead", url: `${origin}/` },
       { name: "Forum", url: `${origin}/` },
     ];
-    if (subInfo) items.push({ name: subInfo.name, url: `${origin}/forum/${meta.article.subcategorySlug}` });
-    items.push({ name: meta.article.title || "Thread", url: canonicalUrl });
-    const breadcrumb = {
-      "@context": "https://schema.org",
-      "@type": "BreadcrumbList",
-      itemListElement: items.map((it, i) => ({
-        "@type": "ListItem",
-        position: i + 1,
-        name: it.name,
-        item: it.url,
-      })),
-    };
-    breadcrumbLdTag = `<script type="application/ld+json">${JSON.stringify(breadcrumb).replace(/</g, "\\u003c")}</script>`;
+    if (subInfo) breadcrumbItems.push({ name: subInfo.name, url: `${origin}/forum/${meta.article.subcategorySlug}` });
+    breadcrumbItems.push({ name: meta.article.title || "Thread", url: canonicalUrl });
   } else if (type === "forum-sub" && meta.article && meta.article.subInfo) {
     const subInfo = meta.article.subInfo;
-    const items = [
+    breadcrumbItems = [
       { name: "Trailhead", url: `${origin}/` },
       { name: "Forum", url: `${origin}/` },
       { name: subInfo.name, url: canonicalUrl },
     ];
+  } else if (meta.breadcrumb && Array.isArray(meta.breadcrumb.items)) {
+    // Generic breadcrumb path declared by the entity resolver — fill in
+    // any null URLs with sensible defaults (home for first, canonical
+    // for last). Middle items keep null `url` since we don't have routes
+    // for "Trip Reports" / "Builds" / etc. yet (the SPA route lists are
+    // app-internal); Google still gets the name hierarchy.
+    breadcrumbItems = meta.breadcrumb.items.map((it, i, arr) => ({
+      name: it.name,
+      url: it.url || (i === 0 ? `${origin}/` : (i === arr.length - 1 ? canonicalUrl : null)),
+    }));
+  }
+  if (breadcrumbItems) {
     const breadcrumb = {
       "@context": "https://schema.org",
       "@type": "BreadcrumbList",
-      itemListElement: items.map((it, i) => ({
+      itemListElement: breadcrumbItems.map((it, i) => Object.fromEntries(Object.entries({
         "@type": "ListItem",
         position: i + 1,
         name: it.name,
-        item: it.url,
-      })),
+        // Schema.org BreadcrumbList: item is required for all but the last
+        // entry. We emit URLs when we have them; omit `item` for entries
+        // without a target.
+        item: it.url || undefined,
+      }).filter(([, v]) => v !== undefined))),
     };
     breadcrumbLdTag = `<script type="application/ld+json">${JSON.stringify(breadcrumb).replace(/</g, "\\u003c")}</script>`;
   }
@@ -1014,6 +1112,128 @@ module.exports = async function handler(req, res) {
     };
     const serialized = JSON.stringify(ld).replace(/</g, "\\u003c");
     jsonLdTag = `<script type="application/ld+json">${serialized}</script>`;
+  } else if (meta.jsonLd && meta.jsonLd.kind === "TripReport") {
+    // Article schema for trip reports + plans. Carries author (Person),
+    // image, geo coords from start_lat/lng, and topical keywords from
+    // terrains + tags. Plans add planned dates; reports add distance/elev.
+    const j = meta.jsonLd;
+    const authorNode = j.author ? Object.fromEntries(Object.entries({
+      "@type": "Person",
+      name: j.author.name || undefined,
+      alternateName: j.author.handle ? `@${j.author.handle}` : undefined,
+      identifier: j.author.handle || undefined,
+      image: j.author.avatarUrl || undefined,
+    }).filter(([, v]) => v !== undefined)) : undefined;
+    const keywords = [...(j.terrains || []), ...(j.tags || []), j.region, j.stateCode].filter(Boolean).join(", ") || undefined;
+    const ld = {
+      "@context": "https://schema.org",
+      "@type": "Article",
+      headline: j.title,
+      description: j.description || undefined,
+      image: j.image || undefined,
+      datePublished: j.createdAt || undefined,
+      dateModified: j.modifiedAt || j.createdAt || undefined,
+      url: canonicalUrl,
+      mainEntityOfPage: canonicalUrl,
+      keywords,
+      author: authorNode,
+      publisher: {
+        "@type": "Organization",
+        name: "Trailhead",
+        url: `${origin}/`,
+        logo: { "@type": "ImageObject", url: `${origin}/lone-peak-flag.png` },
+      },
+      contentLocation: (j.startLat != null && j.startLng != null)
+        ? { "@type": "Place", geo: { "@type": "GeoCoordinates", latitude: j.startLat, longitude: j.startLng } }
+        : undefined,
+      about: j.region || j.stateCode
+        ? Object.fromEntries(Object.entries({
+            "@type": "Place",
+            name: [j.region, j.stateCode].filter(Boolean).join(", "),
+          }).filter(([, v]) => v !== undefined))
+        : undefined,
+    };
+    const clean = Object.fromEntries(Object.entries(ld).filter(([, v]) => v !== undefined));
+    jsonLdTag = `<script type="application/ld+json">${JSON.stringify(clean).replace(/</g, "\\u003c")}</script>`;
+  } else if (meta.jsonLd && meta.jsonLd.kind === "CampingSpot") {
+    // TouristAttraction for camping spots — geo coords + amenityFeature
+    // (spot_type / fee) tell Google this is a physical place users can
+    // visit; eligible for Google Maps result enrichment.
+    const j = meta.jsonLd;
+    const amenityFeatures = [];
+    if (j.spotType && j.spotType !== "unknown") amenityFeatures.push({ "@type": "LocationFeatureSpecification", name: "Spot type", value: j.spotType });
+    if (j.fee) amenityFeatures.push({ "@type": "LocationFeatureSpecification", name: "Fee", value: j.fee });
+    const ld = {
+      "@context": "https://schema.org",
+      "@type": "TouristAttraction",
+      name: j.name,
+      description: j.description || undefined,
+      image: j.image || undefined,
+      url: canonicalUrl,
+      geo: (j.lat != null && j.lng != null)
+        ? { "@type": "GeoCoordinates", latitude: j.lat, longitude: j.lng }
+        : undefined,
+      amenityFeature: amenityFeatures.length > 0 ? amenityFeatures : undefined,
+      dateCreated: j.createdAt || undefined,
+      dateModified: j.modifiedAt || undefined,
+    };
+    const clean = Object.fromEntries(Object.entries(ld).filter(([, v]) => v !== undefined));
+    jsonLdTag = `<script type="application/ld+json">${JSON.stringify(clean).replace(/</g, "\\u003c")}</script>`;
+  } else if (meta.jsonLd && meta.jsonLd.kind === "Build") {
+    // Article schema for vehicle builds (Vehicle schema requires VIN
+    // which we don't collect). `about` carries the make/model/year as
+    // a Vehicle sub-entity so Google still ties it to that topical entity.
+    const j = meta.jsonLd;
+    const authorNode = j.author ? Object.fromEntries(Object.entries({
+      "@type": "Person",
+      name: j.author.name || undefined,
+      alternateName: j.author.handle ? `@${j.author.handle}` : undefined,
+      identifier: j.author.handle || undefined,
+      image: j.author.avatarUrl || undefined,
+    }).filter(([, v]) => v !== undefined)) : undefined;
+    const vehicleEntity = (j.year || j.make || j.model) ? Object.fromEntries(Object.entries({
+      "@type": "Vehicle",
+      name: [j.year, j.make, j.model, j.trim].filter(Boolean).join(" "),
+      vehicleModelDate: j.year ? String(j.year) : undefined,
+      manufacturer: j.make ? { "@type": "Organization", name: j.make } : undefined,
+      model: j.model || undefined,
+    }).filter(([, v]) => v !== undefined)) : undefined;
+    const ld = {
+      "@context": "https://schema.org",
+      "@type": "Article",
+      headline: j.name || [j.year, j.make, j.model].filter(Boolean).join(" "),
+      image: j.image || undefined,
+      datePublished: j.createdAt || undefined,
+      dateModified: j.modifiedAt || j.createdAt || undefined,
+      url: canonicalUrl,
+      mainEntityOfPage: canonicalUrl,
+      author: authorNode,
+      about: vehicleEntity,
+      publisher: {
+        "@type": "Organization",
+        name: "Trailhead",
+        url: `${origin}/`,
+        logo: { "@type": "ImageObject", url: `${origin}/lone-peak-flag.png` },
+      },
+    };
+    const clean = Object.fromEntries(Object.entries(ld).filter(([, v]) => v !== undefined));
+    jsonLdTag = `<script type="application/ld+json">${JSON.stringify(clean).replace(/</g, "\\u003c")}</script>`;
+  } else if (meta.jsonLd && meta.jsonLd.kind === "HQ") {
+    // LocalBusiness for HQ — gives Google the address, geo, contact for
+    // potential Google Business Profile enrichment.
+    const ld = {
+      "@context": "https://schema.org",
+      "@type": "LocalBusiness",
+      name: LPO_HQ.name,
+      description: `The home base of the Lone Peak Overland community in ${LPO_HQ.address}.`,
+      address: { "@type": "PostalAddress", addressLocality: "Wenatchee", addressRegion: "WA", addressCountry: "US" },
+      geo: { "@type": "GeoCoordinates", latitude: LPO_HQ.lat, longitude: LPO_HQ.lng },
+      url: canonicalUrl,
+      image: meta.image || undefined,
+      parentOrganization: { "@type": "Organization", name: "Lone Peak Overland", url: "https://www.lonepeakoverland.com/" },
+    };
+    const clean = Object.fromEntries(Object.entries(ld).filter(([, v]) => v !== undefined));
+    jsonLdTag = `<script type="application/ld+json">${JSON.stringify(clean).replace(/</g, "\\u003c")}</script>`;
   }
 
   let html = SPA_HTML;
