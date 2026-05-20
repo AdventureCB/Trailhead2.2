@@ -459,6 +459,40 @@ function tripStaticMapUrl(lat, lng, kind, { width = 600, height = 320, zoom = 11
 function hqStaticMapUrl({ width = 600, height = 320, zoom = 13 } = {}) {
   return `https://api.mapbox.com/styles/v1/mapbox/outdoors-v12/static/pin-l-star+BD472A(${LPO_HQ.lng},${LPO_HQ.lat})/${LPO_HQ.lng},${LPO_HQ.lat},${zoom}/${width}x${height}@2x?access_token=${MAPBOX_TOKEN}`;
 }
+// Static map with the full route line as an overlay. Used by TripReportCard
+// for plans (which rarely have user-uploaded hero images — the route IS
+// the visual). routeGeom is an array of [lng, lat] tuples (the same shape
+// derived by deriveTripGeom + stored on trip_reports.route_geom). Uses
+// the Mapbox Static Images "auto" framing so the line is centered + fit
+// to the available pixel space. Returns null when the geom is empty or
+// the URL would exceed the ~8KB safe limit (rare; we cap at 100 points).
+function tripRouteStaticMapUrl(routeGeom, kind, { width = 900, height = 360 } = {}) {
+  if (!Array.isArray(routeGeom) || routeGeom.length < 2) return null;
+  // Sample down to <= 100 points to keep URL length safe (URL-encoded
+  // GeoJSON LineString of 100 points lands around 2.5KB, well under the
+  // 8KB Mapbox Static limit).
+  const sample = routeGeom.length > 100
+    ? routeGeom.filter((_, i) => i % Math.ceil(routeGeom.length / 100) === 0).concat([routeGeom[routeGeom.length - 1]])
+    : routeGeom;
+  const coords = sample.filter(p => Array.isArray(p) && isFinite(p[0]) && isFinite(p[1]) && Math.abs(p[1]) <= 90 && Math.abs(p[0]) <= 180);
+  if (coords.length < 2) return null;
+  const colorHex = kind === "plan" ? "#C49A6C" : "#8B6FAF"; // copper plans / purple reports
+  const colorShort = kind === "plan" ? "C49A6C" : "8B6FAF";
+  // Round to 5 decimals (~1m precision) — keeps the URL short.
+  const lineFeature = {
+    type: "Feature",
+    properties: { stroke: colorHex, "stroke-width": 4, "stroke-opacity": 1 },
+    geometry: { type: "LineString", coordinates: coords.map(([x, y]) => [Number(x.toFixed(5)), Number(y.toFixed(5))]) },
+  };
+  // Start + end pins so the direction reads at a glance.
+  const start = coords[0];
+  const end = coords[coords.length - 1];
+  const startPin = `pin-s+${colorShort}(${start[0].toFixed(5)},${start[1].toFixed(5)})`;
+  const endPin = `pin-s-circle+${colorShort}(${end[0].toFixed(5)},${end[1].toFixed(5)})`;
+  const geo = `geojson(${encodeURIComponent(JSON.stringify(lineFeature))})`;
+  const overlays = `${geo},${startPin},${endPin}`;
+  return `https://api.mapbox.com/styles/v1/mapbox/outdoors-v12/static/${overlays}/auto/${width}x${height}@2x?access_token=${MAPBOX_TOKEN}&padding=24`;
+}
 
 /* ─── Marker bounce animation (used to highlight a pin from a photo tap) ─── */
 if (!document.querySelector('style[data-trailhead-mapbox]')) {
@@ -11314,9 +11348,29 @@ const TripReportCard = memo(function TripReportCardImpl({ trip, author, onOpen }
   const authorName = (author && author.handle) ? `@${author.handle}` : (author && author.full_name) || "@user";
   const initial = (authorName.replace(/^@/, "")[0] || "?").toUpperCase();
   const diffColor = trip.difficulty === "Expert" ? T.red : trip.difficulty === "Hard" ? T.copper : trip.difficulty === "Moderate" ? T.tertiary : T.green;
+  // Plans rarely have a user-uploaded hero image — the route IS the
+  // visual. Build a static-map preview from the persisted route_geom (or
+  // fall back to a single start-pin static when the plan has no route
+  // points yet). Reports keep their hero_img / Mountain placeholder
+  // behavior unchanged.
+  const isPlan = trip.kind === "plan";
+  let planMapUrl = null;
+  if (isPlan) {
+    planMapUrl = tripRouteStaticMapUrl(trip.route_geom, "plan")
+      || tripStaticMapUrl(trip.start_lat, trip.start_lng, "plan", { width: 900, height: 360 });
+  }
   return (
     <div onClick={() => onOpen && onOpen(trip.id)} style={{ ...cardStyle, overflow: "hidden", cursor: "pointer" }}>
-      {trip.hero_img ? (
+      {isPlan && planMapUrl ? (
+        <div style={{ position: "relative", height: 180, background: T.charcoal }}>
+          <LoadingImage src={planMapUrl} accent={T.copper} width={900} style={{ width: "100%", height: "100%" }} />
+          {trip.difficulty && (
+            <div style={{ position: "absolute", top: 10, right: 10, background: `${T.darkBg}DD`, padding: "4px 10px", borderRadius: 4, backdropFilter: "blur(6px)" }}>
+              <span style={{ fontFamily: sans, fontSize: 9, color: diffColor, fontWeight: 700, letterSpacing: 1 }}>{trip.difficulty.toUpperCase()}</span>
+            </div>
+          )}
+        </div>
+      ) : trip.hero_img ? (
         <div style={{ position: "relative", height: 180, background: T.charcoal }}>
           <LoadingImage src={trip.hero_img} accent={T.purple} width={900} style={{ width: "100%", height: "100%" }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(transparent 40%, rgba(0,0,0,0.85))", pointerEvents: "none" }} />
