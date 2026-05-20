@@ -22717,6 +22717,18 @@ function dbRowToComment(row, profile) {
 // storage bucket and return a new list where those entries have been replaced
 // with their public URLs. http(s) entries are passed through unchanged. Same
 // shape as uploadPostPhotoList but writes to a separate, DM-scoped bucket.
+// Allowed video MIME types for direct uploads. Images always go through
+// canvas re-encode (always emits image/jpeg) so they're safe regardless
+// of input. The video branch in our upload helpers uploads raw blobs;
+// without this allowlist a malicious client could label e.g. an SVG as
+// type:"video" and ship it to the public bucket where it would execute
+// scripts when served. Defense-in-depth — storage.buckets also has
+// allowed_mime_types set in Supabase to catch direct API calls.
+const ALLOWED_VIDEO_MIME = ["video/mp4", "video/quicktime", "video/webm"];
+function isAllowedVideoMime(t) {
+  return typeof t === "string" && ALLOWED_VIDEO_MIME.includes(t.split(";")[0].trim().toLowerCase());
+}
+
 async function uploadDmAttachmentList(list, uid) {
   if (!Array.isArray(list) || list.length === 0) return list;
   const out = [];
@@ -22732,7 +22744,11 @@ async function uploadDmAttachmentList(list, uid) {
       const blob = await resp.blob();
       let uploadBlob, contentType, ext;
       if (isVideo) {
-        contentType = blob.type || "video/mp4";
+        if (!isAllowedVideoMime(blob.type)) {
+          console.warn("[dm-attachments] rejected MIME", blob.type);
+          out.push(entry); continue;
+        }
+        contentType = blob.type;
         ext = (contentType.split("/")[1] || "mp4").split(";")[0];
         if (ext === "quicktime") ext = "mov";
         uploadBlob = blob;
@@ -22810,9 +22826,13 @@ async function uploadPostPhotoList(list, uid) {
       let uploadBlob, contentType, ext;
       if (isVideo) {
         // Videos can't go through compressImage (Canvas-based, image-only).
-        // Upload the raw blob with its native MIME type. Path extension is
-        // derived from MIME so Supabase serves it with a reasonable suffix.
-        contentType = blob.type || "video/mp4";
+        // Upload the raw blob — but ONLY if its MIME is in our allowlist
+        // (mp4/quicktime/webm). Stops SVG/HTML/exe etc. labeled as video.
+        if (!isAllowedVideoMime(blob.type)) {
+          console.warn("[post-photos] rejected MIME", blob.type);
+          out.push(entry); continue;
+        }
+        contentType = blob.type;
         ext = (contentType.split("/")[1] || "mp4").split(";")[0];
         if (ext === "quicktime") ext = "mov"; // iOS native recording
         uploadBlob = blob;
