@@ -17151,7 +17151,7 @@ function AddBuildForm({ onClose, onSave, onDelete, initialData }) {
 }
 
 /* ─── PROFILE SCREEN (Own Profile) ─── */
-function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, initialUserBio, initialIsPublic, onViewUser, onLogout, userBuilds, onAddBuild, onUpdateBuild, onDeleteBuild, profilePic, onSetProfilePic, notifPrefs, onSetNotifPrefs, feedItems, onDeletePost, onEditPost, onUpdateConvoy, onGoToPost, myPoints: myPointsProp, onSaveProfile, followerCount, followingCount, convoyRsvps, onSubscribePush, onUnsubscribePush, renderFeedScopedTo, onViewBuild, savedRoutes, onUnsaveRoute, onStartNav, myTripPlans, onOpenTripPlan, onNewTripPlan }) {
+function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, initialUserBio, initialIsPublic, onViewUser, onLogout, userBuilds, onAddBuild, onUpdateBuild, onDeleteBuild, profilePic, onSetProfilePic, notifPrefs, onSetNotifPrefs, feedItems, onDeletePost, onEditPost, onUpdateConvoy, onGoToPost, myPoints: myPointsProp, onSaveProfile, followerCount, followingCount, convoyRsvps, onSubscribePush, onUnsubscribePush, renderFeedScopedTo, onViewBuild, savedRoutes, onUnsaveRoute, onStartNav, myTripPlans, onOpenTripPlan, onNewTripPlan, isAdmin }) {
   const [isPublic, setIsPublic] = useState(initialIsPublic == null ? true : !!initialIsPublic);
   const [activeTab, setActiveTab] = useState("builds");
   const [activeBuild, setActiveBuild] = useState(0);
@@ -17601,7 +17601,7 @@ function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, init
         </div>
         <h2 style={{ fontFamily: sans, fontSize: 20, color: T.white, margin: "0 0 2px", fontWeight: 700 }}>{user.name}</h2>
         <span style={{ fontFamily: sans, fontSize: 13, color: T.tertiary, display: "block", marginBottom: 4 }}>{user.handle}</span>
-        {(() => { const rank = getUserRank(user.points); const RIcon = RANK_ICON_MAP[rank.icon] || Star; return (
+        {isAdmin && (() => { const rank = getUserRank(user.points); const RIcon = RANK_ICON_MAP[rank.icon] || Star; return (
           <div style={{ display: "inline-flex", alignItems: "center", gap: 5, background: `${rank.color}18`, padding: "4px 12px", borderRadius: 12, marginBottom: 16 }}>
             <RIcon size={13} color={rank.color} strokeWidth={1.5} />
             <span style={{ fontFamily: sans, fontSize: 10, color: rank.color, letterSpacing: 1, fontWeight: 600 }}>{rank.name.toUpperCase()}</span>
@@ -17609,7 +17609,7 @@ function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, init
           </div>
         ); })()}
 
-        {/* Stats Row */}
+        {/* Stats Row — POINTS column gated to admin while Ranks is a v2 feature */}
         <div style={{ display: "flex", justifyContent: "center", gap: 24, marginBottom: 16 }}>
           <div style={{ textAlign: "center" }}>
             <span style={{ fontFamily: sans, fontSize: 18, color: T.white, fontWeight: 700, display: "block" }}>{user.followers}</span>
@@ -17620,11 +17620,15 @@ function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, init
             <span style={{ fontFamily: sans, fontSize: 18, color: T.white, fontWeight: 700, display: "block" }}>{user.following}</span>
             <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1 }}>FOLLOWING</span>
           </div>
-          <div style={{ width: 1, background: T.charcoal }} />
-          <div style={{ textAlign: "center" }}>
-            <span style={{ fontFamily: sans, fontSize: 18, color: T.copper, fontWeight: 700, display: "block" }}>{user.points.toLocaleString()}</span>
-            <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1 }}>POINTS</span>
-          </div>
+          {isAdmin && (
+            <>
+              <div style={{ width: 1, background: T.charcoal }} />
+              <div style={{ textAlign: "center" }}>
+                <span style={{ fontFamily: sans, fontSize: 18, color: T.copper, fontWeight: 700, display: "block" }}>{user.points.toLocaleString()}</span>
+                <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1 }}>POINTS</span>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Earned Badges */}
@@ -18332,7 +18336,7 @@ function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, isAdmin,
         </div>
         <h2 style={{ fontFamily: sans, fontSize: 20, color: T.white, margin: "0 0 2px", fontWeight: 700 }}>{p.name}</h2>
         <span style={{ fontFamily: sans, fontSize: 13, color: T.tertiary, display: "block", marginBottom: 4 }}>{p.handle}</span>
-        {(() => { const rank = getUserRank(p.points); const RIcon = RANK_ICON_MAP[rank.icon] || Star; return (
+        {isAdmin && (() => { const rank = getUserRank(p.points); const RIcon = RANK_ICON_MAP[rank.icon] || Star; return (
           <div style={{ display: "inline-flex", alignItems: "center", gap: 5, background: `${rank.color}18`, padding: "4px 12px", borderRadius: 12, marginBottom: 14 }}>
             <RIcon size={13} color={rank.color} strokeWidth={1.5} />
             <span style={{ fontFamily: sans, fontSize: 10, color: rank.color, letterSpacing: 1, fontWeight: 600 }}>{rank.name.toUpperCase()}</span>
@@ -18393,7 +18397,7 @@ function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, isAdmin,
           </div>
         )}
 
-        {/* Stats Row */}
+        {/* Stats Row — POINTS column gated to admin while Ranks is a v2 feature */}
         <div style={{ display: "flex", justifyContent: "center", gap: 24, marginBottom: 16 }}>
           <div style={{ textAlign: "center" }}>
             <span style={{ fontFamily: sans, fontSize: 18, color: T.white, fontWeight: 700, display: "block" }}>{(liveCounts ? liveCounts.followers : p.followers).toLocaleString()}</span>
@@ -18404,11 +18408,12 @@ function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, isAdmin,
             <span style={{ fontFamily: sans, fontSize: 18, color: T.white, fontWeight: 700, display: "block" }}>{(liveCounts ? liveCounts.following : p.following).toLocaleString()}</span>
             <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1 }}>FOLLOWING</span>
           </div>
+          {isAdmin && <>
           <div style={{ width: 1, background: T.charcoal }} />
           <div style={{ textAlign: "center" }}>
             <span style={{ fontFamily: sans, fontSize: 18, color: T.copper, fontWeight: 700, display: "block" }}>{p.points.toLocaleString()}</span>
             <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1 }}>POINTS</span>
-          </div>
+          </div></>}
         </div>
 
         {/* Earned Badges — hidden until real per-user badge progress is
@@ -28438,7 +28443,7 @@ export default function Trailhead() {
           isOtherProfile ? (
             <OtherProfileScreen userId={profileStack[1]} onBack={goBack} onMessage={(user) => openDM(user)} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} onAdminUpdateUserRole={adminUpdateUserRole} onAdminDeclineAmbassador={adminDeclineAmbassadorRequest} followingIds={followingIds} onFollow={requireAuth(followUser)} onUnfollow={requireAuth(unfollowUser)} fetchFollowCounts={fetchFollowCounts} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} allBuilds={allBuilds} onLoadAllBuilds={loadAllBuildsOnce} onlineUserIds={onlineUserIds} allTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} />
           ) : (
-            <ProfileScreen currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} convoyRsvps={convoyRsvps} followerCount={myFollowerCount} followingCount={myFollowingCount} onSubscribePush={subscribeToPush} onUnsubscribePush={unsubscribeFromPush} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} savedRoutes={savedRoutes} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} onStartNav={(route) => setActiveNavRoute(route)} myTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} onNewTripPlan={() => requireAuth(() => enterPlanBuilder())()} initialUserName={(currentProfile && currentProfile.full_name) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name) || null} initialUserHandle={(currentProfile && currentProfile.handle) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle) || null} initialUserBio={currentProfile ? currentProfile.bio : null} initialIsPublic={currentProfile ? currentProfile.is_public : null} onSaveProfile={saveProfile} onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={deleteBuild} profilePic={profilePic} onSetProfilePic={handleSetProfilePic} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => deletePost(id)} onEditPost={(id, newText) => updatePost(id, { title: newText })} onUpdateConvoy={(convoyId, updates) => {
+            <ProfileScreen currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} convoyRsvps={convoyRsvps} followerCount={myFollowerCount} followingCount={myFollowingCount} onSubscribePush={subscribeToPush} onUnsubscribePush={unsubscribeFromPush} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} savedRoutes={savedRoutes} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} onStartNav={(route) => setActiveNavRoute(route)} myTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} onNewTripPlan={() => requireAuth(() => enterPlanBuilder())()} initialUserName={(currentProfile && currentProfile.full_name) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name) || null} initialUserHandle={(currentProfile && currentProfile.handle) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle) || null} initialUserBio={currentProfile ? currentProfile.bio : null} initialIsPublic={currentProfile ? currentProfile.is_public : null} onSaveProfile={saveProfile} onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={deleteBuild} profilePic={profilePic} onSetProfilePic={handleSetProfilePic} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => deletePost(id)} onEditPost={(id, newText) => updatePost(id, { title: newText })} onUpdateConvoy={(convoyId, updates) => {
               updatePost(convoyId, updates);
               // DM going/maybe responders that the convoy was updated.
               const convoy = feedItemsRef.current.find(p => p.id === convoyId);
