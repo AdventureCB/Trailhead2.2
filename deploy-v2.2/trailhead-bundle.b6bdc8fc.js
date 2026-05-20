@@ -46262,7 +46262,16 @@ ${suffix}`;
       categorySlug: row.category_slug,
       subcategorySlug: row.subcategory_slug,
       subName: subInfo ? subInfo.name : "",
-      catName: catInfo ? catInfo.name : ""
+      catName: catInfo ? catInfo.name : "",
+      // Marketplace listing fields. Null/undefined on every non-marketplace
+      // thread; populated on marketplace threads regardless of subcategory.
+      // listingDetails is a free-form jsonb blob (brand/model/year/location/
+      // condition/price_modifier/trade_for) so we can add fields later
+      // without a migration.
+      listingPrice: row.listing_price != null ? Number(row.listing_price) : null,
+      listingCurrency: row.listing_currency || "USD",
+      listingStatus: row.listing_status || "active",
+      listingDetails: row.listing_details && typeof row.listing_details === "object" ? row.listing_details : {}
     };
   }
   function dbRowToForumReply(row, profile) {
@@ -46666,6 +46675,15 @@ ${suffix}`;
     const [editTitle, setEditTitle] = (0, import_react4.useState)("");
     const [editSections, setEditSections] = (0, import_react4.useState)([]);
     const [editPhotos, setEditPhotos] = (0, import_react4.useState)([]);
+    const [editPrice, setEditPrice] = (0, import_react4.useState)("");
+    const [editPriceFree, setEditPriceFree] = (0, import_react4.useState)(false);
+    const [editPriceOBO, setEditPriceOBO] = (0, import_react4.useState)(false);
+    const [editCondition, setEditCondition] = (0, import_react4.useState)("");
+    const [editBrand, setEditBrand] = (0, import_react4.useState)("");
+    const [editModelYear, setEditModelYear] = (0, import_react4.useState)("");
+    const [editLocation, setEditLocation] = (0, import_react4.useState)("");
+    const [editListingDesc, setEditListingDesc] = (0, import_react4.useState)("");
+    const [editListingStatus, setEditListingStatus] = (0, import_react4.useState)("active");
     const [editDeleteConfirm, setEditDeleteConfirm] = (0, import_react4.useState)(false);
     const beginEditThread = (thread) => {
       if (!thread) return;
@@ -46675,6 +46693,16 @@ ${suffix}`;
       setEditSections(fromSections);
       setEditPhotos(thread.photos ? thread.photos.map((u, i) => ({ url: u.url || u, id: i, type: u.type || "image", caption: u.caption || "", alt: u.alt || "" })) : []);
       setEditDeleteConfirm(false);
+      const d = thread.listingDetails && typeof thread.listingDetails === "object" ? thread.listingDetails : {};
+      setEditPrice(thread.listingPrice != null ? String(thread.listingPrice) : "");
+      setEditPriceFree(!!d.priceFree);
+      setEditPriceOBO(!!d.priceOBO);
+      setEditCondition(d.condition || "");
+      setEditBrand(d.brand || "");
+      setEditModelYear(d.modelYear || "");
+      setEditLocation(d.location || "");
+      setEditListingDesc(thread.body && (!thread.sections || thread.sections.length === 0) ? thread.body || "" : d.descriptionPlain || (Array.isArray(thread.sections) && thread.sections[0] ? thread.sections[0].body : "") || "");
+      setEditListingStatus(thread.listingStatus || "active");
     };
     const updateEditSection = (id, patch) => setEditSections((prev) => prev.map((s) => s.id === id ? { ...s, ...patch } : s));
     const addEditSection = () => setEditSections((prev) => [...prev, { id: newSectionId(), subheading: "", body: "" }]);
@@ -46690,6 +46718,15 @@ ${suffix}`;
     const [ntPickCat, setNtPickCat] = (0, import_react4.useState)(null);
     const [ntPickSub, setNtPickSub] = (0, import_react4.useState)(null);
     const [ntFromHome, setNtFromHome] = (0, import_react4.useState)(false);
+    const [ntPrice, setNtPrice] = (0, import_react4.useState)("");
+    const [ntPriceFree, setNtPriceFree] = (0, import_react4.useState)(false);
+    const [ntPriceOBO, setNtPriceOBO] = (0, import_react4.useState)(false);
+    const [ntCondition, setNtCondition] = (0, import_react4.useState)("");
+    const [ntBrand, setNtBrand] = (0, import_react4.useState)("");
+    const [ntModelYear, setNtModelYear] = (0, import_react4.useState)("");
+    const [ntLocation, setNtLocation] = (0, import_react4.useState)("");
+    const [ntListingDesc, setNtListingDesc] = (0, import_react4.useState)("");
+    const FORUM_LISTING_CONDITIONS = ["New", "Like New", "Good", "Fair", "For Parts", "N/A"];
     const [searchQuery, setSearchQuery] = (0, import_react4.useState)("");
     const [searchActive, setSearchActive] = (0, import_react4.useState)(false);
     const searchInputRef = (0, import_react4.useRef)(null);
@@ -46766,6 +46803,7 @@ ${suffix}`;
     if (view === "newThread" && (selectedSub || ntFromHome)) {
       const activeCat = ntFromHome ? ntPickCat : selectedCat;
       const activeSub = ntFromHome ? ntPickSub : selectedSub;
+      const isMarketplace = activeCat && activeCat.slug === "marketplace";
       const submitThread = async () => {
         if (!ntTitle.trim()) return;
         if (ntFromHome && (!ntPickCat || !ntPickSub)) return;
@@ -46776,24 +46814,52 @@ ${suffix}`;
         const catName = cat.name;
         const titleText = ntTitle.trim();
         const photoPayload = await commitForumPhotos(ntPhotos);
-        const processedSections = [];
-        for (const s of ntSections) {
-          const subheading = (s.subheading || "").trim();
-          const rawBody = (s.body || "").trim();
-          const processedBody = await processForumBodyImages(rawBody, currentUserId);
-          const plain = processedBody.replace(/<[^>]+>/g, "").trim();
-          if (!subheading && !plain) continue;
-          processedSections.push({ subheading, body: processedBody });
+        let created;
+        if (isMarketplace) {
+          const descHtml = (ntListingDesc || "").trim();
+          const processedDesc = descHtml ? await processForumBodyImages(`<p>${descHtml.replace(/\n/g, "</p><p>")}</p>`, currentUserId) : "";
+          const sections = processedDesc ? [{ subheading: "", body: processedDesc }] : [];
+          const bodyHtml = processedDesc || null;
+          const listingDetails = {
+            condition: ntCondition || null,
+            brand: (ntBrand || "").trim() || null,
+            modelYear: (ntModelYear || "").trim() || null,
+            location: (ntLocation || "").trim() || null,
+            priceFree: !!ntPriceFree,
+            priceOBO: !!ntPriceOBO,
+            descriptionPlain: descHtml || null
+          };
+          created = await onAddForumThread({
+            title: titleText,
+            body: bodyHtml,
+            sections,
+            photos: photoPayload,
+            categoryName: catName,
+            subcategoryName: subName,
+            listingPrice: ntPriceFree ? null : ntPrice !== "" ? Number(ntPrice) : null,
+            listingCurrency: "USD",
+            listingDetails
+          });
+        } else {
+          const processedSections = [];
+          for (const s of ntSections) {
+            const subheading = (s.subheading || "").trim();
+            const rawBody = (s.body || "").trim();
+            const processedBody = await processForumBodyImages(rawBody, currentUserId);
+            const plain = processedBody.replace(/<[^>]+>/g, "").trim();
+            if (!subheading && !plain) continue;
+            processedSections.push({ subheading, body: processedBody });
+          }
+          const bodyHtml = assembleSectionsHtml(processedSections) || null;
+          created = await onAddForumThread({
+            title: titleText,
+            body: bodyHtml,
+            sections: processedSections,
+            photos: photoPayload,
+            categoryName: catName,
+            subcategoryName: subName
+          });
         }
-        const bodyHtml = assembleSectionsHtml(processedSections) || null;
-        const created = await onAddForumThread({
-          title: titleText,
-          body: bodyHtml,
-          sections: processedSections,
-          photos: photoPayload,
-          categoryName: catName,
-          subcategoryName: subName
-        });
         if (!created) return;
         if (ntShareToFeed && onAddFeedPost) {
           onAddFeedPost({
@@ -46814,7 +46880,8 @@ ${suffix}`;
             forumSub: subName
           });
         }
-        const plainText = titleText + " " + processedSections.map((s) => `${s.subheading} ${(s.body || "").replace(/<[^>]+>/g, " ")}`).join(" ");
+        const bodyForMentions = isMarketplace ? ntListingDesc || "" : (created.sections || []).map((s) => `${s.subheading || ""} ${(s.body || "").replace(/<[^>]+>/g, " ")}`).join(" ");
+        const plainText = titleText + " " + bodyForMentions;
         const mentions = extractMentions(plainText);
         mentions.forEach((handle) => {
           if (handle !== currentUserHandle) {
@@ -46827,6 +46894,14 @@ ${suffix}`;
         setNtSections([{ id: newSectionId(), subheading: "", body: "" }]);
         setNtPhotos([]);
         setNtShareToFeed(true);
+        setNtPrice("");
+        setNtPriceFree(false);
+        setNtPriceOBO(false);
+        setNtCondition("");
+        setNtBrand("");
+        setNtModelYear("");
+        setNtLocation("");
+        setNtListingDesc("");
         if (ntFromHome) {
           setSelectedCat(cat);
           setSelectedSub(sub);
@@ -46835,7 +46910,9 @@ ${suffix}`;
           setView("threads");
         }
       };
-      const canPost = ntTitle.trim() && ntSections.some((s) => (s.subheading || "").trim() || (s.body || "").replace(/<[^>]+>/g, "").trim()) && (!ntFromHome || ntPickCat && ntPickSub);
+      const canPostStandard = ntTitle.trim() && ntSections.some((s) => (s.subheading || "").trim() || (s.body || "").replace(/<[^>]+>/g, "").trim()) && (!ntFromHome || ntPickCat && ntPickSub);
+      const canPostMarketplace = ntTitle.trim() && (ntListingDesc || "").trim() && (ntPriceFree || ntPrice !== "") && (!ntFromHome || ntPickCat && ntPickSub);
+      const canPost = isMarketplace ? canPostMarketplace : canPostStandard;
       return /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 0 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "14px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: goBack, style: { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" } }, /* @__PURE__ */ import_react4.default.createElement(ChevronLeft, { size: 20, color: T.white, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, display: "block" } }, "New Thread"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, activeSub ? activeSub.name : "Select a category"))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px" } }, ntFromHome && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "CATEGORY *"), /* @__PURE__ */ import_react4.default.createElement("select", { value: ntPickCat ? ntPickCat.name : "", onChange: (e) => {
         const cat = cats.find((c) => c.name === e.target.value);
         setNtPickCat(cat || null);
@@ -46843,7 +46920,13 @@ ${suffix}`;
       }, style: { width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, outline: "none", boxSizing: "border-box", appearance: "none", WebkitAppearance: "none", backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238B7D6B' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 14px center" } }, /* @__PURE__ */ import_react4.default.createElement("option", { value: "", disabled: true, style: { color: T.tertiary } }, "Select category..."), cats.map((cat) => /* @__PURE__ */ import_react4.default.createElement("option", { key: cat.name, value: cat.name, style: { background: T.darkCard, color: T.white } }, cat.name)))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "SUBCATEGORY *"), /* @__PURE__ */ import_react4.default.createElement("select", { value: ntPickSub ? ntPickSub.name : "", onChange: (e) => {
         const sub = ntPickCat ? ntPickCat.subs.find((s) => s.name === e.target.value) : null;
         setNtPickSub(sub || null);
-      }, disabled: !ntPickCat, style: { width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: ntPickCat ? T.white : T.tertiary, fontFamily: sans, fontSize: 13, outline: "none", boxSizing: "border-box", opacity: ntPickCat ? 1 : 0.5, appearance: "none", WebkitAppearance: "none", backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238B7D6B' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 14px center" } }, /* @__PURE__ */ import_react4.default.createElement("option", { value: "", disabled: true, style: { color: T.tertiary } }, "Select subcategory..."), ntPickCat && ntPickCat.subs.map((sub) => /* @__PURE__ */ import_react4.default.createElement("option", { key: sub.name, value: sub.name, style: { background: T.darkCard, color: T.white } }, sub.name))))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "TITLE *"), /* @__PURE__ */ import_react4.default.createElement("input", { value: ntTitle, onChange: (e) => setNtTitle(e.target.value), placeholder: "Thread title...", style: { width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none", boxSizing: "border-box" } })), ntSections.map((s, i) => /* @__PURE__ */ import_react4.default.createElement(
+      }, disabled: !ntPickCat, style: { width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: ntPickCat ? T.white : T.tertiary, fontFamily: sans, fontSize: 13, outline: "none", boxSizing: "border-box", opacity: ntPickCat ? 1 : 0.5, appearance: "none", WebkitAppearance: "none", backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238B7D6B' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 14px center" } }, /* @__PURE__ */ import_react4.default.createElement("option", { value: "", disabled: true, style: { color: T.tertiary } }, "Select subcategory..."), ntPickCat && ntPickCat.subs.map((sub) => /* @__PURE__ */ import_react4.default.createElement("option", { key: sub.name, value: sub.name, style: { background: T.darkCard, color: T.white } }, sub.name))))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, isMarketplace ? "ITEM TITLE *" : "TITLE *"), /* @__PURE__ */ import_react4.default.createElement("input", { value: ntTitle, onChange: (e) => setNtTitle(e.target.value), placeholder: isMarketplace ? "e.g. ARB Old Man Emu BP-51 Lift Kit" : "Thread title...", style: { width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none", boxSizing: "border-box" } })), isMarketplace ? /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 16, alignItems: "flex-end" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "PRICE (USD) *"), /* @__PURE__ */ import_react4.default.createElement("input", { type: "number", inputMode: "decimal", value: ntPriceFree ? "" : ntPrice, onChange: (e) => setNtPrice(e.target.value), disabled: ntPriceFree, placeholder: ntPriceFree ? "FREE" : "0", style: { width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: ntPriceFree ? T.tertiary : T.white, fontFamily: sans, fontSize: 14, outline: "none", boxSizing: "border-box", opacity: ntPriceFree ? 0.5 : 1 } })), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
+        setNtPriceFree((p) => !p);
+        if (!ntPriceFree) {
+          setNtPrice("");
+          setNtPriceOBO(false);
+        }
+      }, style: { padding: "12px 14px", borderRadius: 8, background: ntPriceFree ? T.green : "none", border: `1px solid ${ntPriceFree ? T.green : T.charcoal}`, cursor: "pointer", color: ntPriceFree ? T.white : T.tertiary, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5 } }, "FREE"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setNtPriceOBO((o) => !o), disabled: ntPriceFree, style: { padding: "12px 14px", borderRadius: 8, background: ntPriceOBO && !ntPriceFree ? T.copper : "none", border: `1px solid ${ntPriceOBO && !ntPriceFree ? T.copper : T.charcoal}`, cursor: ntPriceFree ? "default" : "pointer", color: ntPriceOBO && !ntPriceFree ? T.white : T.tertiary, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, opacity: ntPriceFree ? 0.4 : 1 } }, "OBO")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "CONDITION"), /* @__PURE__ */ import_react4.default.createElement("select", { value: ntCondition, onChange: (e) => setNtCondition(e.target.value), style: { width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: ntCondition ? T.white : T.tertiary, fontFamily: sans, fontSize: 13, outline: "none", boxSizing: "border-box", appearance: "none", WebkitAppearance: "none" } }, /* @__PURE__ */ import_react4.default.createElement("option", { value: "" }, "Select..."), FORUM_LISTING_CONDITIONS.map((c) => /* @__PURE__ */ import_react4.default.createElement("option", { key: c, value: c, style: { background: T.darkCard, color: T.white } }, c)))), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "LOCATION"), /* @__PURE__ */ import_react4.default.createElement("input", { value: ntLocation, onChange: (e) => setNtLocation(e.target.value), placeholder: "City, State", style: { width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, outline: "none", boxSizing: "border-box" } })), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "BRAND"), /* @__PURE__ */ import_react4.default.createElement("input", { value: ntBrand, onChange: (e) => setNtBrand(e.target.value), placeholder: "e.g. ARB", style: { width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, outline: "none", boxSizing: "border-box" } })), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "MODEL / YEAR"), /* @__PURE__ */ import_react4.default.createElement("input", { value: ntModelYear, onChange: (e) => setNtModelYear(e.target.value), placeholder: "e.g. BP-51, 2023", style: { width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, outline: "none", boxSizing: "border-box" } }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "DESCRIPTION *"), /* @__PURE__ */ import_react4.default.createElement("textarea", { value: ntListingDesc, onChange: (e) => setNtListingDesc(e.target.value), placeholder: "Condition notes, what's included, why you're selling, fitment, shipping/pickup...", rows: 6, style: { width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", boxSizing: "border-box", resize: "vertical", lineHeight: 1.5 } }))) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, ntSections.map((s, i) => /* @__PURE__ */ import_react4.default.createElement(
         ForumSectionEditor,
         {
           key: s.id,
@@ -46857,7 +46940,7 @@ ${suffix}`;
           autoFocusBody: false,
           placeholder: i === 0 ? "Share your knowledge, ask a question, or start a discussion..." : "Continue the discussion..."
         }
-      )), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: addSection, style: { width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", borderRadius: 8, background: "none", border: `1px dashed ${T.copper}60`, cursor: "pointer", marginBottom: 16, color: T.copper, fontFamily: sans, fontSize: 12, fontWeight: 600, letterSpacing: 0.5 } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 14, color: T.copper }), "ADD SECTION"), /* @__PURE__ */ import_react4.default.createElement("style", null, `
+      )), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: addSection, style: { width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", borderRadius: 8, background: "none", border: `1px dashed ${T.copper}60`, cursor: "pointer", marginBottom: 16, color: T.copper, fontFamily: sans, fontSize: 12, fontWeight: 600, letterSpacing: 0.5 } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 14, color: T.copper }), "ADD SECTION")), /* @__PURE__ */ import_react4.default.createElement("style", null, `
             [contenteditable][data-placeholder]:empty::before {
               content: attr(data-placeholder);
               color: ${T.tertiary};
@@ -47026,7 +47109,31 @@ ${suffix}`;
         beginEditThread(selectedThread);
       }, style: { position: "absolute", top: 14, right: 14, background: "rgba(0,0,0,0.5)", border: "none", cursor: "pointer", padding: 6, borderRadius: "50%", display: "flex", backdropFilter: "blur(4px)" } }, /* @__PURE__ */ import_react4.default.createElement(PenLine, { size: 16, color: T.white, strokeWidth: 1.5 })), selectedThread.pinned && /* @__PURE__ */ import_react4.default.createElement("span", { style: { position: "absolute", top: 14, left: 50, fontFamily: sans, fontSize: 9, color: T.copper, background: `rgba(0,0,0,0.6)`, padding: "3px 8px", borderRadius: 3, letterSpacing: 1, backdropFilter: "blur(4px)" } }, "PINNED"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", bottom: 0, left: 0, right: 0, padding: "0 16px 14px" } }, /* @__PURE__ */ import_react4.default.createElement("h2", { style: { fontFamily: sans, fontSize: 20, color: T.white, fontWeight: 700, margin: 0, lineHeight: 1.25, textShadow: "0 1px 4px rgba(0,0,0,0.6)" } }, selectedThread.title))) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: goBack, style: { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" } }, /* @__PURE__ */ import_react4.default.createElement(ChevronLeft, { size: 20, color: T.white, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.tertiary } }, selectedSub?.name)), isOwnThread && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
         beginEditThread(selectedThread);
-      }, style: { background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex" } }, /* @__PURE__ */ import_react4.default.createElement(PenLine, { size: 16, color: T.tertiary, strokeWidth: 1.5 }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { margin: "0 16px 4px", padding: "0 0 8px" } }, selectedThread.pinned && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.copper, background: `${T.copper}20`, padding: "2px 6px", borderRadius: 3, letterSpacing: 1, marginBottom: 8, display: "inline-block" } }, "PINNED"), /* @__PURE__ */ import_react4.default.createElement("h2", { style: { fontFamily: sans, fontSize: 20, color: T.white, fontWeight: 700, margin: 0, lineHeight: 1.25 } }, selectedThread.title))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { margin: "0 16px 12px", background: T.darkCard, borderRadius: 12, padding: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 14 } }, /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => onViewUser && onViewUser(selectedThread.handle || selectedThread.userId), style: { width: 40, height: 40, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0, cursor: "pointer" } }, selectedThread.avatarUrl ? /* @__PURE__ */ import_react4.default.createElement("img", { src: txImg(selectedThread.avatarUrl, 96), alt: selectedThread.user || "Author", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 14, fontWeight: 700, color: T.white } }, selectedThread.initial)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" } }, /* @__PURE__ */ import_react4.default.createElement("span", { onClick: () => onViewUser && onViewUser(selectedThread.handle || selectedThread.userId), style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, cursor: "pointer" } }, selectedThread.user || "Author"), /* @__PURE__ */ import_react4.default.createElement(RankBadgeWithName, { points: getPoints(selectedThread.user || selectedThread.author), size: 11 })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginTop: 2 } }, selectedThread.handle && /* @__PURE__ */ import_react4.default.createElement("span", { onClick: () => onViewUser && onViewUser(selectedThread.handle), style: { fontFamily: sans, fontSize: 11, color: T.copper, cursor: "pointer" } }, "@", selectedThread.handle), selectedThread.handle && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, "\xB7"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, formatPostTime(selectedThread.time), selectedThread.editedAt ? " \xB7 edited" : "")))), (() => {
+      }, style: { background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex" } }, /* @__PURE__ */ import_react4.default.createElement(PenLine, { size: 16, color: T.tertiary, strokeWidth: 1.5 }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { margin: "0 16px 4px", padding: "0 0 8px" } }, selectedThread.pinned && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.copper, background: `${T.copper}20`, padding: "2px 6px", borderRadius: 3, letterSpacing: 1, marginBottom: 8, display: "inline-block" } }, "PINNED"), /* @__PURE__ */ import_react4.default.createElement("h2", { style: { fontFamily: sans, fontSize: 20, color: T.white, fontWeight: 700, margin: 0, lineHeight: 1.25 } }, selectedThread.title))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { margin: "0 16px 12px", background: T.darkCard, borderRadius: 12, padding: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 14 } }, /* @__PURE__ */ import_react4.default.createElement("div", { onClick: () => onViewUser && onViewUser(selectedThread.handle || selectedThread.userId), style: { width: 40, height: 40, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0, cursor: "pointer" } }, selectedThread.avatarUrl ? /* @__PURE__ */ import_react4.default.createElement("img", { src: txImg(selectedThread.avatarUrl, 96), alt: selectedThread.user || "Author", style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 14, fontWeight: 700, color: T.white } }, selectedThread.initial)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" } }, /* @__PURE__ */ import_react4.default.createElement("span", { onClick: () => onViewUser && onViewUser(selectedThread.handle || selectedThread.userId), style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, cursor: "pointer" } }, selectedThread.user || "Author"), /* @__PURE__ */ import_react4.default.createElement(RankBadgeWithName, { points: getPoints(selectedThread.user || selectedThread.author), size: 11 })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginTop: 2 } }, selectedThread.handle && /* @__PURE__ */ import_react4.default.createElement("span", { onClick: () => onViewUser && onViewUser(selectedThread.handle), style: { fontFamily: sans, fontSize: 11, color: T.copper, cursor: "pointer" } }, "@", selectedThread.handle), selectedThread.handle && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, "\xB7"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, formatPostTime(selectedThread.time), selectedThread.editedAt ? " \xB7 edited" : "")))), selectedThread.categorySlug === "marketplace" && (() => {
+        const d = selectedThread.listingDetails || {};
+        const isFree = !!d.priceFree;
+        const isOBO = !!d.priceOBO;
+        const price = selectedThread.listingPrice;
+        const status = selectedThread.listingStatus || "active";
+        const isOwn = currentUserId && selectedThread.userId === currentUserId;
+        return /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 14, padding: 14, borderRadius: 10, background: T.darkBg, border: `1px solid ${status === "sold" ? T.green : status === "withdrawn" ? T.tertiary : T.copper}40` } }, status !== "active" && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "inline-block", padding: "3px 10px", borderRadius: 4, background: status === "sold" ? T.green : T.tertiary, color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1.5, marginBottom: 10 } }, status === "sold" ? "SOLD" : "WITHDRAWN"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 10, marginBottom: 10, flexWrap: "wrap" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 26, color: isFree ? T.green : T.white, fontWeight: 800, letterSpacing: -0.5 } }, isFree ? "FREE" : price != null ? `$${Number(price).toLocaleString()}` : "\u2014"), isOBO && !isFree && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 1 } }, "OBO"), d.condition && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.white, background: T.charcoal, padding: "3px 8px", borderRadius: 4, fontWeight: 600, letterSpacing: 0.5 } }, d.condition)), (d.brand || d.modelYear || d.location) && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "grid", gridTemplateColumns: "auto 1fr", columnGap: 12, rowGap: 6 } }, d.brand && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600 } }, "BRAND"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, color: T.white } }, d.brand)), d.modelYear && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600 } }, "MODEL"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, color: T.white } }, d.modelYear)), d.location && /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600 } }, "LOCATION"), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, color: T.white } }, d.location))), isOwn && status === "active" && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6, marginTop: 12, paddingTop: 12, borderTop: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: async () => {
+          if (onUpdateForumThread) {
+            await onUpdateForumThread(selectedThread.id, { listingStatus: "sold" });
+            setSelectedThread((prev) => prev ? { ...prev, listingStatus: "sold" } : prev);
+          }
+        }, style: { flex: 1, padding: "8px 12px", borderRadius: 6, background: T.green, border: "none", cursor: "pointer", color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5 } }, "MARK SOLD"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: async () => {
+          if (!confirm("Withdraw this listing? It will show as 'WITHDRAWN' and stay searchable.")) return;
+          if (onUpdateForumThread) {
+            await onUpdateForumThread(selectedThread.id, { listingStatus: "withdrawn" });
+            setSelectedThread((prev) => prev ? { ...prev, listingStatus: "withdrawn" } : prev);
+          }
+        }, style: { flex: 1, padding: "8px 12px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}40`, cursor: "pointer", color: T.tertiary, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5 } }, "WITHDRAW")), isOwn && status !== "active" && /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginTop: 12, paddingTop: 12, borderTop: `1px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: async () => {
+          if (onUpdateForumThread) {
+            await onUpdateForumThread(selectedThread.id, { listingStatus: "active" });
+            setSelectedThread((prev) => prev ? { ...prev, listingStatus: "active" } : prev);
+          }
+        }, style: { width: "100%", padding: "8px 12px", borderRadius: 6, background: "none", border: `1px solid ${T.copper}40`, cursor: "pointer", color: T.copper, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5 } }, "RELIST")));
+      })(), (() => {
         const hasSections = Array.isArray(selectedThread.sections) && selectedThread.sections.length > 0;
         if (!hasSections && !selectedThread.body) return null;
         const html = hasSections ? assembleSectionsHtml(selectedThread.sections) : selectedThread.body;
@@ -47075,26 +47182,58 @@ ${suffix}`;
         setEditingThreadId(null);
       }, style: { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 20, color: T.white, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700 } }, "Edit Thread")), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: async () => {
         const newPhotos = await commitForumPhotos(editPhotos);
-        const processedSections = [];
-        for (const s of editSections) {
-          const subheading = (s.subheading || "").trim();
-          const rawBody = (s.body || "").trim();
-          const processedBody = await processForumBodyImages(rawBody, currentUserId);
-          const plain = processedBody.replace(/<[^>]+>/g, "").trim();
-          if (!subheading && !plain) continue;
-          processedSections.push({ subheading, body: processedBody });
+        const editIsMarketplace = selectedThread && selectedThread.categorySlug === "marketplace";
+        let updates;
+        if (editIsMarketplace) {
+          const descRaw = (editListingDesc || "").trim();
+          const processedDesc = descRaw ? await processForumBodyImages(`<p>${descRaw.replace(/\n/g, "</p><p>")}</p>`, currentUserId) : "";
+          const sections = processedDesc ? [{ subheading: "", body: processedDesc }] : [];
+          updates = {
+            title: editTitle.trim(),
+            body: processedDesc || null,
+            sections,
+            photos: newPhotos.length > 0 ? newPhotos : [],
+            listingPrice: editPriceFree ? null : editPrice !== "" ? Number(editPrice) : null,
+            listingCurrency: "USD",
+            listingStatus: editListingStatus,
+            listingDetails: {
+              condition: editCondition || null,
+              brand: (editBrand || "").trim() || null,
+              modelYear: (editModelYear || "").trim() || null,
+              location: (editLocation || "").trim() || null,
+              priceFree: !!editPriceFree,
+              priceOBO: !!editPriceOBO,
+              descriptionPlain: descRaw || null
+            }
+          };
+        } else {
+          const processedSections = [];
+          for (const s of editSections) {
+            const subheading = (s.subheading || "").trim();
+            const rawBody = (s.body || "").trim();
+            const processedBody = await processForumBodyImages(rawBody, currentUserId);
+            const plain = processedBody.replace(/<[^>]+>/g, "").trim();
+            if (!subheading && !plain) continue;
+            processedSections.push({ subheading, body: processedBody });
+          }
+          const bodyHtml = assembleSectionsHtml(processedSections) || null;
+          updates = {
+            title: editTitle.trim(),
+            body: bodyHtml,
+            sections: processedSections,
+            photos: newPhotos.length > 0 ? newPhotos : []
+          };
         }
-        const bodyHtml = assembleSectionsHtml(processedSections) || null;
-        const updates = {
-          title: editTitle.trim(),
-          body: bodyHtml,
-          sections: processedSections,
-          photos: newPhotos.length > 0 ? newPhotos : []
-        };
         if (onUpdateForumThread) await onUpdateForumThread(selectedThread.id, updates);
         setSelectedThread({ ...selectedThread, ...updates, photos: newPhotos.length > 0 ? newPhotos : void 0, editedAt: Date.now() });
         setEditingThreadId(null);
-      }, style: { padding: "8px 18px", borderRadius: 8, background: editTitle.trim() ? T.red : T.charcoal, border: "none", cursor: editTitle.trim() ? "pointer" : "default", opacity: editTitle.trim() ? 1 : 0.5 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, "SAVE"))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, overflowY: "auto", padding: "16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "TITLE *"), /* @__PURE__ */ import_react4.default.createElement("input", { value: editTitle, onChange: (e) => setEditTitle(e.target.value), style: { width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none", boxSizing: "border-box" } })), editSections.map((s, i) => /* @__PURE__ */ import_react4.default.createElement(
+      }, style: { padding: "8px 18px", borderRadius: 8, background: editTitle.trim() ? T.red : T.charcoal, border: "none", cursor: editTitle.trim() ? "pointer" : "default", opacity: editTitle.trim() ? 1 : 0.5 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, "SAVE"))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1, overflowY: "auto", padding: "16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, selectedThread.categorySlug === "marketplace" ? "ITEM TITLE *" : "TITLE *"), /* @__PURE__ */ import_react4.default.createElement("input", { value: editTitle, onChange: (e) => setEditTitle(e.target.value), style: { width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none", boxSizing: "border-box" } })), selectedThread.categorySlug === "marketplace" ? /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "STATUS"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 6 } }, [{ k: "active", label: "ACTIVE", c: T.green }, { k: "sold", label: "SOLD", c: T.copper }, { k: "withdrawn", label: "WITHDRAWN", c: T.tertiary }].map((o) => /* @__PURE__ */ import_react4.default.createElement("button", { key: o.k, onClick: () => setEditListingStatus(o.k), style: { flex: 1, padding: "10px 8px", borderRadius: 6, background: editListingStatus === o.k ? o.c : "none", border: editListingStatus === o.k ? "none" : `1px solid ${T.charcoal}`, cursor: "pointer", color: editListingStatus === o.k ? T.white : T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.8 } }, o.label)))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 16, alignItems: "flex-end" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "PRICE (USD) *"), /* @__PURE__ */ import_react4.default.createElement("input", { type: "number", inputMode: "decimal", value: editPriceFree ? "" : editPrice, onChange: (e) => setEditPrice(e.target.value), disabled: editPriceFree, placeholder: editPriceFree ? "FREE" : "0", style: { width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: editPriceFree ? T.tertiary : T.white, fontFamily: sans, fontSize: 14, outline: "none", boxSizing: "border-box", opacity: editPriceFree ? 0.5 : 1 } })), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => {
+        setEditPriceFree((p) => !p);
+        if (!editPriceFree) {
+          setEditPrice("");
+          setEditPriceOBO(false);
+        }
+      }, style: { padding: "12px 14px", borderRadius: 8, background: editPriceFree ? T.green : "none", border: `1px solid ${editPriceFree ? T.green : T.charcoal}`, cursor: "pointer", color: editPriceFree ? T.white : T.tertiary, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5 } }, "FREE"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setEditPriceOBO((o) => !o), disabled: editPriceFree, style: { padding: "12px 14px", borderRadius: 8, background: editPriceOBO && !editPriceFree ? T.copper : "none", border: `1px solid ${editPriceOBO && !editPriceFree ? T.copper : T.charcoal}`, cursor: editPriceFree ? "default" : "pointer", color: editPriceOBO && !editPriceFree ? T.white : T.tertiary, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, opacity: editPriceFree ? 0.4 : 1 } }, "OBO")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "CONDITION"), /* @__PURE__ */ import_react4.default.createElement("select", { value: editCondition, onChange: (e) => setEditCondition(e.target.value), style: { width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: editCondition ? T.white : T.tertiary, fontFamily: sans, fontSize: 13, outline: "none", boxSizing: "border-box", appearance: "none", WebkitAppearance: "none" } }, /* @__PURE__ */ import_react4.default.createElement("option", { value: "" }, "Select..."), FORUM_LISTING_CONDITIONS.map((c) => /* @__PURE__ */ import_react4.default.createElement("option", { key: c, value: c, style: { background: T.darkCard, color: T.white } }, c)))), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "LOCATION"), /* @__PURE__ */ import_react4.default.createElement("input", { value: editLocation, onChange: (e) => setEditLocation(e.target.value), placeholder: "City, State", style: { width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, outline: "none", boxSizing: "border-box" } })), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "BRAND"), /* @__PURE__ */ import_react4.default.createElement("input", { value: editBrand, onChange: (e) => setEditBrand(e.target.value), placeholder: "e.g. ARB", style: { width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, outline: "none", boxSizing: "border-box" } })), /* @__PURE__ */ import_react4.default.createElement("div", null, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "MODEL / YEAR"), /* @__PURE__ */ import_react4.default.createElement("input", { value: editModelYear, onChange: (e) => setEditModelYear(e.target.value), placeholder: "e.g. BP-51, 2023", style: { width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, outline: "none", boxSizing: "border-box" } }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "DESCRIPTION *"), /* @__PURE__ */ import_react4.default.createElement("textarea", { value: editListingDesc, onChange: (e) => setEditListingDesc(e.target.value), rows: 6, placeholder: "Condition notes, what's included, fitment, shipping/pickup...", style: { width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", boxSizing: "border-box", resize: "vertical", lineHeight: 1.5 } }))) : /* @__PURE__ */ import_react4.default.createElement(import_react4.default.Fragment, null, editSections.map((s, i) => /* @__PURE__ */ import_react4.default.createElement(
         ForumSectionEditor,
         {
           key: s.id,
@@ -47107,7 +47246,7 @@ ${suffix}`;
           onRemove: () => removeEditSection(s.id),
           placeholder: i === 0 ? "Share your knowledge, ask a question, or start a discussion..." : "Continue the discussion..."
         }
-      )), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: addEditSection, style: { width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", borderRadius: 8, background: "none", border: `1px dashed ${T.copper}60`, cursor: "pointer", marginBottom: 16, color: T.copper, fontFamily: sans, fontSize: 12, fontWeight: 600, letterSpacing: 0.5 } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 14, color: T.copper }), "ADD SECTION"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "HERO IMAGE"), /* @__PURE__ */ import_react4.default.createElement(PhotoUploader, { photos: editPhotos, onChange: setEditPhotos })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginTop: 32, paddingTop: 20, borderTop: `1px solid ${T.charcoal}` } }, !editDeleteConfirm ? /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setEditDeleteConfirm(true), style: { width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px", borderRadius: 8, background: "none", border: `1px solid ${T.red}40`, cursor: "pointer", color: T.red, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.5 } }, /* @__PURE__ */ import_react4.default.createElement(Trash2, { size: 14, color: T.red }), "DELETE THREAD") : /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: `${T.red}15`, border: `1px solid ${T.red}40`, borderRadius: 8, padding: 14 } }, /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, margin: "0 0 4px" } }, "Delete this thread?"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 12px", lineHeight: 1.5 } }, "This can't be undone. All replies and photos will be removed."), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: async () => {
+      )), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: addEditSection, style: { width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", borderRadius: 8, background: "none", border: `1px dashed ${T.copper}60`, cursor: "pointer", marginBottom: 16, color: T.copper, fontFamily: sans, fontSize: 12, fontWeight: 600, letterSpacing: 0.5 } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 14, color: T.copper }), "ADD SECTION")), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 } }, "HERO IMAGE"), /* @__PURE__ */ import_react4.default.createElement(PhotoUploader, { photos: editPhotos, onChange: setEditPhotos })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { marginTop: 32, paddingTop: 20, borderTop: `1px solid ${T.charcoal}` } }, !editDeleteConfirm ? /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setEditDeleteConfirm(true), style: { width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px", borderRadius: 8, background: "none", border: `1px solid ${T.red}40`, cursor: "pointer", color: T.red, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.5 } }, /* @__PURE__ */ import_react4.default.createElement(Trash2, { size: 14, color: T.red }), "DELETE THREAD") : /* @__PURE__ */ import_react4.default.createElement("div", { style: { background: `${T.red}15`, border: `1px solid ${T.red}40`, borderRadius: 8, padding: 14 } }, /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, margin: "0 0 4px" } }, "Delete this thread?"), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 12px", lineHeight: 1.5 } }, "This can't be undone. All replies and photos will be removed."), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: async () => {
         const tid = selectedThread.id;
         setEditDeleteConfirm(false);
         setEditingThreadId(null);
@@ -47123,7 +47262,16 @@ ${suffix}`;
         if (pa !== pb) return pa - pb;
         return threadAgeMin(a.time) - threadAgeMin(b.time);
       });
-      return /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 0 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "14px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: goBack, style: { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" } }, /* @__PURE__ */ import_react4.default.createElement(ChevronLeft, { size: 20, color: T.white, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, display: "block" } }, selectedSub.name), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, selectedCat.name)), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: openNewThreadFromSub, style: { display: "flex", alignItems: "center", gap: 5, padding: "8px 14px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 14, color: T.white }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, "NEW"))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 2 } }, threads.map((t, i) => /* @__PURE__ */ import_react4.default.createElement("div", { key: t.id, onClick: () => openThread(t), style: { background: T.darkCard, padding: "14px 16px", cursor: "pointer", borderRadius: i === 0 ? "8px 8px 0 0" : i === threads.length - 1 ? "0 0 8px 8px" : 0, borderBottom: i < threads.length - 1 ? `1px solid ${T.charcoal}` : "none" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 6 } }, t.pinned && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.copper, background: `${T.copper}20`, padding: "2px 6px", borderRadius: 3, letterSpacing: 1 } }, "PINNED")), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 14, color: T.white, margin: "0 0 8px", lineHeight: 1.4 } }, t.title), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 12 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, "@", t.author), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, formatPostTime(t.time))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 10, alignItems: "center" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 3 } }, /* @__PURE__ */ import_react4.default.createElement(MessageCircle, { size: 12, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, getReplyCount(t))), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, getViewCount(t)), /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 14, color: T.tertiary }))))))));
+      return /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 0 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "14px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: goBack, style: { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" } }, /* @__PURE__ */ import_react4.default.createElement(ChevronLeft, { size: 20, color: T.white, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, display: "block" } }, selectedSub.name), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, selectedCat.name)), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: openNewThreadFromSub, style: { display: "flex", alignItems: "center", gap: 5, padding: "8px 14px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer" } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 14, color: T.white }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 } }, "NEW"))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 2 } }, threads.map((t, i) => {
+        const isMkt = t.categorySlug === "marketplace";
+        const status = t.listingStatus || "active";
+        const d = t.listingDetails || {};
+        const priceFree = !!d.priceFree;
+        const isOBO = !!d.priceOBO;
+        const cardDim = status === "withdrawn";
+        const priceText = isMkt ? priceFree ? "FREE" : t.listingPrice != null ? `$${Number(t.listingPrice).toLocaleString()}${isOBO ? " OBO" : ""}` : "\u2014" : null;
+        return /* @__PURE__ */ import_react4.default.createElement("div", { key: t.id, onClick: () => openThread(t), style: { background: T.darkCard, padding: "14px 16px", cursor: "pointer", borderRadius: i === 0 ? "8px 8px 0 0" : i === threads.length - 1 ? "0 0 8px 8px" : 0, borderBottom: i < threads.length - 1 ? `1px solid ${T.charcoal}` : "none", opacity: cardDim ? 0.5 : 1, position: "relative" } }, isMkt && status === "sold" && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: 10, right: 12, padding: "2px 8px", borderRadius: 4, background: T.green, color: T.white, fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 1.5 } }, "SOLD"), isMkt && status === "withdrawn" && /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: 10, right: 12, padding: "2px 8px", borderRadius: 4, background: T.tertiary, color: T.white, fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 1.5 } }, "WITHDRAWN"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 6 } }, t.pinned && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.copper, background: `${T.copper}20`, padding: "2px 6px", borderRadius: 3, letterSpacing: 1 } }, "PINNED")), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: serif, fontSize: 14, color: T.white, margin: "0 0 8px", lineHeight: 1.4, paddingRight: isMkt && status !== "active" ? 80 : 0 } }, t.title), isMkt && status === "active" && /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 16, color: priceFree ? T.green : T.copper, fontWeight: 800 } }, priceText), d.condition && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, color: T.white, background: T.charcoal, padding: "2px 6px", borderRadius: 3, fontWeight: 600, letterSpacing: 0.5 } }, d.condition), d.location && /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 10, color: T.tertiary } }, "\xB7 ", d.location)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 12 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, "@", t.author), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, formatPostTime(t.time))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", gap: 10, alignItems: "center" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 3 } }, /* @__PURE__ */ import_react4.default.createElement(MessageCircle, { size: 12, color: T.tertiary }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, getReplyCount(t))), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.tertiary } }, getViewCount(t)), /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 14, color: T.tertiary }))));
+      }))));
     }
     if (view === "subcategories" && selectedCat) {
       return /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 0 16px" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "14px 16px" } }, /* @__PURE__ */ import_react4.default.createElement("button", { onClick: goBack, style: { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" } }, /* @__PURE__ */ import_react4.default.createElement(ChevronLeft, { size: 20, color: T.white, strokeWidth: 1.5 })), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700 } }, selectedCat.name)), /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "0 16px" } }, canCreateSubcategory && /* @__PURE__ */ import_react4.default.createElement("button", { onClick: () => setShowSubModal({ mode: "create", category_id: selectedCat.id }), style: { display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 12px", borderRadius: 6, background: isAdmin ? T.red : T.copper, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 700, letterSpacing: 1, marginBottom: 10 } }, /* @__PURE__ */ import_react4.default.createElement(Plus, { size: 12 }), " SUBCATEGORY"), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 2 } }, selectedCat.subs.map((sub, i) => {
@@ -60249,7 +60397,7 @@ ${suffix}`;
         forumRepliesLoadedRef.current[threadId] = false;
       }
     };
-    const addForumThread = async ({ title, body, sections, photos, categoryName, subcategoryName }) => {
+    const addForumThread = async ({ title, body, sections, photos, categoryName, subcategoryName, listingPrice, listingCurrency, listingDetails }) => {
       const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
       if (!uid) return null;
       if (!title || !title.trim()) return null;
@@ -60258,11 +60406,12 @@ ${suffix}`;
       const subcategorySlug = forumSlugify(subcategoryName || "");
       if (!categorySlug || !subcategorySlug) return null;
       const baseSlug = slugifyForumTitle(trimmed);
+      const isMarketplace = categorySlug === "marketplace";
       let inserted = null;
       let lastError = null;
       for (let attempt = 0; attempt < 5; attempt++) {
         const candidateSlug = attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`;
-        const { data, error } = await supabase.from("forum_threads").insert({
+        const row = {
           user_id: uid,
           category_slug: categorySlug,
           subcategory_slug: subcategorySlug,
@@ -60271,7 +60420,14 @@ ${suffix}`;
           body: body || null,
           sections: Array.isArray(sections) ? sections : [],
           photos: Array.isArray(photos) ? photos : []
-        }).select().single();
+        };
+        if (isMarketplace) {
+          row.listing_price = listingPrice != null && listingPrice !== "" ? Number(listingPrice) : null;
+          row.listing_currency = listingCurrency || "USD";
+          row.listing_status = "active";
+          row.listing_details = listingDetails && typeof listingDetails === "object" ? listingDetails : {};
+        }
+        const { data, error } = await supabase.from("forum_threads").insert(row).select().single();
         if (!error) {
           inserted = data;
           break;
@@ -60306,6 +60462,10 @@ ${suffix}`;
       if (Array.isArray(updates.sections)) patch.sections = updates.sections;
       if (Array.isArray(updates.photos)) patch.photos = updates.photos;
       if (typeof updates.pinned === "boolean") patch.pinned = updates.pinned;
+      if ("listingPrice" in updates) patch.listing_price = updates.listingPrice == null || updates.listingPrice === "" ? null : Number(updates.listingPrice);
+      if (typeof updates.listingCurrency === "string") patch.listing_currency = updates.listingCurrency;
+      if (typeof updates.listingStatus === "string" && ["active", "sold", "withdrawn"].includes(updates.listingStatus)) patch.listing_status = updates.listingStatus;
+      if (updates.listingDetails && typeof updates.listingDetails === "object") patch.listing_details = updates.listingDetails;
       patch.updated_at = (/* @__PURE__ */ new Date()).toISOString();
       try {
         const { data, error } = await supabase.from("forum_threads").update(patch).eq("id", threadId).eq("user_id", uid).select().single();

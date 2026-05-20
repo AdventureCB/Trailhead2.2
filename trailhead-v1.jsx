@@ -5669,6 +5669,15 @@ function dbRowToForumThread(row, profile) {
     subcategorySlug: row.subcategory_slug,
     subName: subInfo ? subInfo.name : "",
     catName: catInfo ? catInfo.name : "",
+    // Marketplace listing fields. Null/undefined on every non-marketplace
+    // thread; populated on marketplace threads regardless of subcategory.
+    // listingDetails is a free-form jsonb blob (brand/model/year/location/
+    // condition/price_modifier/trade_for) so we can add fields later
+    // without a migration.
+    listingPrice: row.listing_price != null ? Number(row.listing_price) : null,
+    listingCurrency: row.listing_currency || "USD",
+    listingStatus: row.listing_status || "active",
+    listingDetails: row.listing_details && typeof row.listing_details === "object" ? row.listing_details : {},
   };
 }
 
@@ -6136,6 +6145,18 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
   const [editTitle, setEditTitle] = useState("");
   const [editSections, setEditSections] = useState([]);
   const [editPhotos, setEditPhotos] = useState([]);
+  // Marketplace edit state — populated by beginEditThread when the edited
+  // thread is in the marketplace category. Mirrors the new-thread fields
+  // below + adds editListingStatus (Active / Sold / Withdrawn).
+  const [editPrice, setEditPrice] = useState("");
+  const [editPriceFree, setEditPriceFree] = useState(false);
+  const [editPriceOBO, setEditPriceOBO] = useState(false);
+  const [editCondition, setEditCondition] = useState("");
+  const [editBrand, setEditBrand] = useState("");
+  const [editModelYear, setEditModelYear] = useState("");
+  const [editLocation, setEditLocation] = useState("");
+  const [editListingDesc, setEditListingDesc] = useState("");
+  const [editListingStatus, setEditListingStatus] = useState("active");
   // Delete confirmation — gated behind a two-step confirm inside the edit
   // form so destructive action requires explicit intent.
   const [editDeleteConfirm, setEditDeleteConfirm] = useState(false);
@@ -6152,6 +6173,18 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
     setEditSections(fromSections);
     setEditPhotos(thread.photos ? thread.photos.map((u, i) => ({ url: u.url || u, id: i, type: u.type || "image", caption: u.caption || "", alt: u.alt || "" })) : []);
     setEditDeleteConfirm(false);
+    // Hydrate marketplace fields when editing a marketplace thread.
+    // listingDetails is a flat jsonb blob ({condition, brand, modelYear, location, priceFree, priceOBO}).
+    const d = (thread.listingDetails && typeof thread.listingDetails === "object") ? thread.listingDetails : {};
+    setEditPrice(thread.listingPrice != null ? String(thread.listingPrice) : "");
+    setEditPriceFree(!!d.priceFree);
+    setEditPriceOBO(!!d.priceOBO);
+    setEditCondition(d.condition || "");
+    setEditBrand(d.brand || "");
+    setEditModelYear(d.modelYear || "");
+    setEditLocation(d.location || "");
+    setEditListingDesc(thread.body && (!thread.sections || thread.sections.length === 0) ? (thread.body || "") : (d.descriptionPlain || (Array.isArray(thread.sections) && thread.sections[0] ? thread.sections[0].body : "") || ""));
+    setEditListingStatus(thread.listingStatus || "active");
   };
   const updateEditSection = (id, patch) => setEditSections(prev => prev.map(s => s.id === id ? { ...s, ...patch } : s));
   const addEditSection = () => setEditSections(prev => [...prev, { id: newSectionId(), subheading: "", body: "" }]);
@@ -6172,6 +6205,20 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
   const [ntPickCat, setNtPickCat] = useState(null); // for category picker in new thread from home
   const [ntPickSub, setNtPickSub] = useState(null);
   const [ntFromHome, setNtFromHome] = useState(false); // true if new thread opened from categories page
+  // Marketplace listing state — active when the picked category is
+  // "marketplace". Replaces the multi-section editor with structured fields
+  // (price/condition/brand/model/location + single-block description). The
+  // listing fields are persisted as separate columns + a jsonb blob on
+  // forum_threads (see addForumThread).
+  const [ntPrice, setNtPrice] = useState("");
+  const [ntPriceFree, setNtPriceFree] = useState(false);
+  const [ntPriceOBO, setNtPriceOBO] = useState(false);
+  const [ntCondition, setNtCondition] = useState("");
+  const [ntBrand, setNtBrand] = useState("");
+  const [ntModelYear, setNtModelYear] = useState("");
+  const [ntLocation, setNtLocation] = useState("");
+  const [ntListingDesc, setNtListingDesc] = useState("");
+  const FORUM_LISTING_CONDITIONS = ["New", "Like New", "Good", "Fair", "For Parts", "N/A"];
   // Search state
   const [searchQuery, setSearchQuery] = useState("");
   const [searchActive, setSearchActive] = useState(false);
@@ -6245,6 +6292,7 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
   if (view === "newThread" && (selectedSub || ntFromHome)) {
     const activeCat = ntFromHome ? ntPickCat : selectedCat;
     const activeSub = ntFromHome ? ntPickSub : selectedSub;
+    const isMarketplace = activeCat && activeCat.slug === "marketplace";
     const submitThread = async () => {
       if (!ntTitle.trim()) return;
       if (ntFromHome && (!ntPickCat || !ntPickSub)) return;
@@ -6257,6 +6305,36 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
       // Upload the hero photo + generate alt text up front so the thread
       // payload carries public URLs + alt (rather than data: blobs).
       const photoPayload = await commitForumPhotos(ntPhotos);
+      let created;
+      if (isMarketplace) {
+        // Marketplace listings use a single-block description (not multi-section).
+        // Store the same HTML in `body` for SEO/OG + as a single section so
+        // detail-page renderers don't need a special path.
+        const descHtml = (ntListingDesc || "").trim();
+        const processedDesc = descHtml ? await processForumBodyImages(`<p>${descHtml.replace(/\n/g, "</p><p>")}</p>`, currentUserId) : "";
+        const sections = processedDesc ? [{ subheading: "", body: processedDesc }] : [];
+        const bodyHtml = processedDesc || null;
+        const listingDetails = {
+          condition: ntCondition || null,
+          brand: (ntBrand || "").trim() || null,
+          modelYear: (ntModelYear || "").trim() || null,
+          location: (ntLocation || "").trim() || null,
+          priceFree: !!ntPriceFree,
+          priceOBO: !!ntPriceOBO,
+          descriptionPlain: descHtml || null,
+        };
+        created = await onAddForumThread({
+          title: titleText,
+          body: bodyHtml,
+          sections,
+          photos: photoPayload,
+          categoryName: catName,
+          subcategoryName: subName,
+          listingPrice: ntPriceFree ? null : (ntPrice !== "" ? Number(ntPrice) : null),
+          listingCurrency: "USD",
+          listingDetails,
+        });
+      } else {
       // Walk each section's body HTML and upload inline images via the
       // same pipeline (uploadPostPhotoList → attachAltTextToPhotos). This
       // gives every embedded image a real storage URL and Claude-generated
@@ -6275,7 +6353,7 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
       // renderers + the OG description excerpt + full-text search keep
       // working without needing to assemble from sections.
       const bodyHtml = assembleSectionsHtml(processedSections) || null;
-      const created = await onAddForumThread({
+      created = await onAddForumThread({
         title: titleText,
         body: bodyHtml,
         sections: processedSections,
@@ -6283,6 +6361,7 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
         categoryName: catName,
         subcategoryName: subName,
       });
+      }
       if (!created) return;
       // Auto-share to feed if toggle is on. Uses the live current user info,
       // not a hardcoded handle.
@@ -6305,8 +6384,12 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
           forumSub: subName,
         });
       }
-      // Send mention notifications across title + all section bodies.
-      const plainText = titleText + " " + processedSections.map(s => `${s.subheading} ${(s.body || "").replace(/<[^>]+>/g, " ")}`).join(" ");
+      // Send mention notifications across title + body content. For marketplace,
+      // sections is empty/single — use the listing description instead.
+      const bodyForMentions = isMarketplace
+        ? (ntListingDesc || "")
+        : ((created.sections || []).map(s => `${s.subheading || ""} ${(s.body || "").replace(/<[^>]+>/g, " ")}`).join(" "));
+      const plainText = titleText + " " + bodyForMentions;
       const mentions = extractMentions(plainText);
       mentions.forEach(handle => {
         if (handle !== currentUserHandle) {
@@ -6319,6 +6402,9 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
       setNtSections([{ id: newSectionId(), subheading: "", body: "" }]);
       setNtPhotos([]);
       setNtShareToFeed(true);
+      // Reset marketplace state too (cheap; safe regardless of branch).
+      setNtPrice(""); setNtPriceFree(false); setNtPriceOBO(false);
+      setNtCondition(""); setNtBrand(""); setNtModelYear(""); setNtLocation(""); setNtListingDesc("");
       if (ntFromHome) {
         setSelectedCat(cat);
         setSelectedSub(sub);
@@ -6327,7 +6413,9 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
         setView("threads");
       }
     };
-    const canPost = ntTitle.trim() && ntSections.some(s => (s.subheading || "").trim() || (s.body || "").replace(/<[^>]+>/g, "").trim()) && (!ntFromHome || (ntPickCat && ntPickSub));
+    const canPostStandard = ntTitle.trim() && ntSections.some(s => (s.subheading || "").trim() || (s.body || "").replace(/<[^>]+>/g, "").trim()) && (!ntFromHome || (ntPickCat && ntPickSub));
+    const canPostMarketplace = ntTitle.trim() && (ntListingDesc || "").trim() && (ntPriceFree || ntPrice !== "") && (!ntFromHome || (ntPickCat && ntPickSub));
+    const canPost = isMarketplace ? canPostMarketplace : canPostStandard;
     return (
       <div style={{ padding: "0 0 16px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px" }}>
@@ -6372,32 +6460,76 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
             </>
           )}
           <div style={{ marginBottom: 16 }}>
-            <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>TITLE *</span>
-            <input value={ntTitle} onChange={e => setNtTitle(e.target.value)} placeholder="Thread title..." style={{ width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none", boxSizing: "border-box" }} />
+            <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>{isMarketplace ? "ITEM TITLE *" : "TITLE *"}</span>
+            <input value={ntTitle} onChange={e => setNtTitle(e.target.value)} placeholder={isMarketplace ? "e.g. ARB Old Man Emu BP-51 Lift Kit" : "Thread title..."} style={{ width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none", boxSizing: "border-box" }} />
           </div>
 
-          {/* Sections — each is { subheading (h2), body (paragraph + inline) }.
-              Title above is the h1. "+ Add Section" appends an empty section. */}
-          {ntSections.map((s, i) => (
-            <ForumSectionEditor
-              key={s.id}
-              sectionNumber={ntSections.length > 1 ? i + 1 : null}
-              subheading={s.subheading}
-              onSubheadingChange={(v) => updateSection(s.id, { subheading: v })}
-              value={s.body}
-              onChange={(v) => updateSection(s.id, { body: v })}
-              showRemove={ntSections.length > 1}
-              onRemove={() => removeSection(s.id)}
-              autoFocusBody={false}
-              placeholder={i === 0
-                ? "Share your knowledge, ask a question, or start a discussion..."
-                : "Continue the discussion..."}
-            />
-          ))}
-          <button onClick={addSection} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", borderRadius: 8, background: "none", border: `1px dashed ${T.copper}60`, cursor: "pointer", marginBottom: 16, color: T.copper, fontFamily: sans, fontSize: 12, fontWeight: 600, letterSpacing: 0.5 }}>
-            <Plus size={14} color={T.copper} />
-            ADD SECTION
-          </button>
+          {isMarketplace ? (
+            <>
+              {/* Marketplace listing fields. Price is the only "required" of
+                  the structured fields — everything else is optional so
+                  "Wanted / ISO" or "Free / Trade" listings can leave the
+                  brand/condition blank. FREE checkbox suppresses the price. */}
+              <div style={{ display: "flex", gap: 8, marginBottom: 16, alignItems: "flex-end" }}>
+                <div style={{ flex: 1 }}>
+                  <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>PRICE (USD) *</span>
+                  <input type="number" inputMode="decimal" value={ntPriceFree ? "" : ntPrice} onChange={e => setNtPrice(e.target.value)} disabled={ntPriceFree} placeholder={ntPriceFree ? "FREE" : "0"} style={{ width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: ntPriceFree ? T.tertiary : T.white, fontFamily: sans, fontSize: 14, outline: "none", boxSizing: "border-box", opacity: ntPriceFree ? 0.5 : 1 }} />
+                </div>
+                <button onClick={() => { setNtPriceFree(p => !p); if (!ntPriceFree) { setNtPrice(""); setNtPriceOBO(false); } }} style={{ padding: "12px 14px", borderRadius: 8, background: ntPriceFree ? T.green : "none", border: `1px solid ${ntPriceFree ? T.green : T.charcoal}`, cursor: "pointer", color: ntPriceFree ? T.white : T.tertiary, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5 }}>FREE</button>
+                <button onClick={() => setNtPriceOBO(o => !o)} disabled={ntPriceFree} style={{ padding: "12px 14px", borderRadius: 8, background: ntPriceOBO && !ntPriceFree ? T.copper : "none", border: `1px solid ${ntPriceOBO && !ntPriceFree ? T.copper : T.charcoal}`, cursor: ntPriceFree ? "default" : "pointer", color: ntPriceOBO && !ntPriceFree ? T.white : T.tertiary, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, opacity: ntPriceFree ? 0.4 : 1 }}>OBO</button>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
+                <div>
+                  <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>CONDITION</span>
+                  <select value={ntCondition} onChange={e => setNtCondition(e.target.value)} style={{ width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: ntCondition ? T.white : T.tertiary, fontFamily: sans, fontSize: 13, outline: "none", boxSizing: "border-box", appearance: "none", WebkitAppearance: "none" }}>
+                    <option value="">Select...</option>
+                    {FORUM_LISTING_CONDITIONS.map(c => <option key={c} value={c} style={{ background: T.darkCard, color: T.white }}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>LOCATION</span>
+                  <input value={ntLocation} onChange={e => setNtLocation(e.target.value)} placeholder="City, State" style={{ width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+                </div>
+                <div>
+                  <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>BRAND</span>
+                  <input value={ntBrand} onChange={e => setNtBrand(e.target.value)} placeholder="e.g. ARB" style={{ width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+                </div>
+                <div>
+                  <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>MODEL / YEAR</span>
+                  <input value={ntModelYear} onChange={e => setNtModelYear(e.target.value)} placeholder="e.g. BP-51, 2023" style={{ width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+                </div>
+              </div>
+              <div style={{ marginBottom: 16 }}>
+                <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>DESCRIPTION *</span>
+                <textarea value={ntListingDesc} onChange={e => setNtListingDesc(e.target.value)} placeholder={"Condition notes, what's included, why you're selling, fitment, shipping/pickup..."} rows={6} style={{ width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", boxSizing: "border-box", resize: "vertical", lineHeight: 1.5 }} />
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Sections — each is { subheading (h2), body (paragraph + inline) }.
+                  Title above is the h1. "+ Add Section" appends an empty section. */}
+              {ntSections.map((s, i) => (
+                <ForumSectionEditor
+                  key={s.id}
+                  sectionNumber={ntSections.length > 1 ? i + 1 : null}
+                  subheading={s.subheading}
+                  onSubheadingChange={(v) => updateSection(s.id, { subheading: v })}
+                  value={s.body}
+                  onChange={(v) => updateSection(s.id, { body: v })}
+                  showRemove={ntSections.length > 1}
+                  onRemove={() => removeSection(s.id)}
+                  autoFocusBody={false}
+                  placeholder={i === 0
+                    ? "Share your knowledge, ask a question, or start a discussion..."
+                    : "Continue the discussion..."}
+                />
+              ))}
+              <button onClick={addSection} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", borderRadius: 8, background: "none", border: `1px dashed ${T.copper}60`, cursor: "pointer", marginBottom: 16, color: T.copper, fontFamily: sans, fontSize: 12, fontWeight: 600, letterSpacing: 0.5 }}>
+                <Plus size={14} color={T.copper} />
+                ADD SECTION
+              </button>
+            </>
+          )}
           <style>{`
             [contenteditable][data-placeholder]:empty::before {
               content: attr(data-placeholder);
@@ -6704,6 +6836,47 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
               </div>
             </div>
           </div>
+          {/* Marketplace listing details card — renders above the description
+              when the thread's category is marketplace. Owner gets quick
+              Mark Sold / Withdraw buttons inline. */}
+          {selectedThread.categorySlug === "marketplace" && (() => {
+            const d = selectedThread.listingDetails || {};
+            const isFree = !!d.priceFree;
+            const isOBO = !!d.priceOBO;
+            const price = selectedThread.listingPrice;
+            const status = selectedThread.listingStatus || "active";
+            const isOwn = currentUserId && selectedThread.userId === currentUserId;
+            return (
+              <div style={{ marginBottom: 14, padding: 14, borderRadius: 10, background: T.darkBg, border: `1px solid ${status === "sold" ? T.green : status === "withdrawn" ? T.tertiary : T.copper}40` }}>
+                {status !== "active" && (
+                  <div style={{ display: "inline-block", padding: "3px 10px", borderRadius: 4, background: status === "sold" ? T.green : T.tertiary, color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1.5, marginBottom: 10 }}>{status === "sold" ? "SOLD" : "WITHDRAWN"}</div>
+                )}
+                <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
+                  <span style={{ fontFamily: sans, fontSize: 26, color: isFree ? T.green : T.white, fontWeight: 800, letterSpacing: -0.5 }}>{isFree ? "FREE" : (price != null ? `$${Number(price).toLocaleString()}` : "—")}</span>
+                  {isOBO && !isFree && <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 1 }}>OBO</span>}
+                  {d.condition && <span style={{ fontFamily: sans, fontSize: 10, color: T.white, background: T.charcoal, padding: "3px 8px", borderRadius: 4, fontWeight: 600, letterSpacing: 0.5 }}>{d.condition}</span>}
+                </div>
+                {(d.brand || d.modelYear || d.location) && (
+                  <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", columnGap: 12, rowGap: 6 }}>
+                    {d.brand && <><span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600 }}>BRAND</span><span style={{ fontFamily: sans, fontSize: 13, color: T.white }}>{d.brand}</span></>}
+                    {d.modelYear && <><span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600 }}>MODEL</span><span style={{ fontFamily: sans, fontSize: 13, color: T.white }}>{d.modelYear}</span></>}
+                    {d.location && <><span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600 }}>LOCATION</span><span style={{ fontFamily: sans, fontSize: 13, color: T.white }}>{d.location}</span></>}
+                  </div>
+                )}
+                {isOwn && status === "active" && (
+                  <div style={{ display: "flex", gap: 6, marginTop: 12, paddingTop: 12, borderTop: `1px solid ${T.charcoal}` }}>
+                    <button onClick={async () => { if (onUpdateForumThread) { await onUpdateForumThread(selectedThread.id, { listingStatus: "sold" }); setSelectedThread(prev => prev ? { ...prev, listingStatus: "sold" } : prev); } }} style={{ flex: 1, padding: "8px 12px", borderRadius: 6, background: T.green, border: "none", cursor: "pointer", color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5 }}>MARK SOLD</button>
+                    <button onClick={async () => { if (!confirm("Withdraw this listing? It will show as 'WITHDRAWN' and stay searchable.")) return; if (onUpdateForumThread) { await onUpdateForumThread(selectedThread.id, { listingStatus: "withdrawn" }); setSelectedThread(prev => prev ? { ...prev, listingStatus: "withdrawn" } : prev); } }} style={{ flex: 1, padding: "8px 12px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}40`, cursor: "pointer", color: T.tertiary, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5 }}>WITHDRAW</button>
+                  </div>
+                )}
+                {isOwn && status !== "active" && (
+                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${T.charcoal}` }}>
+                    <button onClick={async () => { if (onUpdateForumThread) { await onUpdateForumThread(selectedThread.id, { listingStatus: "active" }); setSelectedThread(prev => prev ? { ...prev, listingStatus: "active" } : prev); } }} style={{ width: "100%", padding: "8px 12px", borderRadius: 6, background: "none", border: `1px solid ${T.copper}40`, cursor: "pointer", color: T.copper, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5 }}>RELIST</button>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
           {(() => {
             // Prefer the structured sections array (post-May-2026 threads).
             // Renders title-as-h1 implicit (the page header already shows it),
@@ -6886,25 +7059,51 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
               </div>
               <button onClick={async () => {
                 const newPhotos = await commitForumPhotos(editPhotos);
-                // Run each section's body through the same inline-image
-                // upload + alt-text pipeline used at thread creation, so any
-                // new images dropped in during edit get proper URLs + alt.
-                const processedSections = [];
-                for (const s of editSections) {
-                  const subheading = (s.subheading || "").trim();
-                  const rawBody = (s.body || "").trim();
-                  const processedBody = await processForumBodyImages(rawBody, currentUserId);
-                  const plain = processedBody.replace(/<[^>]+>/g, "").trim();
-                  if (!subheading && !plain) continue;
-                  processedSections.push({ subheading, body: processedBody });
+                const editIsMarketplace = selectedThread && selectedThread.categorySlug === "marketplace";
+                let updates;
+                if (editIsMarketplace) {
+                  const descRaw = (editListingDesc || "").trim();
+                  const processedDesc = descRaw ? await processForumBodyImages(`<p>${descRaw.replace(/\n/g, "</p><p>")}</p>`, currentUserId) : "";
+                  const sections = processedDesc ? [{ subheading: "", body: processedDesc }] : [];
+                  updates = {
+                    title: editTitle.trim(),
+                    body: processedDesc || null,
+                    sections,
+                    photos: newPhotos.length > 0 ? newPhotos : [],
+                    listingPrice: editPriceFree ? null : (editPrice !== "" ? Number(editPrice) : null),
+                    listingCurrency: "USD",
+                    listingStatus: editListingStatus,
+                    listingDetails: {
+                      condition: editCondition || null,
+                      brand: (editBrand || "").trim() || null,
+                      modelYear: (editModelYear || "").trim() || null,
+                      location: (editLocation || "").trim() || null,
+                      priceFree: !!editPriceFree,
+                      priceOBO: !!editPriceOBO,
+                      descriptionPlain: descRaw || null,
+                    },
+                  };
+                } else {
+                  // Run each section's body through the same inline-image
+                  // upload + alt-text pipeline used at thread creation, so any
+                  // new images dropped in during edit get proper URLs + alt.
+                  const processedSections = [];
+                  for (const s of editSections) {
+                    const subheading = (s.subheading || "").trim();
+                    const rawBody = (s.body || "").trim();
+                    const processedBody = await processForumBodyImages(rawBody, currentUserId);
+                    const plain = processedBody.replace(/<[^>]+>/g, "").trim();
+                    if (!subheading && !plain) continue;
+                    processedSections.push({ subheading, body: processedBody });
+                  }
+                  const bodyHtml = assembleSectionsHtml(processedSections) || null;
+                  updates = {
+                    title: editTitle.trim(),
+                    body: bodyHtml,
+                    sections: processedSections,
+                    photos: newPhotos.length > 0 ? newPhotos : [],
+                  };
                 }
-                const bodyHtml = assembleSectionsHtml(processedSections) || null;
-                const updates = {
-                  title: editTitle.trim(),
-                  body: bodyHtml,
-                  sections: processedSections,
-                  photos: newPhotos.length > 0 ? newPhotos : [],
-                };
                 if (onUpdateForumThread) await onUpdateForumThread(selectedThread.id, updates);
                 setSelectedThread({ ...selectedThread, ...updates, photos: newPhotos.length > 0 ? newPhotos : undefined, editedAt: Date.now() });
                 setEditingThreadId(null);
@@ -6916,31 +7115,80 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
             <div style={{ flex: 1, overflowY: "auto", padding: "16px" }}>
               {/* Edit title */}
               <div style={{ marginBottom: 16 }}>
-                <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>TITLE *</span>
+                <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>{selectedThread.categorySlug === "marketplace" ? "ITEM TITLE *" : "TITLE *"}</span>
                 <input value={editTitle} onChange={e => setEditTitle(e.target.value)} style={{ width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none", boxSizing: "border-box" }} />
               </div>
-              {/* Edit sections — mirror of the new-thread multi-section editor.
-                  Title above is the h1; each subheading becomes <h2>; bodies
-                  are paragraph-only with inline formatting + images. */}
-              {editSections.map((s, i) => (
-                <ForumSectionEditor
-                  key={s.id}
-                  sectionNumber={editSections.length > 1 ? i + 1 : null}
-                  subheading={s.subheading}
-                  onSubheadingChange={(v) => updateEditSection(s.id, { subheading: v })}
-                  value={s.body}
-                  onChange={(v) => updateEditSection(s.id, { body: v })}
-                  showRemove={editSections.length > 1}
-                  onRemove={() => removeEditSection(s.id)}
-                  placeholder={i === 0
-                    ? "Share your knowledge, ask a question, or start a discussion..."
-                    : "Continue the discussion..."}
-                />
-              ))}
-              <button onClick={addEditSection} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", borderRadius: 8, background: "none", border: `1px dashed ${T.copper}60`, cursor: "pointer", marginBottom: 16, color: T.copper, fontFamily: sans, fontSize: 12, fontWeight: 600, letterSpacing: 0.5 }}>
-                <Plus size={14} color={T.copper} />
-                ADD SECTION
-              </button>
+              {selectedThread.categorySlug === "marketplace" ? (
+                <>
+                  {/* Edit-mode marketplace fields — mirror of the new-thread form */}
+                  <div style={{ marginBottom: 16 }}>
+                    <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>STATUS</span>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      {[{ k: "active", label: "ACTIVE", c: T.green }, { k: "sold", label: "SOLD", c: T.copper }, { k: "withdrawn", label: "WITHDRAWN", c: T.tertiary }].map(o => (
+                        <button key={o.k} onClick={() => setEditListingStatus(o.k)} style={{ flex: 1, padding: "10px 8px", borderRadius: 6, background: editListingStatus === o.k ? o.c : "none", border: editListingStatus === o.k ? "none" : `1px solid ${T.charcoal}`, cursor: "pointer", color: editListingStatus === o.k ? T.white : T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.8 }}>{o.label}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 16, alignItems: "flex-end" }}>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>PRICE (USD) *</span>
+                      <input type="number" inputMode="decimal" value={editPriceFree ? "" : editPrice} onChange={e => setEditPrice(e.target.value)} disabled={editPriceFree} placeholder={editPriceFree ? "FREE" : "0"} style={{ width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: editPriceFree ? T.tertiary : T.white, fontFamily: sans, fontSize: 14, outline: "none", boxSizing: "border-box", opacity: editPriceFree ? 0.5 : 1 }} />
+                    </div>
+                    <button onClick={() => { setEditPriceFree(p => !p); if (!editPriceFree) { setEditPrice(""); setEditPriceOBO(false); } }} style={{ padding: "12px 14px", borderRadius: 8, background: editPriceFree ? T.green : "none", border: `1px solid ${editPriceFree ? T.green : T.charcoal}`, cursor: "pointer", color: editPriceFree ? T.white : T.tertiary, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5 }}>FREE</button>
+                    <button onClick={() => setEditPriceOBO(o => !o)} disabled={editPriceFree} style={{ padding: "12px 14px", borderRadius: 8, background: editPriceOBO && !editPriceFree ? T.copper : "none", border: `1px solid ${editPriceOBO && !editPriceFree ? T.copper : T.charcoal}`, cursor: editPriceFree ? "default" : "pointer", color: editPriceOBO && !editPriceFree ? T.white : T.tertiary, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, opacity: editPriceFree ? 0.4 : 1 }}>OBO</button>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
+                    <div>
+                      <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>CONDITION</span>
+                      <select value={editCondition} onChange={e => setEditCondition(e.target.value)} style={{ width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: editCondition ? T.white : T.tertiary, fontFamily: sans, fontSize: 13, outline: "none", boxSizing: "border-box", appearance: "none", WebkitAppearance: "none" }}>
+                        <option value="">Select...</option>
+                        {FORUM_LISTING_CONDITIONS.map(c => <option key={c} value={c} style={{ background: T.darkCard, color: T.white }}>{c}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>LOCATION</span>
+                      <input value={editLocation} onChange={e => setEditLocation(e.target.value)} placeholder="City, State" style={{ width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+                    </div>
+                    <div>
+                      <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>BRAND</span>
+                      <input value={editBrand} onChange={e => setEditBrand(e.target.value)} placeholder="e.g. ARB" style={{ width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+                    </div>
+                    <div>
+                      <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>MODEL / YEAR</span>
+                      <input value={editModelYear} onChange={e => setEditModelYear(e.target.value)} placeholder="e.g. BP-51, 2023" style={{ width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+                    </div>
+                  </div>
+                  <div style={{ marginBottom: 16 }}>
+                    <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>DESCRIPTION *</span>
+                    <textarea value={editListingDesc} onChange={e => setEditListingDesc(e.target.value)} rows={6} placeholder="Condition notes, what's included, fitment, shipping/pickup..." style={{ width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", boxSizing: "border-box", resize: "vertical", lineHeight: 1.5 }} />
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Edit sections — mirror of the new-thread multi-section editor.
+                      Title above is the h1; each subheading becomes <h2>; bodies
+                      are paragraph-only with inline formatting + images. */}
+                  {editSections.map((s, i) => (
+                    <ForumSectionEditor
+                      key={s.id}
+                      sectionNumber={editSections.length > 1 ? i + 1 : null}
+                      subheading={s.subheading}
+                      onSubheadingChange={(v) => updateEditSection(s.id, { subheading: v })}
+                      value={s.body}
+                      onChange={(v) => updateEditSection(s.id, { body: v })}
+                      showRemove={editSections.length > 1}
+                      onRemove={() => removeEditSection(s.id)}
+                      placeholder={i === 0
+                        ? "Share your knowledge, ask a question, or start a discussion..."
+                        : "Continue the discussion..."}
+                    />
+                  ))}
+                  <button onClick={addEditSection} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", borderRadius: 8, background: "none", border: `1px dashed ${T.copper}60`, cursor: "pointer", marginBottom: 16, color: T.copper, fontFamily: sans, fontSize: 12, fontWeight: 600, letterSpacing: 0.5 }}>
+                    <Plus size={14} color={T.copper} />
+                    ADD SECTION
+                  </button>
+                </>
+              )}
               {/* Edit hero image */}
               <div style={{ marginBottom: 16 }}>
                 <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>HERO IMAGE</span>
@@ -7015,12 +7263,38 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
 
         <div style={{ padding: "0 16px" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            {threads.map((t, i) => (
-              <div key={t.id} onClick={() => openThread(t)} style={{ background: T.darkCard, padding: "14px 16px", cursor: "pointer", borderRadius: i === 0 ? "8px 8px 0 0" : i === threads.length - 1 ? "0 0 8px 8px" : 0, borderBottom: i < threads.length - 1 ? `1px solid ${T.charcoal}` : "none" }}>
+            {threads.map((t, i) => {
+              // Marketplace listings get a price chip on the top-right of the
+              // card, a SOLD ribbon (green) or WITHDRAWN tag (muted) when
+              // status isn't active, and the whole card dims when withdrawn.
+              const isMkt = t.categorySlug === "marketplace";
+              const status = t.listingStatus || "active";
+              const d = t.listingDetails || {};
+              const priceFree = !!d.priceFree;
+              const isOBO = !!d.priceOBO;
+              const cardDim = status === "withdrawn";
+              const priceText = isMkt
+                ? (priceFree ? "FREE" : (t.listingPrice != null ? `$${Number(t.listingPrice).toLocaleString()}${isOBO ? " OBO" : ""}` : "—"))
+                : null;
+              return (
+              <div key={t.id} onClick={() => openThread(t)} style={{ background: T.darkCard, padding: "14px 16px", cursor: "pointer", borderRadius: i === 0 ? "8px 8px 0 0" : i === threads.length - 1 ? "0 0 8px 8px" : 0, borderBottom: i < threads.length - 1 ? `1px solid ${T.charcoal}` : "none", opacity: cardDim ? 0.5 : 1, position: "relative" }}>
+                {isMkt && status === "sold" && (
+                  <div style={{ position: "absolute", top: 10, right: 12, padding: "2px 8px", borderRadius: 4, background: T.green, color: T.white, fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 1.5 }}>SOLD</div>
+                )}
+                {isMkt && status === "withdrawn" && (
+                  <div style={{ position: "absolute", top: 10, right: 12, padding: "2px 8px", borderRadius: 4, background: T.tertiary, color: T.white, fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 1.5 }}>WITHDRAWN</div>
+                )}
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
                   {t.pinned && <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, background: `${T.copper}20`, padding: "2px 6px", borderRadius: 3, letterSpacing: 1 }}>PINNED</span>}
                 </div>
-                <p style={{ fontFamily: serif, fontSize: 14, color: T.white, margin: "0 0 8px", lineHeight: 1.4 }}>{t.title}</p>
+                <p style={{ fontFamily: serif, fontSize: 14, color: T.white, margin: "0 0 8px", lineHeight: 1.4, paddingRight: isMkt && status !== "active" ? 80 : 0 }}>{t.title}</p>
+                {isMkt && status === "active" && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontFamily: sans, fontSize: 16, color: priceFree ? T.green : T.copper, fontWeight: 800 }}>{priceText}</span>
+                    {d.condition && <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: T.charcoal, padding: "2px 6px", borderRadius: 3, fontWeight: 600, letterSpacing: 0.5 }}>{d.condition}</span>}
+                    {d.location && <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>· {d.location}</span>}
+                  </div>
+                )}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div style={{ display: "flex", gap: 12 }}>
                     <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>@{t.author}</span>
@@ -7036,7 +7310,8 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
@@ -27362,7 +27637,7 @@ export default function Trailhead() {
   // retry mirroring trip_reports), optimistically prepends to state, and
   // returns the translated row so the caller can chain (e.g. auto-share to
   // feed). RLS gates on auth.uid() = user_id.
-  const addForumThread = async ({ title, body, sections, photos, categoryName, subcategoryName }) => {
+  const addForumThread = async ({ title, body, sections, photos, categoryName, subcategoryName, listingPrice, listingCurrency, listingDetails }) => {
     const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
     if (!uid) return null;
     if (!title || !title.trim()) return null;
@@ -27371,22 +27646,30 @@ export default function Trailhead() {
     const subcategorySlug = forumSlugify(subcategoryName || "");
     if (!categorySlug || !subcategorySlug) return null;
     const baseSlug = slugifyForumTitle(trimmed);
+    const isMarketplace = categorySlug === "marketplace";
     let inserted = null;
     let lastError = null;
     for (let attempt = 0; attempt < 5; attempt++) {
       const candidateSlug = attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`;
+      const row = {
+        user_id: uid,
+        category_slug: categorySlug,
+        subcategory_slug: subcategorySlug,
+        title: trimmed,
+        slug: candidateSlug,
+        body: body || null,
+        sections: Array.isArray(sections) ? sections : [],
+        photos: Array.isArray(photos) ? photos : [],
+      };
+      if (isMarketplace) {
+        row.listing_price = (listingPrice != null && listingPrice !== "") ? Number(listingPrice) : null;
+        row.listing_currency = listingCurrency || "USD";
+        row.listing_status = "active";
+        row.listing_details = listingDetails && typeof listingDetails === "object" ? listingDetails : {};
+      }
       const { data, error } = await supabase
         .from("forum_threads")
-        .insert({
-          user_id: uid,
-          category_slug: categorySlug,
-          subcategory_slug: subcategorySlug,
-          title: trimmed,
-          slug: candidateSlug,
-          body: body || null,
-          sections: Array.isArray(sections) ? sections : [],
-          photos: Array.isArray(photos) ? photos : [],
-        })
+        .insert(row)
         .select()
         .single();
       if (!error) { inserted = data; break; }
@@ -27424,6 +27707,12 @@ export default function Trailhead() {
     if (Array.isArray(updates.sections)) patch.sections = updates.sections;
     if (Array.isArray(updates.photos)) patch.photos = updates.photos;
     if (typeof updates.pinned === "boolean") patch.pinned = updates.pinned;
+    // Marketplace fields. listing_price: null clears; explicit number sets.
+    // listing_status accepts only the three valid values (DB check guards).
+    if ("listingPrice" in updates) patch.listing_price = (updates.listingPrice == null || updates.listingPrice === "") ? null : Number(updates.listingPrice);
+    if (typeof updates.listingCurrency === "string") patch.listing_currency = updates.listingCurrency;
+    if (typeof updates.listingStatus === "string" && ["active","sold","withdrawn"].includes(updates.listingStatus)) patch.listing_status = updates.listingStatus;
+    if (updates.listingDetails && typeof updates.listingDetails === "object") patch.listing_details = updates.listingDetails;
     patch.updated_at = new Date().toISOString();
     try {
       const { data, error } = await supabase
