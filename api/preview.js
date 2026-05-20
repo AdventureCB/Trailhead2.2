@@ -124,12 +124,11 @@ function buildForumThreadSSR(article, canonicalUrl, origin) {
   const authorName = escapeHtml(author.name || "Author");
   const authorHandle = author.handle ? escapeHtml(author.handle) : "";
   const authorAvatar = author.avatarUrl ? escapeHtml(author.avatarUrl) : "";
+  const dateIso = article.createdAt ? new Date(article.createdAt).toISOString() : "";
   const dateStr = article.createdAt
     ? new Date(article.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
     : "";
-  // Assemble sections HTML. Each subheading becomes <h2>; bodies are
-  // inserted after sanitization. Falls back to the legacy body blob if no
-  // structured sections exist.
+  // Sections HTML — each subheading becomes <h2>; bodies are sanitized.
   let sectionsHtml = "";
   if (Array.isArray(article.sections) && article.sections.length > 0) {
     sectionsHtml = article.sections.map(s => {
@@ -144,21 +143,67 @@ function buildForumThreadSSR(article, canonicalUrl, origin) {
   } else if (article.bodyFallback) {
     sectionsHtml = `<div style="font-size:16px;color:#F5F2ED;">${sanitizeForumHtml(article.bodyFallback)}</div>`;
   }
-  // Crumbs link the category + subcategory slugs back to canonical-style
-  // URLs (the category/subcategory pages aren't routed yet, but anchors
-  // give Google the topical context).
-  const catSlug = article.categorySlug ? escapeHtml(article.categorySlug) : "";
+  // Replies section — every reply rendered as its own <article> with
+  // author byline, datetime, and body. Top-level replies + nested replies
+  // collapse to a flat list (preserving order) but indent depth-1 replies
+  // for visual hierarchy.
+  const replies = Array.isArray(article.replies) ? article.replies : [];
+  const replyCount = replies.length;
+  let repliesHtml = "";
+  if (replyCount > 0) {
+    repliesHtml = `
+      <section style="margin-top:40px;padding-top:24px;border-top:1px solid #2A2A28;">
+        <h2 style="font-size:18px;font-family:'Trebuchet MS',sans-serif;color:#fff;margin:0 0 20px;font-weight:700;letter-spacing:0.5px;">Discussion (${replyCount})</h2>
+        ${replies.map(r => {
+          if (!r) return "";
+          const ra = r.author || {};
+          const raName = escapeHtml(ra.name || "Author");
+          const raHandle = ra.handle ? escapeHtml(ra.handle) : "";
+          const raAvatar = ra.avatarUrl ? escapeHtml(ra.avatarUrl) : "";
+          const raIso = r.createdAt ? new Date(r.createdAt).toISOString() : "";
+          const raDate = r.createdAt ? new Date(r.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "";
+          const indent = r.parentId ? "margin-left:32px;" : "";
+          const bodySan = sanitizeForumHtml(r.body || "");
+          const raInitial = (ra.name || "A").charAt(0).toUpperCase();
+          const raAvatarBlock = raAvatar
+            ? `<img src="${raAvatar}" alt="${raName}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;" />`
+            : `<div style="width:32px;height:32px;border-radius:50%;background:#C49A6C;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><span style="font-family:'Trebuchet MS',sans-serif;font-size:13px;font-weight:700;color:#fff;">${escapeHtml(raInitial)}</span></div>`;
+          return `
+            <article style="display:flex;gap:12px;padding:14px 0;border-bottom:1px solid #2A2A28;${indent}">
+              ${raAvatarBlock}
+              <div style="flex:1;min-width:0;">
+                <div style="font-family:'Trebuchet MS',sans-serif;font-size:12px;margin-bottom:4px;color:#8B7D6B;">
+                  <strong style="color:#fff;font-weight:600;font-size:13px;">${raName}</strong>
+                  ${raHandle ? ` · <span style="color:#C49A6C;">@${raHandle}</span>` : ""}
+                  · <time datetime="${raIso}">${escapeHtml(raDate)}</time>
+                </div>
+                <div style="font-size:14px;color:#F5F2ED;line-height:1.6;">${bodySan}</div>
+              </div>
+            </article>
+          `;
+        }).join("\n")}
+      </section>
+    `;
+  }
   const subSlug = article.subcategorySlug ? escapeHtml(article.subcategorySlug) : "";
+  const subInfo = subSlug && FORUM_SUB_TO_INFO[article.subcategorySlug];
+  const subName = subInfo ? escapeHtml(subInfo.name) : (subSlug ? subSlug.replace(/-/g, " ") : "");
   const crumbs = [
     `<a href="${origin}/" style="color:#C49A6C;text-decoration:none;">Trailhead</a>`,
     `<a href="${origin}/" style="color:#C49A6C;text-decoration:none;">Forum</a>`,
-    subSlug ? `<a href="${origin}/forum/${subSlug}" style="color:#C49A6C;text-decoration:none;">${subSlug.replace(/-/g, " ")}</a>` : "",
+    subSlug ? `<a href="${origin}/forum/${subSlug}" style="color:#C49A6C;text-decoration:none;">${subName}</a>` : "",
   ].filter(Boolean).join(' <span style="color:#8B7D6B;">/</span> ');
-  // Avatar block: real image if available, else copper initial circle.
   const initial = (author.name || "A").charAt(0).toUpperCase();
   const avatarBlock = authorAvatar
     ? `<img src="${authorAvatar}" alt="${authorName}" style="width:48px;height:48px;border-radius:50%;object-fit:cover;flex-shrink:0;" />`
     : `<div style="width:48px;height:48px;border-radius:50%;background:#C49A6C;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><span style="font-family:'Trebuchet MS',sans-serif;font-size:18px;font-weight:700;color:#fff;">${escapeHtml(initial)}</span></div>`;
+  const statsRow = `
+    <div style="display:flex;gap:18px;margin:14px 0 0;font-family:'Trebuchet MS',sans-serif;font-size:11px;color:#8B7D6B;">
+      ${typeof article.viewCount === "number" ? `<span>${article.viewCount} view${article.viewCount === 1 ? "" : "s"}</span>` : ""}
+      ${typeof article.replyCount === "number" ? `<span>${article.replyCount} repl${article.replyCount === 1 ? "y" : "ies"}</span>` : ""}
+      ${typeof article.likeCount === "number" && article.likeCount > 0 ? `<span>${article.likeCount} like${article.likeCount === 1 ? "" : "s"}</span>` : ""}
+    </div>
+  `;
   return `
     <article style="max-width:720px;margin:0 auto;padding:32px 20px 80px;color:#fff;background:#111111;min-height:100vh;font-family:'Source Serif 4',Georgia,serif;line-height:1.7;box-sizing:border-box;">
       <nav style="font-family:'Trebuchet MS',sans-serif;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:24px;color:#8B7D6B;">
@@ -169,10 +214,12 @@ function buildForumThreadSSR(article, canonicalUrl, origin) {
         ${avatarBlock}
         <div style="display:flex;flex-direction:column;gap:2px;font-family:'Trebuchet MS',sans-serif;">
           <span style="font-size:15px;font-weight:700;color:#fff;">${authorName}</span>
-          <span style="font-size:12px;color:#8B7D6B;">${authorHandle ? `<span style="color:#C49A6C;">@${authorHandle}</span> · ` : ""}${escapeHtml(dateStr)}</span>
+          <span style="font-size:12px;color:#8B7D6B;">${authorHandle ? `<span style="color:#C49A6C;">@${authorHandle}</span> · ` : ""}<time datetime="${dateIso}">${escapeHtml(dateStr)}</time></span>
         </div>
       </div>
       ${sectionsHtml}
+      ${statsRow}
+      ${repliesHtml}
       <footer style="margin-top:48px;padding-top:24px;border-top:1px solid #2A2A28;font-family:'Trebuchet MS',sans-serif;font-size:12px;color:#8B7D6B;">
         Posted by <a href="${origin}/" style="color:#C49A6C;text-decoration:none;">${authorName}</a> ${authorHandle ? `(@${authorHandle})` : ""} on the <a href="${origin}/" style="color:#C49A6C;text-decoration:none;">Trailhead Overlanding Forum</a> — the community for overlanders sharing trips, builds, and trail knowledge.
       </footer>
@@ -448,23 +495,40 @@ async function resolveEntity(type, id) {
       .replace(/\s+/g, " ")
       .trim();
     const description = (plainBody || `Discussion on the Trailhead community forum.`).slice(0, 200);
-    // Pull full author profile for E-E-A-T: name + handle + avatar all
-    // feed into the byline + JSON-LD Person schema.
-    let author = null;
-    if (row.user_id) {
-      const prof = await supabaseFetch(
+    // Fan-out: author profile + replies + reply authors + thread like
+    // count, in parallel. All public-readable, none gate the others.
+    const [authorRow, replyRows, likeRows] = await Promise.all([
+      row.user_id
+        ? supabaseFetch("profiles", `id=eq.${encodeURIComponent(row.user_id)}&select=full_name,handle,avatar_url,bio&limit=1`)
+        : Promise.resolve(null),
+      supabaseFetchAll("forum_replies", `thread_id=eq.${encodeURIComponent(row.id)}&select=id,user_id,body,parent_id,created_at&order=created_at.asc&limit=50`),
+      supabaseFetchAll("forum_thread_likes", `thread_id=eq.${encodeURIComponent(row.id)}&select=user_id`),
+    ]);
+    const author = authorRow
+      ? {
+          name: authorRow.full_name || authorRow.handle || "Author",
+          handle: authorRow.handle || "",
+          avatarUrl: authorRow.avatar_url || null,
+          bio: authorRow.bio || null,
+        }
+      : null;
+    // Resolve reply authors in one shot.
+    const replyAuthorIds = Array.from(new Set((replyRows || []).map(r => r.user_id).filter(Boolean)));
+    const replyAuthorsById = {};
+    if (replyAuthorIds.length > 0) {
+      const profs = await supabaseFetchAll(
         "profiles",
-        `id=eq.${encodeURIComponent(row.user_id)}&select=full_name,handle,avatar_url,bio&limit=1`
+        `id=in.(${replyAuthorIds.map(encodeURIComponent).join(",")})&select=id,full_name,handle,avatar_url`
       );
-      if (prof) {
-        author = {
-          name: prof.full_name || prof.handle || "Author",
-          handle: prof.handle || "",
-          avatarUrl: prof.avatar_url || null,
-          bio: prof.bio || null,
-        };
-      }
+      profs.forEach(p => { replyAuthorsById[p.id] = p; });
     }
+    // Count words across title + sections + reply bodies for SEO.
+    const allText = [
+      row.title || "",
+      plainBody,
+      ...(replyRows || []).map(r => (r.body || "").replace(/<[^>]+>/g, " ")),
+    ].join(" ");
+    const wordCount = (allText.match(/\S+/g) || []).length;
     return {
       title: `${row.title} · Trailhead Forum`,
       description,
@@ -479,6 +543,21 @@ async function resolveEntity(type, id) {
         modifiedAt: row.updated_at && row.updated_at !== row.created_at ? row.updated_at : null,
         author,
         url: null, // filled in by caller
+        categorySlug: row.category_slug,
+        subcategorySlug: row.subcategory_slug,
+        viewCount: row.view_count || 0,
+        likeCount: (likeRows || []).length,
+        replyCount: (replyRows || []).length,
+        wordCount,
+        replies: (replyRows || []).map(r => ({
+          id: r.id,
+          body: (r.body || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim(),
+          parentId: r.parent_id || null,
+          createdAt: r.created_at,
+          author: replyAuthorsById[r.user_id]
+            ? { name: replyAuthorsById[r.user_id].full_name || replyAuthorsById[r.user_id].handle || "Author", handle: replyAuthorsById[r.user_id].handle || "" }
+            : null,
+        })),
       },
       // SSR article payload — caller injects into the root div so crawlers
       // + initial-load humans see the actual content instead of "Loading…".
@@ -487,9 +566,28 @@ async function resolveEntity(type, id) {
         sections: Array.isArray(row.sections) ? row.sections : [],
         bodyFallback: row.body || "",
         createdAt: row.created_at,
+        modifiedAt: row.updated_at && row.updated_at !== row.created_at ? row.updated_at : null,
         author,
         categorySlug: row.category_slug,
         subcategorySlug: row.subcategory_slug,
+        viewCount: row.view_count || 0,
+        likeCount: (likeRows || []).length,
+        replyCount: (replyRows || []).length,
+        // Reply rendering shape — author profile object inline so the
+        // SSR builder doesn't need to look anything up.
+        replies: (replyRows || []).map(r => ({
+          id: r.id,
+          body: r.body || "",
+          parentId: r.parent_id || null,
+          createdAt: r.created_at,
+          author: replyAuthorsById[r.user_id]
+            ? {
+                name: replyAuthorsById[r.user_id].full_name || replyAuthorsById[r.user_id].handle || "Author",
+                handle: replyAuthorsById[r.user_id].handle || "",
+                avatarUrl: replyAuthorsById[r.user_id].avatar_url || null,
+              }
+            : null,
+        })),
       },
     };
   }
@@ -627,12 +725,23 @@ const DEFAULT_META = {
   image: null,
 };
 
-function metaTagsFor({ title, description, image, imageAlt, url }) {
+function metaTagsFor({ title, description, image, imageAlt, url, article }) {
   const t = escapeHtml(title);
   const d = escapeHtml(description);
   const i = image ? escapeHtml(image) : "";
   const a = imageAlt ? escapeHtml(imageAlt) : "";
   const u = escapeHtml(url);
+  // Article-specific OG tags — emitted when the caller passes an `article`
+  // payload (currently forum threads). Provides published time, modified
+  // time, section (topical category), and author name; social rich
+  // previews + some search engines parse these.
+  const articleTags = [];
+  if (article) {
+    if (article.createdAt) articleTags.push(`<meta property="article:published_time" content="${escapeHtml(new Date(article.createdAt).toISOString())}">`);
+    if (article.modifiedAt) articleTags.push(`<meta property="article:modified_time" content="${escapeHtml(new Date(article.modifiedAt).toISOString())}">`);
+    if (article.section) articleTags.push(`<meta property="article:section" content="${escapeHtml(article.section)}">`);
+    if (article.authorName) articleTags.push(`<meta property="article:author" content="${escapeHtml(article.authorName)}">`);
+  }
   return [
     `<meta property="og:type" content="article">`,
     `<meta property="og:site_name" content="Trailhead">`,
@@ -643,6 +752,7 @@ function metaTagsFor({ title, description, image, imageAlt, url }) {
     i && a ? `<meta property="og:image:alt" content="${a}">` : "",
     i ? `<meta property="og:image:width" content="1200">` : "",
     i ? `<meta property="og:image:height" content="630">` : "",
+    ...articleTags,
     `<meta name="twitter:card" content="${i ? "summary_large_image" : "summary"}">`,
     `<meta name="twitter:title" content="${t}">`,
     `<meta name="twitter:description" content="${d}">`,
@@ -684,12 +794,26 @@ module.exports = async function handler(req, res) {
     if (data) meta = data;
   }
 
+  // Article-specific OG tags get emitted when we have an article payload
+  // (currently forum threads). Section is the human-readable subcategory
+  // name; author is the byline name.
+  const articleMeta = (type === "forum-thread" && meta.article)
+    ? {
+        createdAt: meta.article.createdAt || null,
+        modifiedAt: meta.article.modifiedAt || null,
+        section: meta.article.subcategorySlug && FORUM_SUB_TO_INFO[meta.article.subcategorySlug]
+          ? `${FORUM_SUB_TO_INFO[meta.article.subcategorySlug].catName} / ${FORUM_SUB_TO_INFO[meta.article.subcategorySlug].name}`
+          : null,
+        authorName: meta.article.author && meta.article.author.name ? meta.article.author.name : null,
+      }
+    : null;
   const tags = metaTagsFor({
     title: meta.title,
     description: meta.description,
     image: meta.image,
     imageAlt: meta.imageAlt || "",
     url: canonicalUrl,
+    article: articleMeta,
   });
 
   // Canonical URL tag — prevents duplicate-content penalties when the same
@@ -758,31 +882,111 @@ module.exports = async function handler(req, res) {
           alternateName: a.handle ? `@${a.handle}` : undefined,
           identifier: a.handle || undefined,
           image: a.avatarUrl || undefined,
-          // Author "url" should resolve to a profile page. We don't have a
-          // public /users/<handle> route yet, so we omit it and add it back
-          // when that ships (see project_seo_blocked_on_domain).
         }).filter(([, v]) => v !== undefined))
       : undefined;
-    const ld = {
-      "@context": "https://schema.org",
-      "@type": "DiscussionForumPosting",
-      headline: meta.jsonLd.title,
-      articleBody: (meta.jsonLd.body || "").slice(0, 5000),
-      datePublished: meta.jsonLd.createdAt || undefined,
-      dateModified: meta.jsonLd.modifiedAt || meta.jsonLd.createdAt || undefined,
-      url: canonicalUrl,
-      mainEntityOfPage: canonicalUrl,
-      author: authorNode,
-      publisher: {
-        "@type": "Organization",
-        name: "Trailhead",
-        url: `${origin}/`,
-        logo: { "@type": "ImageObject", url: `${origin}/lone-peak-flag.png` },
-      },
+    const subInfo = meta.jsonLd.subcategorySlug ? FORUM_SUB_TO_INFO[meta.jsonLd.subcategorySlug] : null;
+    const articleSection = subInfo ? `${subInfo.catName} / ${subInfo.name}` : undefined;
+    const publisher = {
+      "@type": "Organization",
+      name: "Trailhead",
+      url: `${origin}/`,
+      logo: { "@type": "ImageObject", url: `${origin}/lone-peak-flag.png` },
     };
-    // Strip undefined values so the JSON serializes cleanly.
+    // Build Comment[] schema from the replies — Google indexes these and
+    // shows answer/reply snippets in SERPs.
+    const commentList = Array.isArray(meta.jsonLd.replies) && meta.jsonLd.replies.length > 0
+      ? meta.jsonLd.replies.slice(0, 50).map(r => Object.fromEntries(Object.entries({
+          "@type": "Comment",
+          text: (r.body || "").slice(0, 2000),
+          datePublished: r.createdAt || undefined,
+          author: r.author ? Object.fromEntries(Object.entries({
+            "@type": "Person",
+            name: r.author.name || undefined,
+            alternateName: r.author.handle ? `@${r.author.handle}` : undefined,
+            identifier: r.author.handle || undefined,
+          }).filter(([, v]) => v !== undefined)) : undefined,
+        }).filter(([, v]) => v !== undefined))
+      : undefined;
+    // interactionStatistic — surfaces engagement counts to Google as
+    // social-proof signals.
+    const interactionStats = [];
+    if (typeof meta.jsonLd.viewCount === "number" && meta.jsonLd.viewCount > 0) {
+      interactionStats.push({
+        "@type": "InteractionCounter",
+        interactionType: { "@type": "ViewAction" },
+        userInteractionCount: meta.jsonLd.viewCount,
+      });
+    }
+    if (typeof meta.jsonLd.likeCount === "number" && meta.jsonLd.likeCount > 0) {
+      interactionStats.push({
+        "@type": "InteractionCounter",
+        interactionType: { "@type": "LikeAction" },
+        userInteractionCount: meta.jsonLd.likeCount,
+      });
+    }
+    if (typeof meta.jsonLd.replyCount === "number" && meta.jsonLd.replyCount > 0) {
+      interactionStats.push({
+        "@type": "InteractionCounter",
+        interactionType: { "@type": "CommentAction" },
+        userInteractionCount: meta.jsonLd.replyCount,
+      });
+    }
+    // Detect Q&A pattern: title ends with "?" → upgrade to QAPage with
+    // Question + Answer schema. Google's "People also ask" rich result
+    // panel pulls from this.
+    const isQuestion = /\?\s*$/.test(meta.jsonLd.title || "");
+    let ld;
+    if (isQuestion && commentList) {
+      const topAnswer = commentList[0]; // first reply as the "accepted" answer (no upvote signal available yet)
+      ld = {
+        "@context": "https://schema.org",
+        "@type": "QAPage",
+        mainEntity: {
+          "@type": "Question",
+          name: meta.jsonLd.title,
+          text: (meta.jsonLd.body || "").slice(0, 2000),
+          dateCreated: meta.jsonLd.createdAt || undefined,
+          author: authorNode,
+          answerCount: meta.jsonLd.replyCount || 0,
+          ...(topAnswer ? {
+            acceptedAnswer: {
+              "@type": "Answer",
+              text: topAnswer.text,
+              dateCreated: topAnswer.datePublished,
+              author: topAnswer.author,
+              upvoteCount: 0,
+            },
+            suggestedAnswer: commentList.slice(1).map(c => ({
+              "@type": "Answer",
+              text: c.text,
+              dateCreated: c.datePublished,
+              author: c.author,
+            })),
+          } : {}),
+        },
+        url: canonicalUrl,
+        publisher,
+      };
+    } else {
+      ld = {
+        "@context": "https://schema.org",
+        "@type": "DiscussionForumPosting",
+        headline: meta.jsonLd.title,
+        articleBody: (meta.jsonLd.body || "").slice(0, 5000),
+        datePublished: meta.jsonLd.createdAt || undefined,
+        dateModified: meta.jsonLd.modifiedAt || meta.jsonLd.createdAt || undefined,
+        url: canonicalUrl,
+        mainEntityOfPage: canonicalUrl,
+        articleSection,
+        wordCount: meta.jsonLd.wordCount || undefined,
+        author: authorNode,
+        publisher,
+        comment: commentList,
+        commentCount: typeof meta.jsonLd.replyCount === "number" ? meta.jsonLd.replyCount : undefined,
+        interactionStatistic: interactionStats.length > 0 ? interactionStats : undefined,
+      };
+    }
     const clean = Object.fromEntries(Object.entries(ld).filter(([, v]) => v !== undefined));
-    // Closing-script-tag escape per Google's recommendation for inline JSON-LD.
     const serialized = JSON.stringify(clean).replace(/</g, "\\u003c");
     jsonLdTag = `<script type="application/ld+json">${serialized}</script>`;
   } else if (meta.jsonLd && meta.jsonLd.kind === "CollectionPage") {

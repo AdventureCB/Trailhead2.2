@@ -45168,7 +45168,7 @@ ${suffix}`;
     if (!count) return null;
     return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: -4, right: -4, minWidth: 16, height: 16, borderRadius: 8, background: color || T.red, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px", border: `2px solid ${T.charcoal}` } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 9, fontWeight: 700, color: T.white, lineHeight: 1 } }, count > 99 ? "99+" : count));
   }
-  function UnifiedNotifPanel({ onClose, onViewUser: onViewUser2, onGoToPost, onGoToBuild, notifs, onDismissNotif, onClearNotifs, recoveryAlerts, onDismissAlert, onClearAlerts, onGoToRecovery, onOpenMap, onOpenDM, initialTab }) {
+  function UnifiedNotifPanel({ onClose, onViewUser: onViewUser2, onGoToPost, onGoToBuild, onGoToForumThread, notifs, onDismissNotif, onClearNotifs, recoveryAlerts, onDismissAlert, onClearAlerts, onGoToRecovery, onOpenMap, onOpenDM, initialTab }) {
     const [tab, setTab] = (0, import_react4.useState)(initialTab || "general");
     const urgencyColor = (u) => u === "HIGH" ? T.red : T.copper;
     const tabBtn = (key, label, count, color) => /* @__PURE__ */ import_react4.default.createElement(
@@ -45199,7 +45199,9 @@ ${suffix}`;
     return /* @__PURE__ */ import_react4.default.createElement("div", { style: { position: "absolute", top: "100%", right: 0, width: "calc(100vw - 32px)", maxWidth: 398, background: T.darkCard, borderRadius: "0 0 12px 12px", boxShadow: `0 12px 40px rgba(0,0,0,0.6)`, zIndex: 200, maxHeight: "70vh", display: "flex", flexDirection: "column", overflow: "hidden", border: `1px solid ${T.charcoal}`, borderTop: "none" } }, /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: `1px solid ${T.charcoal}`, flexShrink: 0 } }, /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, letterSpacing: 1 } }, "NOTIFICATIONS"), /* @__PURE__ */ import_react4.default.createElement("button", { onClick: onClose, style: { background: "none", border: "none", cursor: "pointer", padding: 2, display: "flex" } }, /* @__PURE__ */ import_react4.default.createElement(X, { size: 16, color: T.tertiary }))), /* @__PURE__ */ import_react4.default.createElement("div", { style: { display: "flex", borderBottom: `1px solid ${T.charcoal}`, flexShrink: 0 } }, tabBtn("general", "GENERAL", notifs.length, T.copper), tabBtn("recovery", "RECOVERY", recoveryAlerts.length, T.red)), /* @__PURE__ */ import_react4.default.createElement("div", { className: "th-scroll", style: { flex: 1, overflowY: "auto", minHeight: 0 } }, tab === "general" && (notifs.length === 0 ? /* @__PURE__ */ import_react4.default.createElement("div", { style: { padding: "40px 16px", textAlign: "center" } }, /* @__PURE__ */ import_react4.default.createElement(Bell, { size: 28, color: T.tertiary, strokeWidth: 1, style: { opacity: 0.3, marginBottom: 8 } }), /* @__PURE__ */ import_react4.default.createElement("p", { style: { fontFamily: sans, fontSize: 13, color: T.tertiary, margin: 0 } }, "No new notifications")) : notifs.map((n) => {
       const Icon2 = n.icon;
       return /* @__PURE__ */ import_react4.default.createElement("div", { key: n.id, onClick: () => {
-        if (n.buildId) {
+        if (n.forumThreadId) {
+          onGoToForumThread && onGoToForumThread(n.forumThreadId);
+        } else if (n.buildId) {
           onGoToBuild && onGoToBuild(n.buildId, n.target);
         } else if (n.postId) {
           onGoToPost && onGoToPost(n.postId);
@@ -45225,7 +45227,7 @@ ${suffix}`;
       onGoToRecovery && onGoToRecovery();
     }, style: { flex: 2, padding: "12px 16px", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 } }, /* @__PURE__ */ import_react4.default.createElement(TriangleAlert, { size: 12, color: T.red }), /* @__PURE__ */ import_react4.default.createElement("span", { style: { fontFamily: sans, fontSize: 11, color: T.red, fontWeight: 600, letterSpacing: 0.5 } }, "VIEW ALL"), /* @__PURE__ */ import_react4.default.createElement(ChevronRight, { size: 14, color: T.red }))));
   }
-  function TopBar({ onProfile, onBack, showBack, title, onViewUser: onViewUser2, onGoToPost, onGoToBuild, onGoToRecovery, onOpenMap, onSearch, onOpenDM, dmUnread, bellNotifs, onDismissNotif, onClearNotifs, profilePic, notifPrefs, recoveryAlerts, setRecoveryAlerts }) {
+  function TopBar({ onProfile, onBack, showBack, title, onViewUser: onViewUser2, onGoToPost, onGoToBuild, onGoToForumThread, onGoToRecovery, onOpenMap, onSearch, onOpenDM, dmUnread, bellNotifs, onDismissNotif, onClearNotifs, profilePic, notifPrefs, recoveryAlerts, setRecoveryAlerts }) {
     const notifTypeMap = { like: "likes", comment: "comments", reply: "replies", follow: "follows", mention: "mentions" };
     const filteredNotifs = bellNotifs.filter((n) => {
       const pref = notifTypeMap[n.type];
@@ -45261,6 +45263,10 @@ ${suffix}`;
         onGoToBuild: (buildId, name) => {
           setOpenPanel(null);
           onGoToBuild && onGoToBuild(buildId, name);
+        },
+        onGoToForumThread: (threadId) => {
+          setOpenPanel(null);
+          onGoToForumThread && onGoToForumThread(threadId);
         },
         notifs: filteredNotifs,
         onDismissNotif,
@@ -55120,6 +55126,7 @@ ${suffix}`;
       target: row.target || null,
       postId: row.post_id || null,
       buildId: row.build_id || null,
+      forumThreadId: row.forum_thread_id || null,
       time: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
       isRead: row.is_read || false,
       icon: ic.icon,
@@ -59791,6 +59798,37 @@ ${suffix}`;
         };
         const local = dbRowToForumReply(data, prof);
         setForumReplies((prev) => ({ ...prev, [threadId]: [...prev[threadId] || [], local] }));
+        const thread = (forumThreads || []).find((t) => t.id === threadId);
+        const threadTitle = thread && thread.title || "";
+        const myName = prof.full_name;
+        if (parentId) {
+          const parentReply = ((forumReplies || {})[threadId] || []).find((r) => r.id === parentId);
+          if (parentReply && parentReply.userId && parentReply.userId !== uid) {
+            supabase.from("notifications").insert({
+              user_id: parentReply.userId,
+              type: "reply",
+              actor_id: uid,
+              actor_name: myName,
+              text: "replied to your comment",
+              target: threadTitle,
+              forum_thread_id: threadId
+            }).then(({ error: ne }) => {
+              if (ne) console.error("[notif] forum-sub-reply insert", ne);
+            });
+          }
+        } else if (thread && thread.userId && thread.userId !== uid) {
+          supabase.from("notifications").insert({
+            user_id: thread.userId,
+            type: "reply",
+            actor_id: uid,
+            actor_name: myName,
+            text: "replied to your thread",
+            target: threadTitle,
+            forum_thread_id: threadId
+          }).then(({ error: ne }) => {
+            if (ne) console.error("[notif] forum-reply insert", ne);
+          });
+        }
         return local;
       } catch (e) {
         console.error("[forum_replies] addForumReply failed", e);
@@ -59857,6 +59895,21 @@ ${suffix}`;
         } else {
           const { error } = await supabase.from("forum_thread_likes").insert({ thread_id: threadId, user_id: uid });
           if (error) throw error;
+          const thread = (forumThreads || []).find((t) => t.id === threadId);
+          if (thread && thread.userId && thread.userId !== uid) {
+            const myName = currentProfile && currentProfile.full_name || "Someone";
+            supabase.from("notifications").insert({
+              user_id: thread.userId,
+              type: "like",
+              actor_id: uid,
+              actor_name: myName,
+              text: "liked your forum thread",
+              target: thread.title || "",
+              forum_thread_id: threadId
+            }).then(({ error: ne }) => {
+              if (ne) console.error("[notif] forum-thread-like insert", ne);
+            });
+          }
         }
       } catch (e) {
         console.error("[forum_thread_likes] toggle failed", e);
@@ -59887,6 +59940,33 @@ ${suffix}`;
         } else {
           const { error } = await supabase.from("forum_reply_likes").insert({ reply_id: replyId, user_id: uid });
           if (error) throw error;
+          let replyAuthor = null;
+          let parentThreadId = null;
+          let threadTitle = "";
+          for (const [tid, list] of Object.entries(forumReplies || {})) {
+            const r = (list || []).find((x) => x.id === replyId);
+            if (r) {
+              replyAuthor = r.userId;
+              parentThreadId = tid;
+              const thread = (forumThreads || []).find((t) => t.id === tid);
+              if (thread) threadTitle = thread.title || "";
+              break;
+            }
+          }
+          if (replyAuthor && replyAuthor !== uid && parentThreadId) {
+            const myName = currentProfile && currentProfile.full_name || "Someone";
+            supabase.from("notifications").insert({
+              user_id: replyAuthor,
+              type: "like",
+              actor_id: uid,
+              actor_name: myName,
+              text: "liked your reply",
+              target: threadTitle,
+              forum_thread_id: parentThreadId
+            }).then(({ error: ne }) => {
+              if (ne) console.error("[notif] forum-reply-like insert", ne);
+            });
+          }
         }
       } catch (e) {
         console.error("[forum_reply_likes] toggle failed", e);
@@ -59956,6 +60036,26 @@ ${suffix}`;
     const openForumThread = (threadId, catName, subName) => {
       setPendingThread({ threadId, catName, subName });
       setScreen("forum");
+    };
+    const openForumThreadById = async (threadId) => {
+      if (!threadId) return;
+      const local = (forumThreads || []).find((t) => t.id === threadId);
+      if (local) {
+        setPendingThread({ threadId, catName: local.catName, subName: local.subName });
+        return;
+      }
+      try {
+        const { data: row } = await supabase.from("forum_threads").select("id,slug,subcategory_slug,user_id").eq("id", threadId).maybeSingle();
+        if (!row) return;
+        try {
+          loadForumThreadBySlugFast(row.slug);
+        } catch (e) {
+        }
+        const subInfo = FORUM_SUB_BY_SLUG[row.subcategory_slug];
+        if (subInfo) setPendingThread({ threadId, catName: subInfo.catName, subName: subInfo.name });
+      } catch (e) {
+        console.warn("[forum] openForumThreadById failed", e);
+      }
     };
     const handleViewBuild = (nav) => {
       setPendingBuildNav(nav || null);
@@ -60127,6 +60227,13 @@ ${suffix}`;
           setShowCompose(false);
           setScreen("builds");
           setPendingBuildNav({ rawId: buildId, name: name || "" });
+        },
+        onGoToForumThread: (threadId) => {
+          setProfileStack([]);
+          setShowRecovery(false);
+          setShowCompose(false);
+          setScreen("forum");
+          openForumThreadById(threadId);
         },
         onGoToRecovery: () => {
           setShowRecovery(true);
