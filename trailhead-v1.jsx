@@ -5889,8 +5889,23 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
     return 99999;
   };
   const [view, setView] = useState("categories"); // "categories" | "subcategories" | "threads" | "thread" | "newThread"
-  const [selectedCat, setSelectedCat] = useState(null);
-  const [selectedSub, setSelectedSub] = useState(null);
+  const [selectedCatRaw, setSelectedCatRaw] = useState(null);
+  const [selectedSubRaw, setSelectedSubRaw] = useState(null);
+  // Re-derive the selected cat/sub from the live `cats` prop on every
+  // render so admin CRUD (add subcategory, rename, etc.) reflects without
+  // a refresh. The raw setters still take a click-time snapshot; the live
+  // versions used by renderers look that snapshot up in the current
+  // `cats` array by id (preferred) or name (fallback for pre-DB callers).
+  const selectedCat = useMemo(() => {
+    if (!selectedCatRaw) return null;
+    return cats.find(c => (selectedCatRaw.id && c.id === selectedCatRaw.id) || c.name === selectedCatRaw.name) || selectedCatRaw;
+  }, [cats, selectedCatRaw]);
+  const selectedSub = useMemo(() => {
+    if (!selectedSubRaw || !selectedCat) return selectedSubRaw;
+    return (selectedCat.subs || []).find(s => (selectedSubRaw.id && s.id === selectedSubRaw.id) || s.name === selectedSubRaw.name) || selectedSubRaw;
+  }, [selectedCat, selectedSubRaw]);
+  const setSelectedCat = setSelectedCatRaw;
+  const setSelectedSub = setSelectedSubRaw;
   const [selectedThread, setSelectedThread] = useState(null);
   // Admin/ambassador CRUD UI state — modals + dropdown menus for categories
   // and subcategories. `showCatModal` is { mode: "create" | "edit", cat? }

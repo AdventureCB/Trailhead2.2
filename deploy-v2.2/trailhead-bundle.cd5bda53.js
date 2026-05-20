@@ -46463,8 +46463,18 @@ ${suffix}`;
       return 99999;
     };
     const [view, setView] = (0, import_react4.useState)("categories");
-    const [selectedCat, setSelectedCat] = (0, import_react4.useState)(null);
-    const [selectedSub, setSelectedSub] = (0, import_react4.useState)(null);
+    const [selectedCatRaw, setSelectedCatRaw] = (0, import_react4.useState)(null);
+    const [selectedSubRaw, setSelectedSubRaw] = (0, import_react4.useState)(null);
+    const selectedCat = (0, import_react4.useMemo)(() => {
+      if (!selectedCatRaw) return null;
+      return cats.find((c) => selectedCatRaw.id && c.id === selectedCatRaw.id || c.name === selectedCatRaw.name) || selectedCatRaw;
+    }, [cats, selectedCatRaw]);
+    const selectedSub = (0, import_react4.useMemo)(() => {
+      if (!selectedSubRaw || !selectedCat) return selectedSubRaw;
+      return (selectedCat.subs || []).find((s) => selectedSubRaw.id && s.id === selectedSubRaw.id || s.name === selectedSubRaw.name) || selectedSubRaw;
+    }, [selectedCat, selectedSubRaw]);
+    const setSelectedCat = setSelectedCatRaw;
+    const setSelectedSub = setSelectedSubRaw;
     const [selectedThread, setSelectedThread] = (0, import_react4.useState)(null);
     const [showCatModal, setShowCatModal] = (0, import_react4.useState)(null);
     const [showSubModal, setShowSubModal] = (0, import_react4.useState)(null);
