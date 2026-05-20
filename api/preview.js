@@ -1241,7 +1241,7 @@ module.exports = async function handler(req, res) {
             alternateName: r.author.handle ? `@${r.author.handle}` : undefined,
             identifier: r.author.handle || undefined,
           }).filter(([, v]) => v !== undefined)) : undefined,
-        }).filter(([, v]) => v !== undefined))
+        }).filter(([, v]) => v !== undefined)))
       : undefined;
     // interactionStatistic — surfaces engagement counts to Google as
     // social-proof signals.
