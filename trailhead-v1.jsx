@@ -17230,12 +17230,32 @@ function AddBuildForm({ onClose, onSave, onDelete, initialData }) {
         );
       })()}
 
-      {/* Preview Button */}
+      {/* Share to Feed toggle — moved here from the (removed) preview view
+          so the user can decide before tapping Save. */}
+      <div
+        onClick={() => setShareToFeed(!shareToFeed)}
+        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", background: T.darkCard, borderRadius: 10, cursor: "pointer", marginTop: 16, marginBottom: 12, border: shareToFeed ? `1px solid ${T.red}40` : `1px solid ${T.charcoal}` }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <Share2 size={18} color={shareToFeed ? T.red : T.tertiary} />
+          <div>
+            <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 600, display: "block" }}>Share to Feed</span>
+            <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{shareToFeed ? "Your build will appear in the community feed" : "Only visible on your profile"}</span>
+          </div>
+        </div>
+        <div style={{ width: 44, height: 24, borderRadius: 12, background: shareToFeed ? T.red : T.charcoal, position: "relative", transition: "background 0.2s" }}>
+          <div style={{ width: 20, height: 20, borderRadius: "50%", background: T.white, position: "absolute", top: 2, left: shareToFeed ? 22 : 2, transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }} />
+        </div>
+      </div>
+
+      {/* Save Button — was PREVIEW BUILD previously. Saves directly; the
+          preview view is removed to cut the extra step + the UX trap where
+          users tapped Preview and thought they had saved. */}
       <button
-        onClick={() => { if (make && model && year) setShowPreview(true); }}
+        onClick={() => { if (make && model && year) handleSave(); }}
         style={{ width: "100%", padding: "16px", borderRadius: 10, background: (!make || !model || !year) ? T.charcoal : T.red, border: "none", cursor: (!make || !model || !year) ? "default" : "pointer", fontFamily: sans, fontSize: 14, color: (!make || !model || !year) ? T.tertiary : T.white, fontWeight: 700, letterSpacing: 1, marginTop: 8, opacity: (!make || !model || !year) ? 0.5 : 1, transition: "all 0.2s" }}
       >
-        PREVIEW BUILD
+        {shareToFeed ? "SAVE & SHARE" : "SAVE BUILD"}
       </button>
 
       {/* Delete (edit mode only) */}
@@ -17401,7 +17421,10 @@ function AddBuildForm({ onClose, onSave, onDelete, initialData }) {
     </div>
   );
 
-  return showPreview ? previewView : formView;
+  // The preview step was removed — its share-toggle + save button moved
+  // into the form view itself. `previewView` is still constructed above
+  // (dead code) but never rendered; safe to delete in a later pass.
+  return formView;
 }
 
 /* ─── PROFILE SCREEN (Own Profile) ─── */
