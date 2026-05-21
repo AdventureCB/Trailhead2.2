@@ -26016,8 +26016,37 @@ export default function Trailhead() {
   // / elevation stats, and saves. Mirrors the densification logic in
   // commitPlanToDraft (kept separate for now — refactor opportunity later).
   // Called from TripReportDetail's drag-to-reorder UI on drop.
+  //
+  // OPTIMISTIC UPDATE: the Mapbox Directions densification can take 1-3s.
+  // If the user closes the trip detail before it finishes, the explore-map
+  // layer below would still show the pre-reorder line. So we apply a
+  // straight-line approximation to local state synchronously (clears
+  // densified points → deriveTripGeom falls back to pins → bbox layer
+  // updates instantly). The slower DB write inside updateTripDraft below
+  // then refines with the densified path.
   const reorderTripPins = async (tripId, newPins) => {
     if (!tripId || !Array.isArray(newPins) || newPins.length === 0) return;
+    const tripBefore = (tripReports || []).find(t => t.id === tripId);
+    if (tripBefore) {
+      const rdBefore = tripBefore.route_data || {};
+      // Clear the stale densified points so deriveTripGeom uses the new
+      // pin order for route_geom. Also recompute start/end coords from
+      // the reordered pins so the bbox layer's start + end dots jump
+      // immediately to the right places.
+      const optimisticRD = { ...rdBefore, pins: newPins, points: [] };
+      const optimisticDerived = deriveTripGeom(optimisticRD);
+      const optFirst = newPins[0];
+      const optLast = newPins[newPins.length - 1];
+      setTripReports(prev => prev.map(t => t.id === tripId ? {
+        ...t,
+        route_data: optimisticRD,
+        route_geom: optimisticDerived.geom,
+        start_lat: optFirst.lat,
+        start_lng: optFirst.lng,
+        end_lat: optLast.lat,
+        end_lng: optLast.lng,
+      } : t));
+    }
     // Densify the route via per-segment Mapbox Directions. Same logic as
     // commitPlanToDraft so the resulting points/offroadRanges shape is
     // identical and renderers don't need any conditional handling.
