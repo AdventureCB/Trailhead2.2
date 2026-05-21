@@ -19116,6 +19116,9 @@ function AdminDashboardScreen({ currentUserId, onBack, onViewUser, onOpenAdminEn
         supabase.rpc("admin_get_recent_signups", { p_hours: 24, p_limit: 30 }),
         supabase.rpc("admin_get_most_followed", { p_limit: 10 }),
       ]);
+      [s, d, r, rs, mf].forEach((res, i) => {
+        if (res.error) console.error(`[admin] users RPC error (${["signups","dau","roles","recent_signups","most_followed"][i]}):`, res.error);
+      });
       setSignupDaily(s.data || []);
       setDauDaily(d.data || []);
       setRoleBreakdown(r.data || []);
@@ -19133,6 +19136,9 @@ function AdminDashboardScreen({ currentUserId, onBack, onViewUser, onOpenAdminEn
         supabase.rpc("admin_get_trending_posts", { p_limit: 10 }),
         supabase.rpc("admin_get_forum_category_activity"),
       ]);
+      [pbt, tc, eng, tp, fca].forEach((res, i) => {
+        if (res.error) console.error(`[admin] content RPC error (${["posts_by_type","top_creators","engagement","trending","forum_cats"][i]}):`, res.error);
+      });
       setPostsByType(pbt.data || []);
       setTopCreators(tc.data || []);
       setEngagement(eng.data && eng.data[0] ? eng.data[0] : null);
@@ -19148,6 +19154,9 @@ function AdminDashboardScreen({ currentUserId, onBack, onViewUser, onOpenAdminEn
         supabase.rpc("admin_get_push_history", { p_limit: 50 }),
         supabase.rpc("admin_get_push_delivery_stats"),
       ]);
+      [cnt, hist, deliv].forEach((res, i) => {
+        if (res.error) console.error(`[admin] push RPC error (${["recipient_count","history","delivery"][i]}):`, res.error);
+      });
       setPushRecipientCount(typeof cnt.data === "number" ? cnt.data : null);
       setPushHistory(hist.data || []);
       setPushDeliveryStats(deliv.data && deliv.data[0] ? deliv.data[0] : null);
