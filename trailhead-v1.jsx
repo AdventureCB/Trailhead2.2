@@ -11726,27 +11726,72 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
     const next = pins.map((p, i) => i === idx ? { ...p, note: (pinNoteDrafts[idx] || "").trim() || undefined } : p);
     if (JSON.stringify(next) !== JSON.stringify(pins)) flush({ route_data: { ...rd, pins: next } });
   };
-  // Drag-to-reorder state for the pin cards. While a card is being dragged,
-  // `draggingPinIdx` holds its source index and `dropTargetPinIdx` holds
-  // the slot it would land in on release. Refs to each rendered card give
-  // us getBoundingClientRect() so the move handler can figure out which
-  // card the pointer is over. On drop we reorder pinNoteDrafts AND fire
-  // onReorderPins(tripId, newPins) — the root helper handles re-densifying
-  // the route via Mapbox Directions and saving.
+  // Drag-to-reorder state for the pin cards. Long-press model: the user
+  // holds the ≡ handle for ~350ms before drag activates. This stops the
+  // touchscreen "swipe" gesture from immediately picking up + dragging a
+  // card the user only meant to scroll past or tap. Pre-activation moves
+  // beyond a small threshold cancel the long-press (treated as scroll).
+  //   • `pinDragRef.current` holds the live state-machine values (source
+  //     idx, long-press timer, start coords, activation flag). Ref so the
+  //     pointer-event handlers always see the latest values without going
+  //     through stale React closures.
+  //   • `draggingPinIdx` + `dropTargetPinIdx` are React state — used to
+  //     drive visual cues (dim the dragged card, copper outline on the
+  //     drop target row). They're only set AFTER long-press activates.
+  //   • Refs to each rendered card give us getBoundingClientRect() so the
+  //     move handler can figure out which card the pointer is over.
+  //   • On drop we reorder pinNoteDrafts AND fire onReorderPins(tripId,
+  //     newPins) — the root helper re-densifies the route via Mapbox
+  //     Directions and saves.
   const [draggingPinIdx, setDraggingPinIdx] = useState(null);
   const [dropTargetPinIdx, setDropTargetPinIdx] = useState(null);
   const [reorderSaving, setReorderSaving] = useState(false);
   const pinCardRefs = useRef([]);
+  const pinDragRef = useRef({ idx: null, timer: null, startX: 0, startY: 0, active: false });
+  const LONG_PRESS_MS = 350;
+  const MOVE_CANCEL_PX = 10;
+  const clearPinDragState = () => {
+    const st = pinDragRef.current;
+    if (st.timer) { clearTimeout(st.timer); st.timer = null; }
+    st.idx = null;
+    st.active = false;
+  };
   const onPinDragStart = (idx) => (e) => {
-    e.preventDefault();
-    setDraggingPinIdx(idx);
-    setDropTargetPinIdx(idx);
+    // Capture the pointer up front so we keep receiving move/up events
+    // even if the finger drifts off the small handle button. We DON'T
+    // setDraggingPinIdx yet — that waits for the long-press to fire.
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
+    const st = pinDragRef.current;
+    if (st.timer) clearTimeout(st.timer);
+    st.idx = idx;
+    st.active = false;
+    st.startX = e.clientX;
+    st.startY = e.clientY;
+    st.timer = setTimeout(() => {
+      st.active = true;
+      st.timer = null;
+      setDraggingPinIdx(idx);
+      setDropTargetPinIdx(idx);
+      // Subtle haptic to confirm drag is now armed. iOS Safari ignores
+      // navigator.vibrate (no error); Android + most desktops respect it.
+      try { if (navigator.vibrate) navigator.vibrate(15); } catch (_) {}
+    }, LONG_PRESS_MS);
   };
   const onPinDragMove = (e) => {
-    if (draggingPinIdx === null) return;
+    const st = pinDragRef.current;
+    if (st.idx === null) return;
+    if (!st.active) {
+      // Pre-activation phase: if the user has moved beyond the threshold
+      // it's a scroll/swipe attempt — cancel the pending long-press so
+      // the drag doesn't accidentally trigger.
+      const dx = e.clientX - st.startX;
+      const dy = e.clientY - st.startY;
+      if ((dx * dx + dy * dy) > MOVE_CANCEL_PX * MOVE_CANCEL_PX) clearPinDragState();
+      return;
+    }
+    // Active drag — find the card under the pointer + update target.
     const y = e.clientY;
-    let target = draggingPinIdx;
+    let target = st.idx;
     for (let i = 0; i < pinCardRefs.current.length; i++) {
       const card = pinCardRefs.current[i];
       if (!card) continue;
@@ -11756,8 +11801,12 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
     if (target !== dropTargetPinIdx) setDropTargetPinIdx(target);
   };
   const onPinDragEnd = async () => {
-    const from = draggingPinIdx;
+    const st = pinDragRef.current;
+    const wasActive = st.active;
+    const from = st.idx;
     const to = dropTargetPinIdx;
+    clearPinDragState();
+    if (!wasActive) return; // long-press never fired — just a tap/swipe
     setDraggingPinIdx(null);
     setDropTargetPinIdx(null);
     if (from === null || to === null || from === to) return;
@@ -12429,7 +12478,7 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
           <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 8 }}>
             {isPlan ? "PIN NOTES" : "ROUTE PINS"}
             {canEditInline
-              ? (pins.length > 1 ? " — TAP TO EDIT · DRAG ≡ TO REORDER" : " — TAP TO EDIT")
+              ? (pins.length > 1 ? " — TAP TO EDIT · HOLD ≡ TO REORDER" : " — TAP TO EDIT")
               : " — TAP TO SHOW ON MAP"}
             {reorderSaving && <span style={{ marginLeft: 8, color: T.copper }}>re-routing…</span>}
           </span>
