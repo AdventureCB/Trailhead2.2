@@ -22454,6 +22454,11 @@ const __INITIAL_SHARED_LINK = (function() {
     if (forumSubMatch) {
       return { kind: "forum-sub", subSlug: decodeURIComponent(forumSubMatch[1]) };
     }
+    // Forum landing — bare /forum URL. Crawlers + share-link clickers land
+    // on the categories grid (default view). Sitemap enumerates this URL.
+    if (path === "/forum" || path === "/forum/") {
+      return { kind: "forum-landing" };
+    }
   } catch (e) { /* ignore */ }
   return null;
 })();
@@ -24506,7 +24511,7 @@ export default function Trailhead() {
     // Spot/HQ links still need the map (their popup IS the map UI).
     if (initialSharedLink.kind === "spot" || initialSharedLink.kind === "hq") return "routes";
     if (initialSharedLink.kind === "build") return "builds";
-    if (initialSharedLink.kind === "forum-thread" || initialSharedLink.kind === "forum-sub") return "forum";
+    if (initialSharedLink.kind === "forum-thread" || initialSharedLink.kind === "forum-sub" || initialSharedLink.kind === "forum-landing") return "forum";
     return "feed";
   });
   const [profileStack, setProfileStack] = useState([]);

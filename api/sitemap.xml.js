@@ -70,6 +70,10 @@ module.exports = async function handler(req, res) {
   const now = new Date().toISOString();
 
   // Fan out all the fetches in parallel — no single one blocks the others.
+  // Note: forum categories aren't fetched because they don't have their own
+  // URL in the SPA — `openCategory` is internal state, not a route. Only
+  // subcategories have indexable landings (`/forum/<sub-slug>`), and those
+  // are already DB-driven below so renames/additions propagate next request.
   const [forumSubcategories, forumThreads, tripReports, builds, campingSpots, profiles, posts] = await Promise.all([
     supabaseFetch("forum_subcategories", "select=slug,updated_at,created_at&order=sort_order.asc&limit=2000"),
     supabaseFetch("forum_threads", "select=slug,subcategory_slug,updated_at,created_at&order=updated_at.desc&limit=10000"),
@@ -93,6 +97,9 @@ module.exports = async function handler(req, res) {
   // Static pages — priority 1.0 for home, 0.8 for HQ.
   urls.push(urlEntry(`${origin}/`, now, "daily", "1.0"));
   urls.push(urlEntry(`${origin}/hq`, now, "monthly", "0.6"));
+  // Forum landing — single hub URL listing every category. SPA handles
+  // rendering; no rewrite needed (falls through to index.html shell).
+  urls.push(urlEntry(`${origin}/forum`, now, "daily", "0.8"));
 
   // Forum subcategory landing pages — each is its own topical hub.
   forumSubcategories.forEach(sub => {
