@@ -17293,7 +17293,7 @@ function AddBuildForm({ onClose, onSave, onDelete, initialData }) {
 }
 
 /* ─── PROFILE SCREEN (Own Profile) ─── */
-function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, initialUserBio, initialIsPublic, onViewUser, onLogout, userBuilds, onAddBuild, onUpdateBuild, onDeleteBuild, profilePic, onSetProfilePic, notifPrefs, onSetNotifPrefs, feedItems, onDeletePost, onEditPost, onUpdateConvoy, onGoToPost, myPoints: myPointsProp, onSaveProfile, followerCount, followingCount, convoyRsvps, onSubscribePush, onUnsubscribePush, renderFeedScopedTo, onViewBuild, savedRoutes, onUnsaveRoute, onStartNav, myTripPlans, onOpenTripPlan, onNewTripPlan, isAdmin, savedTrips, onUnsaveTrip, onOpenSavedTrip, pendingScroll, onConsumePendingScroll }) {
+function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, initialUserBio, initialIsPublic, onViewUser, onLogout, userBuilds, onAddBuild, onUpdateBuild, onDeleteBuild, profilePic, onSetProfilePic, notifPrefs, onSetNotifPrefs, feedItems, onDeletePost, onEditPost, onUpdateConvoy, onGoToPost, myPoints: myPointsProp, onSaveProfile, followerCount, followingCount, convoyRsvps, onSubscribePush, onUnsubscribePush, renderFeedScopedTo, onViewBuild, savedRoutes, onUnsaveRoute, onStartNav, myTripPlans, onOpenTripPlan, onNewTripPlan, isAdmin, savedTrips, onUnsaveTrip, onOpenSavedTrip, pendingScroll, onConsumePendingScroll, onOpenAdminDashboard }) {
   const [isPublic, setIsPublic] = useState(initialIsPublic == null ? true : !!initialIsPublic);
   const [activeTab, setActiveTab] = useState("builds");
   const [activeBuild, setActiveBuild] = useState(0);
@@ -17724,6 +17724,16 @@ function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, init
               <ChevronRight size={16} color={T.tertiary} />
             </button>
           </div>
+
+          {/* Admin Dashboard — admin-only quick access. Server-side RPCs +
+              the route gate enforce the same restriction so a tampered
+              client can't get past the button. */}
+          {isAdmin && (
+            <button onClick={onOpenAdminDashboard} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "14px", borderRadius: 10, background: `${T.copper}12`, border: `1px solid ${T.copper}40`, cursor: "pointer", marginBottom: 10 }}>
+              <Shield size={14} color={T.copper} />
+              <span style={{ fontFamily: sans, fontSize: 13, color: T.copper, fontWeight: 600, letterSpacing: 0.5 }}>ADMIN DASHBOARD</span>
+            </button>
+          )}
 
           {/* Sign Out */}
           <button onClick={onLogout} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "14px", borderRadius: 10, background: `${T.red}12`, border: `1px solid ${T.red}25`, cursor: "pointer" }}>
@@ -18731,6 +18741,361 @@ function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, isAdmin,
           })}
         </>
       )}
+    </div>
+  );
+}
+
+/* ─── ADMIN DASHBOARD ─────────────────────────────────────────────────────
+   Admin-only analytics + push broadcast tool. Reads via SECURITY DEFINER
+   RPCs that gate by is_admin(auth.uid()) — non-admin callers get empty
+   data even if the client gate is bypassed (defense in depth).
+   4 tabs: Overview / Users / Content / Push. */
+
+// Tiny SVG sparkline. Auto-scales to series min/max. Last-point dot.
+function Sparkline({ data, height = 60, color = T.copper, fill = true }) {
+  if (!data || data.length === 0) return <div style={{ height }} />;
+  const w = 280, h = height;
+  const max = Math.max(1, ...data);
+  const min = Math.min(0, ...data);
+  const range = max - min || 1;
+  const step = w / Math.max(1, data.length - 1);
+  const pts = data.map((v, i) => [i * step, h - ((v - min) / range) * h]);
+  const ptsStr = pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  const [lx, ly] = pts[pts.length - 1];
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ width: "100%", height: h, display: "block" }}>
+      {fill && <polyline points={`0,${h} ${ptsStr} ${w},${h}`} fill={`${color}22`} stroke="none" />}
+      <polyline points={ptsStr} fill="none" stroke={color} strokeWidth={1.5} />
+      <circle cx={lx} cy={ly} r={3} fill={color} />
+    </svg>
+  );
+}
+
+// Stacked vertical bar chart. `series` = [{label, color, data: number[]}].
+// Each column is one day; each segment is a series stacked from bottom.
+function StackedBars({ series, height = 100 }) {
+  if (!series || series.length === 0) return <div style={{ height }} />;
+  const days = series[0].data.length;
+  if (days === 0) return <div style={{ height }} />;
+  const totals = Array.from({ length: days }, (_, i) => series.reduce((acc, s) => acc + (s.data[i] || 0), 0));
+  const maxTotal = Math.max(1, ...totals);
+  const w = 280, h = height;
+  const colW = w / days;
+  const gap = Math.min(2, colW * 0.15);
+  const barW = colW - gap;
+  const rects = [];
+  for (let i = 0; i < days; i++) {
+    let yAccum = h;
+    for (let si = 0; si < series.length; si++) {
+      const v = series[si].data[i] || 0;
+      if (v <= 0) continue;
+      const segH = (v / maxTotal) * h;
+      yAccum -= segH;
+      rects.push(<rect key={`${i}-${si}`} x={i * colW + gap / 2} y={yAccum} width={barW} height={segH} fill={series[si].color} />);
+    }
+  }
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ width: "100%", height: h, display: "block" }}>{rects}</svg>
+  );
+}
+
+// Stat card — big number + label + optional pulse dot.
+function AdminStatCard({ label, value, pulse, accent }) {
+  return (
+    <div style={{ background: T.darkCard, borderRadius: 10, padding: 14, border: `1px solid ${T.charcoal}` }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+        {pulse && <span style={{ width: 8, height: 8, borderRadius: "50%", background: T.green, boxShadow: `0 0 6px ${T.green}` }} />}
+        <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600, textTransform: "uppercase" }}>{label}</div>
+      </div>
+      <div style={{ fontFamily: serif, fontSize: 28, color: accent || T.white, fontWeight: 600, lineHeight: 1 }}>
+        {value != null ? Number(value).toLocaleString() : "—"}
+      </div>
+    </div>
+  );
+}
+
+function AdminDashboardScreen({ currentUserId, onBack }) {
+  const [tab, setTab] = useState("overview");
+  const [overview, setOverview] = useState(null);
+  const [signupDaily, setSignupDaily] = useState([]);
+  const [dauDaily, setDauDaily] = useState([]);
+  const [roleBreakdown, setRoleBreakdown] = useState([]);
+  const [postsByType, setPostsByType] = useState([]);
+  const [topCreators, setTopCreators] = useState([]);
+  const [engagement, setEngagement] = useState(null);
+  const [pushSegment, setPushSegment] = useState("all");
+  const [pushRecipientCount, setPushRecipientCount] = useState(null);
+  const [pushBody, setPushBody] = useState("");
+  const [pushSending, setPushSending] = useState(false);
+  const [pushError, setPushError] = useState("");
+  const [pushHistory, setPushHistory] = useState([]);
+
+  const fetchOverview = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.rpc("admin_get_overview_stats");
+      if (!error && Array.isArray(data) && data[0]) setOverview(data[0]);
+    } catch (e) { console.error("[admin] overview", e); }
+  }, []);
+
+  const fetchUsersData = useCallback(async () => {
+    try {
+      const [s, d, r] = await Promise.all([
+        supabase.rpc("admin_get_signups_daily", { p_days: 30 }),
+        supabase.rpc("admin_get_dau_daily", { p_days: 30 }),
+        supabase.rpc("admin_get_role_breakdown"),
+      ]);
+      setSignupDaily(s.data || []);
+      setDauDaily(d.data || []);
+      setRoleBreakdown(r.data || []);
+    } catch (e) { console.error("[admin] users", e); }
+  }, []);
+
+  const fetchContentData = useCallback(async () => {
+    try {
+      const [pbt, tc, eng] = await Promise.all([
+        supabase.rpc("admin_get_posts_by_type_daily", { p_days: 30 }),
+        supabase.rpc("admin_get_top_creators", { p_limit: 10 }),
+        supabase.rpc("admin_get_engagement_totals"),
+      ]);
+      setPostsByType(pbt.data || []);
+      setTopCreators(tc.data || []);
+      setEngagement(eng.data && eng.data[0] ? eng.data[0] : null);
+    } catch (e) { console.error("[admin] content", e); }
+  }, []);
+
+  const fetchPushData = useCallback(async () => {
+    try {
+      const [cnt, hist] = await Promise.all([
+        supabase.rpc("admin_get_push_recipient_count", { p_segment: pushSegment }),
+        supabase.rpc("admin_get_push_history", { p_limit: 50 }),
+      ]);
+      setPushRecipientCount(typeof cnt.data === "number" ? cnt.data : null);
+      setPushHistory(hist.data || []);
+    } catch (e) { console.error("[admin] push", e); }
+  }, [pushSegment]);
+
+  useEffect(() => { fetchOverview(); }, [fetchOverview]);
+  useEffect(() => { if (tab === "users") fetchUsersData(); }, [tab, fetchUsersData]);
+  useEffect(() => { if (tab === "content") fetchContentData(); }, [tab, fetchContentData]);
+  useEffect(() => { if (tab === "push") fetchPushData(); }, [tab, fetchPushData]);
+
+  // Overview auto-refresh every 30s so Live Now + Posts Today stay fresh.
+  useEffect(() => {
+    if (tab !== "overview") return;
+    const iv = setInterval(fetchOverview, 30000);
+    return () => clearInterval(iv);
+  }, [tab, fetchOverview]);
+
+  // Realtime — push_broadcasts inserts trigger a history refetch (so the
+  // join with sender profile lands fully formed).
+  useEffect(() => {
+    if (tab !== "push") return;
+    const ch = supabase.channel(`admin_pb_${currentUserId || "x"}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "push_broadcasts" }, () => fetchPushData())
+      .subscribe();
+    return () => { try { supabase.removeChannel(ch); } catch (_) {} };
+  }, [tab, currentUserId, fetchPushData]);
+
+  const sendPush = async () => {
+    if (!pushBody.trim() || pushSending) return;
+    setPushSending(true); setPushError("");
+    try {
+      const { data, error } = await supabase.functions.invoke("broadcast-push", {
+        body: { body: pushBody.trim(), segment: pushSegment },
+      });
+      if (error) throw error;
+      if (data && data.ok === false) throw new Error(data.error || "send failed");
+      setPushBody("");
+      fetchPushData();
+    } catch (e) {
+      setPushError(e.message || "Failed to send");
+    }
+    setPushSending(false);
+  };
+
+  const tabs = [
+    { key: "overview", label: "OVERVIEW", icon: TrendingUp },
+    { key: "users", label: "USERS", icon: Users },
+    { key: "content", label: "CONTENT", icon: BookOpen },
+    { key: "push", label: "PUSH", icon: Bell },
+  ];
+
+  const sectionTitle = (text) => (
+    <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600, marginBottom: 10 }}>{text}</div>
+  );
+  const sectionCard = (children) => (
+    <div style={{ background: T.darkCard, borderRadius: 10, padding: 14, border: `1px solid ${T.charcoal}` }}>{children}</div>
+  );
+
+  return (
+    <div style={{ height: "100%", display: "flex", flexDirection: "column", background: T.darkBg }}>
+      <div style={{ display: "flex", alignItems: "center", padding: "12px 16px", borderBottom: `1px solid ${T.charcoal}` }}>
+        <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, marginRight: 10 }}>
+          <ChevronLeft size={22} color={T.white} />
+        </button>
+        <div style={{ fontFamily: sans, fontSize: 14, fontWeight: 700, color: T.white, letterSpacing: 1.5 }}>ADMIN DASHBOARD</div>
+        <Shield size={14} color={T.copper} style={{ marginLeft: 8 }} />
+      </div>
+      <div style={{ display: "flex", borderBottom: `1px solid ${T.charcoal}` }}>
+        {tabs.map(t => {
+          const Icon = t.icon;
+          const active = tab === t.key;
+          return (
+            <button key={t.key} onClick={() => setTab(t.key)}
+                    style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px 4px", background: "none", border: "none", borderBottom: `2px solid ${active ? T.copper : "transparent"}`, cursor: "pointer", fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 1.1, color: active ? T.copper : T.tertiary }}>
+              <Icon size={12} />
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ flex: 1, overflowY: "auto", padding: 14 }}>
+        {tab === "overview" && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <AdminStatCard label="Total Users" value={overview ? overview.total_users : null} />
+            <AdminStatCard label="Live Now" value={overview ? overview.live_now : null} pulse accent={T.green} />
+            <AdminStatCard label="New Today" value={overview ? overview.new_today : null} accent={T.copper} />
+            <AdminStatCard label="Posts Today" value={overview ? overview.posts_today : null} accent={T.copper} />
+            <AdminStatCard label="DAU Today" value={overview ? overview.dau_today : null} />
+            <AdminStatCard label="Posts Total" value={overview ? overview.posts_total : null} />
+          </div>
+        )}
+        {tab === "users" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {sectionCard(<>
+              {sectionTitle("SIGNUPS — LAST 30 DAYS")}
+              <Sparkline data={(signupDaily || []).map(r => r.signups || 0)} color={T.copper} />
+              <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, marginTop: 6 }}>{(signupDaily || []).reduce((a, r) => a + (r.signups || 0), 0)} signups</div>
+            </>)}
+            {sectionCard(<>
+              {sectionTitle("DAILY ACTIVE USERS — LAST 30 DAYS")}
+              <Sparkline data={(dauDaily || []).map(r => r.active_users || 0)} color={T.green} />
+            </>)}
+            {sectionCard(<>
+              {sectionTitle("ROLE BREAKDOWN")}
+              {(roleBreakdown || []).map(r => (
+                <div key={r.role} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${T.charcoal}` }}>
+                  <span style={{ fontFamily: sans, fontSize: 12, color: T.white, textTransform: "uppercase", letterSpacing: 1 }}>{r.role}</span>
+                  <span style={{ fontFamily: serif, fontSize: 14, color: T.copper, fontWeight: 600 }}>{r.count}</span>
+                </div>
+              ))}
+            </>)}
+          </div>
+        )}
+        {tab === "content" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {sectionCard((() => {
+              const TYPE_COLORS = { POST: T.copper, PHOTOS: T.green, ROUTES: T.purple, BUILDS: T.red, CONVOYS: T.tertiary };
+              const types = ["POST","PHOTOS","ROUTES","BUILDS","CONVOYS"];
+              const days = Array.from(new Set((postsByType || []).map(r => r.day))).sort();
+              const series = types.map(t => ({
+                label: t, color: TYPE_COLORS[t] || T.copper,
+                data: days.map(d => {
+                  const cell = (postsByType || []).find(r => r.day === d && r.type === t);
+                  return cell ? cell.count : 0;
+                }),
+              }));
+              return (<>
+                {sectionTitle("POSTS BY TYPE — LAST 30 DAYS")}
+                <StackedBars series={series} />
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 8 }}>
+                  {types.map(t => (
+                    <div key={t} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <span style={{ width: 8, height: 8, background: TYPE_COLORS[t], borderRadius: 2 }} />
+                      <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1 }}>{t}</span>
+                    </div>
+                  ))}
+                </div>
+              </>);
+            })())}
+            {engagement && sectionCard(<>
+              {sectionTitle("ENGAGEMENT TOTALS")}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                {[
+                  ["Posts", engagement.posts],
+                  ["Post Likes", engagement.post_likes],
+                  ["Comments", engagement.post_comments],
+                  ["Threads", engagement.forum_threads],
+                  ["Replies", engagement.forum_replies],
+                  ["Builds", engagement.builds],
+                  ["Trips", engagement.trip_reports],
+                  ["Spots", engagement.camping_spots],
+                ].map(([label, val]) => (
+                  <div key={label} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0" }}>
+                    <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1 }}>{label.toUpperCase()}</span>
+                    <span style={{ fontFamily: serif, fontSize: 13, color: T.white, fontWeight: 600 }}>{Number(val || 0).toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            </>)}
+            {(topCreators || []).length > 0 && sectionCard(<>
+              {sectionTitle("TOP CREATORS")}
+              {topCreators.map((c, i) => (
+                <div key={c.user_id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: i < topCreators.length - 1 ? `1px solid ${T.charcoal}` : "none" }}>
+                  <div style={{ fontFamily: serif, fontSize: 14, color: T.tertiary, width: 18 }}>{i + 1}</div>
+                  {c.avatar_url ? <img src={c.avatar_url} alt="" style={{ width: 30, height: 30, borderRadius: "50%", objectFit: "cover" }} /> : <SilhouetteAvatar size={30} />}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.full_name || "—"}</div>
+                    <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>@{c.handle || "user"}</div>
+                  </div>
+                  <div style={{ textAlign: "right", minWidth: 40 }}>
+                    <div style={{ fontFamily: serif, fontSize: 14, color: T.copper, fontWeight: 600 }}>{c.posts_count}</div>
+                    <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1 }}>POSTS</div>
+                  </div>
+                  <div style={{ textAlign: "right", minWidth: 40 }}>
+                    <div style={{ fontFamily: serif, fontSize: 14, color: T.red, fontWeight: 600 }}>{c.likes_received}</div>
+                    <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1 }}>LIKES</div>
+                  </div>
+                </div>
+              ))}
+            </>)}
+          </div>
+        )}
+        {tab === "push" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {sectionCard(<>
+              {sectionTitle("SEND PUSH BROADCAST")}
+              <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+                {[
+                  { v: "all", label: "ALL" },
+                  { v: "admin", label: "ADMINS" },
+                  { v: "ambassador", label: "AMBSDRS" },
+                  { v: "user", label: "USERS" },
+                ].map(s => {
+                  const sel = pushSegment === s.v;
+                  return (
+                    <button key={s.v} onClick={() => setPushSegment(s.v)}
+                            style={{ flex: 1, padding: "8px 4px", borderRadius: 6, background: sel ? T.copper : "transparent", border: `1px solid ${sel ? T.copper : T.charcoal}`, color: sel ? T.darkBg : T.tertiary, fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>{s.label}</button>
+                  );
+                })}
+              </div>
+              <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, marginBottom: 8 }}>
+                Will send to <span style={{ color: T.white, fontWeight: 700 }}>{pushRecipientCount != null ? pushRecipientCount.toLocaleString() : "—"}</span> {pushRecipientCount === 1 ? "device" : "devices"}
+              </div>
+              <textarea value={pushBody} onChange={(e) => setPushBody(e.target.value)} placeholder="Message body…" maxLength={500}
+                        style={{ width: "100%", minHeight: 80, padding: 10, borderRadius: 6, background: T.darkBg, color: T.white, border: `1px solid ${T.charcoal}`, fontFamily: serif, fontSize: 13, resize: "vertical", boxSizing: "border-box" }} />
+              {pushError && <div style={{ fontFamily: sans, fontSize: 11, color: T.red, marginTop: 6 }}>{pushError}</div>}
+              <button onClick={sendPush} disabled={!pushBody.trim() || pushSending || !pushRecipientCount}
+                      style={{ marginTop: 10, width: "100%", padding: "12px 16px", borderRadius: 6, background: T.red, color: T.white, border: "none", cursor: (!pushBody.trim() || pushSending || !pushRecipientCount) ? "not-allowed" : "pointer", opacity: (!pushBody.trim() || pushSending || !pushRecipientCount) ? 0.5 : 1, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 1.5, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                <Send size={13} /> {pushSending ? "SENDING…" : "SEND PUSH"}
+              </button>
+            </>)}
+            {(pushHistory || []).length > 0 && sectionCard(<>
+              {sectionTitle("HISTORY")}
+              {pushHistory.map((h, i) => (
+                <div key={h.id} style={{ padding: "10px 0", borderBottom: i < pushHistory.length - 1 ? `1px solid ${T.charcoal}` : "none" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                    <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 1, fontWeight: 700, textTransform: "uppercase" }}>{h.segment} · {h.recipient_count} sent</span>
+                    <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>{new Date(h.sent_at).toLocaleString()}</span>
+                  </div>
+                  <div style={{ fontFamily: serif, fontSize: 13, color: T.white, lineHeight: 1.4 }}>{h.body}</div>
+                  {h.sender_handle && <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, marginTop: 4 }}>@{h.sender_handle}</div>}
+                </div>
+              ))}
+            </>)}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -22459,6 +22824,11 @@ const __INITIAL_SHARED_LINK = (function() {
     if (path === "/forum" || path === "/forum/") {
       return { kind: "forum-landing" };
     }
+    // Admin dashboard — gated by isAdmin server-side; cold-boot effect
+    // ignores this kind if the user isn't an admin once auth resolves.
+    if (path === "/admin" || path === "/admin/") {
+      return { kind: "admin" };
+    }
   } catch (e) { /* ignore */ }
   return null;
 })();
@@ -23751,6 +24121,26 @@ export default function Trailhead() {
     return () => { supabase.removeChannel(channel); };
   }, [supabaseSession && supabaseSession.user && supabaseSession.user.id]);
 
+  // ─── Heartbeat: bump profiles.last_seen_at every ~60s ──────────────────
+  // Powers "Live Now" + DAU on the admin dashboard. Skips when the tab
+  // is hidden so background tabs don't inflate the live count.
+  useEffect(() => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) return;
+    const tick = () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      supabase.rpc("bump_last_seen").catch(() => {});
+    };
+    tick(); // immediate ping on login / mount
+    const iv = setInterval(tick, 60000);
+    const onVis = () => { if (!document.hidden) tick(); };
+    if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVis);
+    return () => {
+      clearInterval(iv);
+      if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [supabaseSession && supabaseSession.user && supabaseSession.user.id]);
+
   // ─── Realtime: live comment + like updates ─────────────────────────────
   // When another user comments on or likes a post, the change appears
   // immediately without a refresh. We subscribe to the full table (no
@@ -24512,8 +24902,23 @@ export default function Trailhead() {
     if (initialSharedLink.kind === "spot" || initialSharedLink.kind === "hq") return "routes";
     if (initialSharedLink.kind === "build") return "builds";
     if (initialSharedLink.kind === "forum-thread" || initialSharedLink.kind === "forum-sub" || initialSharedLink.kind === "forum-landing") return "forum";
+    // Admin landing is gated by an isAdmin-aware useEffect below — at boot
+    // time we don't know the role yet, so cold-boot to feed and promote
+    // once auth resolves.
     return "feed";
   });
+  // Cold-boot for /admin: when the URL is /admin AND the resolved profile
+  // is admin, switch to the admin screen. Non-admins stay on feed (the
+  // admin route stays inert for them). Ref-consumes so navigating away
+  // doesn't get pulled back in by the same initial link.
+  const adminLinkConsumedRef = useRef(false);
+  useEffect(() => {
+    if (adminLinkConsumedRef.current) return;
+    if (!initialSharedLink || initialSharedLink.kind !== "admin") return;
+    if (!isAdmin) return;
+    adminLinkConsumedRef.current = true;
+    setScreen("admin");
+  }, [isAdmin]);
   const [profileStack, setProfileStack] = useState([]);
   const [showRecovery, setShowRecovery] = useState(false);
   const [showCompose, setShowCompose] = useState(false);
@@ -29491,7 +29896,7 @@ export default function Trailhead() {
           isOtherProfile ? (
             <OtherProfileScreen userId={profileStack[1]} onBack={goBack} onMessage={(user) => openDM(user)} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} onAdminUpdateUserRole={adminUpdateUserRole} onAdminDeclineAmbassador={adminDeclineAmbassadorRequest} followingIds={followingIds} onFollow={requireAuth(followUser)} onUnfollow={requireAuth(unfollowUser)} fetchFollowCounts={fetchFollowCounts} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} allBuilds={allBuilds} onLoadAllBuilds={loadAllBuildsOnce} onlineUserIds={onlineUserIds} allTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} />
           ) : (
-            <ProfileScreen currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} convoyRsvps={convoyRsvps} followerCount={myFollowerCount} followingCount={myFollowingCount} onSubscribePush={subscribeToPush} onUnsubscribePush={unsubscribeFromPush} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} savedRoutes={savedRoutes} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} savedTrips={(() => { const ids = savedTripIds || {}; const pool = [...(allTripReports || []), ...(allTripPlans || [])]; const seen = {}; const out = []; pool.forEach(t => { if (t && t.id && ids[t.id] && !seen[t.id]) { seen[t.id] = true; out.push(t); } }); return out; })()} onUnsaveTrip={requireAuth(toggleSaveTrip)} onOpenSavedTrip={(t) => { if (!t) return; if (t.slug) setPendingTripNav(t.slug); else setDetailTripId(t.id); }} pendingScroll={pendingProfileScroll} onConsumePendingScroll={() => setPendingProfileScroll(null)} onStartNav={(route) => setActiveNavRoute(route)} myTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} onNewTripPlan={requireAuth(() => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("routes"); enterPlanBuilder(); })} initialUserName={(currentProfile && currentProfile.full_name) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name) || null} initialUserHandle={(currentProfile && currentProfile.handle) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle) || null} initialUserBio={currentProfile ? currentProfile.bio : null} initialIsPublic={currentProfile ? currentProfile.is_public : null} onSaveProfile={saveProfile} onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={deleteBuild} profilePic={profilePic} onSetProfilePic={handleSetProfilePic} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => deletePost(id)} onEditPost={(id, newText) => updatePost(id, { title: newText })} onUpdateConvoy={(convoyId, updates) => {
+            <ProfileScreen onOpenAdminDashboard={() => { setProfileStack([]); setScreen("admin"); if (typeof window !== "undefined") window.history.pushState({}, "", "/admin"); }} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} convoyRsvps={convoyRsvps} followerCount={myFollowerCount} followingCount={myFollowingCount} onSubscribePush={subscribeToPush} onUnsubscribePush={unsubscribeFromPush} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} savedRoutes={savedRoutes} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} savedTrips={(() => { const ids = savedTripIds || {}; const pool = [...(allTripReports || []), ...(allTripPlans || [])]; const seen = {}; const out = []; pool.forEach(t => { if (t && t.id && ids[t.id] && !seen[t.id]) { seen[t.id] = true; out.push(t); } }); return out; })()} onUnsaveTrip={requireAuth(toggleSaveTrip)} onOpenSavedTrip={(t) => { if (!t) return; if (t.slug) setPendingTripNav(t.slug); else setDetailTripId(t.id); }} pendingScroll={pendingProfileScroll} onConsumePendingScroll={() => setPendingProfileScroll(null)} onStartNav={(route) => setActiveNavRoute(route)} myTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} onNewTripPlan={requireAuth(() => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("routes"); enterPlanBuilder(); })} initialUserName={(currentProfile && currentProfile.full_name) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name) || null} initialUserHandle={(currentProfile && currentProfile.handle) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle) || null} initialUserBio={currentProfile ? currentProfile.bio : null} initialIsPublic={currentProfile ? currentProfile.is_public : null} onSaveProfile={saveProfile} onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={deleteBuild} profilePic={profilePic} onSetProfilePic={handleSetProfilePic} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => deletePost(id)} onEditPost={(id, newText) => updatePost(id, { title: newText })} onUpdateConvoy={(convoyId, updates) => {
               updatePost(convoyId, updates);
               // DM going/maybe responders that the convoy was updated.
               const convoy = feedItemsRef.current.find(p => p.id === convoyId);
@@ -29515,6 +29920,10 @@ export default function Trailhead() {
               : isAdmin
                 ? <RanksScreen myPoints={myTotalPoints} pointsBreakdown={pointsBreakdown} />
                 : <div style={{ padding: 32, textAlign: "center", fontFamily: serif, fontSize: 14, color: T.tertiary, lineHeight: 1.6 }}>Ranks is coming in a future release.</div>
+            )}
+            {screen === "admin" && (isAdmin
+              ? <AdminDashboardScreen currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} onBack={() => { setScreen("feed"); if (typeof window !== "undefined" && window.location.pathname === "/admin") window.history.pushState({}, "", "/"); }} />
+              : <div style={{ padding: 32, textAlign: "center", fontFamily: serif, fontSize: 14, color: T.tertiary, lineHeight: 1.6 }}>Not authorized.</div>
             )}
           </>
         )}
