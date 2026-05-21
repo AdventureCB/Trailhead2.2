@@ -314,6 +314,14 @@ cd /Users/cainen/Documents/Claude/Projects/Trailhead && supabase functions deplo
 
 `--no-verify-jwt` is required because the Postgres triggers call the function without an auth header. Secrets (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `SEND_PUSH_SECRET`) are already set in Supabase — only re-set them if rotated. `SEND_PUSH_SECRET` is the shared-secret bearer token the DB triggers send via the `x-trailhead-push-secret` header; the function timing-safe-compares and rejects 401 if missing/wrong. Same value is mirrored in Supabase Vault under name `send_push_secret` so the triggers can read it via `vault.decrypted_secrets`. See `project_pre_launch_hardening` for the rotation recipe.
 
+### Admin push broadcast — `broadcast-push`
+
+`supabase/functions/broadcast-push/index.ts`. Called from the AdminDashboardScreen Push tab. Deploy WITHOUT `--no-verify-jwt`:
+```bash
+cd /Users/cainen/Documents/Claude/Projects/Trailhead && supabase functions deploy broadcast-push
+```
+Supabase gateway validates the caller's JWT; the function then re-asserts admin role server-side via service-role lookup of `profiles.role` (defense in depth). Resolves recipients per segment ('all' / 'admin' / 'ambassador' / 'user'), fans out web push using the same VAPID config as send-push, inserts a `push_broadcasts` audit row, returns `{ok, recipient_count, failed, status}`. See `project_admin_dashboard`.
+
 ### Auto-generated image alt text — `generate-alt-text`
 
 The `generate-alt-text` Edge Function lives at `supabase/functions/generate-alt-text/index.ts`. Called by the client from `attachAltTextToPhotos` (sibling of `uploadPostPhotoList`) right after the photo upload resolves a public storage URL. Sends the URL to Anthropic's Claude Haiku 4.5 vision API; returns a one-sentence descriptive alt text that gets persisted on the photo object as `{url, alt}`. Runs every photo in a batch in parallel — a 5-photo upload waits ~1 round trip, not 5.
@@ -361,6 +369,7 @@ Defined in code as the `T` object (line ~6):
 | `RanksScreen` | ~7750 | Leaderboard and loyalty points |
 | `ProfileScreen` | ~8744 | User profile with settings, activity, builds |
 | `OtherProfileScreen` | ~9676 | View other users' profiles (fetches from Supabase) |
+| `AdminDashboardScreen` | ~18739 | Admin-only analytics + push broadcast. 4 tabs (Overview / Users / Content / Push). Inline SVG charts (`Sparkline`, `StackedBars`, `AdminStatCard`). See `project_admin_dashboard` |
 | `LoginScreen` | ~9954 | Email/password + Google OAuth login |
 | `SignupScreen` | ~10080 | Registration flow |
 | `OnboardingScreen` | ~10477 | Post-signup profile setup |
@@ -443,3 +452,9 @@ The following have been run in the Supabase SQL Editor across prior sessions:
   - **Storage bucket MIME + size lockdown** — `update storage.buckets set allowed_mime_types = ARRAY[...]::text[], file_size_limit = N where id in (...)`. `post-photos` + `dm-attachments`: jpeg/png/webp/gif + mp4/quicktime/webm, 100MB cap. `avatars`: jpeg/png/webp only, 5MB cap. Defense in depth — bucket-level rejects bypass-the-helper attacks (direct `supabase.storage.upload()` via DevTools).
   - **send-push shared-secret lockdown** — `vault.create_secret(<random>, 'send_push_secret')` + new `public._send_push_request(p_table, p_record)` SECURITY DEFINER helper that reads from vault and POSTs to edge function with `x-trailhead-push-secret` header. Trigger functions `notify_push_on_notification_insert()` + `notify_push_on_dm_message_insert()` recreated to delegate to the helper. Same secret value stored as `SEND_PUSH_SECRET` env var on the edge function — it timing-safe-compares header to env. Stops anyone with the function URL from blasting arbitrary push notifications.
   - See `project_pre_launch_hardening` for the full pass + the SHOULD-FIX backlog still pending.
+- **Admin dashboard SQL** (2026-05-21):
+  - `profiles.last_seen_at timestamptz` + `profiles_last_seen_at_idx`. Heartbeat-driven; powers Live Now + DAU on `/admin`.
+  - `bump_last_seen()` SECURITY DEFINER RPC — `update profiles set last_seen_at = now() where id = auth.uid()`. Called by client every 60s while foregrounded.
+  - `push_broadcasts (id uuid pk, sender_id uuid FK auth.users SET NULL, body text, segment text check ('all','admin','ambassador','user'), recipient_count int, sent_at timestamptz, status text check ('sent','partial','failed'))`. RLS: admin SELECT-only. No INSERT policy (only edge function via service role writes). Realtime + REPLICA IDENTITY FULL.
+  - 8 admin analytics RPCs, all SECURITY DEFINER + `is_admin(auth.uid())`-gated + granted to authenticated: `admin_get_overview_stats()`, `admin_get_signups_daily(int)`, `admin_get_dau_daily(int)` (union of heartbeat + every user-action table), `admin_get_posts_by_type_daily(int)` (padded 30×5 grid), `admin_get_role_breakdown()`, `admin_get_top_creators(int)`, `admin_get_engagement_totals()`, `admin_get_push_recipient_count(text)`, `admin_get_push_history(int)`.
+  - See `project_admin_dashboard` for the full feature.
