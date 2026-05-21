@@ -19093,6 +19093,8 @@ function AdminDashboardScreen({ currentUserId, onBack, onViewUser, onOpenAdminEn
         supabase.rpc("admin_get_overview_stats"),
         supabase.rpc("admin_get_recent_activity", { p_limit: 30 }),
       ]);
+      if (ov.error) console.error("[admin] overview RPC error:", ov.error);
+      if (ra.error) console.error("[admin] recent activity RPC error:", ra.error);
       if (!ov.error && Array.isArray(ov.data) && ov.data[0]) setOverview(ov.data[0]);
       setRecentActivity(ra.data || []);
     } catch (e) { console.error("[admin] overview", e); }
