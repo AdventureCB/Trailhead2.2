@@ -19059,7 +19059,7 @@ function ChartDetailModal({ chartKey, dateRange, setDateRange, signupDaily, dauD
   );
 }
 
-function AdminDashboardScreen({ currentUserId, onBack }) {
+function AdminDashboardScreen({ currentUserId, onBack, onViewUser, onOpenAdminEntity }) {
   const [tab, setTab] = useState("overview");
   const [dateRange, setDateRange] = useState(30); // 7 / 30 / 90 — Users + Content tabs
   const [overview, setOverview] = useState(null);
@@ -19069,6 +19069,14 @@ function AdminDashboardScreen({ currentUserId, onBack }) {
   const [postsByType, setPostsByType] = useState([]);
   const [topCreators, setTopCreators] = useState([]);
   const [engagement, setEngagement] = useState(null);
+  const [recentSignups, setRecentSignups] = useState([]);
+  const [mostFollowed, setMostFollowed] = useState([]);
+  const [trendingPosts, setTrendingPosts] = useState([]);
+  const [forumCatActivity, setForumCatActivity] = useState([]);
+  const [recentActivity, setRecentActivity] = useState([]);
+  const [pushDeliveryStats, setPushDeliveryStats] = useState(null);
+  const [pendingAmbassadors, setPendingAmbassadors] = useState([]);
+  const [ambassadorsExpanded, setAmbassadorsExpanded] = useState(false);
   const [pushSegment, setPushSegment] = useState("all");
   const [pushRecipientCount, setPushRecipientCount] = useState(null);
   const [pushBody, setPushBody] = useState("");
@@ -19081,45 +19089,66 @@ function AdminDashboardScreen({ currentUserId, onBack }) {
 
   const fetchOverview = useCallback(async () => {
     try {
-      const { data, error } = await supabase.rpc("admin_get_overview_stats");
-      if (!error && Array.isArray(data) && data[0]) setOverview(data[0]);
+      const [ov, ra] = await Promise.all([
+        supabase.rpc("admin_get_overview_stats"),
+        supabase.rpc("admin_get_recent_activity", { p_limit: 30 }),
+      ]);
+      if (!ov.error && Array.isArray(ov.data) && ov.data[0]) setOverview(ov.data[0]);
+      setRecentActivity(ra.data || []);
     } catch (e) { console.error("[admin] overview", e); }
+  }, []);
+
+  const fetchPendingAmbassadorsList = useCallback(async () => {
+    try {
+      const { data } = await supabase.rpc("admin_get_pending_ambassadors", { p_limit: 50 });
+      setPendingAmbassadors(data || []);
+    } catch (e) { console.error("[admin] pending ambassadors", e); }
   }, []);
 
   const fetchUsersData = useCallback(async () => {
     try {
-      const [s, d, r] = await Promise.all([
+      const [s, d, r, rs, mf] = await Promise.all([
         supabase.rpc("admin_get_signups_daily", { p_days: dateRange }),
         supabase.rpc("admin_get_dau_daily", { p_days: dateRange }),
         supabase.rpc("admin_get_role_breakdown"),
+        supabase.rpc("admin_get_recent_signups", { p_hours: 24, p_limit: 30 }),
+        supabase.rpc("admin_get_most_followed", { p_limit: 10 }),
       ]);
       setSignupDaily(s.data || []);
       setDauDaily(d.data || []);
       setRoleBreakdown(r.data || []);
+      setRecentSignups(rs.data || []);
+      setMostFollowed(mf.data || []);
     } catch (e) { console.error("[admin] users", e); }
   }, [dateRange]);
 
   const fetchContentData = useCallback(async () => {
     try {
-      const [pbt, tc, eng] = await Promise.all([
+      const [pbt, tc, eng, tp, fca] = await Promise.all([
         supabase.rpc("admin_get_posts_by_type_daily", { p_days: dateRange }),
         supabase.rpc("admin_get_top_creators", { p_limit: 10 }),
         supabase.rpc("admin_get_engagement_totals"),
+        supabase.rpc("admin_get_trending_posts", { p_limit: 10 }),
+        supabase.rpc("admin_get_forum_category_activity"),
       ]);
       setPostsByType(pbt.data || []);
       setTopCreators(tc.data || []);
       setEngagement(eng.data && eng.data[0] ? eng.data[0] : null);
+      setTrendingPosts(tp.data || []);
+      setForumCatActivity(fca.data || []);
     } catch (e) { console.error("[admin] content", e); }
   }, [dateRange]);
 
   const fetchPushData = useCallback(async () => {
     try {
-      const [cnt, hist] = await Promise.all([
+      const [cnt, hist, deliv] = await Promise.all([
         supabase.rpc("admin_get_push_recipient_count", { p_segment: pushSegment }),
         supabase.rpc("admin_get_push_history", { p_limit: 50 }),
+        supabase.rpc("admin_get_push_delivery_stats"),
       ]);
       setPushRecipientCount(typeof cnt.data === "number" ? cnt.data : null);
       setPushHistory(hist.data || []);
+      setPushDeliveryStats(deliv.data && deliv.data[0] ? deliv.data[0] : null);
     } catch (e) { console.error("[admin] push", e); }
   }, [pushSegment]);
 
@@ -19259,13 +19288,68 @@ function AdminDashboardScreen({ currentUserId, onBack }) {
       </div>
       <div style={{ flex: 1, overflowY: "auto", padding: 14 }}>
         {tab === "overview" && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <AdminStatCard label="Total Users" value={overview ? overview.total_users : null} />
-            <AdminStatCard label="Live Now" value={overview ? overview.live_now : null} pulse accent={T.green} />
-            <AdminStatCard label="New Today" value={overview ? overview.new_today : null} accent={T.copper} />
-            <AdminStatCard label="Posts Today" value={overview ? overview.posts_today : null} accent={T.copper} />
-            <AdminStatCard label="DAU Today" value={overview ? overview.dau_today : null} />
-            <AdminStatCard label="Posts Total" value={overview ? overview.posts_total : null} />
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <AdminStatCard label="Total Users" value={overview ? overview.total_users : null} />
+              <AdminStatCard label="Live Now" value={overview ? overview.live_now : null} pulse accent={T.green} />
+              <AdminStatCard label="New Today" value={overview ? overview.new_today : null} accent={T.copper} />
+              <AdminStatCard label="Posts Today" value={overview ? overview.posts_today : null} accent={T.copper} />
+              <AdminStatCard label="DAU Today" value={overview ? overview.dau_today : null} />
+              <AdminStatCard label="WAU" value={overview ? overview.wau : null} />
+              <AdminStatCard label="MAU" value={overview ? overview.mau : null} />
+              <AdminStatCard label="Stickiness" value={overview && overview.stickiness_pct != null ? `${Number(overview.stickiness_pct).toFixed(1)}%` : null} accent={T.copper} />
+              <AdminStatCard label="Posts Total" value={overview ? overview.posts_total : null} />
+              <AdminStatCard label="Pending Ambsdrs" value={overview ? overview.pending_ambassadors : null} accent={overview && overview.pending_ambassadors > 0 ? T.red : T.white} />
+            </div>
+            {/* Pending ambassadors expandable — only render if there are any. */}
+            {overview && overview.pending_ambassadors > 0 && (
+              <div style={{ background: T.darkCard, borderRadius: 10, padding: 14, border: `1px solid ${T.charcoal}` }}>
+                <button onClick={() => {
+                  const next = !ambassadorsExpanded;
+                  setAmbassadorsExpanded(next);
+                  if (next && pendingAmbassadors.length === 0) fetchPendingAmbassadorsList();
+                }} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                  <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600 }}>AMBASSADOR REQUESTS · {overview.pending_ambassadors}</div>
+                  {ambassadorsExpanded ? <ChevronUp size={14} color={T.tertiary} /> : <ChevronDown size={14} color={T.tertiary} />}
+                </button>
+                {ambassadorsExpanded && (
+                  <div style={{ marginTop: 10 }}>
+                    {pendingAmbassadors.length === 0 ? (
+                      <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, padding: "8px 0" }}>Loading…</div>
+                    ) : pendingAmbassadors.map((a, i) => (
+                      <button key={a.user_id} onClick={() => onViewUser && onViewUser(a.handle || a.user_id)}
+                              style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", width: "100%", background: "none", border: "none", cursor: "pointer", borderBottom: i < pendingAmbassadors.length - 1 ? `1px solid ${T.charcoal}` : "none", textAlign: "left" }}>
+                        {a.avatar_url ? <img src={a.avatar_url} alt="" style={{ width: 30, height: 30, borderRadius: "50%", objectFit: "cover" }} /> : <SilhouetteAvatar size={30} />}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>{a.full_name || "—"}</div>
+                          <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>@{a.handle || "user"}</div>
+                        </div>
+                        <ChevronRight size={14} color={T.tertiary} />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {/* Recent activity feed — chronological across posts/threads/spots/builds/trips. */}
+            {(recentActivity || []).length > 0 && (
+              <div style={{ background: T.darkCard, borderRadius: 10, padding: 14, border: `1px solid ${T.charcoal}` }}>
+                <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600, marginBottom: 10 }}>RECENT ACTIVITY</div>
+                {recentActivity.map((r, i) => {
+                  const kindColor = r.kind === "post" ? T.copper : r.kind === "thread" ? T.green : r.kind === "spot" ? T.green : r.kind === "build" ? T.red : T.purple;
+                  return (
+                    <button key={`${r.kind}-${r.entity_id}`} onClick={() => onOpenAdminEntity && onOpenAdminEntity(r)}
+                            style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", width: "100%", background: "none", border: "none", cursor: "pointer", borderBottom: i < recentActivity.length - 1 ? `1px solid ${T.charcoal}` : "none", textAlign: "left" }}>
+                      <span style={{ fontFamily: sans, fontSize: 8, color: kindColor, letterSpacing: 1.2, fontWeight: 700, minWidth: 44, textTransform: "uppercase" }}>{r.kind}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontFamily: serif, fontSize: 12, color: T.white, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.title || "(untitled)"}</div>
+                        <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>@{r.handle || "user"} · {new Date(r.created_at).toLocaleString()}</div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
         {tab === "users" && (
@@ -19287,6 +19371,42 @@ function AdminDashboardScreen({ currentUserId, onBack }) {
                   <span style={{ fontFamily: sans, fontSize: 12, color: T.white, textTransform: "uppercase", letterSpacing: 1 }}>{r.role}</span>
                   <span style={{ fontFamily: serif, fontSize: 14, color: T.copper, fontWeight: 600 }}>{r.count}</span>
                 </div>
+              ))}
+            </>)}
+            {/* Recent signups in last 24h. */}
+            {sectionCard(<>
+              {sectionTitle(`RECENT SIGNUPS · LAST 24H · ${(recentSignups || []).length}`)}
+              {(recentSignups || []).length === 0 ? (
+                <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, padding: "4px 0" }}>No signups in the last 24 hours.</div>
+              ) : recentSignups.map((u, i) => (
+                <button key={u.user_id} onClick={() => onViewUser && onViewUser(u.handle || u.user_id)}
+                        style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", width: "100%", background: "none", border: "none", cursor: "pointer", borderBottom: i < recentSignups.length - 1 ? `1px solid ${T.charcoal}` : "none", textAlign: "left" }}>
+                  {u.avatar_url ? <img src={u.avatar_url} alt="" style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover" }} /> : <SilhouetteAvatar size={32} />}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>{u.full_name || "—"}</div>
+                    <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>@{u.handle || "user"} · {new Date(u.created_at).toLocaleString()}</div>
+                  </div>
+                  <ChevronRight size={14} color={T.tertiary} />
+                </button>
+              ))}
+            </>)}
+            {/* Most-followed users. */}
+            {(mostFollowed || []).length > 0 && sectionCard(<>
+              {sectionTitle("MOST FOLLOWED")}
+              {mostFollowed.map((u, i) => (
+                <button key={u.user_id} onClick={() => onViewUser && onViewUser(u.handle || u.user_id)}
+                        style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", width: "100%", background: "none", border: "none", cursor: "pointer", borderBottom: i < mostFollowed.length - 1 ? `1px solid ${T.charcoal}` : "none", textAlign: "left" }}>
+                  <div style={{ fontFamily: serif, fontSize: 14, color: T.tertiary, width: 18 }}>{i + 1}</div>
+                  {u.avatar_url ? <img src={u.avatar_url} alt="" style={{ width: 30, height: 30, borderRadius: "50%", objectFit: "cover" }} /> : <SilhouetteAvatar size={30} />}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>{u.full_name || "—"}</div>
+                    <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>@{u.handle || "user"}</div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontFamily: serif, fontSize: 14, color: T.copper, fontWeight: 600 }}>{u.follower_count}</div>
+                    <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1 }}>FOLLOWERS</div>
+                  </div>
+                </button>
               ))}
             </>)}
           </div>
@@ -19341,7 +19461,8 @@ function AdminDashboardScreen({ currentUserId, onBack }) {
             {(topCreators || []).length > 0 && sectionCard(<>
               {sectionTitle("TOP CREATORS")}
               {topCreators.map((c, i) => (
-                <div key={c.user_id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: i < topCreators.length - 1 ? `1px solid ${T.charcoal}` : "none" }}>
+                <button key={c.user_id} onClick={() => onViewUser && onViewUser(c.handle || c.user_id)}
+                        style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", width: "100%", background: "none", border: "none", cursor: "pointer", borderBottom: i < topCreators.length - 1 ? `1px solid ${T.charcoal}` : "none", textAlign: "left" }}>
                   <div style={{ fontFamily: serif, fontSize: 14, color: T.tertiary, width: 18 }}>{i + 1}</div>
                   {c.avatar_url ? <img src={c.avatar_url} alt="" style={{ width: 30, height: 30, borderRadius: "50%", objectFit: "cover" }} /> : <SilhouetteAvatar size={30} />}
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -19355,6 +19476,44 @@ function AdminDashboardScreen({ currentUserId, onBack }) {
                   <div style={{ textAlign: "right", minWidth: 40 }}>
                     <div style={{ fontFamily: serif, fontSize: 14, color: T.red, fontWeight: 600 }}>{c.likes_received}</div>
                     <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1 }}>LIKES</div>
+                  </div>
+                </button>
+              ))}
+            </>)}
+            {/* Trending posts (last 7d). */}
+            {(trendingPosts || []).length > 0 && sectionCard(<>
+              {sectionTitle("TRENDING · LAST 7 DAYS")}
+              {trendingPosts.map((p, i) => (
+                <button key={p.post_id} onClick={() => onOpenAdminEntity && onOpenAdminEntity({ kind: "post", entity_id: p.post_id, url: `/post/${p.post_id}`, title: p.title })}
+                        style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 0", width: "100%", background: "none", border: "none", cursor: "pointer", borderBottom: i < trendingPosts.length - 1 ? `1px solid ${T.charcoal}` : "none", textAlign: "left" }}>
+                  <div style={{ fontFamily: serif, fontSize: 14, color: T.tertiary, width: 18, paddingTop: 2 }}>{i + 1}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: serif, fontSize: 13, color: T.white, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.title || p.body || "(untitled)"}</div>
+                    <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 3 }}>@{p.handle || "user"} · {p.type}</div>
+                  </div>
+                  <div style={{ textAlign: "right", minWidth: 50 }}>
+                    <div style={{ fontFamily: serif, fontSize: 14, color: T.copper, fontWeight: 600 }}>{p.score}</div>
+                    <div style={{ fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 1 }}>{p.recent_likes}♥ {p.recent_comments}💬</div>
+                  </div>
+                </button>
+              ))}
+            </>)}
+            {/* Forum category activity. */}
+            {(forumCatActivity || []).length > 0 && sectionCard(<>
+              {sectionTitle("FORUM CATEGORIES")}
+              {forumCatActivity.map((c, i) => (
+                <div key={c.category_slug} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: i < forumCatActivity.length - 1 ? `1px solid ${T.charcoal}` : "none" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>{c.category_name}</div>
+                    <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>{c.last_active_at ? `Last active ${new Date(c.last_active_at).toLocaleDateString()}` : "No activity"}</div>
+                  </div>
+                  <div style={{ textAlign: "right", minWidth: 50 }}>
+                    <div style={{ fontFamily: serif, fontSize: 13, color: T.copper, fontWeight: 600 }}>{c.thread_count}</div>
+                    <div style={{ fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 1 }}>THREADS</div>
+                  </div>
+                  <div style={{ textAlign: "right", minWidth: 50 }}>
+                    <div style={{ fontFamily: serif, fontSize: 13, color: T.green, fontWeight: 600 }}>{c.reply_count}</div>
+                    <div style={{ fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 1 }}>REPLIES</div>
                   </div>
                 </div>
               ))}
@@ -19409,6 +19568,29 @@ function AdminDashboardScreen({ currentUserId, onBack }) {
                       style={{ marginTop: 10, width: "100%", padding: "12px 16px", borderRadius: 6, background: T.red, color: T.white, border: "none", cursor: (!pushBody.trim() || pushSending || !pushRecipientCount || (pushImage && pushImage.uploading)) ? "not-allowed" : "pointer", opacity: (!pushBody.trim() || pushSending || !pushRecipientCount || (pushImage && pushImage.uploading)) ? 0.5 : 1, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 1.5, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
                 <Send size={13} /> {pushSending ? "SENDING…" : "SEND PUSH"}
               </button>
+            </>)}
+            {/* Aggregate delivery stats across all broadcasts. */}
+            {pushDeliveryStats && pushDeliveryStats.broadcasts_count > 0 && sectionCard(<>
+              {sectionTitle("DELIVERY")}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                <div>
+                  <div style={{ fontFamily: serif, fontSize: 18, color: T.white, fontWeight: 600 }}>{Number(pushDeliveryStats.broadcasts_count || 0).toLocaleString()}</div>
+                  <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1 }}>BROADCASTS</div>
+                </div>
+                <div>
+                  <div style={{ fontFamily: serif, fontSize: 18, color: T.green, fontWeight: 600 }}>{Number(pushDeliveryStats.total_sent || 0).toLocaleString()}</div>
+                  <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1 }}>DELIVERED</div>
+                </div>
+                <div>
+                  <div style={{ fontFamily: serif, fontSize: 18, color: T.copper, fontWeight: 600 }}>{Number(pushDeliveryStats.success_rate || 0).toFixed(1)}%</div>
+                  <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1 }}>SUCCESS RATE</div>
+                </div>
+              </div>
+              {(pushDeliveryStats.total_failed || 0) > 0 && (
+                <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 8 }}>
+                  {Number(pushDeliveryStats.total_failed).toLocaleString()} failed deliveries — dead subscriptions auto-cleaned.
+                </div>
+              )}
             </>)}
             {(pushHistory || []).length > 0 && sectionCard(<>
               {sectionTitle("HISTORY")}
@@ -30259,7 +30441,30 @@ export default function Trailhead() {
                 : <div style={{ padding: 32, textAlign: "center", fontFamily: serif, fontSize: 14, color: T.tertiary, lineHeight: 1.6 }}>Ranks is coming in a future release.</div>
             )}
             {screen === "admin" && (isAdmin
-              ? <AdminDashboardScreen currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} onBack={() => { setScreen("feed"); if (typeof window !== "undefined" && window.location.pathname === "/admin") window.history.pushState({}, "", "/"); }} />
+              ? <AdminDashboardScreen
+                  currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id}
+                  onBack={() => { setScreen("feed"); if (typeof window !== "undefined" && window.location.pathname === "/admin") window.history.pushState({}, "", "/"); }}
+                  onViewUser={(handleOrId) => openUserProfile(handleOrId)}
+                  onOpenAdminEntity={(r) => {
+                    if (!r || !r.kind) return;
+                    // Dispatch the moderation-queue / trending click to the
+                    // right screen. URL pushState happens inside the target
+                    // screen's open handler so deep-link copies still work.
+                    if (r.kind === "post") {
+                      setScreen("feed"); setPendingPostNav(r.entity_id);
+                    } else if (r.kind === "thread") {
+                      setScreen("forum"); openForumThreadById(r.entity_id);
+                    } else if (r.kind === "spot") {
+                      setScreen("routes"); setPendingSpotNav(r.entity_id);
+                    } else if (r.kind === "build") {
+                      setScreen("builds"); setPendingBuildNav({ rawId: r.entity_id, name: r.title || "" });
+                    } else if (r.kind === "trip") {
+                      // URL parsing — r.url is /trips/<slug>; pull the slug.
+                      const slug = (r.url || "").replace(/^\/trips\//, "");
+                      if (slug) setPendingTripNav(slug); else setDetailTripId(r.entity_id);
+                    }
+                  }}
+                />
               : <div style={{ padding: 32, textAlign: "center", fontFamily: serif, fontSize: 14, color: T.tertiary, lineHeight: 1.6 }}>Not authorized.</div>
             )}
           </>
