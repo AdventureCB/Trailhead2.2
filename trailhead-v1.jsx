@@ -679,7 +679,7 @@ function ContentLoader({ spinnerSize = 22, accent }) {
    `imgStyle` overrides; default fills the wrapper at object-fit:cover.
    The wrapper inherits the surrounding sizing — most callers pass
    width/height via `style`. */
-const LoadingImage = memo(function LoadingImageImpl({ src, alt = "", style, imgStyle, accent, onClick, fallbackIcon, width }) {
+const LoadingImage = memo(function LoadingImageImpl({ src, alt = "", style, imgStyle, accent, onClick, fallbackIcon, width, eager }) {
   const imgRef = useRef(null);
   const [state, setState] = useState("loading"); // 'loading' | 'loaded' | 'error'
   // Synchronously detect cached images before paint: when feed pills swap,
@@ -706,6 +706,8 @@ const LoadingImage = memo(function LoadingImageImpl({ src, alt = "", style, imgS
           src={txSrc}
           alt={alt}
           decoding="async"
+          loading={eager ? "eager" : "lazy"}
+          width={width || undefined}
           onLoad={() => setState("loaded")}
           onError={() => setState("error")}
           style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", opacity: state === "loaded" ? 1 : 0, transition: state === "loaded" ? "none" : "opacity 0.2s ease-out", ...imgStyle }}
@@ -730,6 +732,7 @@ const LoadingImage = memo(function LoadingImageImpl({ src, alt = "", style, imgS
   prev.width === next.width &&
   prev.accent === next.accent &&
   prev.alt === next.alt &&
+  prev.eager === next.eager &&
   prev.fallbackIcon === next.fallbackIcon
 ));
 
@@ -11883,7 +11886,7 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
         {hasMap ? (
           <RouteMapPreview pins={pins} points={points} photos={photos} offroadRanges={Array.isArray(rd.offroadRanges) ? rd.offroadRanges : undefined} highlightedPinIdx={highlightedPinIdx} />
         ) : trip.hero_img ? (
-          <LoadingImage src={trip.hero_img} accent={isPlan ? T.copper : T.purple} width={900} style={{ width: "100%", height: "100%" }} />
+          <LoadingImage src={trip.hero_img} accent={isPlan ? T.copper : T.purple} width={900} eager style={{ width: "100%", height: "100%" }} />
         ) : (
           <div style={{ position: "absolute", inset: 0, background: `linear-gradient(135deg, ${T.charcoal} 0%, ${T.copper}20 100%)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <Mountain size={100} color={T.tertiary} strokeWidth={0.2} style={{ opacity: 0.15 }} />
@@ -12544,7 +12547,7 @@ function ConvoyDetail({ item, linkedPlan, currentUserId, currentUserName, curren
         {heroPhoto && heroPhoto.url ? (
           heroPhoto.type === "video"
             ? <video src={heroPhoto.url + "#t=0.001"} preload="metadata" playsInline controls style={{ width: "100%", height: "100%", objectFit: "cover", background: "#000" }} />
-            : <LoadingImage src={heroPhoto.url} alt={imgAlt(heroPhoto)} accent={T.copper} width={480} style={{ width: "100%", height: "100%" }} fallbackIcon={Users} />
+            : <LoadingImage src={heroPhoto.url} alt={imgAlt(heroPhoto)} accent={T.copper} width={480} eager style={{ width: "100%", height: "100%" }} fallbackIcon={Users} />
         ) : (
           <div style={{ position: "absolute", inset: 0, background: `linear-gradient(135deg, ${T.charcoal} 0%, ${T.copper}20 100%)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <Users size={100} color={T.copper} strokeWidth={0.5} style={{ opacity: 0.25 }} />
