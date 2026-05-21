@@ -14475,11 +14475,32 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
           )}
           <img src={txImg(curUrl, 1200)} alt="" onClick={(e) => e.stopPropagation()}
                style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 8 }} />
-          {lightbox.urls.length > 1 && (
-            <div style={{ position: "absolute", bottom: 18, left: 0, right: 0, textAlign: "center", fontFamily: sans, fontSize: 11, color: T.white, letterSpacing: 0.5 }}>
-              {lightbox.index + 1} / {lightbox.urls.length}
-            </div>
-          )}
+          {/* Footer overlay — "Added by @handle" credit on the left when
+              the photo has attribution; counter on the right when multi.
+              Both share a single row so they don't stack awkwardly. */}
+          {(() => {
+            const addedByProf = addedBy && spotAuthors ? spotAuthors[addedBy] : null;
+            const handle = addedByProf && addedByProf.handle;
+            const showCredit = !!handle;
+            const showCounter = lightbox.urls.length > 1;
+            if (!showCredit && !showCounter) return null;
+            return (
+              <div style={{ position: "absolute", bottom: 18, left: 16, right: 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, fontFamily: sans, fontSize: 11, color: T.white, letterSpacing: 0.5 }}
+                   onClick={(e) => e.stopPropagation()}>
+                {showCredit ? (
+                  <button onClick={() => onViewUser && onViewUser(handle)}
+                          style={{ background: "rgba(0,0,0,0.5)", border: "none", borderRadius: 6, padding: "6px 10px", color: T.white, fontFamily: sans, fontSize: 11, cursor: "pointer", letterSpacing: 0.3 }}>
+                    Added by <span style={{ color: T.copper, fontWeight: 600 }}>@{handle}</span>
+                  </button>
+                ) : <span />}
+                {showCounter && (
+                  <span style={{ background: "rgba(0,0,0,0.5)", borderRadius: 6, padding: "6px 10px" }}>
+                    {lightbox.index + 1} / {lightbox.urls.length}
+                  </span>
+                )}
+              </div>
+            );
+          })()}
         </div>
         );
       })()}
@@ -26557,12 +26578,23 @@ export default function Trailhead() {
   const [spotAuthors, setSpotAuthors] = useState({});
   useEffect(() => {
     if (!Array.isArray(campingSpots) || campingSpots.length === 0) return;
-    const missing = Array.from(new Set(
-      campingSpots
-        .filter(s => s && s.source === "user" && s.user_id)
-        .map(s => s.user_id)
-        .filter(uid => !spotAuthors[uid])
-    ));
+    // Collect every uid we'd want to credit on the map: spot owners (for
+    // user-created spots) AND photo contributors (added_by on any spot,
+    // seeded or user). Both go into the same cache so the lightbox + spot
+    // popup share the lookup.
+    const ownerUids = campingSpots
+      .filter(s => s && s.source === "user" && s.user_id)
+      .map(s => s.user_id);
+    const photoUids = [];
+    campingSpots.forEach(s => {
+      if (s && Array.isArray(s.photos)) {
+        s.photos.forEach(p => {
+          if (p && typeof p === "object" && p.added_by) photoUids.push(p.added_by);
+        });
+      }
+    });
+    const missing = Array.from(new Set([...ownerUids, ...photoUids]))
+      .filter(uid => !spotAuthors[uid]);
     if (missing.length === 0) return;
     let cancelled = false;
     supabase.from("profiles").select("id, full_name, handle, avatar_url").in("id", missing).then(({ data, error }) => {
