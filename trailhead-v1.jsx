@@ -24129,7 +24129,10 @@ export default function Trailhead() {
     if (!uid) return;
     const tick = () => {
       if (typeof document !== "undefined" && document.hidden) return;
-      supabase.rpc("bump_last_seen").catch(() => {});
+      // PostgrestBuilder is thenable but not a real Promise — no .catch.
+      // Pass a noop reject handler to .then to swallow errors without
+      // emitting an unhandled rejection.
+      supabase.rpc("bump_last_seen").then(() => {}, () => {});
     };
     tick(); // immediate ping on login / mount
     const iv = setInterval(tick, 60000);
