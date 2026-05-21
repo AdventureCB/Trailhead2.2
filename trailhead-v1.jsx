@@ -1733,6 +1733,126 @@ function ShareIntentSheet({ target, onClose, onOpenShareCompose, onShowToast }) 
 // multi-select. Submit resolves to find-or-create-by-participants and
 // hands back a thread id (or for a single user, just the user id so
 // the parent can defer to openDM and inherit its dmKey-bump remount).
+// Module-scoped share-compose modal. Lives at root level so its hooks
+// (caption state) keep stable identity across parent re-renders — heartbeat
+// + realtime cause the root to re-render often, and a component declared
+// inside an IIFE would unmount + remount every time, wiping the caption.
+// See `feedback_inline_component_state_wipe` for the trap.
+function ShareComposeModal({ target, onClose }) {
+  const t = target;
+  const accent = t.accent || T.copper;
+  const Icon = t.IconComponent || Share2;
+  const [caption, setCaption] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const placeholder = t.captionPlaceholder || (t.action === "feed" ? "Add a caption (optional)…" : "Add a message (optional)…");
+  const submit = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      await t.onSubmit(caption);
+    } finally {
+      onClose();
+    }
+  };
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape" && !submitting) onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [submitting, onClose]);
+  return (
+    <div onClick={() => { if (!submitting) onClose(); }} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: T.darkBg, borderRadius: 14, border: `1px solid ${accent}40`, padding: 18, width: "100%", maxWidth: 420, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 16px 40px rgba(0,0,0,0.6)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+          <Icon size={16} color={accent} />
+          <span style={{ fontFamily: sans, fontSize: 11, color: accent, fontWeight: 700, letterSpacing: 1.4 }}>
+            {t.action === "feed" ? "SHARE TO FEED" : "SEND VIA DM"}
+          </span>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: T.tertiary, marginLeft: "auto" }}>
+            <X size={16} />
+          </button>
+        </div>
+        <textarea autoFocus value={caption} onChange={(e) => setCaption(e.target.value.slice(0, 280))}
+                  placeholder={placeholder} rows={3}
+                  style={{ width: "100%", boxSizing: "border-box", padding: "11px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", resize: "vertical", lineHeight: 1.5, marginBottom: 12 }} />
+        <div style={{ borderRadius: 10, overflow: "hidden", border: `1px solid ${accent}40`, background: `${T.charcoal}80`, marginBottom: 16 }}>
+          {t.cardImage && (
+            <img src={txImg(t.cardImage, 480)} alt="" style={{ width: "100%", height: 180, objectFit: "cover", display: "block" }} />
+          )}
+          <div style={{ padding: "10px 12px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+              <Icon size={12} color={accent} />
+              <span style={{ fontFamily: sans, fontSize: 9, color: accent, letterSpacing: 1.2, fontWeight: 700 }}>{t.cardLabel}</span>
+            </div>
+            <p style={{ fontFamily: serif, fontSize: 14, color: T.white, margin: 0, fontWeight: 600, lineHeight: 1.4 }}>{t.cardTitle}</p>
+            {t.cardBody && (
+              <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "4px 0 0", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{t.cardBody}</p>
+            )}
+            {t.cardCta && (
+              <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 6 }}>
+                <span style={{ fontFamily: sans, fontSize: 10, color: accent, fontWeight: 600 }}>{t.cardCta}</span>
+                <ChevronRight size={12} color={accent} />
+              </div>
+            )}
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={onClose}
+                  style={{ flex: 1, padding: "12px", borderRadius: 8, background: T.charcoal, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 700, letterSpacing: 0.5 }}>CANCEL</button>
+          <button onClick={submit} disabled={submitting}
+                  style={{ flex: 2, padding: "12px", borderRadius: 8, background: !submitting ? accent : T.charcoal, border: "none", cursor: !submitting ? "pointer" : "default", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5, opacity: !submitting ? 1 : 0.5 }}>
+            {t.action === "feed" ? (submitting ? "POSTING…" : "POST TO FEED") : (submitting ? "OPENING…" : "CHOOSE RECIPIENT")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Module-scoped trip plan save prompt. Hoisted out of ExploreMap's IIFE
+// for the same hook-stability reason as ShareComposeModal — name + desc
+// state must survive parent re-renders (heartbeat, realtime, etc).
+function PlanSavePrompt({ planBuilder }) {
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const submit = async () => {
+    if (!name.trim() || submitting) return;
+    setSubmitting(true);
+    const draft = await planBuilder.commit({ name: name.trim(), description: description.trim() });
+    setSubmitting(false);
+    if (!draft) planBuilder.setSavePromptOpen(false);
+  };
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div style={{ background: T.darkBg, borderRadius: 14, border: `1px solid ${T.copper}40`, padding: 22, width: "100%", maxWidth: 400, boxShadow: "0 16px 40px rgba(0,0,0,0.6)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+          <Route size={18} color={T.copper} />
+          <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 1.4 }}>SAVE TRIP PLAN</span>
+        </div>
+        <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 16px", lineHeight: 1.5 }}>
+          Give your plan a name and a short description. You'll land in the editor next where you can add dates, party size, gear notes, and tweak the route.
+        </p>
+        <label style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 600, display: "block", marginBottom: 6 }}>PLAN NAME</label>
+        <input autoFocus value={name} onChange={(e) => setName(e.target.value.slice(0, 90))}
+               placeholder="e.g. Stemilt Loop overnighter"
+               style={{ width: "100%", boxSizing: "border-box", padding: "11px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none", marginBottom: 12 }} />
+        <label style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 600, display: "block", marginBottom: 6 }}>DESCRIPTION (OPTIONAL)</label>
+        <textarea value={description} onChange={(e) => setDescription(e.target.value.slice(0, 280))}
+                  placeholder="What's the vibe? Goals, must-sees, vehicle requirements…" rows={3}
+                  style={{ width: "100%", boxSizing: "border-box", padding: "11px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", resize: "vertical", lineHeight: 1.5, marginBottom: 16 }} />
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={() => planBuilder.setSavePromptOpen(false)}
+                  style={{ flex: 1, padding: "12px", borderRadius: 8, background: T.charcoal, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 700, letterSpacing: 0.5 }}>BACK TO MAP</button>
+          <button onClick={submit} disabled={!name.trim() || submitting}
+                  style={{ flex: 2, padding: "12px", borderRadius: 8, background: name.trim() && !submitting ? T.copper : T.charcoal, border: "none", cursor: name.trim() && !submitting ? "pointer" : "default", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5, opacity: name.trim() && !submitting ? 1 : 0.5 }}>
+            {submitting ? "SAVING…" : "CREATE PLAN"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ShareRecipientPicker({ followingIdsArr, searchUsers, onCancel, onSubmit }) {
   const [followingProfiles, setFollowingProfiles] = useState([]);
   const [followingLoaded, setFollowingLoaded] = useState(false);
@@ -14362,50 +14482,9 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
           before committing the in-progress builder to a trip_reports draft.
           Cancel returns to the map with planning still active so the user
           doesn't lose their points. */}
-      {planActive && planBuilder.savePromptOpen && (() => {
-        const SavePromptInner = () => {
-          const [name, setName] = useState("");
-          const [description, setDescription] = useState("");
-          const [submitting, setSubmitting] = useState(false);
-          const submit = async () => {
-            if (!name.trim() || submitting) return;
-            setSubmitting(true);
-            const draft = await planBuilder.commit({ name: name.trim(), description: description.trim() });
-            setSubmitting(false);
-            if (!draft) planBuilder.setSavePromptOpen(false);
-          };
-          return (
-            <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-              <div style={{ background: T.darkBg, borderRadius: 14, border: `1px solid ${T.copper}40`, padding: 22, width: "100%", maxWidth: 400, boxShadow: "0 16px 40px rgba(0,0,0,0.6)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-                  <Route size={18} color={T.copper} />
-                  <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 1.4 }}>SAVE TRIP PLAN</span>
-                </div>
-                <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 16px", lineHeight: 1.5 }}>
-                  Give your plan a name and a short description. You'll land in the editor next where you can add dates, party size, gear notes, and tweak the route.
-                </p>
-                <label style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 600, display: "block", marginBottom: 6 }}>PLAN NAME</label>
-                <input autoFocus value={name} onChange={(e) => setName(e.target.value.slice(0, 90))}
-                       placeholder="e.g. Stemilt Loop overnighter"
-                       style={{ width: "100%", boxSizing: "border-box", padding: "11px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none", marginBottom: 12 }} />
-                <label style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 600, display: "block", marginBottom: 6 }}>DESCRIPTION (OPTIONAL)</label>
-                <textarea value={description} onChange={(e) => setDescription(e.target.value.slice(0, 280))}
-                          placeholder="What's the vibe? Goals, must-sees, vehicle requirements…" rows={3}
-                          style={{ width: "100%", boxSizing: "border-box", padding: "11px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", resize: "vertical", lineHeight: 1.5, marginBottom: 16 }} />
-                <div style={{ display: "flex", gap: 10 }}>
-                  <button onClick={() => planBuilder.setSavePromptOpen(false)}
-                          style={{ flex: 1, padding: "12px", borderRadius: 8, background: T.charcoal, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 700, letterSpacing: 0.5 }}>BACK TO MAP</button>
-                  <button onClick={submit} disabled={!name.trim() || submitting}
-                          style={{ flex: 2, padding: "12px", borderRadius: 8, background: name.trim() && !submitting ? T.copper : T.charcoal, border: "none", cursor: name.trim() && !submitting ? "pointer" : "default", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5, opacity: name.trim() && !submitting ? 1 : 0.5 }}>
-                    {submitting ? "SAVING…" : "CREATE PLAN"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          );
-        };
-        return <SavePromptInner />;
-      })()}
+      {planActive && planBuilder.savePromptOpen && (
+        <PlanSavePrompt planBuilder={planBuilder} />
+      )}
       </div>
       {/* Photo lightbox — full-screen overlay above everything else.
           Tap backdrop / X / image to close; arrow buttons step through
@@ -31018,79 +31097,9 @@ export default function Trailhead() {
         onOpenShareCompose={(req) => { setShareIntentTarget(null); openShareCompose(req); }}
         onShowToast={showErrorToast}
       />
-      {shareComposeTarget && (() => {
-        const t = shareComposeTarget;
-        const accent = t.accent || T.copper;
-        const Icon = t.IconComponent || Share2;
-        const Inner = () => {
-          const [caption, setCaption] = useState("");
-          const [submitting, setSubmitting] = useState(false);
-          const placeholder = t.captionPlaceholder || (t.action === "feed" ? "Add a caption (optional)…" : "Add a message (optional)…");
-          const submit = async () => {
-            if (submitting) return;
-            setSubmitting(true);
-            try {
-              await t.onSubmit(caption);
-            } finally {
-              setShareComposeTarget(null);
-            }
-          };
-          // ESC closes the modal — guaranteed escape hatch for desktop.
-          useEffect(() => {
-            const onKey = (e) => { if (e.key === "Escape" && !submitting) setShareComposeTarget(null); };
-            window.addEventListener("keydown", onKey);
-            return () => window.removeEventListener("keydown", onKey);
-          }, [submitting]);
-          return (
-            <div onClick={() => { if (!submitting) setShareComposeTarget(null); }} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-              <div onClick={(e) => e.stopPropagation()} style={{ background: T.darkBg, borderRadius: 14, border: `1px solid ${accent}40`, padding: 18, width: "100%", maxWidth: 420, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 16px 40px rgba(0,0,0,0.6)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-                  <Icon size={16} color={accent} />
-                  <span style={{ fontFamily: sans, fontSize: 11, color: accent, fontWeight: 700, letterSpacing: 1.4 }}>
-                    {t.action === "feed" ? "SHARE TO FEED" : "SEND VIA DM"}
-                  </span>
-                  <button onClick={() => setShareComposeTarget(null)} style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: T.tertiary, marginLeft: "auto" }}>
-                    <X size={16} />
-                  </button>
-                </div>
-                <textarea autoFocus value={caption} onChange={(e) => setCaption(e.target.value.slice(0, 280))}
-                          placeholder={placeholder} rows={3}
-                          style={{ width: "100%", boxSizing: "border-box", padding: "11px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", resize: "vertical", lineHeight: 1.5, marginBottom: 12 }} />
-                <div style={{ borderRadius: 10, overflow: "hidden", border: `1px solid ${accent}40`, background: `${T.charcoal}80`, marginBottom: 16 }}>
-                  {t.cardImage && (
-                    <img src={txImg(t.cardImage, 480)} alt="" style={{ width: "100%", height: 180, objectFit: "cover", display: "block" }} />
-                  )}
-                  <div style={{ padding: "10px 12px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-                      <Icon size={12} color={accent} />
-                      <span style={{ fontFamily: sans, fontSize: 9, color: accent, letterSpacing: 1.2, fontWeight: 700 }}>{t.cardLabel}</span>
-                    </div>
-                    <p style={{ fontFamily: serif, fontSize: 14, color: T.white, margin: 0, fontWeight: 600, lineHeight: 1.4 }}>{t.cardTitle}</p>
-                    {t.cardBody && (
-                      <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "4px 0 0", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{t.cardBody}</p>
-                    )}
-                    {t.cardCta && (
-                      <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 6 }}>
-                        <span style={{ fontFamily: sans, fontSize: 10, color: accent, fontWeight: 600 }}>{t.cardCta}</span>
-                        <ChevronRight size={12} color={accent} />
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div style={{ display: "flex", gap: 10 }}>
-                  <button onClick={() => setShareComposeTarget(null)}
-                          style={{ flex: 1, padding: "12px", borderRadius: 8, background: T.charcoal, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 700, letterSpacing: 0.5 }}>CANCEL</button>
-                  <button onClick={submit} disabled={submitting}
-                          style={{ flex: 2, padding: "12px", borderRadius: 8, background: !submitting ? accent : T.charcoal, border: "none", cursor: !submitting ? "pointer" : "default", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5, opacity: !submitting ? 1 : 0.5 }}>
-                    {t.action === "feed" ? (submitting ? "POSTING…" : "POST TO FEED") : (submitting ? "OPENING…" : "CHOOSE RECIPIENT")}
-                  </button>
-                </div>
-              </div>
-            </div>
-          );
-        };
-        return <Inner />;
-      })()}
+      {shareComposeTarget && (
+        <ShareComposeModal target={shareComposeTarget} onClose={() => setShareComposeTarget(null)} />
+      )}
       {/* Recipient picker — opens after share-compose's "Choose
           Recipient". Component is hoisted to module scope so its hooks
           have stable identity across root re-renders. */}
