@@ -18814,8 +18814,254 @@ function AdminStatCard({ label, value, pulse, accent }) {
   );
 }
 
+// Format an ISO date string (YYYY-MM-DD or full timestamp) as "Mon DD".
+function fmtChartDay(s) {
+  if (!s) return "";
+  const d = new Date(typeof s === "string" && s.length === 10 ? s + "T00:00:00" : s);
+  if (isNaN(d.getTime())) return String(s);
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+// Trigger a CSV file download. headers + rows are arrays of strings.
+function exportCsv(filename, headers, rows) {
+  const escape = (s) => {
+    const v = String(s == null ? "" : s);
+    return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+  };
+  const csv = [headers, ...rows].map(r => r.map(escape).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+// Interactive variant of the chart used inside ChartDetailModal. Renders
+// the same shape (sparkline OR stacked) at full width with axis labels +
+// a vertical guide line + tooltip on hover/tap.
+function InteractiveChart({ kind, values, series, dayLabels, color, types, typeColors, height = 220 }) {
+  const wrapRef = useRef(null);
+  const [hoverIdx, setHoverIdx] = useState(null);
+  const n = kind === "sparkline" ? (values ? values.length : 0) : (series && series[0] ? series[0].data.length : 0);
+  if (n === 0) return <div style={{ height, color: T.tertiary, fontFamily: sans, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>No data.</div>;
+  // Compute scales — for sparkline use min/max of the series; for stacked
+  // use max stacked total (so segments don't overflow the chart top).
+  let yMax;
+  if (kind === "sparkline") yMax = Math.max(1, ...values);
+  else yMax = Math.max(1, ...Array.from({ length: n }, (_, i) => series.reduce((a, s) => a + (s.data[i] || 0), 0)));
+  // Pad to nearest "nice" round number for Y axis labels.
+  const niceMax = (() => {
+    if (yMax <= 5) return Math.ceil(yMax);
+    const p = Math.pow(10, Math.floor(Math.log10(yMax)));
+    return Math.ceil(yMax / p) * p;
+  })();
+  const W = 600, H = height;
+  const padL = 36, padR = 8, padT = 10, padB = 24;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+  const xStep = plotW / Math.max(1, n - 1);
+  const colW = plotW / n; // for hit-test in stacked mode
+  // Y-axis tick lines at 0%, 50%, 100%.
+  const yTicks = [0, niceMax / 2, niceMax];
+  // X labels — show ~5 evenly spaced labels even when n=90.
+  const xLabelStride = Math.max(1, Math.ceil(n / 6));
+  const onMove = (clientX) => {
+    const rect = wrapRef.current && wrapRef.current.getBoundingClientRect();
+    if (!rect) return;
+    const x = ((clientX - rect.left) / rect.width) * W - padL;
+    const i = Math.round(x / xStep);
+    setHoverIdx(Math.max(0, Math.min(n - 1, i)));
+  };
+  const onLeave = () => setHoverIdx(null);
+  const totalAt = (i) => kind === "sparkline" ? (values[i] || 0) : series.reduce((a, s) => a + (s.data[i] || 0), 0);
+
+  return (
+    <div ref={wrapRef} style={{ position: "relative", touchAction: "pan-y" }}
+         onMouseMove={(e) => onMove(e.clientX)}
+         onMouseLeave={onLeave}
+         onTouchStart={(e) => { if (e.touches && e.touches[0]) onMove(e.touches[0].clientX); }}
+         onTouchMove={(e) => { if (e.touches && e.touches[0]) onMove(e.touches[0].clientX); }}>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: "100%", height: H, display: "block" }}>
+        {/* Y axis gridlines + labels */}
+        {yTicks.map((tv, i) => {
+          const y = padT + plotH - (tv / niceMax) * plotH;
+          return (
+            <g key={i}>
+              <line x1={padL} y1={y} x2={W - padR} y2={y} stroke={T.charcoal} strokeWidth={1} />
+              <text x={padL - 4} y={y + 3} textAnchor="end" fontSize={9} fill={T.tertiary} fontFamily={sans}>{Math.round(tv)}</text>
+            </g>
+          );
+        })}
+        {/* X labels */}
+        {dayLabels.map((lbl, i) => {
+          if (i % xLabelStride !== 0 && i !== n - 1) return null;
+          const x = padL + i * xStep;
+          return (
+            <text key={i} x={x} y={H - 6} textAnchor="middle" fontSize={9} fill={T.tertiary} fontFamily={sans}>{lbl}</text>
+          );
+        })}
+        {/* Data */}
+        {kind === "sparkline" && (() => {
+          const pts = values.map((v, i) => [padL + i * xStep, padT + plotH - ((v || 0) / niceMax) * plotH]);
+          const ptsStr = pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+          return (
+            <>
+              <polyline points={`${padL},${padT + plotH} ${ptsStr} ${padL + (n - 1) * xStep},${padT + plotH}`} fill={`${color || T.copper}22`} stroke="none" />
+              <polyline points={ptsStr} fill="none" stroke={color || T.copper} strokeWidth={1.5} />
+              {pts.map(([x, y], i) => <circle key={i} cx={x} cy={y} r={hoverIdx === i ? 4 : 2} fill={color || T.copper} />)}
+            </>
+          );
+        })()}
+        {kind === "stacked" && (() => {
+          const out = [];
+          for (let i = 0; i < n; i++) {
+            let yAccum = padT + plotH;
+            for (let si = 0; si < series.length; si++) {
+              const v = series[si].data[i] || 0;
+              if (v <= 0) continue;
+              const segH = (v / niceMax) * plotH;
+              yAccum -= segH;
+              const bx = padL + i * xStep - colW * 0.4;
+              const bw = colW * 0.8;
+              out.push(<rect key={`${i}-${si}`} x={bx} y={yAccum} width={bw} height={segH} fill={series[si].color} />);
+            }
+          }
+          return out;
+        })()}
+        {/* Vertical guide + crosshair */}
+        {hoverIdx != null && (
+          <line x1={padL + hoverIdx * xStep} y1={padT} x2={padL + hoverIdx * xStep} y2={padT + plotH}
+                stroke={T.white} strokeOpacity={0.3} strokeWidth={1} />
+        )}
+      </svg>
+      {hoverIdx != null && (
+        <div style={{ marginTop: 8, padding: 10, borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}` }}>
+          <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, marginBottom: 4 }}>{dayLabels[hoverIdx]}</div>
+          {kind === "sparkline" && (
+            <div style={{ fontFamily: serif, fontSize: 18, color: color || T.copper, fontWeight: 600 }}>{(values[hoverIdx] || 0).toLocaleString()}</div>
+          )}
+          {kind === "stacked" && (
+            <>
+              <div style={{ fontFamily: serif, fontSize: 14, color: T.white, fontWeight: 600, marginBottom: 6 }}>{totalAt(hoverIdx).toLocaleString()} total</div>
+              {series.map((s, si) => (
+                <div key={si} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0", fontFamily: sans, fontSize: 11 }}>
+                  <span style={{ color: T.tertiary, display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ width: 8, height: 8, background: s.color, borderRadius: 2 }} />{s.label}
+                  </span>
+                  <span style={{ color: T.white, fontWeight: 600 }}>{(s.data[hoverIdx] || 0).toLocaleString()}</span>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Full-screen modal that opens when admin taps a chart card. Shows the
+// chart at large size with interactive tooltip + raw data table + CSV
+// export button. Date range picker lifts state up to the parent dashboard.
+function ChartDetailModal({ chartKey, dateRange, setDateRange, signupDaily, dauDaily, postsByType, onClose }) {
+  if (!chartKey) return null;
+  // Build chart props from current dashboard state based on which chart is open.
+  let title, kind, values, series, dayLabels, color, csvFilename, csvHeaders, csvRows;
+  if (chartKey === "signups") {
+    title = "SIGNUPS";
+    kind = "sparkline";
+    values = (signupDaily || []).map(r => r.signups || 0);
+    dayLabels = (signupDaily || []).map(r => fmtChartDay(r.day));
+    color = T.copper;
+    csvFilename = `signups-${dateRange}d.csv`;
+    csvHeaders = ["Date", "Signups"];
+    csvRows = (signupDaily || []).map(r => [r.day, r.signups || 0]);
+  } else if (chartKey === "dau") {
+    title = "DAILY ACTIVE USERS";
+    kind = "sparkline";
+    values = (dauDaily || []).map(r => r.active_users || 0);
+    dayLabels = (dauDaily || []).map(r => fmtChartDay(r.day));
+    color = T.green;
+    csvFilename = `dau-${dateRange}d.csv`;
+    csvHeaders = ["Date", "Active Users"];
+    csvRows = (dauDaily || []).map(r => [r.day, r.active_users || 0]);
+  } else if (chartKey === "posts-by-type") {
+    title = "POSTS BY TYPE";
+    kind = "stacked";
+    const TYPE_COLORS = { POST: T.copper, PHOTOS: T.green, ROUTES: T.purple, BUILDS: T.red, CONVOYS: T.tertiary };
+    const types = ["POST","PHOTOS","ROUTES","BUILDS","CONVOYS"];
+    const days = Array.from(new Set((postsByType || []).map(r => r.day))).sort();
+    series = types.map(t => ({
+      label: t, color: TYPE_COLORS[t],
+      data: days.map(d => {
+        const cell = (postsByType || []).find(r => r.day === d && r.type === t);
+        return cell ? cell.count : 0;
+      }),
+    }));
+    dayLabels = days.map(fmtChartDay);
+    csvFilename = `posts-by-type-${dateRange}d.csv`;
+    csvHeaders = ["Date", ...types];
+    csvRows = days.map((d, i) => [d, ...types.map((_, si) => series[si].data[i])]);
+  } else {
+    return null;
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "stretch", justifyContent: "center" }}>
+      <div style={{ width: "100%", maxWidth: 720, background: T.darkBg, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", padding: "12px 16px", borderBottom: `1px solid ${T.charcoal}` }}>
+          <div style={{ fontFamily: sans, fontSize: 12, fontWeight: 700, color: T.white, letterSpacing: 1.5, flex: 1 }}>{title}</div>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+            <X size={20} color={T.white} />
+          </button>
+        </div>
+        {/* Date range picker */}
+        <div style={{ display: "flex", gap: 6, padding: "10px 14px", borderBottom: `1px solid ${T.charcoal}` }}>
+          {[7, 30, 90].map(d => {
+            const sel = dateRange === d;
+            return (
+              <button key={d} onClick={() => setDateRange(d)}
+                      style={{ flex: 1, padding: "6px 4px", borderRadius: 6, background: sel ? T.copper : "transparent", border: `1px solid ${sel ? T.copper : T.charcoal}`, color: sel ? T.darkBg : T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>{d} DAYS</button>
+            );
+          })}
+        </div>
+        <div style={{ flex: 1, overflowY: "auto", padding: 14 }}>
+          <InteractiveChart kind={kind} values={values} series={series} dayLabels={dayLabels} color={color} height={240} />
+          {kind === "stacked" && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 10 }}>
+              {series.map(s => (
+                <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <span style={{ width: 8, height: 8, background: s.color, borderRadius: 2 }} />
+                  <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1 }}>{s.label}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <button onClick={() => exportCsv(csvFilename, csvHeaders, csvRows)}
+                  style={{ marginTop: 16, padding: "10px 14px", borderRadius: 6, background: "transparent", border: `1px solid ${T.copper}`, color: T.copper, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1.2, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+            <Send size={11} /> EXPORT CSV
+          </button>
+          <div style={{ marginTop: 18, fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600, marginBottom: 6 }}>RAW DATA</div>
+          <div style={{ background: T.darkCard, borderRadius: 8, overflow: "hidden" }}>
+            <div style={{ display: "grid", gridTemplateColumns: kind === "stacked" ? `1.2fr repeat(${(series || []).length}, 1fr)` : "1.5fr 1fr", padding: "8px 12px", background: T.charcoal, fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 700 }}>
+              {csvHeaders.map((h, i) => <div key={i}>{h.toUpperCase()}</div>)}
+            </div>
+            {csvRows.map((row, i) => (
+              <div key={i} style={{ display: "grid", gridTemplateColumns: kind === "stacked" ? `1.2fr repeat(${(series || []).length}, 1fr)` : "1.5fr 1fr", padding: "6px 12px", borderTop: i > 0 ? `1px solid ${T.charcoal}` : "none", fontFamily: serif, fontSize: 12, color: T.white }}>
+                {row.map((v, j) => <div key={j} style={{ color: j === 0 ? T.tertiary : T.white }}>{j === 0 ? fmtChartDay(v) : Number(v || 0).toLocaleString()}</div>)}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AdminDashboardScreen({ currentUserId, onBack }) {
   const [tab, setTab] = useState("overview");
+  const [dateRange, setDateRange] = useState(30); // 7 / 30 / 90 — Users + Content tabs
   const [overview, setOverview] = useState(null);
   const [signupDaily, setSignupDaily] = useState([]);
   const [dauDaily, setDauDaily] = useState([]);
@@ -18826,9 +19072,12 @@ function AdminDashboardScreen({ currentUserId, onBack }) {
   const [pushSegment, setPushSegment] = useState("all");
   const [pushRecipientCount, setPushRecipientCount] = useState(null);
   const [pushBody, setPushBody] = useState("");
+  const [pushImage, setPushImage] = useState(null); // { url, uploading? }
   const [pushSending, setPushSending] = useState(false);
   const [pushError, setPushError] = useState("");
   const [pushHistory, setPushHistory] = useState([]);
+  const [chartModalKey, setChartModalKey] = useState(null); // "signups" | "dau" | "posts-by-type"
+  const pushImageFileRef = useRef(null);
 
   const fetchOverview = useCallback(async () => {
     try {
@@ -18840,20 +19089,20 @@ function AdminDashboardScreen({ currentUserId, onBack }) {
   const fetchUsersData = useCallback(async () => {
     try {
       const [s, d, r] = await Promise.all([
-        supabase.rpc("admin_get_signups_daily", { p_days: 30 }),
-        supabase.rpc("admin_get_dau_daily", { p_days: 30 }),
+        supabase.rpc("admin_get_signups_daily", { p_days: dateRange }),
+        supabase.rpc("admin_get_dau_daily", { p_days: dateRange }),
         supabase.rpc("admin_get_role_breakdown"),
       ]);
       setSignupDaily(s.data || []);
       setDauDaily(d.data || []);
       setRoleBreakdown(r.data || []);
     } catch (e) { console.error("[admin] users", e); }
-  }, []);
+  }, [dateRange]);
 
   const fetchContentData = useCallback(async () => {
     try {
       const [pbt, tc, eng] = await Promise.all([
-        supabase.rpc("admin_get_posts_by_type_daily", { p_days: 30 }),
+        supabase.rpc("admin_get_posts_by_type_daily", { p_days: dateRange }),
         supabase.rpc("admin_get_top_creators", { p_limit: 10 }),
         supabase.rpc("admin_get_engagement_totals"),
       ]);
@@ -18861,7 +19110,7 @@ function AdminDashboardScreen({ currentUserId, onBack }) {
       setTopCreators(tc.data || []);
       setEngagement(eng.data && eng.data[0] ? eng.data[0] : null);
     } catch (e) { console.error("[admin] content", e); }
-  }, []);
+  }, [dateRange]);
 
   const fetchPushData = useCallback(async () => {
     try {
@@ -18878,6 +19127,18 @@ function AdminDashboardScreen({ currentUserId, onBack }) {
   useEffect(() => { if (tab === "users") fetchUsersData(); }, [tab, fetchUsersData]);
   useEffect(() => { if (tab === "content") fetchContentData(); }, [tab, fetchContentData]);
   useEffect(() => { if (tab === "push") fetchPushData(); }, [tab, fetchPushData]);
+
+  // Browser back from /admin → / should exit the admin screen (since the
+  // back button on the header pushes / itself). Without this handler, the
+  // URL bar would say / but the screen would still be admin.
+  useEffect(() => {
+    const onPop = () => {
+      const path = typeof window !== "undefined" ? window.location.pathname : "/";
+      if (path !== "/admin" && path !== "/admin/") onBack();
+    };
+    if (typeof window !== "undefined") window.addEventListener("popstate", onPop);
+    return () => { if (typeof window !== "undefined") window.removeEventListener("popstate", onPop); };
+  }, [onBack]);
 
   // Overview auto-refresh every 30s so Live Now + Posts Today stay fresh.
   useEffect(() => {
@@ -18896,16 +19157,43 @@ function AdminDashboardScreen({ currentUserId, onBack }) {
     return () => { try { supabase.removeChannel(ch); } catch (_) {} };
   }, [tab, currentUserId, fetchPushData]);
 
+  const handlePushImageFiles = async (files) => {
+    const file = files && files[0];
+    if (!file || !currentUserId) return;
+    if (!file.type.startsWith("image/")) { setPushError("Only image files allowed."); return; }
+    setPushError("");
+    setPushImage({ url: null, uploading: true });
+    try {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      // Reuse the existing helper — uploads to post-photos, returns { url, alt }.
+      const uploaded = await uploadPostPhotoList([{ url: dataUrl }], currentUserId);
+      const finalUrl = uploaded && uploaded[0] && uploaded[0].url;
+      if (typeof finalUrl !== "string" || !finalUrl.startsWith("http")) throw new Error("upload failed");
+      setPushImage({ url: finalUrl });
+    } catch (e) {
+      setPushError(e.message || "Image upload failed.");
+      setPushImage(null);
+    }
+    if (pushImageFileRef.current) pushImageFileRef.current.value = "";
+  };
+
   const sendPush = async () => {
     if (!pushBody.trim() || pushSending) return;
+    if (pushImage && pushImage.uploading) { setPushError("Wait for the image to finish uploading."); return; }
     setPushSending(true); setPushError("");
     try {
       const { data, error } = await supabase.functions.invoke("broadcast-push", {
-        body: { body: pushBody.trim(), segment: pushSegment },
+        body: { body: pushBody.trim(), segment: pushSegment, image_url: (pushImage && pushImage.url) || null },
       });
       if (error) throw error;
       if (data && data.ok === false) throw new Error(data.error || "send failed");
       setPushBody("");
+      setPushImage(null);
       fetchPushData();
     } catch (e) {
       setPushError(e.message || "Failed to send");
@@ -18923,8 +19211,28 @@ function AdminDashboardScreen({ currentUserId, onBack }) {
   const sectionTitle = (text) => (
     <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600, marginBottom: 10 }}>{text}</div>
   );
-  const sectionCard = (children) => (
-    <div style={{ background: T.darkCard, borderRadius: 10, padding: 14, border: `1px solid ${T.charcoal}` }}>{children}</div>
+  const sectionCard = (children, opts) => (
+    <div style={{ background: T.darkCard, borderRadius: 10, padding: 14, border: `1px solid ${T.charcoal}`, ...(opts && opts.tappable ? { cursor: "pointer" } : {}) }} onClick={opts && opts.onTap}>{children}</div>
+  );
+  // Tappable chart card header — includes a small expand icon so the
+  // affordance is discoverable on touch where there's no hover state.
+  const chartCardHeader = (label) => (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+      <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600 }}>{label}</div>
+      <Maximize2 size={11} color={T.tertiary} />
+    </div>
+  );
+  const rangeLabel = `LAST ${dateRange} DAYS`;
+  const rangePicker = (
+    <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+      {[7, 30, 90].map(d => {
+        const sel = dateRange === d;
+        return (
+          <button key={d} onClick={() => setDateRange(d)}
+                  style={{ flex: 1, padding: "8px 4px", borderRadius: 6, background: sel ? T.copper : "transparent", border: `1px solid ${sel ? T.copper : T.charcoal}`, color: sel ? T.darkBg : T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>{d} DAYS</button>
+        );
+      })}
+    </div>
   );
 
   return (
@@ -18962,15 +19270,16 @@ function AdminDashboardScreen({ currentUserId, onBack }) {
         )}
         {tab === "users" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {rangePicker}
             {sectionCard(<>
-              {sectionTitle("SIGNUPS — LAST 30 DAYS")}
+              {chartCardHeader(`SIGNUPS — ${rangeLabel}`)}
               <Sparkline data={(signupDaily || []).map(r => r.signups || 0)} color={T.copper} />
               <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, marginTop: 6 }}>{(signupDaily || []).reduce((a, r) => a + (r.signups || 0), 0)} signups</div>
-            </>)}
+            </>, { tappable: true, onTap: () => setChartModalKey("signups") })}
             {sectionCard(<>
-              {sectionTitle("DAILY ACTIVE USERS — LAST 30 DAYS")}
+              {chartCardHeader(`DAILY ACTIVE USERS — ${rangeLabel}`)}
               <Sparkline data={(dauDaily || []).map(r => r.active_users || 0)} color={T.green} />
-            </>)}
+            </>, { tappable: true, onTap: () => setChartModalKey("dau") })}
             {sectionCard(<>
               {sectionTitle("ROLE BREAKDOWN")}
               {(roleBreakdown || []).map(r => (
@@ -18984,6 +19293,7 @@ function AdminDashboardScreen({ currentUserId, onBack }) {
         )}
         {tab === "content" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {rangePicker}
             {sectionCard((() => {
               const TYPE_COLORS = { POST: T.copper, PHOTOS: T.green, ROUTES: T.purple, BUILDS: T.red, CONVOYS: T.tertiary };
               const types = ["POST","PHOTOS","ROUTES","BUILDS","CONVOYS"];
@@ -18996,7 +19306,7 @@ function AdminDashboardScreen({ currentUserId, onBack }) {
                 }),
               }));
               return (<>
-                {sectionTitle("POSTS BY TYPE — LAST 30 DAYS")}
+                {chartCardHeader(`POSTS BY TYPE — ${rangeLabel}`)}
                 <StackedBars series={series} />
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 8 }}>
                   {types.map(t => (
@@ -19007,7 +19317,7 @@ function AdminDashboardScreen({ currentUserId, onBack }) {
                   ))}
                 </div>
               </>);
-            })())}
+            })(), { tappable: true, onTap: () => setChartModalKey("posts-by-type") })}
             {engagement && sectionCard(<>
               {sectionTitle("ENGAGEMENT TOTALS")}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -19074,9 +19384,29 @@ function AdminDashboardScreen({ currentUserId, onBack }) {
               </div>
               <textarea value={pushBody} onChange={(e) => setPushBody(e.target.value)} placeholder="Message body…" maxLength={500}
                         style={{ width: "100%", minHeight: 80, padding: 10, borderRadius: 6, background: T.darkBg, color: T.white, border: `1px solid ${T.charcoal}`, fontFamily: serif, fontSize: 13, resize: "vertical", boxSizing: "border-box" }} />
+              {/* Image attachment */}
+              <input ref={pushImageFileRef} type="file" accept="image/*" onChange={(e) => handlePushImageFiles(e.target.files)} style={{ display: "none" }} />
+              {!pushImage && (
+                <button onClick={() => pushImageFileRef.current && pushImageFileRef.current.click()}
+                        style={{ marginTop: 8, padding: "8px 12px", borderRadius: 6, background: "transparent", border: `1px dashed ${T.copper}60`, color: T.copper, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                  <Camera size={11} /> ADD IMAGE (OPTIONAL)
+                </button>
+              )}
+              {pushImage && pushImage.uploading && (
+                <div style={{ marginTop: 8, fontFamily: sans, fontSize: 11, color: T.tertiary }}>Uploading image…</div>
+              )}
+              {pushImage && pushImage.url && (
+                <div style={{ marginTop: 8, position: "relative", borderRadius: 6, overflow: "hidden", border: `1px solid ${T.charcoal}` }}>
+                  <img src={pushImage.url} alt="" style={{ display: "block", width: "100%", maxHeight: 180, objectFit: "cover" }} />
+                  <button onClick={() => setPushImage(null)}
+                          style={{ position: "absolute", top: 6, right: 6, width: 24, height: 24, borderRadius: "50%", background: "rgba(0,0,0,0.7)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+                    <X size={13} color={T.white} />
+                  </button>
+                </div>
+              )}
               {pushError && <div style={{ fontFamily: sans, fontSize: 11, color: T.red, marginTop: 6 }}>{pushError}</div>}
-              <button onClick={sendPush} disabled={!pushBody.trim() || pushSending || !pushRecipientCount}
-                      style={{ marginTop: 10, width: "100%", padding: "12px 16px", borderRadius: 6, background: T.red, color: T.white, border: "none", cursor: (!pushBody.trim() || pushSending || !pushRecipientCount) ? "not-allowed" : "pointer", opacity: (!pushBody.trim() || pushSending || !pushRecipientCount) ? 0.5 : 1, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 1.5, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+              <button onClick={sendPush} disabled={!pushBody.trim() || pushSending || !pushRecipientCount || (pushImage && pushImage.uploading)}
+                      style={{ marginTop: 10, width: "100%", padding: "12px 16px", borderRadius: 6, background: T.red, color: T.white, border: "none", cursor: (!pushBody.trim() || pushSending || !pushRecipientCount || (pushImage && pushImage.uploading)) ? "not-allowed" : "pointer", opacity: (!pushBody.trim() || pushSending || !pushRecipientCount || (pushImage && pushImage.uploading)) ? 0.5 : 1, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 1.5, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
                 <Send size={13} /> {pushSending ? "SENDING…" : "SEND PUSH"}
               </button>
             </>)}
@@ -19089,6 +19419,7 @@ function AdminDashboardScreen({ currentUserId, onBack }) {
                     <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>{new Date(h.sent_at).toLocaleString()}</span>
                   </div>
                   <div style={{ fontFamily: serif, fontSize: 13, color: T.white, lineHeight: 1.4 }}>{h.body}</div>
+                  {h.image_url && <img src={h.image_url} alt="" style={{ marginTop: 6, width: "100%", maxHeight: 160, objectFit: "cover", borderRadius: 6 }} />}
                   {h.sender_handle && <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, marginTop: 4 }}>@{h.sender_handle}</div>}
                 </div>
               ))}
@@ -19096,6 +19427,9 @@ function AdminDashboardScreen({ currentUserId, onBack }) {
           </div>
         )}
       </div>
+      <ChartDetailModal chartKey={chartModalKey} dateRange={dateRange} setDateRange={setDateRange}
+                         signupDaily={signupDaily} dauDaily={dauDaily} postsByType={postsByType}
+                         onClose={() => setChartModalKey(null)} />
     </div>
   );
 }

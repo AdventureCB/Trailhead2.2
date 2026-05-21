@@ -86,13 +86,19 @@ Deno.serve(async (req) => {
   }
 
   // 3) Parse + validate the payload.
-  let payload: { body?: string; segment?: string };
+  let payload: { body?: string; segment?: string; image_url?: string | null };
   try { payload = await req.json(); } catch { return json({ ok: false, error: "bad json" }, 400); }
   const body = (payload?.body || "").trim();
   const segment = (payload?.segment || "all").trim();
+  const imageUrl = (payload?.image_url || "").trim() || null;
   if (!body) return json({ ok: false, error: "body required" }, 400);
   if (body.length > 500) return json({ ok: false, error: "body too long (max 500)" }, 400);
   if (!ALLOWED_SEGMENTS.includes(segment)) return json({ ok: false, error: "invalid segment" }, 400);
+  // Image URL allowlist — must be our Supabase storage origin so a forged
+  // payload can't link to phishing-style external content.
+  if (imageUrl && !imageUrl.startsWith("https://babbgaziiyjfaqjsaxgd.supabase.co/storage/v1/object/public/")) {
+    return json({ ok: false, error: "invalid image_url origin" }, 400);
+  }
 
   // 4) Resolve recipient user_ids by segment. "all" = every subscribed user.
   //    Role-filtered segments join profiles.
@@ -108,7 +114,7 @@ Deno.serve(async (req) => {
     if (uids.length === 0) {
       // No matching users → still record the broadcast attempt with 0 sent.
       await sb.from("push_broadcasts").insert({
-        sender_id: callerUid, body, segment, recipient_count: 0, status: "sent",
+        sender_id: callerUid, body, segment, image_url: imageUrl, recipient_count: 0, status: "sent",
       });
       return json({ ok: true, recipient_count: 0, sent: 0 });
     }
@@ -124,6 +130,7 @@ Deno.serve(async (req) => {
     body,
     icon: "/lone-peak-flag.png",
     badge: "/lone-peak-flag.png",
+    image: imageUrl || undefined,
     tag: "trailhead-broadcast",
     data: { url: "/", type: "broadcast" },
   });
@@ -150,7 +157,7 @@ Deno.serve(async (req) => {
   // 7) Audit row. Status reflects whether anything failed.
   const status = sentFail === 0 ? "sent" : (sentOk === 0 ? "failed" : "partial");
   await sb.from("push_broadcasts").insert({
-    sender_id: callerUid, body, segment, recipient_count: sentOk, status,
+    sender_id: callerUid, body, segment, image_url: imageUrl, recipient_count: sentOk, status,
   });
 
   return json({ ok: true, recipient_count: sentOk, failed: sentFail, status });
