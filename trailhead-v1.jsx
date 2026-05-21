@@ -29067,13 +29067,16 @@ export default function Trailhead() {
     }
   };
 
-  // Edit name / description / visibility on a spot the current user owns.
-  // RLS enforces ownership; we also gate locally so the UI never even tries.
+  // Edit name / description / visibility on a spot. Owner or admin can
+  // mutate — RLS enforces this server-side via the camping_spots_admin_*
+  // policies plus the owner policy (Postgres ORs them). The local UI gate
+  // matches: allow when current user is the owner OR an admin.
   const updateCampingSpot = async (id, updates) => {
     const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
     if (!uid || !id) return null;
     const before = campingSpots.find(s => s.id === id);
-    if (!before || before.user_id !== uid) return null;
+    if (!before) return null;
+    if (before.user_id !== uid && !isAdmin) return null;
     const patch = {};
     if (updates.name != null) patch.name = updates.name;
     if (updates.description !== undefined) patch.description = updates.description;
@@ -29085,54 +29088,65 @@ export default function Trailhead() {
       catch (e) { console.error("[camping_spots] photo upload failed", e); patch.photos = updates.photos; }
     }
     if (Object.keys(patch).length === 0) return before;
-    setCampingSpots(prev => prev.map(s => s.id === id ? { ...s, ...patch } : s));
+    // Optimistic — update whichever slice the spot lives in (owner edits
+    // hit user slice; admin edits of others' spots live in viewport slice).
+    setUserCampingSpots(prev => prev.map(s => s.id === id ? { ...s, ...patch } : s));
+    setViewportCampingSpots(prev => prev.map(s => s.id === id ? { ...s, ...patch } : s));
     try {
       const { data, error } = await supabase
         .from("camping_spots")
         .update(patch)
         .eq("id", id)
-        .eq("user_id", uid)
         .select()
         .single();
       if (error) {
         console.error("[camping_spots] update failed", error);
         showErrorToast(`Couldn't update spot: ${error.message || error.code}`);
         // Roll back.
-        setCampingSpots(prev => prev.map(s => s.id === id ? before : s));
+        setUserCampingSpots(prev => prev.map(s => s.id === id ? before : s));
+        setViewportCampingSpots(prev => prev.map(s => s.id === id ? before : s));
         return null;
       }
-      setCampingSpots(prev => prev.map(s => s.id === id ? data : s));
+      setUserCampingSpots(prev => prev.map(s => s.id === id ? { ...s, ...data } : s));
+      setViewportCampingSpots(prev => prev.map(s => s.id === id ? { ...s, ...data } : s));
       return data;
     } catch (e) {
       console.error("[camping_spots] update threw", e);
-      setCampingSpots(prev => prev.map(s => s.id === id ? before : s));
+      setUserCampingSpots(prev => prev.map(s => s.id === id ? before : s));
+      setViewportCampingSpots(prev => prev.map(s => s.id === id ? before : s));
       return null;
     }
   };
 
-  // Owner-only delete. Optimistic; rolls back if RLS rejects (which would
-  // only happen if the user tampered with state — UI gates ownership too).
+  // Owner-or-admin delete. RLS enforces this server-side via the owner
+  // policy + camping_spots_admin_delete override (Postgres ORs them).
+  // Optimistic local removal; rolls back if the request fails.
   const deleteCampingSpot = async (id) => {
     const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
     if (!uid || !id) return false;
     const before = campingSpots.find(s => s.id === id);
-    if (!before || before.user_id !== uid) return false;
+    if (!before) return false;
+    if (before.user_id !== uid && !isAdmin) return false;
     // Drop from BOTH slices so the merged union doesn't keep showing a
-    // stale viewport copy (the user's own public spot can live in both).
+    // stale viewport copy (the user's own public spot can live in both;
+    // admin-deleted spots typically live only in viewport).
     setUserCampingSpots(prev => prev.filter(s => s.id !== id));
     setViewportCampingSpots(prev => prev.filter(s => s.id !== id));
     try {
-      const { error } = await supabase.from("camping_spots").delete().eq("id", id).eq("user_id", uid);
+      const { error } = await supabase.from("camping_spots").delete().eq("id", id);
       if (error) {
         console.error("[camping_spots] delete failed", error);
         showErrorToast(`Couldn't delete spot: ${error.message || error.code}`);
-        setUserCampingSpots(prev => [before, ...prev]);
+        // Roll back into whichever slice it came from (best-effort).
+        if (before.user_id === uid) setUserCampingSpots(prev => [before, ...prev]);
+        else setViewportCampingSpots(prev => [before, ...prev]);
         return false;
       }
       return true;
     } catch (e) {
       console.error("[camping_spots] delete threw", e);
-      setUserCampingSpots(prev => [before, ...prev]);
+      if (before.user_id === uid) setUserCampingSpots(prev => [before, ...prev]);
+      else setViewportCampingSpots(prev => [before, ...prev]);
       return false;
     }
   };
