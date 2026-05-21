@@ -70,7 +70,7 @@ module.exports = async function handler(req, res) {
   const now = new Date().toISOString();
 
   // Fan out all the fetches in parallel — no single one blocks the others.
-  const [forumSubcategories, forumThreads, tripReports, builds, campingSpots, profiles] = await Promise.all([
+  const [forumSubcategories, forumThreads, tripReports, builds, campingSpots, profiles, posts] = await Promise.all([
     supabaseFetch("forum_subcategories", "select=slug,updated_at,created_at&order=sort_order.asc&limit=2000"),
     supabaseFetch("forum_threads", "select=slug,subcategory_slug,updated_at,created_at&order=updated_at.desc&limit=10000"),
     supabaseFetch("trip_reports", "status=eq.published&select=slug,updated_at,created_at,kind,visibility&order=updated_at.desc&limit=10000"),
@@ -80,6 +80,12 @@ module.exports = async function handler(req, res) {
     // E-E-A-T hub page linking to all the user's content. Filter
     // is_public=true so private accounts stay out of search results.
     supabaseFetch("profiles", "is_public=eq.true&handle=not.is.null&select=handle,updated_at,created_at&order=updated_at.desc&limit=10000"),
+    // Feed posts (POST / PHOTOS / ROUTES / BUILDS / CONVOYS) — every one
+    // gets a /post/:id URL that api/preview.js SSRs with OG + JSON-LD.
+    // Posts are public by design (no visibility column). Cap matches the
+    // others; if Trailhead ever blows past 50K total URLs we'll need to
+    // split into a sitemap index.
+    supabaseFetch("posts", "select=id,updated_at,created_at&order=updated_at.desc&limit=10000"),
   ]);
 
   const urls = [];
@@ -134,6 +140,16 @@ module.exports = async function handler(req, res) {
     if (!row || !row.handle) return;
     const lastmod = row.updated_at || row.created_at || now;
     urls.push(urlEntry(`${origin}/users/${row.handle}`, lastmod, "weekly", "0.7"));
+  });
+
+  // Feed posts — short-form social content. Lower priority than the
+  // long-form surfaces (threads / trips) because individual posts are
+  // ephemeral and topically narrow, but they still deserve indexing for
+  // tail-keyword discoverability + internal link graph.
+  posts.forEach(row => {
+    if (!row || !row.id) return;
+    const lastmod = row.updated_at || row.created_at || now;
+    urls.push(urlEntry(`${origin}/post/${row.id}`, lastmod, "monthly", "0.5"));
   });
 
   const xml = [
