@@ -30,8 +30,15 @@
 <link rel="apple-touch-icon" href="/summit-lp-logo.png">
 <link rel="icon" type="image/png" href="/summit-lp-logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://babbgaziiyjfaqjsaxgd.supabase.co">
-<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@400;600;700&display=swap" rel="stylesheet">
+<!-- Non-blocking webfont load. Browser treats the stylesheet as print-only
+     (skipped during first paint), then onload swaps media back to all so
+     the font CSS applies. Page hits first paint with Georgia/system serif
+     and swaps to Source Serif 4 when ready (display=swap). No-JS fallback
+     below uses the standard blocking link. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@400;600;700&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@400;600;700&display=swap"></noscript>
 <!-- WebSite + Organization JSON-LD — establishes Trailhead as the publisher
      entity globally + enables Google sitelinks search box. -->
 <script type="application/ld+json">
@@ -63,6 +70,6 @@ window.onerror = function(msg, url, line, col, err) {
 <div id="root">
   <p style="color:#999;padding:20px;font-family:sans-serif">Loading Trailhead...</p>
 </div>
-<script src="/trailhead-bundle.4e3c1e5e.js"></script>
+<script src="/trailhead-bundle.72157aa3.js"></script>
 </body>
 </html>
