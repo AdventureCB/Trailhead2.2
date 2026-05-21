@@ -30018,6 +30018,16 @@ export default function Trailhead() {
     setShowRecovery(false);
     setShowCompose(false);
     setScreen(key);
+    // Keep the URL bar in sync for the admin screen — it has its own
+    // /admin route + popstate handler. Other screens leave URL alone
+    // so they don't clobber active deep links (e.g. /trips/xyz).
+    if (typeof window !== "undefined") {
+      if (key === "admin" && window.location.pathname !== "/admin") {
+        window.history.pushState({}, "", "/admin");
+      } else if (key !== "admin" && window.location.pathname === "/admin") {
+        window.history.pushState({}, "", "/");
+      }
+    }
   };
 
   const isProfile = profileStack.length > 0;
@@ -30185,15 +30195,18 @@ export default function Trailhead() {
     { key: "routes", label: "Maps", icon: Map },
     { key: "builds", label: "Builds", icon: Wrench },
     (!isGuest && isAdmin) ? { key: "ranks", label: "Ranks", icon: Trophy } : null,
+    (!isGuest && isAdmin) ? { key: "admin", label: "Admin", icon: Shield } : null,
   ].filter(Boolean);
   const myFullName = (currentProfile && currentProfile.full_name) || "You";
   const myHandle = (currentProfile && currentProfile.handle) || "";
   const myAvatar = profilePic || (currentProfile && currentProfile.avatar_url) || null;
   const desktopLeftNav = isDesktop && (
     <aside style={{ width: 260, padding: "20px 16px", display: "flex", flexDirection: "column", gap: 6, flexShrink: 0, background: T.darkBg, borderRight: `1px solid ${T.charcoal}` }}>
-      {/* Brand block */}
-      <div onClick={() => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("feed"); }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", marginBottom: 12, cursor: "pointer" }}>
-        <img src="/lone-peak-flag.png" alt="Trailhead" style={{ width: 32, height: 32, borderRadius: 6 }} />
+      {/* Brand block — uses the homescreen app logo (same one as the iOS
+          apple-touch-icon + favicon) so the desktop brand matches the
+          installed PWA icon. */}
+      <div onClick={() => handleNav("feed")} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", marginBottom: 12, cursor: "pointer" }}>
+        <img src="/summit-lp-logo.png" alt="Trailhead" style={{ width: 32, height: 32, borderRadius: 6 }} />
         <span style={{ fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>TRAILHEAD</span>
       </div>
       {desktopNavItems.map(it => {
