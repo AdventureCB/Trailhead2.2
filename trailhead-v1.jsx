@@ -3400,7 +3400,7 @@ function BellNotifPanel({ onClose, onViewUser, notifs, onDismiss, onClearAll }) 
   );
 }
 
-function RecoveryNotifPanel({ onClose, onGoToRecovery, alerts, onDismiss, onClearAll, onOpenMap, onOpenDM }) {
+function RecoveryNotifPanel({ onClose, onGoToRecovery, alerts, onDismiss, onClearAll, onOpenMap, onOpenDM, onRespondToRecovery }) {
   const urgencyColor = (u) => u === "HIGH" ? T.red : T.copper;
 
   return (
@@ -3448,7 +3448,7 @@ function RecoveryNotifPanel({ onClose, onGoToRecovery, alerts, onDismiss, onClea
               <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{a.vehicle}</span>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => { onClose(); onOpenDM && onOpenDM(a.author, "I'm responding to your recovery request — on my way to help!", { title: `🚨 Recovery: ${a.title}`, user: a.author, initial: a.author.charAt(0).toUpperCase(), type: "recovery", location: a.location, urgency: a.urgency }); }} style={{ background: T.red, color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 600, padding: "7px 14px", borderRadius: 6, border: "none", cursor: "pointer", letterSpacing: 0.5 }}>RESPOND</button>
+              <button onClick={() => { onClose(); onRespondToRecovery && onRespondToRecovery(a); }} style={{ background: T.red, color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 600, padding: "7px 14px", borderRadius: 6, border: "none", cursor: "pointer", letterSpacing: 0.5 }}>RESPOND</button>
               <button onClick={() => { onClose(); onOpenMap && onOpenMap(a.coords, a.location, a.title, { author: a.author, alertId: a.id, title: a.title }); }} style={{ background: "none", color: T.tertiary, fontFamily: sans, fontSize: 10, padding: "7px 14px", borderRadius: 6, border: `1px solid ${T.charcoal}`, cursor: "pointer", letterSpacing: 0.5 }}>VIEW ON MAP</button>
             </div>
           </div>
@@ -3463,7 +3463,7 @@ function RecoveryNotifPanel({ onClose, onGoToRecovery, alerts, onDismiss, onClea
   );
 }
 
-function UnifiedNotifPanel({ onClose, onViewUser, onGoToPost, onGoToBuild, onGoToForumThread, notifs, onDismissNotif, onClearNotifs, recoveryAlerts, onDismissAlert, onClearAlerts, onGoToRecovery, onOpenMap, onOpenDM, initialTab }) {
+function UnifiedNotifPanel({ onClose, onViewUser, onGoToPost, onGoToBuild, onGoToForumThread, notifs, onDismissNotif, onClearNotifs, recoveryAlerts, onDismissAlert, onClearAlerts, onGoToRecovery, onOpenMap, onOpenDM, onRespondToRecovery, initialTab }) {
   const [tab, setTab] = useState(initialTab || "general");
   const urgencyColor = (u) => u === "HIGH" ? T.red : T.copper;
   const tabBtn = (key, label, count, color) => (
@@ -3566,7 +3566,7 @@ function UnifiedNotifPanel({ onClose, onViewUser, onGoToPost, onGoToBuild, onGoT
                 <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{a.vehicle}</span>
               </div>
               <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={() => { onClose(); onOpenDM && onOpenDM(a.author, "I'm responding to your recovery request — on my way to help!", { title: `🚨 Recovery: ${a.title}`, user: a.author, initial: a.author.charAt(0).toUpperCase(), type: "recovery", location: a.location, urgency: a.urgency }); }} style={{ background: T.red, color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 600, padding: "7px 14px", borderRadius: 6, border: "none", cursor: "pointer", letterSpacing: 0.5 }}>RESPOND</button>
+                <button onClick={() => { onClose(); onRespondToRecovery && onRespondToRecovery(a); }} style={{ background: T.red, color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 600, padding: "7px 14px", borderRadius: 6, border: "none", cursor: "pointer", letterSpacing: 0.5 }}>RESPOND</button>
                 <button onClick={() => { onClose(); onOpenMap && onOpenMap(a.coords, a.location, a.title, { author: a.author, alertId: a.id, title: a.title }); }} style={{ background: "none", color: T.tertiary, fontFamily: sans, fontSize: 10, padding: "7px 14px", borderRadius: 6, border: `1px solid ${T.charcoal}`, cursor: "pointer", letterSpacing: 0.5 }}>VIEW ON MAP</button>
               </div>
             </div>
@@ -3598,7 +3598,7 @@ function UnifiedNotifPanel({ onClose, onViewUser, onGoToPost, onGoToBuild, onGoT
   );
 }
 
-function TopBar({ onProfile, onBack, showBack, title, onViewUser, onGoToPost, onGoToBuild, onGoToForumThread, onGoToRecovery, onOpenMap, onSearch, onOpenDM, dmUnread, bellNotifs, onDismissNotif, onClearNotifs, profilePic, notifPrefs, recoveryAlerts, setRecoveryAlerts }) {
+function TopBar({ onProfile, onBack, showBack, title, onViewUser, onGoToPost, onGoToBuild, onGoToForumThread, onGoToRecovery, onOpenMap, onSearch, onOpenDM, onRespondToRecovery, dmUnread, bellNotifs, onDismissNotif, onClearNotifs, profilePic, notifPrefs, recoveryAlerts, setRecoveryAlerts }) {
   const notifTypeMap = { like: "likes", comment: "comments", reply: "replies", follow: "follows", mention: "mentions" };
   const filteredNotifs = bellNotifs.filter(n => { const pref = notifTypeMap[n.type]; return !pref || (notifPrefs && notifPrefs[pref] !== false); });
   const [openPanel, setOpenPanel] = useState(null); // null | "notif"
@@ -3670,6 +3670,7 @@ function TopBar({ onProfile, onBack, showBack, title, onViewUser, onGoToPost, on
           onGoToRecovery={() => { setOpenPanel(null); onGoToRecovery && onGoToRecovery(); }}
           onOpenMap={onOpenMap}
           onOpenDM={(user, prefill, shared) => { setOpenPanel(null); onOpenDM && onOpenDM(user, prefill, shared); }}
+          onRespondToRecovery={(alert) => { setOpenPanel(null); onRespondToRecovery && onRespondToRecovery(alert); }}
           initialTab={initialNotifTab}
         />
       )}
@@ -22044,7 +22045,7 @@ function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotificatio
 }
 
 /* ─── RECOVERY PAGE (Full screen) ─── */
-function RecoveryScreen({ onOpenMap, onOpenDM, recoveryItems, onRequestHelp, currentUserId, onMarkResolved }) {
+function RecoveryScreen({ onOpenMap, onOpenDM, onRespondToRecovery, recoveryItems, onRequestHelp, currentUserId, onMarkResolved }) {
   const [filter, setFilter] = useState("ALL");
   // Live recovery items from feedItems (filtered to type="RECOVERY" + the
   // dismiss layer in root). Local urgency filter is layered on top so the
@@ -22125,7 +22126,7 @@ function RecoveryScreen({ onOpenMap, onOpenDM, recoveryItems, onRequestHelp, cur
                         MARK RESOLVED
                       </button>
                     ) : (
-                      <button onClick={() => onOpenDM && onOpenDM(a.userId || a.author, "I'm responding to your recovery request — on my way to help!", { title: `🚨 Recovery: ${a.title}`, user: a.author, initial: (a.author || "U").charAt(0).toUpperCase(), type: "recovery", location: a.location, urgency: a.urgency })} style={{ background: T.red, color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 600, padding: "9px 18px", borderRadius: 6, border: "none", cursor: "pointer", letterSpacing: 0.5 }}>RESPOND</button>
+                      <button onClick={() => onRespondToRecovery && onRespondToRecovery(a)} style={{ background: T.red, color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 600, padding: "9px 18px", borderRadius: 6, border: "none", cursor: "pointer", letterSpacing: 0.5 }}>RESPOND</button>
                     )}
                     {a.coords && a.coords !== "—" && (
                       <button onClick={() => onOpenMap && onOpenMap(a.coords, a.location, a.title, { author: a.author, alertId: a.id, title: a.title })} style={{ background: "none", color: T.tertiary, fontFamily: sans, fontSize: 11, padding: "9px 18px", borderRadius: 6, border: `1px solid ${T.charcoal}`, cursor: "pointer", letterSpacing: 0.5 }}>VIEW ON MAP</button>
@@ -28020,6 +28021,50 @@ export default function Trailhead() {
   // conversation, then mounts DMScreen with that conv id as the initial.
   // While resolving we still mount the screen (inbox view) so it doesn't feel
   // delayed; the chat view appears once dmInitialConvId lands.
+  // Recovery RESPOND now joins a shared group DM linked to the recovery
+  // post (mirrors convoy RSVP-going pattern). Requester is auto-added when
+  // the group is created; subsequent responders join the existing group.
+  // First-time joiners get an auto-message so the requester is notified.
+  const respondToRecovery = async (alert) => {
+    if (isGuest) { setShowGuestPrompt(true); return; }
+    if (!alert || !alert.id) return;
+    try {
+      const { data, error } = await supabase.rpc("respond_to_recovery", { p_post_id: alert.id });
+      if (error) {
+        console.error("[recovery] respond RPC error", error);
+        showErrorToast(`Couldn't join recovery group: ${error.message || error.code}`);
+        return;
+      }
+      const row = Array.isArray(data) ? data[0] : data;
+      const convId = row && row.conv_id;
+      const joined = row && row.joined;
+      if (!convId) return;
+      // First-time join → send the "I'm on my way" auto-message so the
+      // requester gets pushed instantly (same UX as the old direct-DM
+      // version). Subsequent re-opens just open the group; no spam.
+      if (joined) {
+        try {
+          await supabase.from("dm_messages").insert({
+            conversation_id: convId,
+            sender_id: (supabaseSession && supabaseSession.user && supabaseSession.user.id) || null,
+            body: "I'm responding to your recovery request — on my way to help!",
+          });
+        } catch (e) { console.warn("[recovery] auto-message insert failed", e); }
+        awardPoints(POINTS.recoveryRespond || 0, "Recovery Responded");
+      }
+      // Open the group DM. Bypass openDM's direct-DM lookup by setting
+      // initialConvId directly.
+      setDmInitialMessage("");
+      setDmSharedPost(null);
+      setDmInitialConvId(convId);
+      setDmKey(k => k + 1);
+      setShowDM(true);
+    } catch (e) {
+      console.error("[recovery] respond threw", e);
+      showErrorToast("Couldn't open recovery group.");
+    }
+  };
+
   const openDM = async (userOrId, prefillMsg, sharedPost) => {
     if (isGuest) { setShowGuestPrompt(true); return; }
     setDmInitialMessage(prefillMsg || "");
@@ -30745,6 +30790,7 @@ export default function Trailhead() {
         onOpenMap={openMap}
         onSearch={() => setShowGlobalSearch(true)}
         onOpenDM={(user, prefill, shared) => openDM(user, prefill, shared)}
+        onRespondToRecovery={requireAuth(respondToRecovery)}
         dmUnread={dmUnreadCount}
         bellNotifs={bellNotifs}
         onDismissNotif={(id) => { setBellNotifs(prev => prev.filter(n => n.id !== id)); supabase.from("notifications").delete().eq("id", id).then(({ error }) => { if (error) console.error("[notif] dismiss error", error); }); }}
@@ -30762,6 +30808,7 @@ export default function Trailhead() {
           <RecoveryScreen
             onOpenMap={openMap}
             onOpenDM={openDM}
+            onRespondToRecovery={requireAuth(respondToRecovery)}
             recoveryItems={recoveryAlerts}
             currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id}
             onMarkResolved={requireAuth((id) => updatePost(id, { urgency: "RESOLVED", resolvedAt: Date.now() }))}
