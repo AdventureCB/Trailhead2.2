@@ -11726,95 +11726,77 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
     const next = pins.map((p, i) => i === idx ? { ...p, note: (pinNoteDrafts[idx] || "").trim() || undefined } : p);
     if (JSON.stringify(next) !== JSON.stringify(pins)) flush({ route_data: { ...rd, pins: next } });
   };
-  // Drag-to-reorder state for the pin cards. Long-press model: the user
-  // holds the ≡ handle for ~350ms before drag activates. This stops the
-  // touchscreen "swipe" gesture from immediately picking up + dragging a
-  // card the user only meant to scroll past or tap. Pre-activation moves
-  // beyond a small threshold cancel the long-press (treated as scroll).
-  //   • `pinDragRef.current` holds the live state-machine values (source
-  //     idx, long-press timer, start coords, activation flag). Ref so the
-  //     pointer-event handlers always see the latest values without going
-  //     through stale React closures.
-  //   • `draggingPinIdx` + `dropTargetPinIdx` are React state — used to
-  //     drive visual cues (dim the dragged card, copper outline on the
-  //     drop target row). They're only set AFTER long-press activates.
-  //   • Refs to each rendered card give us getBoundingClientRect() so the
-  //     move handler can figure out which card the pointer is over.
-  //   • On drop we reorder pinNoteDrafts AND fire onReorderPins(tripId,
-  //     newPins) — the root helper re-densifies the route via Mapbox
-  //     Directions and saves.
+  // Drag-to-reorder state for the pin cards. Sortable-list pattern: a
+  // dedicated drag handle column on the LEFT of each row. Touching the
+  // handle picks up the row immediately (no long-press) — the handle is
+  // small + visually distinct so scroll attempts naturally land on the
+  // card body, not the handle. Touch-action: none on the handle blocks
+  // browser scroll while dragging.
+  //   • `draggingPinIdx` — index of the row being dragged. Lifts the row
+  //     visually (shadow + translateY) and prevents the row from being
+  //     used in insertion calculations.
+  //   • `dragY` — translateY offset for the lifted row (follows finger).
+  //   • `insertionIdx` — 0..pins.length, where the dragged card would
+  //     land on release. Render a copper bar at this position.
+  //   • `pinRowRefs` — refs to the OUTER row containers (handle + card
+  //     together) for getBoundingClientRect during drag.
+  //   • On drop: convert `insertionIdx` → `newIdx` (accounting for splice
+  //     shift) and call onReorderPins.
   const [draggingPinIdx, setDraggingPinIdx] = useState(null);
-  const [dropTargetPinIdx, setDropTargetPinIdx] = useState(null);
+  const [dragY, setDragY] = useState(0);
+  const [insertionIdx, setInsertionIdx] = useState(null);
   const [reorderSaving, setReorderSaving] = useState(false);
-  const pinCardRefs = useRef([]);
-  const pinDragRef = useRef({ idx: null, timer: null, startX: 0, startY: 0, active: false });
-  const LONG_PRESS_MS = 350;
-  const MOVE_CANCEL_PX = 10;
-  const clearPinDragState = () => {
-    const st = pinDragRef.current;
-    if (st.timer) { clearTimeout(st.timer); st.timer = null; }
-    st.idx = null;
-    st.active = false;
-  };
+  const pinRowRefs = useRef([]);
+  const dragStateRef = useRef({ idx: null, startY: 0 });
   const onPinDragStart = (idx) => (e) => {
-    // Capture the pointer up front so we keep receiving move/up events
-    // even if the finger drifts off the small handle button. We DON'T
-    // setDraggingPinIdx yet — that waits for the long-press to fire.
+    e.preventDefault();
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
-    const st = pinDragRef.current;
-    if (st.timer) clearTimeout(st.timer);
-    st.idx = idx;
-    st.active = false;
-    st.startX = e.clientX;
-    st.startY = e.clientY;
-    st.timer = setTimeout(() => {
-      st.active = true;
-      st.timer = null;
-      setDraggingPinIdx(idx);
-      setDropTargetPinIdx(idx);
-      // Subtle haptic to confirm drag is now armed. iOS Safari ignores
-      // navigator.vibrate (no error); Android + most desktops respect it.
-      try { if (navigator.vibrate) navigator.vibrate(15); } catch (_) {}
-    }, LONG_PRESS_MS);
+    dragStateRef.current = { idx, startY: e.clientY };
+    setDraggingPinIdx(idx);
+    setDragY(0);
+    setInsertionIdx(idx);
   };
   const onPinDragMove = (e) => {
-    const st = pinDragRef.current;
+    const st = dragStateRef.current;
     if (st.idx === null) return;
-    if (!st.active) {
-      // Pre-activation phase: if the user has moved beyond the threshold
-      // it's a scroll/swipe attempt — cancel the pending long-press so
-      // the drag doesn't accidentally trigger.
-      const dx = e.clientX - st.startX;
-      const dy = e.clientY - st.startY;
-      if ((dx * dx + dy * dy) > MOVE_CANCEL_PX * MOVE_CANCEL_PX) clearPinDragState();
-      return;
-    }
-    // Active drag — find the card under the pointer + update target.
+    setDragY(e.clientY - st.startY);
+    // Find the insertion index — pointer Y compared against the midpoint
+    // of each non-dragging row (which stays in its original position;
+    // only the dragged row translates).
     const y = e.clientY;
-    let target = st.idx;
-    for (let i = 0; i < pinCardRefs.current.length; i++) {
-      const card = pinCardRefs.current[i];
-      if (!card) continue;
-      const rect = card.getBoundingClientRect();
-      if (y >= rect.top && y <= rect.bottom) { target = i; break; }
+    let insertion = pinRowRefs.current.length;
+    for (let i = 0; i < pinRowRefs.current.length; i++) {
+      if (i === st.idx) continue;
+      const row = pinRowRefs.current[i];
+      if (!row) continue;
+      const rect = row.getBoundingClientRect();
+      const mid = rect.top + rect.height / 2;
+      if (y < mid) { insertion = i; break; }
     }
-    if (target !== dropTargetPinIdx) setDropTargetPinIdx(target);
+    if (insertion !== insertionIdx) setInsertionIdx(insertion);
   };
   const onPinDragEnd = async () => {
-    const st = pinDragRef.current;
-    const wasActive = st.active;
+    const st = dragStateRef.current;
     const from = st.idx;
-    const to = dropTargetPinIdx;
-    clearPinDragState();
-    if (!wasActive) return; // long-press never fired — just a tap/swipe
+    const insertion = insertionIdx;
+    dragStateRef.current = { idx: null, startY: 0 };
     setDraggingPinIdx(null);
-    setDropTargetPinIdx(null);
-    if (from === null || to === null || from === to) return;
-    // Snapshot current pins WITH the latest draft notes baked in, so the
-    // save doesn't lose a half-typed note on the moved card.
+    setDragY(0);
+    setInsertionIdx(null);
+    if (from === null || insertion === null) return;
+    // No-op cases: insertion === from means "insert before yourself";
+    // insertion === from + 1 means "insert right after yourself". Both
+    // leave the list unchanged.
+    if (insertion === from || insertion === from + 1) return;
+    // Convert insertion (target slot in current render order) → newIdx
+    // (post-splice array index). If inserting AFTER current position,
+    // the splice-out shifts later indices down by 1.
+    const newIdx = insertion > from ? insertion - 1 : insertion;
+    if (newIdx === from) return;
     const rd = trip.route_data || {};
     const curPins = Array.isArray(rd.pins) ? rd.pins : [];
     if (curPins.length < 2) return;
+    // Snapshot current pins WITH the latest draft notes baked in.
     const pinsWithNotes = curPins.map((p, i) => ({
       ...p,
       note: (pinNoteDrafts[i] || "").trim() || undefined,
@@ -11822,11 +11804,10 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
     const reorder = (arr) => {
       const next = [...arr];
       const [item] = next.splice(from, 1);
-      next.splice(to, 0, item);
+      next.splice(newIdx, 0, item);
       return next;
     };
     const newPins = reorder(pinsWithNotes);
-    // Reorder drafts to match so each note stays with its card visually.
     setPinNoteDrafts(reorder);
     if (onReorderPins) {
       setReorderSaving(true);
@@ -12478,53 +12459,45 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
           <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 8 }}>
             {isPlan ? "PIN NOTES" : "ROUTE PINS"}
             {canEditInline
-              ? (pins.length > 1 ? " — TAP TO EDIT · HOLD ≡ TO REORDER" : " — TAP TO EDIT")
+              ? (pins.length > 1 ? " — TAP TO EDIT · DRAG ≡ TO REORDER" : " — TAP TO EDIT")
               : " — TAP TO SHOW ON MAP"}
             {reorderSaving && <span style={{ marginLeft: 8, color: T.copper }}>re-routing…</span>}
           </span>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, position: "relative" }}>
             {pins.map((p, i) => {
               if (!p) return null;
               const hasNote = p.note && p.note.trim();
               const isCamp = p.planType === "camp";
-              // First pin is always the trailhead — display "Trailhead"
-              // regardless of any stored label like "Waypoint" (which the
-              // commit code defaults to). Camp/end labels still take
-              // priority for those positions.
               const label = (i === 0 && !isCamp)
                 ? "Trailhead"
                 : (p.label || (i === pins.length - 1 ? "End" : `Pin ${i + 1}`));
-              // Reports use purple accents (matches the explore-map layer
-              // and the polyline on the hero map). Plans keep the
-              // green→copper→red position tinting.
               const accent = isPlan ? T.copper : T.purple;
               const endColor = isPlan ? T.red : T.purple;
               const startColor = isPlan ? T.green : T.purple;
               const dotColor = isCamp ? "#5B8C5A" : i === 0 ? startColor : i === pins.length - 1 ? endColor : accent;
               const isHi = highlightedPinIdx === i;
               const isDragging = draggingPinIdx === i;
-              const isDropTarget = dropTargetPinIdx === i && draggingPinIdx !== null && draggingPinIdx !== i;
-              // Border picks the strongest signal: drop target > highlighted >
-              // default. Drop target = copper for visibility during the drag.
-              const borderColor = isDropTarget ? T.copper : (isHi && !canEditInline ? T.red : T.charcoal);
-              const baseStyle = {
+              const showHandle = canEditInline && pins.length > 1;
+              // Insertion line shows above this card when the dragged
+              // card would land just before it AND the move would actually
+              // change the order. Suppressed for insertion === draggingPinIdx
+              // (same slot) and insertion === draggingPinIdx + 1 (also same).
+              const showLineAbove = draggingPinIdx !== null
+                && insertionIdx === i
+                && insertionIdx !== draggingPinIdx
+                && insertionIdx !== draggingPinIdx + 1;
+              const cardStyleBase = {
                 ...cardStyle,
                 padding: 12,
                 display: "flex",
                 gap: 10,
-                border: `${isDropTarget ? 2 : 1}px solid ${borderColor}`,
-                opacity: isDragging ? 0.45 : 1,
-                transition: "border-color 0.12s, opacity 0.12s",
+                border: `1px solid ${(isHi && !canEditInline) ? T.red : T.charcoal}`,
+                flex: 1,
+                minWidth: 0,
               };
-              // Editing owners get the textarea (no row-tap-to-highlight,
-              // since the focused click target is the textarea); read-only
-              // viewers get the tap-to-highlight behavior.
-              const rowProps = canEditInline ? { style: baseStyle } : {
-                onClick: () => togglePinHighlight(i),
-                style: { ...baseStyle, cursor: "pointer" },
-              };
-              return (
-                <div key={i} ref={el => { pinCardRefs.current[i] = el; }} {...rowProps}>
+              const cardEl = (
+                <div onClick={canEditInline ? undefined : () => togglePinHighlight(i)}
+                     style={{ ...cardStyleBase, cursor: canEditInline ? "default" : "pointer" }}>
                   <div style={{ width: 26, height: 26, borderRadius: "50%", background: dotColor, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2 }}>
                     {isCamp
                       ? <Tent size={13} color={T.white} strokeWidth={2.2} />
@@ -12560,22 +12533,65 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
                       <p style={{ fontFamily: serif, fontSize: 13, color: T.warmStone, margin: 0, lineHeight: 1.5 }}>{p.note}</p>
                     ) : null}
                   </div>
-                  {/* Drag handle — only in edit mode and only when there's
-                      more than one pin to reorder. `touchAction: none`
-                      keeps the page from scrolling while the user drags. */}
-                  {canEditInline && pins.length > 1 && (
-                    <button onPointerDown={onPinDragStart(i)}
-                            onPointerMove={onPinDragMove}
-                            onPointerUp={onPinDragEnd}
-                            onPointerCancel={onPinDragEnd}
-                            aria-label="Drag to reorder pin"
-                            style={{ alignSelf: "stretch", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 6px", background: "none", border: "none", cursor: isDragging ? "grabbing" : "grab", touchAction: "none", color: T.tertiary, flexShrink: 0 }}>
-                      <MoveVertical size={16} />
-                    </button>
-                  )}
                 </div>
               );
+              return (
+                <React.Fragment key={i}>
+                  {/* Insertion line — copper bar where the dragged card
+                      would land. Renders before the row it would precede. */}
+                  {showLineAbove && (
+                    <div style={{ height: 3, background: T.copper, borderRadius: 2, margin: "1px 0" }} />
+                  )}
+                  <div ref={el => { pinRowRefs.current[i] = el; }}
+                       style={{
+                         display: "flex",
+                         gap: 6,
+                         alignItems: "stretch",
+                         // Lift visual: translate with finger, scale + shadow,
+                         // float above siblings via zIndex. transition: none so
+                         // the drag feels 1:1 with the finger (no easing lag).
+                         transform: isDragging ? `translateY(${dragY}px) scale(1.02)` : "none",
+                         boxShadow: isDragging ? "0 12px 28px rgba(0,0,0,0.55)" : "none",
+                         zIndex: isDragging ? 20 : 0,
+                         position: "relative",
+                         transition: isDragging ? "none" : "transform 0.15s",
+                         willChange: isDragging ? "transform" : "auto",
+                       }}>
+                    {showHandle && (
+                      <button onPointerDown={onPinDragStart(i)}
+                              onPointerMove={onPinDragMove}
+                              onPointerUp={onPinDragEnd}
+                              onPointerCancel={onPinDragEnd}
+                              aria-label="Drag to reorder pin"
+                              style={{
+                                width: 36,
+                                alignSelf: "stretch",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                background: T.darkCard,
+                                border: `1px solid ${T.charcoal}`,
+                                borderRadius: 8,
+                                cursor: isDragging ? "grabbing" : "grab",
+                                touchAction: "none",
+                                color: T.tertiary,
+                                flexShrink: 0,
+                                padding: 0,
+                              }}>
+                        <MoveVertical size={16} />
+                      </button>
+                    )}
+                    {cardEl}
+                  </div>
+                </React.Fragment>
+              );
             })}
+            {/* Insertion line at the very end of the list. */}
+            {draggingPinIdx !== null
+              && insertionIdx === pins.length
+              && insertionIdx !== draggingPinIdx + 1 && (
+              <div style={{ height: 3, background: T.copper, borderRadius: 2, margin: "1px 0" }} />
+            )}
           </div>
         </div>
       )}
