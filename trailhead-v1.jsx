@@ -12806,7 +12806,7 @@ function ConvoyDetail({ item, linkedPlan, currentUserId, currentUserName, curren
   );
 }
 
-function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onLoadCampingSpotPhotos, onLoadCampingSpotElevation, spotAuthors, tripAuthors, onLoadRouteData, onViewUser, onStartNav, onNewTripReport, onNewTripPlan, currentUserId, isAdmin, onMapViewportChange, tripReports, showTripReports, setShowTripReports, tripPlans, showTripPlans, setShowTripPlans, onOpenTripDetail, onOpenTripPlanDraft, pendingSpotNav, onConsumePendingSpotNav, pendingHQOpen, onConsumePendingHQOpen, pendingPlanNav, onConsumePendingPlanNav, onShareCampingSpotToFeed, onShareHQToFeed, onShareTripToFeed, onShareTripPlanToFeed, onOpenDM, onShowToast, onOpenShareCompose, onOpenShareIntent, planBuilder, isGuest, onGuestTap, savedTripIds, onToggleSaveTrip }) {
+function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onAddPhotoToSpot, onDeletePhotoFromSpot, onLoadCampingSpotPhotos, onLoadCampingSpotElevation, spotAuthors, tripAuthors, onLoadRouteData, onViewUser, onStartNav, onNewTripReport, onNewTripPlan, currentUserId, isAdmin, onMapViewportChange, tripReports, showTripReports, setShowTripReports, tripPlans, showTripPlans, setShowTripPlans, onOpenTripDetail, onOpenTripPlanDraft, pendingSpotNav, onConsumePendingSpotNav, pendingHQOpen, onConsumePendingHQOpen, pendingPlanNav, onConsumePendingPlanNav, onShareCampingSpotToFeed, onShareHQToFeed, onShareTripToFeed, onShareTripPlanToFeed, onOpenDM, onShowToast, onOpenShareCompose, onOpenShareIntent, planBuilder, isGuest, onGuestTap, savedTripIds, onToggleSaveTrip }) {
   const mapRef = useRef(null);
   const mapInst = useRef(null);
   const [mapReady, setMapReady] = useState(false);
@@ -12833,9 +12833,26 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
   const editFileRef = useRef(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   // Lightbox state — when a thumbnail is tapped we show a full-screen
-  // overlay with the image. Holds { urls: [...], index: n } so left/right
-  // navigation works across all photos for the spot.
+  // overlay with the image. Holds { urls, index, photos, spotId } so
+  // navigation + per-photo delete (admin/adder/spot-owner gated) work.
   const [lightbox, setLightbox] = useState(null);
+  // Community-contributed photos. The "ADD PHOTO" button on any spot
+  // popup opens this hidden file picker; the in-flight spot id is stashed
+  // so onChange knows which spot to attach the upload to.
+  const addPhotoSpotIdRef = useRef(null);
+  const addPhotoFileRef = useRef(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const handleSpotPhotoFiles = async (files) => {
+    const spotId = addPhotoSpotIdRef.current;
+    if (!spotId || !onAddPhotoToSpot) return;
+    setPhotoUploading(true);
+    for (const f of Array.from(files || [])) {
+      await onAddPhotoToSpot(spotId, f);
+    }
+    setPhotoUploading(false);
+    addPhotoSpotIdRef.current = null;
+    if (addPhotoFileRef.current) addPhotoFileRef.current.value = "";
+  };
   // Sync the local edit form whenever a different spot enters edit mode.
   useEffect(() => {
     if (editingSpot) {
@@ -13591,16 +13608,35 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
                 once the popup opens. Empty arrays render nothing; null
                 (still loading) shows nothing yet. Centered when fewer
                 than overflow; horizontally scrolls when more. */}
-            {photos && photos.length > 0 && (() => {
-              const urls = photos.map(p => typeof p === "string" ? p : (p && p.url) || "").filter(Boolean);
+            {(() => {
+              const photoObjs = (photos || []).filter(p => {
+                const u = typeof p === "string" ? p : (p && p.url);
+                return typeof u === "string" && u.length > 0;
+              });
+              const urls = photoObjs.map(p => typeof p === "string" ? p : p.url);
+              // ADD PHOTO tile renders for any authenticated user (not
+              // guest). Community contributions land via the RPC + capture
+              // added_by server-side for later attribution + delete auth.
+              const showAdd = !isGuest && !!onAddPhotoToSpot;
+              if (photoObjs.length === 0 && !showAdd) return null;
               return (
               <div style={{ display: "flex", justifyContent: "center", gap: 6, overflowX: "auto", marginTop: 4, paddingBottom: 4, maxWidth: "100%" }}>
                 {urls.map((url, i) => (
-                  <button key={i} onClick={() => setLightbox({ urls, index: i })}
+                  <button key={i} onClick={() => setLightbox({ urls, index: i, photos: photoObjs, spotId: spot.id, spotOwnerId: spot.user_id || null })}
                           style={{ flexShrink: 0, width: 84, height: 84, borderRadius: 6, overflow: "hidden", border: `1px solid ${T.charcoal}`, background: "none", padding: 0, cursor: "pointer" }}>
                     <img src={txImg(url, 480)} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
                   </button>
                 ))}
+                {showAdd && (
+                  <button onClick={() => {
+                    addPhotoSpotIdRef.current = spot.id;
+                    if (addPhotoFileRef.current) addPhotoFileRef.current.click();
+                  }} disabled={photoUploading}
+                          style={{ flexShrink: 0, width: 84, height: 84, borderRadius: 6, border: `1px dashed ${T.copper}80`, background: "transparent", cursor: photoUploading ? "wait" : "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, color: T.copper }}>
+                    {photoUploading ? <Disc size={18} /> : <Plus size={20} />}
+                    <span style={{ fontFamily: sans, fontSize: 8, fontWeight: 700, letterSpacing: 1 }}>{photoUploading ? "UPLOAD…" : "ADD PHOTO"}</span>
+                  </button>
+                )}
               </div>
               );
             })()}
@@ -14374,13 +14410,57 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
       {/* Photo lightbox — full-screen overlay above everything else.
           Tap backdrop / X / image to close; arrow buttons step through
           when the spot has more than one photo. */}
-      {lightbox && (
+      {/* Hidden file input — shared across all "ADD PHOTO" buttons. The
+          ref-stashed spot id (`addPhotoSpotIdRef`) tells the onChange
+          handler which spot to attach the upload(s) to. */}
+      <input ref={addPhotoFileRef} type="file" accept="image/*" multiple
+             onChange={(e) => handleSpotPhotoFiles(e.target.files)}
+             style={{ display: "none" }} />
+      {lightbox && (() => {
+        const curUrl = lightbox.urls[lightbox.index];
+        // Find the matching photo object (lightbox.photos is the full
+        // jsonb array with added_by/added_at). Per-photo delete is allowed
+        // when the viewer is admin OR they added the photo OR they own
+        // the spot (matches server-side RPC authorization).
+        const curPhoto = Array.isArray(lightbox.photos)
+          ? lightbox.photos.find(p => {
+              const u = typeof p === "string" ? p : (p && p.url);
+              return u === curUrl;
+            })
+          : null;
+        const addedBy = curPhoto && typeof curPhoto === "object" ? curPhoto.added_by : null;
+        const canDeletePhoto = !!(currentUserId && (
+          isAdmin ||
+          (addedBy && addedBy === currentUserId) ||
+          (lightbox.spotOwnerId && lightbox.spotOwnerId === currentUserId)
+        ));
+        return (
         <div onClick={() => setLightbox(null)}
              style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
           <button onClick={(e) => { e.stopPropagation(); setLightbox(null); }}
                   style={{ position: "absolute", top: 16, right: 16, background: "rgba(0,0,0,0.5)", border: "none", borderRadius: "50%", width: 36, height: 36, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: T.white }}>
             <X size={20} />
           </button>
+          {canDeletePhoto && onDeletePhotoFromSpot && lightbox.spotId && (
+            <button onClick={async (e) => {
+                      e.stopPropagation();
+                      if (!confirm("Delete this photo?")) return;
+                      const ok = await onDeletePhotoFromSpot(lightbox.spotId, curUrl);
+                      if (ok) {
+                        // Advance to the next photo, or close if it was the last.
+                        setLightbox(prev => {
+                          if (!prev) return null;
+                          const nextUrls = prev.urls.filter((u, i) => i !== prev.index);
+                          const nextPhotos = (prev.photos || []).filter((p, i) => i !== prev.index);
+                          if (nextUrls.length === 0) return null;
+                          return { ...prev, urls: nextUrls, photos: nextPhotos, index: Math.min(prev.index, nextUrls.length - 1) };
+                        });
+                      }
+                    }}
+                    style={{ position: "absolute", top: 16, left: 16, background: `${T.red}D0`, border: "none", borderRadius: 6, padding: "8px 12px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1 }}>
+              <Trash2 size={12} />DELETE
+            </button>
+          )}
           {lightbox.urls.length > 1 && (
             <button onClick={(e) => { e.stopPropagation(); setLightbox(prev => prev ? { ...prev, index: (prev.index - 1 + prev.urls.length) % prev.urls.length } : prev); }}
                     style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", background: "rgba(0,0,0,0.5)", border: "none", borderRadius: "50%", width: 40, height: 40, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: T.white, zIndex: 2 }}>
@@ -14393,7 +14473,7 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
               <ChevronRight size={22} />
             </button>
           )}
-          <img src={txImg(lightbox.urls[lightbox.index], 1200)} alt="" onClick={(e) => e.stopPropagation()}
+          <img src={txImg(curUrl, 1200)} alt="" onClick={(e) => e.stopPropagation()}
                style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 8 }} />
           {lightbox.urls.length > 1 && (
             <div style={{ position: "absolute", bottom: 18, left: 0, right: 0, textAlign: "center", fontFamily: sans, fontSize: 11, color: T.white, letterSpacing: 0.5 }}>
@@ -14401,12 +14481,13 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
             </div>
           )}
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
 
-function RoutesScreen({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, currentUserId, isAdmin, tripReports, showTripReports, setShowTripReports, tripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onLoadCampingSpotPhotos, onLoadCampingSpotElevation, spotAuthors, tripAuthors, onLoadRouteData, onOpenTripDetail, onOpenTripPlanDraft, onNewTripReport, onNewTripPlan, pendingSpotNav, onConsumePendingSpotNav, pendingHQOpen, onConsumePendingHQOpen, pendingPlanNav, onConsumePendingPlanNav, onShareCampingSpotToFeed, onShareHQToFeed, onShareTripToFeed, onShareTripPlanToFeed, onOpenDM, onShowToast, onOpenShareCompose, onOpenShareIntent, onViewUser, onStartNav, planBuilder, isGuest, onGuestTap, savedTripIds, onToggleSaveTrip }) {
+function RoutesScreen({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, currentUserId, isAdmin, tripReports, showTripReports, setShowTripReports, tripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onAddPhotoToSpot, onDeletePhotoFromSpot, onLoadCampingSpotPhotos, onLoadCampingSpotElevation, spotAuthors, tripAuthors, onLoadRouteData, onOpenTripDetail, onOpenTripPlanDraft, onNewTripReport, onNewTripPlan, pendingSpotNav, onConsumePendingSpotNav, pendingHQOpen, onConsumePendingHQOpen, pendingPlanNav, onConsumePendingPlanNav, onShareCampingSpotToFeed, onShareHQToFeed, onShareTripToFeed, onShareTripPlanToFeed, onOpenDM, onShowToast, onOpenShareCompose, onOpenShareIntent, onViewUser, onStartNav, planBuilder, isGuest, onGuestTap, savedTripIds, onToggleSaveTrip }) {
   // Maps screen — full-height ExploreMap with no chrome. Trip-reports list,
   // create modal, and detail overlay all live at the root now (the list
   // moved to the Feed under the renamed TRIP REPORTS filter; the modal +
@@ -14427,6 +14508,8 @@ function RoutesScreen({ campingSpots, showCampingSpots, setShowCampingSpots, sho
         onAddCampingSpot={onAddCampingSpot}
         onUpdateCampingSpot={onUpdateCampingSpot}
         onDeleteCampingSpot={onDeleteCampingSpot}
+        onAddPhotoToSpot={onAddPhotoToSpot}
+        onDeletePhotoFromSpot={onDeletePhotoFromSpot}
         onLoadCampingSpotPhotos={onLoadCampingSpotPhotos}
         onLoadCampingSpotElevation={onLoadCampingSpotElevation}
         spotAuthors={spotAuthors}
@@ -29151,6 +29234,88 @@ export default function Trailhead() {
     }
   };
 
+  // Community photo contribution. Any authenticated user can add a photo
+  // to any spot via the add_camping_spot_photo RPC (URL-allowlisted to our
+  // Supabase storage origin). Captures added_by + added_at server-side so
+  // the per-photo delete authorization can identify the contributor.
+  const addPhotoToSpot = async (spotId, file) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid || !spotId || !file) return null;
+    try {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const uploaded = await uploadPostPhotoList([{ url: dataUrl }], uid);
+      const finalUrl = uploaded && uploaded[0] && uploaded[0].url;
+      const alt = uploaded && uploaded[0] && uploaded[0].alt || "";
+      if (typeof finalUrl !== "string" || !finalUrl.startsWith("http")) {
+        showErrorToast("Photo upload failed.");
+        return null;
+      }
+      const { data, error } = await supabase.rpc("add_camping_spot_photo", {
+        p_spot_id: spotId, p_url: finalUrl, p_alt: alt,
+      });
+      if (error) {
+        console.error("[camping_spots] add photo failed", error);
+        showErrorToast(error.message || "Couldn't add photo.");
+        return null;
+      }
+      // Append optimistically to both slices.
+      const entry = data && typeof data === "object" ? data : { url: finalUrl, alt, added_by: uid, added_at: new Date().toISOString() };
+      const append = (s) => {
+        const cur = Array.isArray(s.photos) ? s.photos : [];
+        return { ...s, photos: [...cur, entry] };
+      };
+      setUserCampingSpots(prev => prev.map(s => s.id === spotId ? append(s) : s));
+      setViewportCampingSpots(prev => prev.map(s => s.id === spotId ? append(s) : s));
+      return entry;
+    } catch (e) {
+      console.error("[camping_spots] add photo threw", e);
+      showErrorToast("Photo upload failed.");
+      return null;
+    }
+  };
+
+  // Delete a single photo by URL. Server gates authorization to: admin OR
+  // the user who added the photo OR the spot owner.
+  const deletePhotoFromSpot = async (spotId, url) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid || !spotId || !url) return false;
+    // Optimistic — remove the first occurrence from both slices.
+    const stripFirst = (s) => {
+      const cur = Array.isArray(s.photos) ? s.photos : [];
+      let removed = false;
+      const next = cur.filter(p => {
+        const u = typeof p === "string" ? p : (p && p.url) || "";
+        if (!removed && u === url) { removed = true; return false; }
+        return true;
+      });
+      return removed ? { ...s, photos: next } : s;
+    };
+    setUserCampingSpots(prev => prev.map(s => s.id === spotId ? stripFirst(s) : s));
+    setViewportCampingSpots(prev => prev.map(s => s.id === spotId ? stripFirst(s) : s));
+    try {
+      const { data, error } = await supabase.rpc("delete_camping_spot_photo", {
+        p_spot_id: spotId, p_url: url,
+      });
+      if (error) {
+        console.error("[camping_spots] delete photo failed", error);
+        showErrorToast(error.message || "Couldn't delete photo.");
+        // Refetch authoritative photos to reconcile.
+        loadCampingSpotPhotos && fetchedSpotPhotosRef.current.delete(spotId);
+        if (loadCampingSpotPhotos) loadCampingSpotPhotos(spotId);
+        return false;
+      }
+      return data === true;
+    } catch (e) {
+      console.error("[camping_spots] delete photo threw", e);
+      return false;
+    }
+  };
+
   const setDmMessageReaction = async (messageId, emoji) => {
     const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
     if (!uid || !emoji) return;
@@ -30476,7 +30641,7 @@ export default function Trailhead() {
             {isGuest && screen !== "routes" && <GuestBanner onSignIn={() => setShowGuestPrompt(true)} />}
             {screen === "feed" && renderFeedScopedTo({ hideFilters: false })}
             {screen === "forum" && <ForumScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} isAdmin={isAdmin} isAmbassador={isAmbassador} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentUserName={(currentProfile && currentProfile.full_name) || "You"} currentUserHandle={(currentProfile && currentProfile.handle) || ""} currentUserAvatar={profilePic || (currentProfile && currentProfile.avatar_url) || null} pendingThread={pendingThread} onPendingHandled={() => setPendingThread(null)} pendingForumSubNav={pendingForumSubNav} onConsumePendingForumSubNav={() => setPendingForumSubNav(null)} pendingForumCatNav={pendingForumCatNav} onConsumePendingForumCatNav={() => setPendingForumCatNav(null)} onAddNotification={requireAuth(addNotification)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onOpenShareCompose={openShareCompose} onOpenShareIntent={openShareIntent} onAddFeedPost={requireAuth((post) => addPost(post))} threadsBySub={forumThreadsBySub} repliesByThread={forumReplies} onAddForumThread={requireAuth(addForumThread)} onUpdateForumThread={requireAuth(updateForumThread)} onDeleteForumThread={requireAuth(deleteForumThread)} onAddForumReply={requireAuth(addForumReply)} onDeleteForumReply={requireAuth(deleteForumReply)} onLoadForumReplies={loadForumReplies} likedForumThreadIds={likedForumThreadIds} forumThreadLikeCounts={forumThreadLikeCounts} onToggleForumThreadLike={requireAuth(toggleForumThreadLike)} likedForumReplyIds={likedForumReplyIds} forumReplyLikeCounts={forumReplyLikeCounts} onToggleForumReplyLike={requireAuth(toggleForumReplyLike)} onBumpForumThreadView={bumpForumThreadView} onAwardPoints={awardPoints} categoriesList={forumCategoriesList} onAddCategory={requireAuth(addForumCategory)} onUpdateCategory={requireAuth(updateForumCategory)} onDeleteCategory={requireAuth(deleteForumCategory)} onAddSubcategory={requireAuth(addForumSubcategory)} onUpdateSubcategory={requireAuth(updateForumSubcategory)} onDeleteSubcategory={requireAuth(deleteForumSubcategory)} />}
-            {screen === "routes" && <RoutesScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} campingSpots={campingSpots} showCampingSpots={showCampingSpots} setShowCampingSpots={setShowCampingSpots} showPublicLands={showPublicLands} setShowPublicLands={setShowPublicLands} showSatellite={showSatellite} setShowSatellite={setShowSatellite} onOpenShareIntent={openShareIntent} tripAuthors={tripAuthors} onLoadRouteData={loadTripRouteData} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} tripReports={allTripReports} showTripReports={showTripReports} setShowTripReports={setShowTripReports} tripPlans={allTripPlans} showTripPlans={showTripPlans} setShowTripPlans={setShowTripPlans} onMapViewportChange={onMapViewportChange} onAddCampingSpot={requireAuth(addCampingSpot)} onUpdateCampingSpot={requireAuth(updateCampingSpot)} onDeleteCampingSpot={requireAuth(deleteCampingSpot)} onLoadCampingSpotPhotos={loadCampingSpotPhotos} onLoadCampingSpotElevation={loadCampingSpotElevation} spotAuthors={spotAuthors} onViewUser={openUserProfile} onStartNav={(route) => setActiveNavRoute(route)} onOpenTripDetail={(slug) => setPendingTripNav(slug)} onOpenTripPlanDraft={(id) => setDetailTripId(id)} onNewTripReport={() => setTripCreatorMode("report")} onNewTripPlan={() => requireAuth(() => enterPlanBuilder())()} pendingSpotNav={pendingSpotNav} onConsumePendingSpotNav={() => setPendingSpotNav(null)} pendingHQOpen={pendingHQOpen} onConsumePendingHQOpen={() => setPendingHQOpen(false)} pendingPlanNav={pendingPlanNav} onConsumePendingPlanNav={() => setPendingPlanNav(null)} onShareCampingSpotToFeed={requireAuth(shareCampingSpotToFeed)} onShareHQToFeed={requireAuth(shareHQToFeed)} onShareTripToFeed={requireAuth(shareTripToFeed)} onShareTripPlanToFeed={requireAuth(shareTripPlanToFeed)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onShowToast={showErrorToast} onOpenShareCompose={openShareCompose} savedTripIds={savedTripIds} onToggleSaveTrip={requireAuth(toggleSaveTrip)} planBuilder={{ active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, editingId: planBuilderEditingId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen, accent: (planBuilderEditingId && (tripReports || []).find(t => t.id === planBuilderEditingId && t.kind === "report")) ? T.purple : T.copper }} />}
+            {screen === "routes" && <RoutesScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} campingSpots={campingSpots} showCampingSpots={showCampingSpots} setShowCampingSpots={setShowCampingSpots} showPublicLands={showPublicLands} setShowPublicLands={setShowPublicLands} showSatellite={showSatellite} setShowSatellite={setShowSatellite} onOpenShareIntent={openShareIntent} tripAuthors={tripAuthors} onLoadRouteData={loadTripRouteData} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} tripReports={allTripReports} showTripReports={showTripReports} setShowTripReports={setShowTripReports} tripPlans={allTripPlans} showTripPlans={showTripPlans} setShowTripPlans={setShowTripPlans} onMapViewportChange={onMapViewportChange} onAddCampingSpot={requireAuth(addCampingSpot)} onUpdateCampingSpot={requireAuth(updateCampingSpot)} onDeleteCampingSpot={requireAuth(deleteCampingSpot)} onAddPhotoToSpot={requireAuth(addPhotoToSpot)} onDeletePhotoFromSpot={requireAuth(deletePhotoFromSpot)} onLoadCampingSpotPhotos={loadCampingSpotPhotos} onLoadCampingSpotElevation={loadCampingSpotElevation} spotAuthors={spotAuthors} onViewUser={openUserProfile} onStartNav={(route) => setActiveNavRoute(route)} onOpenTripDetail={(slug) => setPendingTripNav(slug)} onOpenTripPlanDraft={(id) => setDetailTripId(id)} onNewTripReport={() => setTripCreatorMode("report")} onNewTripPlan={() => requireAuth(() => enterPlanBuilder())()} pendingSpotNav={pendingSpotNav} onConsumePendingSpotNav={() => setPendingSpotNav(null)} pendingHQOpen={pendingHQOpen} onConsumePendingHQOpen={() => setPendingHQOpen(false)} pendingPlanNav={pendingPlanNav} onConsumePendingPlanNav={() => setPendingPlanNav(null)} onShareCampingSpotToFeed={requireAuth(shareCampingSpotToFeed)} onShareHQToFeed={requireAuth(shareHQToFeed)} onShareTripToFeed={requireAuth(shareTripToFeed)} onShareTripPlanToFeed={requireAuth(shareTripPlanToFeed)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onShowToast={showErrorToast} onOpenShareCompose={openShareCompose} savedTripIds={savedTripIds} onToggleSaveTrip={requireAuth(toggleSaveTrip)} planBuilder={{ active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, editingId: planBuilderEditingId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen, accent: (planBuilderEditingId && (tripReports || []).find(t => t.id === planBuilderEditingId && t.kind === "report")) ? T.purple : T.copper }} />}
             {screen === "builds" && <BuildsScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onViewUser={openUserProfile} userBuilds={userBuilds} allBuilds={allBuilds} onLoadAllBuilds={loadAllBuildsOnce} onLoadBuildById={loadBuildById} allBuildsLoaded={allBuildsLoaded} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} followingIds={followingIds} pendingBuildNav={pendingBuildNav} onConsumePendingBuildNav={() => setPendingBuildNav(null)} onAddBuild={requireAuth(addBuild)} userRoutes={userRoutes} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onOpenShareCompose={openShareCompose} onOpenShareIntent={openShareIntent} onUpdateBuild={requireAuth(updateBuild)} likedBuildIds={likedBuildIds} buildLikeCounts={buildLikeCounts} onToggleBuildLike={requireAuth(toggleBuildLike)} onDeleteBuild={requireAuth(deleteBuild)} onPostBuildToFeed={requireAuth((b, opts) => { const rawBd = b.buildData; const bd = scrubLocalPhotosFromBuildData(rawBd); const isLocalUrl = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:")); const rawHero = b.image || (rawBd && rawBd.mainPhotos && rawBd.mainPhotos[0] && rawBd.mainPhotos[0].url) || null; const cleanHero = isLocalUrl(rawHero) ? ((bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url) || null) : rawHero; const heroImg = isLocalUrl(cleanHero) ? null : cleanHero; const meName = (currentProfile && currentProfile.full_name) || "You"; const myUid = supabaseSession && supabaseSession.user && supabaseSession.user.id; const isReshare = b.userId && myUid && b.userId !== myUid; const ownerHandle = isReshare ? (b.handle || "").replace(/^@/, "") : null; const ownerName = isReshare ? (b.owner || null) : null; addPost({ id: "feedbuild_" + Date.now(), type: "BUILDS", user: meName, initial: meName.charAt(0).toUpperCase(), time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, subtitle: isReshare ? `Shared @${ownerHandle}'s build` : "Added a new build", vehicle: `${b.year} ${b.make} ${b.model}`, photoUrls: heroImg ? [heroImg] : undefined, image: heroImg, likes: 0, comments: 0, buildData: bd, buildRawId: b.rawId != null ? b.rawId : null, sharedFromOwnerHandle: ownerHandle, sharedFromOwnerName: ownerName, _skipBuildIdCol: isReshare }); awardPoints(POINTS.feedPost, "Build Shared"); })} buildComments={buildComments} onLoadBuildComments={loadBuildComments} onAddBuildComment={requireAuth(addBuildComment)} onDeleteBuildComment={deleteBuildComment} likedBuildCommentIds={likedBuildCommentIds} buildCommentLikeCounts={buildCommentLikeCounts} onToggleBuildCommentLike={requireAuth(toggleBuildCommentLike)} currentUserName={(currentProfile && currentProfile.full_name) || ""} currentUserHandle={(currentProfile && currentProfile.handle) ? "@" + currentProfile.handle : ""} currentUserAvatar={(currentProfile && currentProfile.avatar_url) || null} />}
             {screen === "ranks" && (isGuest
               ? <GuestGateScreen title="RANKS REQUIRE AN ACCOUNT" subtitle="Sign in to see the leaderboard and start earning points from your posts, routes and builds." onSignIn={goToLoginFromGuest} />
