@@ -11629,7 +11629,7 @@ const TripReportCard = memo(function TripReportCardImpl({ trip, author, onOpen }
 // title + author + difficulty/region pills → terrain/tag chips →
 // description → trip stats → trailhead + Get Directions → full route map
 // → per-pin notes → photo grid → footer with author profile link.
-function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onEdit, onUpdate, onDelete, onEditPlanRoute, onLoadRouteData, onBumpView, isLiked, likeCount, onToggleLike, onShareToFeed, onStartDirections, onStartNav, onPlanConvoy, initialEditMode, isSaved, onToggleSave }) {
+function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onEdit, onUpdate, onDelete, onEditPlanRoute, onLoadRouteData, onBumpView, isLiked, likeCount, onToggleLike, onShareToFeed, onStartDirections, onStartNav, onPlanConvoy, onReorderPins, initialEditMode, isSaved, onToggleSave }) {
   if (!trip) return null;
   const isPlan = trip.kind === "plan";
   const isOwner = !!(currentUserId && trip.user_id === currentUserId);
@@ -11725,6 +11725,66 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
     const pins = Array.isArray(rd.pins) ? rd.pins : [];
     const next = pins.map((p, i) => i === idx ? { ...p, note: (pinNoteDrafts[idx] || "").trim() || undefined } : p);
     if (JSON.stringify(next) !== JSON.stringify(pins)) flush({ route_data: { ...rd, pins: next } });
+  };
+  // Drag-to-reorder state for the pin cards. While a card is being dragged,
+  // `draggingPinIdx` holds its source index and `dropTargetPinIdx` holds
+  // the slot it would land in on release. Refs to each rendered card give
+  // us getBoundingClientRect() so the move handler can figure out which
+  // card the pointer is over. On drop we reorder pinNoteDrafts AND fire
+  // onReorderPins(tripId, newPins) — the root helper handles re-densifying
+  // the route via Mapbox Directions and saving.
+  const [draggingPinIdx, setDraggingPinIdx] = useState(null);
+  const [dropTargetPinIdx, setDropTargetPinIdx] = useState(null);
+  const [reorderSaving, setReorderSaving] = useState(false);
+  const pinCardRefs = useRef([]);
+  const onPinDragStart = (idx) => (e) => {
+    e.preventDefault();
+    setDraggingPinIdx(idx);
+    setDropTargetPinIdx(idx);
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
+  };
+  const onPinDragMove = (e) => {
+    if (draggingPinIdx === null) return;
+    const y = e.clientY;
+    let target = draggingPinIdx;
+    for (let i = 0; i < pinCardRefs.current.length; i++) {
+      const card = pinCardRefs.current[i];
+      if (!card) continue;
+      const rect = card.getBoundingClientRect();
+      if (y >= rect.top && y <= rect.bottom) { target = i; break; }
+    }
+    if (target !== dropTargetPinIdx) setDropTargetPinIdx(target);
+  };
+  const onPinDragEnd = async () => {
+    const from = draggingPinIdx;
+    const to = dropTargetPinIdx;
+    setDraggingPinIdx(null);
+    setDropTargetPinIdx(null);
+    if (from === null || to === null || from === to) return;
+    // Snapshot current pins WITH the latest draft notes baked in, so the
+    // save doesn't lose a half-typed note on the moved card.
+    const rd = trip.route_data || {};
+    const curPins = Array.isArray(rd.pins) ? rd.pins : [];
+    if (curPins.length < 2) return;
+    const pinsWithNotes = curPins.map((p, i) => ({
+      ...p,
+      note: (pinNoteDrafts[i] || "").trim() || undefined,
+    }));
+    const reorder = (arr) => {
+      const next = [...arr];
+      const [item] = next.splice(from, 1);
+      next.splice(to, 0, item);
+      return next;
+    };
+    const newPins = reorder(pinsWithNotes);
+    // Reorder drafts to match so each note stays with its card visually.
+    setPinNoteDrafts(reorder);
+    if (onReorderPins) {
+      setReorderSaving(true);
+      try { await onReorderPins(trip.id, newPins); } catch (e) { console.error("[trip] reorder failed", e); }
+      setReorderSaving(false);
+      setSavedTick(Date.now());
+    }
   };
   const setVis = (v) => {
     if (!canEditInline) return;
@@ -12366,7 +12426,13 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
           sees the saved note as a paragraph (or "no notes yet"). */}
       {pins.length > 0 && (
         <div style={{ padding: "0 16px 16px" }}>
-          <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 8 }}>{isPlan ? "PIN NOTES" : "ROUTE PINS"}{canEditInline ? " — TAP TO EDIT" : " — TAP TO SHOW ON MAP"}</span>
+          <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 8 }}>
+            {isPlan ? "PIN NOTES" : "ROUTE PINS"}
+            {canEditInline
+              ? (pins.length > 1 ? " — TAP TO EDIT · DRAG ≡ TO REORDER" : " — TAP TO EDIT")
+              : " — TAP TO SHOW ON MAP"}
+            {reorderSaving && <span style={{ marginLeft: 8, color: T.copper }}>re-routing…</span>}
+          </span>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {pins.map((p, i) => {
               if (!p) return null;
@@ -12387,15 +12453,29 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
               const startColor = isPlan ? T.green : T.purple;
               const dotColor = isCamp ? "#5B8C5A" : i === 0 ? startColor : i === pins.length - 1 ? endColor : accent;
               const isHi = highlightedPinIdx === i;
+              const isDragging = draggingPinIdx === i;
+              const isDropTarget = dropTargetPinIdx === i && draggingPinIdx !== null && draggingPinIdx !== i;
+              // Border picks the strongest signal: drop target > highlighted >
+              // default. Drop target = copper for visibility during the drag.
+              const borderColor = isDropTarget ? T.copper : (isHi && !canEditInline ? T.red : T.charcoal);
+              const baseStyle = {
+                ...cardStyle,
+                padding: 12,
+                display: "flex",
+                gap: 10,
+                border: `${isDropTarget ? 2 : 1}px solid ${borderColor}`,
+                opacity: isDragging ? 0.45 : 1,
+                transition: "border-color 0.12s, opacity 0.12s",
+              };
               // Editing owners get the textarea (no row-tap-to-highlight,
               // since the focused click target is the textarea); read-only
               // viewers get the tap-to-highlight behavior.
-              const rowProps = canEditInline ? {} : {
+              const rowProps = canEditInline ? { style: baseStyle } : {
                 onClick: () => togglePinHighlight(i),
-                style: { ...cardStyle, padding: 12, display: "flex", gap: 10, cursor: "pointer", border: `1px solid ${isHi ? T.red : T.charcoal}`, transition: "border 0.15s" },
+                style: { ...baseStyle, cursor: "pointer" },
               };
               return (
-                <div key={i} {...(canEditInline ? { style: { ...cardStyle, padding: 12, display: "flex", gap: 10 } } : rowProps)}>
+                <div key={i} ref={el => { pinCardRefs.current[i] = el; }} {...rowProps}>
                   <div style={{ width: 26, height: 26, borderRadius: "50%", background: dotColor, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2 }}>
                     {isCamp
                       ? <Tent size={13} color={T.white} strokeWidth={2.2} />
@@ -12431,6 +12511,19 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
                       <p style={{ fontFamily: serif, fontSize: 13, color: T.warmStone, margin: 0, lineHeight: 1.5 }}>{p.note}</p>
                     ) : null}
                   </div>
+                  {/* Drag handle — only in edit mode and only when there's
+                      more than one pin to reorder. `touchAction: none`
+                      keeps the page from scrolling while the user drags. */}
+                  {canEditInline && pins.length > 1 && (
+                    <button onPointerDown={onPinDragStart(i)}
+                            onPointerMove={onPinDragMove}
+                            onPointerUp={onPinDragEnd}
+                            onPointerCancel={onPinDragEnd}
+                            aria-label="Drag to reorder pin"
+                            style={{ alignSelf: "stretch", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 6px", background: "none", border: "none", cursor: isDragging ? "grabbing" : "grab", touchAction: "none", color: T.tertiary, flexShrink: 0 }}>
+                      <MoveVertical size={16} />
+                    </button>
+                  )}
                 </div>
               );
             })}
@@ -25853,6 +25946,97 @@ export default function Trailhead() {
   // Commit the in-progress builder to a real draft. Creates the trip_reports
   // row (kind='plan'), patches route_data + start coords from the points,
   // exits builder mode, and lands the user in the editor for refinement.
+  // Reorder pins on an existing trip (plan or report). Densifies the new
+  // route via per-segment Mapbox Directions, recomputes distance / duration
+  // / elevation stats, and saves. Mirrors the densification logic in
+  // commitPlanToDraft (kept separate for now — refactor opportunity later).
+  // Called from TripReportDetail's drag-to-reorder UI on drop.
+  const reorderTripPins = async (tripId, newPins) => {
+    if (!tripId || !Array.isArray(newPins) || newPins.length === 0) return;
+    // Densify the route via per-segment Mapbox Directions. Same logic as
+    // commitPlanToDraft so the resulting points/offroadRanges shape is
+    // identical and renderers don't need any conditional handling.
+    const OFFROAD_THRESHOLD_M = 50;
+    const densePoints = [];
+    const offroadRanges = [];
+    let totalSeconds = 0;
+    const pushPoint = (lat, lng) => { densePoints.push({ lat, lng }); return densePoints.length - 1; };
+    const recordOffroad = (a, b) => { if (b > a) offroadRanges.push([a, b]); };
+    pushPoint(newPins[0].lat, newPins[0].lng);
+    if (newPins.length >= 2) {
+      const segResults = await Promise.all(
+        newPins.slice(0, -1).map((from, i) => mapboxDirections(from, newPins[i + 1]))
+      );
+      segResults.forEach((dir, i) => {
+        if (dir && typeof dir.duration === "number") totalSeconds += dir.duration;
+        const from = newPins[i];
+        const to = newPins[i + 1];
+        const segStartIdx = densePoints.length - 1;
+        if (!dir || !dir.geometry || !Array.isArray(dir.geometry.coordinates) || dir.geometry.coordinates.length < 2) {
+          const toIdx = pushPoint(to.lat, to.lng);
+          recordOffroad(segStartIdx, toIdx);
+          return;
+        }
+        const coords = dir.geometry.coordinates;
+        const wpStart = dir.waypoints && dir.waypoints[0] && dir.waypoints[0].location;
+        const wpEnd = dir.waypoints && dir.waypoints[dir.waypoints.length - 1] && dir.waypoints[dir.waypoints.length - 1].location;
+        let routedStartIdx = segStartIdx;
+        if (wpStart && haversine(from.lat, from.lng, wpStart[1], wpStart[0]) > OFFROAD_THRESHOLD_M) {
+          const tailIdx = pushPoint(wpStart[1], wpStart[0]);
+          recordOffroad(segStartIdx, tailIdx);
+          routedStartIdx = tailIdx;
+        }
+        coords.slice(1).forEach(c => pushPoint(c[1], c[0]));
+        const routedEndIdx = densePoints.length - 1;
+        if (wpEnd && haversine(to.lat, to.lng, wpEnd[1], wpEnd[0]) > OFFROAD_THRESHOLD_M) {
+          const toIdx = pushPoint(to.lat, to.lng);
+          recordOffroad(routedEndIdx, toIdx);
+        }
+      });
+    }
+    let totalMeters = 0;
+    for (let i = 1; i < densePoints.length; i++) {
+      totalMeters += haversine(
+        densePoints[i - 1].lat, densePoints[i - 1].lng,
+        densePoints[i].lat, densePoints[i].lng,
+      );
+    }
+    let elevGainFt = null, maxElevFt = null;
+    try {
+      const elevs = await fetchElevationsAlongPath(densePoints);
+      if (Array.isArray(elevs) && elevs.length > 1) {
+        let gainM = 0, maxM = -Infinity;
+        for (let i = 0; i < elevs.length; i++) {
+          if (typeof elevs[i] !== "number" || !isFinite(elevs[i])) continue;
+          if (elevs[i] > maxM) maxM = elevs[i];
+          if (i > 0 && typeof elevs[i - 1] === "number" && elevs[i] > elevs[i - 1]) {
+            gainM += elevs[i] - elevs[i - 1];
+          }
+        }
+        if (isFinite(maxM)) maxElevFt = Math.round(maxM * 3.28084);
+        elevGainFt = Math.round(gainM * 3.28084);
+      }
+    } catch (e) { /* non-fatal */ }
+    const trip = (tripReports || []).find(t => t && t.id === tripId);
+    const rd = (trip && trip.route_data) || {};
+    const first = newPins[0];
+    const last = newPins[newPins.length - 1];
+    await updateTripDraft(tripId, {
+      route_data: { ...rd, pins: newPins, points: densePoints, offroadRanges },
+      start_lat: first.lat,
+      start_lng: first.lng,
+      // Re-derive start_label from the new first pin so the trailhead
+      // chip stays in sync. Falls back to existing label if pin has none.
+      start_label: first.label || (trip && trip.start_label) || null,
+      end_lat: last.lat,
+      end_lng: last.lng,
+      distance_mi: totalMeters > 0 ? Number((totalMeters / 1609.344).toFixed(2)) : null,
+      duration_min: totalSeconds > 0 ? Math.round(totalSeconds / 60) : null,
+      elev_gain_ft: elevGainFt,
+      max_elev_ft: maxElevFt,
+    });
+  };
+
   const commitPlanToDraft = async ({ name, description } = {}) => {
     if (planBuilderPoints.length === 0) { showErrorToast("Add at least one point first."); return null; }
     // EDIT path — mutating an existing plan. Skip createTripDraft, just
@@ -31022,6 +31206,7 @@ export default function Trailhead() {
               onBack={() => { setDetailTripId(null); setDetailTripInitialEdit(false); }}
               onEdit={(id) => { setDetailTripId(null); setDetailTripInitialEdit(false); setEditingTripId(id); }}
               onUpdate={requireAuth(updateTripDraft)}
+              onReorderPins={requireAuth(reorderTripPins)}
               onDelete={requireAuth(async (id) => { await deleteTripDraft(id); setDetailTripId(null); setDetailTripInitialEdit(false); })}
               onEditPlanRoute={(t) => {
                 // Re-enter the plan builder with this trip's points
