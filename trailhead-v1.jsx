@@ -3545,7 +3545,7 @@ function RecoveryNotifPanel({ onClose, onGoToRecovery, alerts, onDismiss, onClea
   );
 }
 
-function UnifiedNotifPanel({ onClose, onViewUser, onGoToPost, onGoToBuild, onGoToForumThread, notifs, onDismissNotif, onClearNotifs, recoveryAlerts, onDismissAlert, onClearAlerts, onGoToRecovery, onOpenMap, onOpenDM, onRespondToRecovery, initialTab }) {
+function UnifiedNotifPanel({ onClose, onViewUser, onGoToPost, onGoToBuild, onGoToForumThread, onGoToAdminBugs, notifs, onDismissNotif, onClearNotifs, recoveryAlerts, onDismissAlert, onClearAlerts, onGoToRecovery, onOpenMap, onOpenDM, onRespondToRecovery, initialTab }) {
   const [tab, setTab] = useState(initialTab || "general");
   const urgencyColor = (u) => u === "HIGH" ? T.red : T.copper;
   const tabBtn = (key, label, count, color) => (
@@ -3602,7 +3602,7 @@ function UnifiedNotifPanel({ onClose, onViewUser, onGoToPost, onGoToBuild, onGoT
           ) : notifs.map((n) => {
             const Icon = n.icon;
             return (
-              <div key={n.id} onClick={() => { if (n.forumThreadId) { onGoToForumThread && onGoToForumThread(n.forumThreadId); } else if (n.buildId) { onGoToBuild && onGoToBuild(n.buildId, n.target); } else if (n.postId) { onGoToPost && onGoToPost(n.postId); } }} style={{ display: "flex", gap: 10, padding: "12px 16px", borderBottom: `1px solid ${T.charcoal}22`, cursor: "pointer", transition: "background 0.15s", position: "relative" }} onMouseEnter={(e) => e.currentTarget.style.background = `${T.charcoal}` } onMouseLeave={(e) => e.currentTarget.style.background = "transparent" }>
+              <div key={n.id} onClick={() => { if (n.type === "bug_report") { onGoToAdminBugs && onGoToAdminBugs(); } else if (n.forumThreadId) { onGoToForumThread && onGoToForumThread(n.forumThreadId); } else if (n.buildId) { onGoToBuild && onGoToBuild(n.buildId, n.target); } else if (n.postId) { onGoToPost && onGoToPost(n.postId); } }} style={{ display: "flex", gap: 10, padding: "12px 16px", borderBottom: `1px solid ${T.charcoal}22`, cursor: "pointer", transition: "background 0.15s", position: "relative" }} onMouseEnter={(e) => e.currentTarget.style.background = `${T.charcoal}` } onMouseLeave={(e) => e.currentTarget.style.background = "transparent" }>
                 <div style={{ width: 32, height: 32, borderRadius: "50%", background: `${n.iconColor}18`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2 }}>
                   <Icon size={14} color={n.iconColor} strokeWidth={1.8} />
                 </div>
@@ -3680,7 +3680,7 @@ function UnifiedNotifPanel({ onClose, onViewUser, onGoToPost, onGoToBuild, onGoT
   );
 }
 
-function TopBar({ onProfile, onBack, showBack, title, onViewUser, onGoToPost, onGoToBuild, onGoToForumThread, onGoToRecovery, onOpenMap, onSearch, onOpenDM, onRespondToRecovery, dmUnread, bellNotifs, onDismissNotif, onClearNotifs, profilePic, notifPrefs, recoveryAlerts, setRecoveryAlerts }) {
+function TopBar({ onProfile, onBack, showBack, title, onViewUser, onGoToPost, onGoToBuild, onGoToForumThread, onGoToRecovery, onGoToAdminBugs, onOpenMap, onSearch, onOpenDM, onRespondToRecovery, dmUnread, bellNotifs, onDismissNotif, onClearNotifs, profilePic, notifPrefs, recoveryAlerts, setRecoveryAlerts }) {
   const notifTypeMap = { like: "likes", comment: "comments", reply: "replies", follow: "follows", mention: "mentions" };
   const filteredNotifs = bellNotifs.filter(n => { const pref = notifTypeMap[n.type]; return !pref || (notifPrefs && notifPrefs[pref] !== false); });
   const [openPanel, setOpenPanel] = useState(null); // null | "notif"
@@ -3743,6 +3743,7 @@ function TopBar({ onProfile, onBack, showBack, title, onViewUser, onGoToPost, on
           onGoToPost={(postId) => { setOpenPanel(null); onGoToPost && onGoToPost(postId); }}
           onGoToBuild={(buildId, name) => { setOpenPanel(null); onGoToBuild && onGoToBuild(buildId, name); }}
           onGoToForumThread={(threadId) => { setOpenPanel(null); onGoToForumThread && onGoToForumThread(threadId); }}
+          onGoToAdminBugs={() => { setOpenPanel(null); onGoToAdminBugs && onGoToAdminBugs(); }}
           notifs={filteredNotifs}
           onDismissNotif={onDismissNotif}
           onClearNotifs={onClearNotifs}
@@ -19741,8 +19742,17 @@ function ChartDetailModal({ chartKey, dateRange, setDateRange, signupDaily, dauD
   );
 }
 
-function AdminDashboardScreen({ currentUserId, onBack, onViewUser, onOpenAdminEntity }) {
-  const [tab, setTab] = useState("overview");
+function AdminDashboardScreen({ currentUserId, onBack, onViewUser, onOpenAdminEntity, initialTab, onInitialTabConsumed }) {
+  const [tab, setTab] = useState(initialTab || "overview");
+  // When the parent re-sets initialTab while we're already mounted (e.g.
+  // admin taps a bug-report bell notification while on /admin), switch to
+  // the requested tab and let the parent clear its pending state.
+  useEffect(() => {
+    if (initialTab) {
+      setTab(initialTab);
+      if (onInitialTabConsumed) onInitialTabConsumed();
+    }
+  }, [initialTab]);
   const [dateRange, setDateRange] = useState(30); // 7 / 30 / 90 — Users + Content tabs
   const [overview, setOverview] = useState(null);
   const [signupDaily, setSignupDaily] = useState([]);
@@ -24308,7 +24318,7 @@ function clientDataToDbBuild(data, userId) {
 // derived client-side from the type field.
 function dbNotifToBell(row) {
   if (!row) return null;
-  const iconMap = { like: { icon: Heart, iconColor: T.red }, comment: { icon: MessageCircle, iconColor: T.copper }, mention: { icon: AtSign, iconColor: T.copper }, reply: { icon: MessageCircle, iconColor: T.copper }, follow: { icon: UserPlus, iconColor: T.green }, rsvp: { icon: Users, iconColor: T.green }, role: { icon: Shield, iconColor: T.copper }, bug_fix: { icon: CheckCircle, iconColor: T.green } };
+  const iconMap = { like: { icon: Heart, iconColor: T.red }, comment: { icon: MessageCircle, iconColor: T.copper }, mention: { icon: AtSign, iconColor: T.copper }, reply: { icon: MessageCircle, iconColor: T.copper }, follow: { icon: UserPlus, iconColor: T.green }, rsvp: { icon: Users, iconColor: T.green }, role: { icon: Shield, iconColor: T.copper }, bug_fix: { icon: CheckCircle, iconColor: T.green }, bug_report: { icon: AlertTriangle, iconColor: T.red } };
   const ic = iconMap[row.type] || { icon: Bell, iconColor: T.tertiary };
   return {
     id: row.id,
@@ -26284,6 +26294,10 @@ export default function Trailhead() {
   // admin route stays inert for them). Ref-consumes so navigating away
   // doesn't get pulled back in by the same initial link.
   const adminLinkConsumedRef = useRef(false);
+  // pendingAdminTab — set when the bell click for a 'bug_report' notif
+  // routes the admin to /admin → BUGS tab. AdminDashboardScreen reads it
+  // as initialTab and clears via onInitialTabConsumed.
+  const [pendingAdminTab, setPendingAdminTab] = useState(null);
   useEffect(() => {
     if (adminLinkConsumedRef.current) return;
     if (!initialSharedLink || initialSharedLink.kind !== "admin") return;
@@ -31534,6 +31548,13 @@ export default function Trailhead() {
         onGoToBuild={(buildId, name) => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("builds"); setPendingBuildNav({ rawId: buildId, name: name || "" }); }}
         onGoToForumThread={(threadId) => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("forum"); openForumThreadById(threadId); }}
         onGoToRecovery={() => { setShowRecovery(true); setProfileStack([]); }}
+        onGoToAdminBugs={() => {
+          if (!isAdmin) return;
+          setProfileStack([]); setShowRecovery(false); setShowCompose(false);
+          setPendingAdminTab("bugs");
+          setScreen("admin");
+          if (typeof window !== "undefined" && window.location.pathname !== "/admin") window.history.pushState({}, "", "/admin");
+        }}
         onOpenMap={openMap}
         onSearch={() => setShowGlobalSearch(true)}
         onOpenDM={(user, prefill, shared) => openDM(user, prefill, shared)}
@@ -31593,6 +31614,8 @@ export default function Trailhead() {
             {screen === "admin" && (isAdmin
               ? <AdminDashboardScreen
                   currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id}
+                  initialTab={pendingAdminTab}
+                  onInitialTabConsumed={() => setPendingAdminTab(null)}
                   onBack={() => { setScreen("feed"); if (typeof window !== "undefined" && window.location.pathname === "/admin") window.history.pushState({}, "", "/"); }}
                   onViewUser={(handleOrId) => openUserProfile(handleOrId)}
                   onOpenAdminEntity={(r) => {
