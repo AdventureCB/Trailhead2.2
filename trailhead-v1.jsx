@@ -965,6 +965,88 @@ function useLonePeakHQMarker(mapRef, ready, onSelect) {
   }, [mapRef, ready]);
 }
 
+// User location "puck" — a blue dot with a directional arrow rotated to
+// the user's heading. Tapping it drops a pin at the current GPS location
+// (calls onTap({lat, lng}) which the parent wires to setPlanTapPos so
+// the staged-pin type picker appears). Heading comes from pos.coords —
+// browsers compute it from movement vector, so it's null when stationary
+// or on desktop; arrow defaults to pointing up in those cases.
+// IMPORTANT: rotate the INNER arrow div, NOT the marker el — Mapbox
+// writes positioning transform on the el directly. See
+// feedback_mapbox_marker_positioning.
+function buildUserLocationPuckEl() {
+  const el = document.createElement("div");
+  el.className = "th-user-puck";
+  el.style.cssText = "width: 28px; height: 28px; cursor: pointer; position: relative; pointer-events: auto;";
+  // Translucent halo + white-ringed disc behind the arrow.
+  const ring = document.createElement("div");
+  ring.style.cssText = "position: absolute; inset: 0; border-radius: 50%; background: rgba(66,133,244,0.22); border: 2px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.45);";
+  el.appendChild(ring);
+  // Arrow — translate to center then rotate. Transition makes heading
+  // changes feel smooth instead of snapping.
+  const arrow = document.createElement("div");
+  arrow.className = "th-puck-arrow";
+  arrow.style.cssText = "position: absolute; left: 50%; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; transform: rotate(0deg); transform-origin: center; transition: transform 0.25s ease-out;";
+  arrow.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="#4285F4" xmlns="http://www.w3.org/2000/svg"><path d="M12 3 L20 21 L12 16 L4 21 Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>';
+  el.appendChild(arrow);
+  return el;
+}
+
+function useUserLocationPuck(mapRef, ready, onTap, enabled) {
+  const handlerRef = useRef(onTap);
+  const lastPosRef = useRef(null);
+  useEffect(() => { handlerRef.current = onTap; }, [onTap]);
+  useEffect(() => {
+    const map = mapRef && mapRef.current;
+    if (!ready || !map || !window.mapboxgl) return;
+    if (enabled === false || !navigator.geolocation) return;
+    let marker = null;
+    let watchId = null;
+    let removed = false;
+    const updateOrCreate = (lat, lng, heading) => {
+      if (removed) return;
+      lastPosRef.current = { lat, lng };
+      if (!marker) {
+        const el = buildUserLocationPuckEl();
+        el.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const fn = handlerRef.current;
+          const pos = lastPosRef.current;
+          if (fn && pos) fn(pos);
+        });
+        try {
+          marker = new window.mapboxgl.Marker({ element: el })
+            .setLngLat([lng, lat])
+            .addTo(map);
+        } catch (_) {}
+      } else {
+        try { marker.setLngLat([lng, lat]); } catch (_) {}
+      }
+      // Rotate the inner arrow only — NOT the marker el (Mapbox owns its
+      // transform for positioning).
+      if (typeof heading === "number" && isFinite(heading) && marker) {
+        try {
+          const arrow = marker.getElement().querySelector(".th-puck-arrow");
+          if (arrow) arrow.style.transform = `rotate(${heading}deg)`;
+        } catch (_) {}
+      }
+    };
+    watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const { latitude, longitude, heading } = pos.coords;
+        updateOrCreate(latitude, longitude, heading);
+      },
+      (err) => { console.warn("[user puck] geolocation:", err.message); },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
+    );
+    return () => {
+      removed = true;
+      if (watchId !== null) { try { navigator.geolocation.clearWatch(watchId); } catch (_) {} }
+      if (marker) { try { marker.remove(); } catch (_) {} marker = null; }
+    };
+  }, [mapRef, ready, enabled]);
+}
+
 // Map a camping spot's (source, source_id) pair to its public-facing
 // detail page. Recreation.gov has the highest user value (photos, fees,
 // reservations); OSM is mostly attribution + raw map view; user-added
@@ -13305,6 +13387,9 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
   useTripReportsLayer(mapInst, mapReady, tripReports || [], showTripReports, (trip) => { clearOtherSelections(); setSelectedTrip(trip); }, selectedTrip && selectedTrip.id, layerRefreshTick);
   useTripPlansLayer(mapInst, mapReady, tripPlans || [], showTripPlans, (plan) => { clearOtherSelections(); setSelectedPlan(plan); }, selectedPlan && selectedPlan.id, layerRefreshTick);
   useLonePeakHQMarker(mapInst, mapReady, (hq) => { clearOtherSelections(); setSelectedHQ(hq); });
+  // User location puck wired further down — needs setPlanTapPos which is
+  // declared lower in this component (TDZ would bite if we called the hook
+  // here). See "useUserLocationPuck" below the planTapPos state.
   // Plan-builder note sheet — id of the point whose inline note editor is
   // open. Tapping any numbered marker on the map sets this.
   const [selectedPlanPointId, setSelectedPlanPointId] = useState(null);
@@ -13408,6 +13493,13 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
   // surfaces the type picker. Stays armed for the whole planning
   // session.
   const [planTapPos, setPlanTapPos] = useState(null); // { lat, lng } | null
+  // Blue user-location puck — tap it to drop a pin at current GPS coords
+  // (same type-picker flow as a long-press on the map). Disabled for
+  // guests so the geolocation prompt doesn't fire for read-only viewers.
+  useUserLocationPuck(mapInst, mapReady, (loc) => {
+    setSelectedSpot(null); setSelectedLand(null); setSelectedTrip(null); setSelectedHQ(null); setSelectedPlan(null);
+    setPlanTapPos(loc);
+  }, !isGuest);
   // After a type is picked for a non-plan staged pin, transition to a
   // compact name+notes form positioned to not block the dropped pin.
   const [spotNotesPending, setSpotNotesPending] = useState(null); // { lat, lng } | null
