@@ -19742,7 +19742,7 @@ function ChartDetailModal({ chartKey, dateRange, setDateRange, signupDaily, dauD
   );
 }
 
-function AdminDashboardScreen({ currentUserId, onBack, onViewUser, onOpenAdminEntity, initialTab, onInitialTabConsumed }) {
+function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserName, onBack, onViewUser, onOpenAdminEntity, initialTab, onInitialTabConsumed }) {
   const [tab, setTab] = useState(initialTab || "overview");
   // When the parent re-sets initialTab while we're already mounted (e.g.
   // admin taps a bug-report bell notification while on /admin), switch to
@@ -19781,7 +19781,8 @@ function AdminDashboardScreen({ currentUserId, onBack, onViewUser, onOpenAdminEn
   const [bugReports, setBugReports] = useState([]);
   const [bugStatusFilter, setBugStatusFilter] = useState("open"); // "open" | "fixed" | "all"
   const [expandedBugId, setExpandedBugId] = useState(null);
-  const [bugNotesDraft, setBugNotesDraft] = useState({}); // bugId → draft text
+  const [bugComments, setBugComments] = useState({});         // bugId → [{id, body, author_id, author_handle, author_name, created_at}]
+  const [bugCommentDraft, setBugCommentDraft] = useState({}); // bugId → in-flight text
   const pushImageFileRef = useRef(null);
 
   const fetchOverview = useCallback(async () => {
@@ -19903,13 +19904,76 @@ function AdminDashboardScreen({ currentUserId, onBack, onViewUser, onOpenAdminEn
     }
   };
 
-  const saveBugNotes = async (bugId) => {
-    const notes = bugNotesDraft[bugId];
-    if (notes === undefined) return;
-    const patch = { admin_notes: notes.trim() || null, updated_at: new Date().toISOString() };
-    setBugReports(prev => prev.map(b => b.id === bugId ? { ...b, ...patch } : b));
-    const { error } = await supabase.from("bug_reports").update(patch).eq("id", bugId);
-    if (error) { console.error("[admin] bug notes update", error); fetchBugs(); }
+  // Comment thread on a bug report. Loaded lazily on first expand. Mutations
+  // go through bug_report_comments (admin-only RLS). Each comment carries an
+  // author snapshot so deleted admins still show attribution.
+  const loadBugComments = useCallback(async (bugId) => {
+    if (!bugId || bugComments[bugId]) return;
+    try {
+      const { data, error } = await supabase
+        .from("bug_report_comments")
+        .select("*")
+        .eq("bug_id", bugId)
+        .order("created_at", { ascending: true });
+      if (error) { console.error("[admin] bug comments load", error); return; }
+      setBugComments(prev => ({ ...prev, [bugId]: data || [] }));
+    } catch (e) { console.error("[admin] bug comments threw", e); }
+  }, [bugComments]);
+
+  const addBugComment = async (bugId) => {
+    const body = (bugCommentDraft[bugId] || "").trim();
+    if (!body || !currentUserId) return;
+    // Optimistic — server INSERT may take a moment. Use a tmp id so the
+    // realtime echo can dedupe.
+    const tmpId = "tmp_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+    const meHandle = currentUserHandle || null;
+    const meName = currentUserName || null;
+    const optimistic = {
+      id: tmpId,
+      bug_id: bugId,
+      author_id: currentUserId,
+      author_handle: meHandle,
+      author_name: meName,
+      body,
+      created_at: new Date().toISOString(),
+    };
+    setBugComments(prev => ({ ...prev, [bugId]: [...(prev[bugId] || []), optimistic] }));
+    setBugCommentDraft(prev => ({ ...prev, [bugId]: "" }));
+    try {
+      const { data, error } = await supabase
+        .from("bug_report_comments")
+        .insert({
+          bug_id: bugId,
+          author_id: currentUserId,
+          author_handle: meHandle,
+          author_name: meName,
+          body,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      // Replace the optimistic row with the canonical one (real id, etc).
+      setBugComments(prev => {
+        const list = (prev[bugId] || []).map(c => c.id === tmpId ? data : c);
+        return { ...prev, [bugId]: list };
+      });
+    } catch (e) {
+      console.error("[admin] bug comment insert", e);
+      // Roll back the optimistic entry.
+      setBugComments(prev => ({ ...prev, [bugId]: (prev[bugId] || []).filter(c => c.id !== tmpId) }));
+    }
+  };
+
+  const deleteBugComment = async (bugId, commentId) => {
+    const before = (bugComments[bugId] || []).find(c => c.id === commentId);
+    setBugComments(prev => ({ ...prev, [bugId]: (prev[bugId] || []).filter(c => c.id !== commentId) }));
+    try {
+      const { error } = await supabase.from("bug_report_comments").delete().eq("id", commentId);
+      if (error) throw error;
+    } catch (e) {
+      console.error("[admin] bug comment delete", e);
+      if (before) setBugComments(prev => ({ ...prev, [bugId]: [...(prev[bugId] || []), before].sort((a, b) => a.created_at.localeCompare(b.created_at)) }));
+    }
   };
 
   useEffect(() => { fetchOverview(); }, [fetchOverview]);
@@ -19918,12 +19982,29 @@ function AdminDashboardScreen({ currentUserId, onBack, onViewUser, onOpenAdminEn
   useEffect(() => { if (tab === "push") fetchPushData(); }, [tab, fetchPushData]);
   useEffect(() => { if (tab === "bugs") fetchBugs(); }, [tab, fetchBugs]);
 
-  // Realtime: new bug reports appear in the list without a refresh.
+  // Realtime: new bug reports appear in the list without a refresh; new
+  // comments appear in the open thread (multi-admin discussion).
   useEffect(() => {
     if (tab !== "bugs") return;
     const ch = supabase.channel(`admin_bugs_${currentUserId || "x"}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "bug_reports" }, () => fetchBugs())
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "bug_reports" }, () => fetchBugs())
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "bug_report_comments" }, (payload) => {
+        const c = payload.new;
+        if (!c || !c.bug_id) return;
+        // Skip our own optimistic echo (already in state with tmp id).
+        if (c.author_id === currentUserId) return;
+        setBugComments(prev => {
+          const list = prev[c.bug_id] || [];
+          if (list.some(x => x.id === c.id)) return prev;
+          return { ...prev, [c.bug_id]: [...list, c] };
+        });
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "bug_report_comments" }, (payload) => {
+        const c = payload.old;
+        if (!c || !c.bug_id) return;
+        setBugComments(prev => ({ ...prev, [c.bug_id]: (prev[c.bug_id] || []).filter(x => x.id !== c.id) }));
+      })
       .subscribe();
     return () => { try { supabase.removeChannel(ch); } catch (_) {} };
   }, [tab, currentUserId, fetchBugs]);
@@ -20404,12 +20485,22 @@ function AdminDashboardScreen({ currentUserId, onBack, onViewUser, onOpenAdminEn
             ) : bugReports.map(b => {
               const isOpen = b.status === "open";
               const isExpanded = expandedBugId === b.id;
-              const draftNotes = bugNotesDraft[b.id] !== undefined ? bugNotesDraft[b.id] : (b.admin_notes || "");
-              const notesDirty = draftNotes !== (b.admin_notes || "");
+              const reoccursLabel = b.reoccurs === "yes" ? "Yes — still reproduces after restart"
+                : b.reoccurs === "no" ? "No — restart fixed it"
+                : "User hasn't tested";
+              const reoccursColor = b.reoccurs === "yes" ? T.red
+                : b.reoccurs === "no" ? T.green
+                : T.tertiary;
+              const commentsList = bugComments[b.id] || [];
+              const commentDraftText = bugCommentDraft[b.id] || "";
               return (
                 <div key={b.id} style={{ background: T.darkCard, borderRadius: 10, border: `1px solid ${isOpen ? `${T.red}40` : T.charcoal}`, overflow: "hidden" }}>
                   {/* Header row — click to expand */}
-                  <button onClick={() => setExpandedBugId(isExpanded ? null : b.id)}
+                  <button onClick={() => {
+                    const next = isExpanded ? null : b.id;
+                    setExpandedBugId(next);
+                    if (next) loadBugComments(b.id);
+                  }}
                           style={{ width: "100%", padding: 12, background: "none", border: "none", cursor: "pointer", textAlign: "left", display: "flex", alignItems: "flex-start", gap: 10 }}>
                     {/* Mark fixed checkbox */}
                     <button onClick={(e) => { e.stopPropagation(); setBugStatus(b.id, isOpen ? "fixed" : "open"); }}
@@ -20422,9 +20513,9 @@ function AdminDashboardScreen({ currentUserId, onBack, onViewUser, onOpenAdminEn
                         <span style={{ fontFamily: sans, fontSize: 9, color: isOpen ? T.red : T.green, letterSpacing: 1, fontWeight: 700 }}>{b.status.toUpperCase()}</span>
                         {b.reporter_handle && <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 0.5, fontWeight: 600 }}>@{b.reporter_handle}</span>}
                         <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>{new Date(b.created_at).toLocaleString()}</span>
-                        {b.reoccurs && b.reoccurs !== "not_tried" && (
-                          <span style={{ fontFamily: sans, fontSize: 8, color: b.reoccurs === "yes" ? T.red : T.tertiary, letterSpacing: 0.8, fontWeight: 700, padding: "1px 6px", borderRadius: 3, background: T.darkBg, border: `1px solid ${T.charcoal}` }}>
-                            {b.reoccurs === "yes" ? "REOCCURS" : "NO REPEAT"}
+                        {commentsList.length > 0 && (
+                          <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, display: "inline-flex", alignItems: "center", gap: 3 }}>
+                            <MessageCircle size={9} color={T.tertiary} />{commentsList.length}
                           </span>
                         )}
                       </div>
@@ -20436,6 +20527,11 @@ function AdminDashboardScreen({ currentUserId, onBack, onViewUser, onOpenAdminEn
                   </button>
                   {isExpanded && (
                     <div style={{ padding: "0 12px 14px 12px", borderTop: `1px solid ${T.charcoal}` }}>
+                      {/* DID RESTART FIX IT — promoted to a labeled section
+                          (was previously a small inline badge). */}
+                      <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600, marginTop: 12, marginBottom: 6 }}>DID RESTART FIX IT?</div>
+                      <div style={{ fontFamily: sans, fontSize: 12, color: reoccursColor, fontWeight: 700, padding: "8px 10px", background: T.darkBg, borderRadius: 6, border: `1px solid ${reoccursColor === T.tertiary ? T.charcoal : reoccursColor + "40"}` }}>{reoccursLabel}</div>
+
                       {b.screenshot_url && (
                         <>
                           <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600, marginTop: 12, marginBottom: 6 }}>SCREENSHOT</div>
@@ -20452,18 +20548,51 @@ function AdminDashboardScreen({ currentUserId, onBack, onViewUser, onOpenAdminEn
                         <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600, marginTop: 12, marginBottom: 6 }}>DEVICE</div>
                         <div style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 10, color: T.tertiary, lineHeight: 1.5, whiteSpace: "pre-wrap", padding: 8, background: T.darkBg, borderRadius: 6, border: `1px solid ${T.charcoal}` }}>{b.device_info}</div>
                       </>}
-                      <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600, marginTop: 12, marginBottom: 6 }}>ADMIN NOTES</div>
-                      <textarea value={draftNotes}
-                                onChange={(e) => setBugNotesDraft(prev => ({ ...prev, [b.id]: e.target.value.slice(0, 2000) }))}
-                                onBlur={() => { if (notesDirty) saveBugNotes(b.id); }} rows={3}
-                                placeholder="Triage notes, repro steps, fix commit, etc."
-                                style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 6, background: T.darkBg, border: `1px solid ${notesDirty ? T.copper : T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", resize: "vertical", lineHeight: 1.4 }} />
-                      <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, marginTop: 4 }}>{notesDirty ? "Unsaved — auto-saves on blur" : (b.admin_notes ? "Saved" : "No notes yet")}</div>
                       {!isOpen && b.fixed_at && (
-                        <div style={{ fontFamily: sans, fontSize: 10, color: T.green, marginTop: 10 }}>
+                        <div style={{ fontFamily: sans, fontSize: 10, color: T.green, marginTop: 12 }}>
                           Fixed {new Date(b.fixed_at).toLocaleString()}
                         </div>
                       )}
+
+                      {/* Admin discussion thread — multi-admin comments via
+                          bug_report_comments. Realtime so concurrent admins
+                          see each other's messages live. */}
+                      <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600, marginTop: 16, marginBottom: 6 }}>ADMIN DISCUSSION</div>
+                      {commentsList.length === 0 ? (
+                        <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, padding: "4px 0 8px" }}>No comments yet.</div>
+                      ) : (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 8 }}>
+                          {commentsList.map(c => {
+                            const isMine = c.author_id === currentUserId;
+                            const who = c.author_handle ? `@${c.author_handle}` : (c.author_name || "Admin");
+                            return (
+                              <div key={c.id} style={{ background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 6, padding: 10 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                                  <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 0.5 }}>{who}</span>
+                                  <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>{new Date(c.created_at).toLocaleString()}</span>
+                                  {isMine && (
+                                    <button onClick={() => { if (confirm("Delete this comment?")) deleteBugComment(b.id, c.id); }}
+                                            style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", padding: 2, color: T.tertiary }}
+                                            aria-label="Delete comment">
+                                      <Trash2 size={11} />
+                                    </button>
+                                  )}
+                                </div>
+                                <div style={{ fontFamily: serif, fontSize: 12, color: T.white, lineHeight: 1.45, whiteSpace: "pre-wrap" }}>{c.body}</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      <textarea value={commentDraftText}
+                                onChange={(e) => setBugCommentDraft(prev => ({ ...prev, [b.id]: e.target.value.slice(0, 2000) }))}
+                                placeholder="Add a comment — repro steps, fix commit, blockers…"
+                                rows={2}
+                                style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", resize: "vertical", lineHeight: 1.4 }} />
+                      <button onClick={() => addBugComment(b.id)} disabled={!commentDraftText.trim()}
+                              style={{ marginTop: 6, padding: "8px 14px", borderRadius: 6, background: commentDraftText.trim() ? T.copper : T.charcoal, border: "none", color: commentDraftText.trim() ? T.darkBg : T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, cursor: commentDraftText.trim() ? "pointer" : "default", display: "inline-flex", alignItems: "center", gap: 5 }}>
+                        <Send size={11} /> POST COMMENT
+                      </button>
                     </div>
                   )}
                 </div>
@@ -31614,6 +31743,8 @@ export default function Trailhead() {
             {screen === "admin" && (isAdmin
               ? <AdminDashboardScreen
                   currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id}
+                  currentUserHandle={(currentProfile && currentProfile.handle) || ""}
+                  currentUserName={(currentProfile && currentProfile.full_name) || ""}
                   initialTab={pendingAdminTab}
                   onInitialTabConsumed={() => setPendingAdminTab(null)}
                   onBack={() => { setScreen("feed"); if (typeof window !== "undefined" && window.location.pathname === "/admin") window.history.pushState({}, "", "/"); }}
