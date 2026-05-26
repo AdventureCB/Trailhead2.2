@@ -17757,6 +17757,185 @@ function AddBuildForm({ onClose, onSave, onDelete, initialData }) {
   return formView;
 }
 
+// ─── BUG REPORT FORM ──────────────────────────────────────────────────────
+// In-app bug submission modal. Triggered by the REPORT A BUG button on
+// ProfileScreen. Inserts into `public.bug_reports` (admin-only SELECT/UPDATE
+// per RLS). Screenshot uploads through `uploadPostPhotoList` to post-photos.
+// Module-scoped so its useState survives parent re-renders (see
+// feedback_inline_component_state_wipe).
+function buildDeviceInfoString() {
+  if (typeof navigator === "undefined") return "";
+  const ua = navigator.userAgent || "";
+  const platform = navigator.platform || "";
+  const isStandalone = typeof window !== "undefined" && (
+    (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) ||
+    navigator.standalone === true
+  );
+  const w = (typeof window !== "undefined" && window.innerWidth) || 0;
+  const h = (typeof window !== "undefined" && window.innerHeight) || 0;
+  return `${ua}\nPlatform: ${platform}\nViewport: ${w}×${h}\nInstalled PWA: ${isStandalone ? "yes" : "no"}`;
+}
+
+function BugSubmittedToast({ onDone }) {
+  useEffect(() => {
+    const t = setTimeout(() => onDone && onDone(), 2400);
+    return () => clearTimeout(t);
+  }, [onDone]);
+  return (
+    <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", background: T.green, color: T.white, padding: "10px 18px", borderRadius: 8, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.6, zIndex: 1300, boxShadow: "0 4px 12px rgba(0,0,0,0.4)" }}>
+      Thanks — bug report sent!
+    </div>
+  );
+}
+
+function BugReportForm({ currentUserId, currentUserHandle, onClose, onSubmitted }) {
+  const [description, setDescription] = useState("");
+  const [context, setContext] = useState("");
+  const [device, setDevice] = useState(() => buildDeviceInfoString());
+  const [reoccurs, setReoccurs] = useState("not_tried");
+  const [screenshot, setScreenshot] = useState(null); // { url, uploading? }
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const fileRef = useRef(null);
+  // ESC closes (consistent with other modals).
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape" && !submitting) onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [submitting, onClose]);
+
+  const handleFile = async (files) => {
+    const file = files && files[0];
+    if (!file || !currentUserId) return;
+    if (!file.type.startsWith("image/")) { setError("Screenshot must be an image."); return; }
+    setError("");
+    setScreenshot({ url: null, uploading: true });
+    try {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const uploaded = await uploadPostPhotoList([{ url: dataUrl }], currentUserId);
+      const finalUrl = uploaded && uploaded[0] && uploaded[0].url;
+      if (typeof finalUrl !== "string" || !finalUrl.startsWith("http")) throw new Error("upload failed");
+      setScreenshot({ url: finalUrl });
+    } catch (e) {
+      setError(e.message || "Screenshot upload failed.");
+      setScreenshot(null);
+    }
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
+  const submit = async () => {
+    if (!description.trim()) { setError("Describe the bug before submitting."); return; }
+    if (!currentUserId) { setError("You need to be signed in to submit a bug."); return; }
+    if (screenshot && screenshot.uploading) { setError("Wait for screenshot upload to finish."); return; }
+    setSubmitting(true); setError("");
+    try {
+      const { error: insErr } = await supabase.from("bug_reports").insert({
+        reporter_id: currentUserId,
+        reporter_handle: currentUserHandle || null,
+        description: description.trim(),
+        screenshot_url: (screenshot && screenshot.url) || null,
+        context: context.trim() || null,
+        device_info: device.trim() || null,
+        reoccurs,
+      });
+      if (insErr) throw insErr;
+      if (onSubmitted) onSubmitted();
+      onClose();
+    } catch (e) {
+      console.error("[bug_reports] submit failed", e);
+      setError(e.message || "Submit failed.");
+    }
+    setSubmitting(false);
+  };
+
+  const labelStyle = { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 600, display: "block", marginBottom: 6, marginTop: 14 };
+  const inputStyle = { width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", lineHeight: 1.5 };
+
+  return (
+    <div onClick={() => { if (!submitting) onClose(); }} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 1200, display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: T.darkBg, borderRadius: 14, border: `1px solid ${T.red}40`, padding: 18, width: "100%", maxWidth: 460, maxHeight: "92vh", overflowY: "auto", boxShadow: "0 16px 40px rgba(0,0,0,0.6)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <AlertTriangle size={16} color={T.red} />
+          <span style={{ fontFamily: sans, fontSize: 12, color: T.red, fontWeight: 700, letterSpacing: 1.4 }}>REPORT A BUG</span>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: T.tertiary, marginLeft: "auto" }}>
+            <X size={16} />
+          </button>
+        </div>
+        <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 8px", lineHeight: 1.5 }}>
+          Thanks for taking the time. The more detail you give, the faster we can fix it.
+        </p>
+
+        <label style={labelStyle}>BUG DESCRIPTION *</label>
+        <textarea autoFocus value={description} onChange={(e) => setDescription(e.target.value.slice(0, 2000))}
+                  placeholder="What went wrong? Be specific about what you saw vs. what you expected." rows={4}
+                  style={{ ...inputStyle, resize: "vertical" }} />
+
+        <label style={labelStyle}>SCREENSHOT (OPTIONAL)</label>
+        <input ref={fileRef} type="file" accept="image/*" onChange={(e) => handleFile(e.target.files)} style={{ display: "none" }} />
+        {!screenshot && (
+          <button onClick={() => fileRef.current && fileRef.current.click()}
+                  style={{ width: "100%", padding: "10px 12px", borderRadius: 8, background: "transparent", border: `1px dashed ${T.copper}60`, color: T.copper, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+            <Camera size={13} /> ATTACH SCREENSHOT
+          </button>
+        )}
+        {screenshot && screenshot.uploading && <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, padding: 6 }}>Uploading…</div>}
+        {screenshot && screenshot.url && (
+          <div style={{ position: "relative", borderRadius: 8, overflow: "hidden", border: `1px solid ${T.charcoal}` }}>
+            <img src={screenshot.url} alt="" style={{ display: "block", width: "100%", maxHeight: 220, objectFit: "cover" }} />
+            <button onClick={() => setScreenshot(null)}
+                    style={{ position: "absolute", top: 6, right: 6, width: 24, height: 24, borderRadius: "50%", background: "rgba(0,0,0,0.7)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+              <X size={13} color={T.white} />
+            </button>
+          </div>
+        )}
+
+        <label style={labelStyle}>WHAT WERE YOU TRYING TO DO?</label>
+        <textarea value={context} onChange={(e) => setContext(e.target.value.slice(0, 1000))}
+                  placeholder="e.g. 'Trying to share my trip plan to the feed.'" rows={2}
+                  style={{ ...inputStyle, resize: "vertical" }} />
+
+        <label style={labelStyle}>DEVICE</label>
+        <textarea value={device} onChange={(e) => setDevice(e.target.value.slice(0, 1000))} rows={3}
+                  style={{ ...inputStyle, resize: "vertical", fontFamily: "ui-monospace, Menlo, monospace", fontSize: 11 }} />
+        <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 4 }}>Auto-filled from your browser. Edit if you want to add details.</div>
+
+        <label style={labelStyle}>DID THE BUG REOCCUR AFTER CLOSING + REOPENING THE APP?</label>
+        <div style={{ display: "flex", gap: 6 }}>
+          {[
+            { v: "yes", label: "YES" },
+            { v: "no", label: "NO" },
+            { v: "not_tried", label: "HAVEN'T TRIED" },
+          ].map(o => {
+            const sel = reoccurs === o.v;
+            return (
+              <button key={o.v} onClick={() => setReoccurs(o.v)}
+                      style={{ flex: 1, padding: "10px 4px", borderRadius: 6, background: sel ? T.copper : "transparent", border: `1px solid ${sel ? T.copper : T.charcoal}`, color: sel ? T.darkBg : T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>
+                {o.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {error && <div style={{ fontFamily: sans, fontSize: 11, color: T.red, marginTop: 10 }}>{error}</div>}
+
+        <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+          <button onClick={onClose} disabled={submitting}
+                  style={{ flex: 1, padding: "12px", borderRadius: 8, background: T.charcoal, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 700, letterSpacing: 0.5 }}>CANCEL</button>
+          <button onClick={submit} disabled={submitting || !description.trim() || (screenshot && screenshot.uploading)}
+                  style={{ flex: 2, padding: "12px", borderRadius: 8, background: (submitting || !description.trim() || (screenshot && screenshot.uploading)) ? T.charcoal : T.red, border: "none", cursor: (submitting || !description.trim() || (screenshot && screenshot.uploading)) ? "default" : "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5, opacity: (submitting || !description.trim() || (screenshot && screenshot.uploading)) ? 0.5 : 1 }}>
+            {submitting ? "SUBMITTING…" : "SUBMIT BUG REPORT"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── PROFILE SCREEN (Own Profile) ─── */
 function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, initialUserBio, initialIsPublic, onViewUser, onLogout, userBuilds, onAddBuild, onUpdateBuild, onDeleteBuild, profilePic, onSetProfilePic, notifPrefs, onSetNotifPrefs, feedItems, onDeletePost, onEditPost, onUpdateConvoy, onGoToPost, myPoints: myPointsProp, onSaveProfile, followerCount, followingCount, convoyRsvps, onSubscribePush, onUnsubscribePush, renderFeedScopedTo, onViewBuild, savedRoutes, onUnsaveRoute, onStartNav, myTripPlans, onOpenTripPlan, onNewTripPlan, isAdmin, savedTrips, onUnsaveTrip, onOpenSavedTrip, pendingScroll, onConsumePendingScroll, onOpenAdminDashboard }) {
   const [isPublic, setIsPublic] = useState(initialIsPublic == null ? true : !!initialIsPublic);
@@ -17769,6 +17948,8 @@ function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, init
   const [carouselImages, setCarouselImages] = useState(null);
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
+  const [showBugForm, setShowBugForm] = useState(false);
+  const [bugSubmittedTick, setBugSubmittedTick] = useState(0);
   // Ref + effect for deep-linking into the push toggle. When the parent
   // sets `pendingScroll="push"` (e.g. from the PushPromptModal CTA), we
   // open the settings panel, scroll the toggle into view, and trigger a
@@ -18305,11 +18486,15 @@ function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, init
           <p style={{ fontFamily: serif, fontSize: 13, color: T.warmBg, margin: "0 0 12px", lineHeight: 1.5, maxWidth: 300, marginLeft: "auto", marginRight: "auto" }}>{userBio}</p>
         )}
 
-        {/* Settings Button */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 16 }}>
+        {/* Settings + Report Bug Buttons */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
           <button onClick={() => setShowSettings(true)} style={{ display: "flex", alignItems: "center", gap: 6, background: T.darkCard, padding: "10px 20px", borderRadius: 8, border: "none", cursor: "pointer" }}>
             <Settings size={14} color={T.tertiary} />
             <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, letterSpacing: 1, fontWeight: 600 }}>SETTINGS</span>
+          </button>
+          <button onClick={() => setShowBugForm(true)} style={{ display: "flex", alignItems: "center", gap: 6, background: T.darkCard, padding: "10px 20px", borderRadius: 8, border: `1px solid ${T.red}30`, cursor: "pointer" }}>
+            <AlertTriangle size={14} color={T.red} />
+            <span style={{ fontFamily: sans, fontSize: 11, color: T.red, letterSpacing: 1, fontWeight: 600 }}>REPORT A BUG</span>
           </button>
         </div>
 
@@ -18785,6 +18970,15 @@ function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, init
         // post's own menu).
         filterFn: (p) => !!(currentUserId && p.userId === currentUserId && p.type !== "CONVOYS"),
       })}
+      {showBugForm && (
+        <BugReportForm
+          currentUserId={currentUserId}
+          currentUserHandle={(initialUserHandle || "").replace(/^@/, "")}
+          onClose={() => setShowBugForm(false)}
+          onSubmitted={() => { setBugSubmittedTick(t => t + 1); }}
+        />
+      )}
+      {bugSubmittedTick > 0 && <BugSubmittedToast onDone={() => setBugSubmittedTick(0)} />}
     </div>
   );
 }
@@ -19550,6 +19744,11 @@ function AdminDashboardScreen({ currentUserId, onBack, onViewUser, onOpenAdminEn
   const [pushError, setPushError] = useState("");
   const [pushHistory, setPushHistory] = useState([]);
   const [chartModalKey, setChartModalKey] = useState(null); // "signups" | "dau" | "posts-by-type"
+  // Bugs tab state
+  const [bugReports, setBugReports] = useState([]);
+  const [bugStatusFilter, setBugStatusFilter] = useState("open"); // "open" | "fixed" | "all"
+  const [expandedBugId, setExpandedBugId] = useState(null);
+  const [bugNotesDraft, setBugNotesDraft] = useState({}); // bugId → draft text
   const pushImageFileRef = useRef(null);
 
   const fetchOverview = useCallback(async () => {
@@ -19628,10 +19827,54 @@ function AdminDashboardScreen({ currentUserId, onBack, onViewUser, onOpenAdminEn
     } catch (e) { console.error("[admin] push", e); }
   }, [pushSegment]);
 
+  const fetchBugs = useCallback(async () => {
+    try {
+      let q = supabase.from("bug_reports").select("*").order("created_at", { ascending: false }).limit(200);
+      if (bugStatusFilter !== "all") q = q.eq("status", bugStatusFilter);
+      const { data, error } = await q;
+      if (error) console.error("[admin] bug_reports fetch error:", error);
+      setBugReports(data || []);
+    } catch (e) { console.error("[admin] bug_reports", e); }
+  }, [bugStatusFilter]);
+
+  const setBugStatus = async (bugId, status) => {
+    const patch = { status, updated_at: new Date().toISOString() };
+    if (status === "fixed") {
+      patch.fixed_at = new Date().toISOString();
+      patch.fixed_by = currentUserId;
+    } else {
+      patch.fixed_at = null;
+      patch.fixed_by = null;
+    }
+    setBugReports(prev => prev.map(b => b.id === bugId ? { ...b, ...patch } : b));
+    const { error } = await supabase.from("bug_reports").update(patch).eq("id", bugId);
+    if (error) { console.error("[admin] bug status update", error); fetchBugs(); }
+  };
+
+  const saveBugNotes = async (bugId) => {
+    const notes = bugNotesDraft[bugId];
+    if (notes === undefined) return;
+    const patch = { admin_notes: notes.trim() || null, updated_at: new Date().toISOString() };
+    setBugReports(prev => prev.map(b => b.id === bugId ? { ...b, ...patch } : b));
+    const { error } = await supabase.from("bug_reports").update(patch).eq("id", bugId);
+    if (error) { console.error("[admin] bug notes update", error); fetchBugs(); }
+  };
+
   useEffect(() => { fetchOverview(); }, [fetchOverview]);
   useEffect(() => { if (tab === "users") fetchUsersData(); }, [tab, fetchUsersData]);
   useEffect(() => { if (tab === "content") fetchContentData(); }, [tab, fetchContentData]);
   useEffect(() => { if (tab === "push") fetchPushData(); }, [tab, fetchPushData]);
+  useEffect(() => { if (tab === "bugs") fetchBugs(); }, [tab, fetchBugs]);
+
+  // Realtime: new bug reports appear in the list without a refresh.
+  useEffect(() => {
+    if (tab !== "bugs") return;
+    const ch = supabase.channel(`admin_bugs_${currentUserId || "x"}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "bug_reports" }, () => fetchBugs())
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "bug_reports" }, () => fetchBugs())
+      .subscribe();
+    return () => { try { supabase.removeChannel(ch); } catch (_) {} };
+  }, [tab, currentUserId, fetchBugs]);
 
   // Browser back from /admin → / should exit the admin screen (since the
   // back button on the header pushes / itself). Without this handler, the
@@ -19711,6 +19954,7 @@ function AdminDashboardScreen({ currentUserId, onBack, onViewUser, onOpenAdminEn
     { key: "users", label: "USERS", icon: Users },
     { key: "content", label: "CONTENT", icon: BookOpen },
     { key: "push", label: "PUSH", icon: Bell },
+    { key: "bugs", label: "BUGS", icon: AlertTriangle },
   ];
 
   const sectionTitle = (text) => (
@@ -20082,6 +20326,97 @@ function AdminDashboardScreen({ currentUserId, onBack, onViewUser, onOpenAdminEn
                 </div>
               ))}
             </>)}
+          </div>
+        )}
+        {tab === "bugs" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {/* Status filter pills */}
+            <div style={{ display: "flex", gap: 6 }}>
+              {[
+                { v: "open", label: "OPEN" },
+                { v: "fixed", label: "FIXED" },
+                { v: "all", label: "ALL" },
+              ].map(s => {
+                const sel = bugStatusFilter === s.v;
+                return (
+                  <button key={s.v} onClick={() => setBugStatusFilter(s.v)}
+                          style={{ flex: 1, padding: "8px 4px", borderRadius: 6, background: sel ? T.copper : "transparent", border: `1px solid ${sel ? T.copper : T.charcoal}`, color: sel ? T.darkBg : T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>{s.label}</button>
+                );
+              })}
+            </div>
+            {bugReports.length === 0 ? (
+              <div style={{ background: T.darkCard, borderRadius: 10, padding: 24, textAlign: "center", border: `1px solid ${T.charcoal}` }}>
+                <AlertTriangle size={28} color={T.tertiary} style={{ opacity: 0.4, marginBottom: 8 }} />
+                <div style={{ fontFamily: sans, fontSize: 12, color: T.tertiary }}>No {bugStatusFilter !== "all" ? bugStatusFilter + " " : ""}bug reports.</div>
+              </div>
+            ) : bugReports.map(b => {
+              const isOpen = b.status === "open";
+              const isExpanded = expandedBugId === b.id;
+              const draftNotes = bugNotesDraft[b.id] !== undefined ? bugNotesDraft[b.id] : (b.admin_notes || "");
+              const notesDirty = draftNotes !== (b.admin_notes || "");
+              return (
+                <div key={b.id} style={{ background: T.darkCard, borderRadius: 10, border: `1px solid ${isOpen ? `${T.red}40` : T.charcoal}`, overflow: "hidden" }}>
+                  {/* Header row — click to expand */}
+                  <button onClick={() => setExpandedBugId(isExpanded ? null : b.id)}
+                          style={{ width: "100%", padding: 12, background: "none", border: "none", cursor: "pointer", textAlign: "left", display: "flex", alignItems: "flex-start", gap: 10 }}>
+                    {/* Mark fixed checkbox */}
+                    <button onClick={(e) => { e.stopPropagation(); setBugStatus(b.id, isOpen ? "fixed" : "open"); }}
+                            style={{ width: 20, height: 20, borderRadius: 4, background: isOpen ? "transparent" : T.green, border: `2px solid ${isOpen ? T.tertiary : T.green}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0, flexShrink: 0, marginTop: 2 }}
+                            aria-label={isOpen ? "Mark fixed" : "Reopen"}>
+                      {!isOpen && <CheckCircle size={12} color={T.white} />}
+                    </button>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
+                        <span style={{ fontFamily: sans, fontSize: 9, color: isOpen ? T.red : T.green, letterSpacing: 1, fontWeight: 700 }}>{b.status.toUpperCase()}</span>
+                        {b.reporter_handle && <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 0.5, fontWeight: 600 }}>@{b.reporter_handle}</span>}
+                        <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>{new Date(b.created_at).toLocaleString()}</span>
+                        {b.reoccurs && b.reoccurs !== "not_tried" && (
+                          <span style={{ fontFamily: sans, fontSize: 8, color: b.reoccurs === "yes" ? T.red : T.tertiary, letterSpacing: 0.8, fontWeight: 700, padding: "1px 6px", borderRadius: 3, background: T.darkBg, border: `1px solid ${T.charcoal}` }}>
+                            {b.reoccurs === "yes" ? "REOCCURS" : "NO REPEAT"}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontFamily: serif, fontSize: 13, color: T.white, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: isExpanded ? 99 : 2, WebkitBoxOrient: "vertical", textDecoration: !isOpen ? "line-through" : "none", textDecorationColor: T.tertiary }}>
+                        {b.description}
+                      </div>
+                    </div>
+                    {isExpanded ? <ChevronUp size={14} color={T.tertiary} /> : <ChevronDown size={14} color={T.tertiary} />}
+                  </button>
+                  {isExpanded && (
+                    <div style={{ padding: "0 12px 14px 12px", borderTop: `1px solid ${T.charcoal}` }}>
+                      {b.screenshot_url && (
+                        <>
+                          <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600, marginTop: 12, marginBottom: 6 }}>SCREENSHOT</div>
+                          <a href={b.screenshot_url} target="_blank" rel="noopener noreferrer">
+                            <img src={b.screenshot_url} alt="" style={{ display: "block", width: "100%", maxHeight: 300, objectFit: "contain", background: T.darkBg, borderRadius: 6, border: `1px solid ${T.charcoal}` }} />
+                          </a>
+                        </>
+                      )}
+                      {b.context && <>
+                        <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600, marginTop: 12, marginBottom: 6 }}>CONTEXT</div>
+                        <div style={{ fontFamily: serif, fontSize: 12, color: T.white, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{b.context}</div>
+                      </>}
+                      {b.device_info && <>
+                        <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600, marginTop: 12, marginBottom: 6 }}>DEVICE</div>
+                        <div style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 10, color: T.tertiary, lineHeight: 1.5, whiteSpace: "pre-wrap", padding: 8, background: T.darkBg, borderRadius: 6, border: `1px solid ${T.charcoal}` }}>{b.device_info}</div>
+                      </>}
+                      <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600, marginTop: 12, marginBottom: 6 }}>ADMIN NOTES</div>
+                      <textarea value={draftNotes}
+                                onChange={(e) => setBugNotesDraft(prev => ({ ...prev, [b.id]: e.target.value.slice(0, 2000) }))}
+                                onBlur={() => { if (notesDirty) saveBugNotes(b.id); }} rows={3}
+                                placeholder="Triage notes, repro steps, fix commit, etc."
+                                style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 6, background: T.darkBg, border: `1px solid ${notesDirty ? T.copper : T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", resize: "vertical", lineHeight: 1.4 }} />
+                      <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, marginTop: 4 }}>{notesDirty ? "Unsaved — auto-saves on blur" : (b.admin_notes ? "Saved" : "No notes yet")}</div>
+                      {!isOpen && b.fixed_at && (
+                        <div style={{ fontFamily: sans, fontSize: 10, color: T.green, marginTop: 10 }}>
+                          Fixed {new Date(b.fixed_at).toLocaleString()}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
