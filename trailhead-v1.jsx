@@ -19885,7 +19885,7 @@ function AdminDashboardScreen({ currentUserId, onBack, onViewUser, onOpenAdminEn
           type: "bug_fix",
           actor_id: currentUserId,
           actor_name: "Trailhead",
-          text: "Your bug report has been resolved",
+          text: "Your bug report has been resolved — please close + reopen the app to apply the fix",
           target: (bug.description || "").slice(0, 80),
         });
         if (nerr) console.error("[admin] bug_fix notification insert", nerr);
