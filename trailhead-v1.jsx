@@ -17794,6 +17794,7 @@ function BugReportForm({ currentUserId, currentUserHandle, onClose, onSubmitted 
   const [device, setDevice] = useState(() => buildDeviceInfoString());
   const [reoccurs, setReoccurs] = useState("not_tried");
   const [screenshot, setScreenshot] = useState(null); // { url, uploading? }
+  const [notifyOnFix, setNotifyOnFix] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const fileRef = useRef(null);
@@ -17831,17 +17832,19 @@ function BugReportForm({ currentUserId, currentUserHandle, onClose, onSubmitted 
   const submit = async () => {
     if (!description.trim()) { setError("Describe the bug before submitting."); return; }
     if (!currentUserId) { setError("You need to be signed in to submit a bug."); return; }
-    if (screenshot && screenshot.uploading) { setError("Wait for screenshot upload to finish."); return; }
+    if (!screenshot || !screenshot.url) { setError("Attach a screenshot before submitting."); return; }
+    if (screenshot.uploading) { setError("Wait for screenshot upload to finish."); return; }
     setSubmitting(true); setError("");
     try {
       const { error: insErr } = await supabase.from("bug_reports").insert({
         reporter_id: currentUserId,
         reporter_handle: currentUserHandle || null,
         description: description.trim(),
-        screenshot_url: (screenshot && screenshot.url) || null,
+        screenshot_url: screenshot.url,
         context: context.trim() || null,
         device_info: device.trim() || null,
         reoccurs,
+        notify_on_fix: notifyOnFix,
       });
       if (insErr) throw insErr;
       if (onSubmitted) onSubmitted();
@@ -17875,7 +17878,7 @@ function BugReportForm({ currentUserId, currentUserHandle, onClose, onSubmitted 
                   placeholder="What went wrong? Be specific about what you saw vs. what you expected." rows={4}
                   style={{ ...inputStyle, resize: "vertical" }} />
 
-        <label style={labelStyle}>SCREENSHOT (OPTIONAL)</label>
+        <label style={labelStyle}>SCREENSHOT *</label>
         <input ref={fileRef} type="file" accept="image/*" onChange={(e) => handleFile(e.target.files)} style={{ display: "none" }} />
         {!screenshot && (
           <button onClick={() => fileRef.current && fileRef.current.click()}
@@ -17921,16 +17924,36 @@ function BugReportForm({ currentUserId, currentUserHandle, onClose, onSubmitted 
           })}
         </div>
 
+        {/* Opt-in push notification when the bug gets marked fixed. Tap
+            the whole row so the touch target is generous. */}
+        <button onClick={() => setNotifyOnFix(v => !v)}
+                style={{ marginTop: 14, width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${notifyOnFix ? T.copper : T.charcoal}`, cursor: "pointer", textAlign: "left" }}>
+          <div style={{ width: 18, height: 18, borderRadius: 4, background: notifyOnFix ? T.copper : "transparent", border: `2px solid ${notifyOnFix ? T.copper : T.tertiary}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            {notifyOnFix && <CheckCircle size={11} color={T.darkBg} />}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>Notify me when this is fixed</div>
+            <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 2 }}>You'll get a push when an admin marks it resolved.</div>
+          </div>
+        </button>
+
         {error && <div style={{ fontFamily: sans, fontSize: 11, color: T.red, marginTop: 10 }}>{error}</div>}
 
-        <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-          <button onClick={onClose} disabled={submitting}
-                  style={{ flex: 1, padding: "12px", borderRadius: 8, background: T.charcoal, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 700, letterSpacing: 0.5 }}>CANCEL</button>
-          <button onClick={submit} disabled={submitting || !description.trim() || (screenshot && screenshot.uploading)}
-                  style={{ flex: 2, padding: "12px", borderRadius: 8, background: (submitting || !description.trim() || (screenshot && screenshot.uploading)) ? T.charcoal : T.red, border: "none", cursor: (submitting || !description.trim() || (screenshot && screenshot.uploading)) ? "default" : "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5, opacity: (submitting || !description.trim() || (screenshot && screenshot.uploading)) ? 0.5 : 1 }}>
-            {submitting ? "SUBMITTING…" : "SUBMIT BUG REPORT"}
-          </button>
-        </div>
+        {(() => {
+          const screenshotReady = screenshot && screenshot.url;
+          const screenshotPending = screenshot && screenshot.uploading;
+          const disabled = submitting || !description.trim() || !screenshotReady || screenshotPending;
+          return (
+            <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+              <button onClick={onClose} disabled={submitting}
+                      style={{ flex: 1, padding: "12px", borderRadius: 8, background: T.charcoal, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 700, letterSpacing: 0.5 }}>CANCEL</button>
+              <button onClick={submit} disabled={disabled}
+                      style={{ flex: 2, padding: "12px", borderRadius: 8, background: disabled ? T.charcoal : T.red, border: "none", cursor: disabled ? "default" : "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5, opacity: disabled ? 0.5 : 1 }}>
+                {submitting ? "SUBMITTING…" : "SUBMIT BUG REPORT"}
+              </button>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
@@ -19838,6 +19861,9 @@ function AdminDashboardScreen({ currentUserId, onBack, onViewUser, onOpenAdminEn
   }, [bugStatusFilter]);
 
   const setBugStatus = async (bugId, status) => {
+    const bug = bugReports.find(b => b.id === bugId);
+    const wasOpen = bug && bug.status === "open";
+    const flippingToFixed = status === "fixed" && wasOpen;
     const patch = { status, updated_at: new Date().toISOString() };
     if (status === "fixed") {
       patch.fixed_at = new Date().toISOString();
@@ -19848,7 +19874,23 @@ function AdminDashboardScreen({ currentUserId, onBack, onViewUser, onOpenAdminEn
     }
     setBugReports(prev => prev.map(b => b.id === bugId ? { ...b, ...patch } : b));
     const { error } = await supabase.from("bug_reports").update(patch).eq("id", bugId);
-    if (error) { console.error("[admin] bug status update", error); fetchBugs(); }
+    if (error) { console.error("[admin] bug status update", error); fetchBugs(); return; }
+    // Send the opt-in notification when the bug flips open → fixed. RLS on
+    // notifications requires actor_id = auth.uid() (admin doing the fix).
+    // DB trigger fans this row out to the reporter's push subscriptions.
+    if (flippingToFixed && bug && bug.notify_on_fix && bug.reporter_id && bug.reporter_id !== currentUserId) {
+      try {
+        const { error: nerr } = await supabase.from("notifications").insert({
+          user_id: bug.reporter_id,
+          type: "bug_fix",
+          actor_id: currentUserId,
+          actor_name: "Trailhead",
+          text: "Your bug report has been resolved",
+          target: (bug.description || "").slice(0, 80),
+        });
+        if (nerr) console.error("[admin] bug_fix notification insert", nerr);
+      } catch (e) { console.error("[admin] bug_fix notification threw", e); }
+    }
   };
 
   const saveBugNotes = async (bugId) => {
@@ -24266,7 +24308,7 @@ function clientDataToDbBuild(data, userId) {
 // derived client-side from the type field.
 function dbNotifToBell(row) {
   if (!row) return null;
-  const iconMap = { like: { icon: Heart, iconColor: T.red }, comment: { icon: MessageCircle, iconColor: T.copper }, mention: { icon: AtSign, iconColor: T.copper }, reply: { icon: MessageCircle, iconColor: T.copper }, follow: { icon: UserPlus, iconColor: T.green }, rsvp: { icon: Users, iconColor: T.green }, role: { icon: Shield, iconColor: T.copper } };
+  const iconMap = { like: { icon: Heart, iconColor: T.red }, comment: { icon: MessageCircle, iconColor: T.copper }, mention: { icon: AtSign, iconColor: T.copper }, reply: { icon: MessageCircle, iconColor: T.copper }, follow: { icon: UserPlus, iconColor: T.green }, rsvp: { icon: Users, iconColor: T.green }, role: { icon: Shield, iconColor: T.copper }, bug_fix: { icon: CheckCircle, iconColor: T.green } };
   const ic = iconMap[row.type] || { icon: Bell, iconColor: T.tertiary };
   return {
     id: row.id,
