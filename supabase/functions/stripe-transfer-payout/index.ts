@@ -130,23 +130,45 @@ Deno.serve(async (req: Request) => {
     return ok({ ok: false, error: "ambassador hasn't completed Stripe onboarding (banking info / W-9 missing)" }, 400);
   }
 
+  // Fetch the ambassador's display name for the Stripe transfer
+  // description (visible on their Stripe dashboard + bank statement
+  // memo line) + a human-readable month label for the earning period.
+  const profResp = await supabaseFetch(`/rest/v1/profiles?id=eq.${amb.profile_id}&select=full_name,handle`);
+  const prof = (Array.isArray(profResp.data) && profResp.data[0]) || {};
+  const displayName = prof.full_name || prof.handle || "Ambassador";
+  // period_start is yyyy-mm-dd. Build "April 2026" without timezone drift.
+  const periodMonthLabel = (() => {
+    try {
+      const d = new Date(`${payout.period_start}T00:00:00Z`);
+      return d.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+    } catch { return String(payout.period_start || ""); }
+  })();
+
   // Compute amount in cents (Stripe takes integer minor units).
   const netDollars = parseFloat(String(payout.net_amount || "0")) || 0;
   if (netDollars <= 0) return ok({ ok: false, error: "payout net_amount must be > 0" }, 400);
   const amountCents = Math.round(netDollars * 100);
 
-  // Create the transfer. Idempotency key = payout id so a retry doesn't
-  // double-fund. Stripe returns the same transfer object on retry.
+  // Create the transfer. Idempotency key includes payout id (so a
+  // double-click within the same attempt doesn't double-fund) PLUS the
+  // prior failure timestamp (so admin can retry after a sync failure
+  // without hitting Stripe's 24h cached-response replay). On a fresh
+  // payout, transfer_failed_at is null → key is just the id.
+  const idemKey = payout.transfer_failed_at
+    ? `trailhead_payout_${payoutId}_retry_${new Date(payout.transfer_failed_at).getTime()}`
+    : `trailhead_payout_${payoutId}`;
   const transferResp = await stripeFetch("/v1/transfers", {
     amount: String(amountCents),
     currency: "usd",
     destination: amb.stripe_account_id,
-    description: `Trailhead ambassador commission payout — period ${payout.period_start} to ${payout.period_end}`,
+    description: `LPO ambassador commission · ${displayName} · ${periodMonthLabel}`,
     "metadata[trailhead_payout_id]": payoutId,
     "metadata[trailhead_ambassador_id]": amb.id,
+    "metadata[trailhead_ambassador_name]": displayName,
+    "metadata[trailhead_earning_month]": periodMonthLabel,
     "metadata[trailhead_period_start]": String(payout.period_start),
     "metadata[trailhead_period_end]": String(payout.period_end),
-  }, `trailhead_payout_${payoutId}`);
+  }, idemKey);
 
   if (!transferResp.ok || !transferResp.data?.id) {
     // Persist failure detail so admin can debug. Status stays 'approved'.
@@ -198,6 +220,20 @@ Deno.serve(async (req: Request) => {
     body: JSON.stringify({
       state: "paid",
       updated_at: new Date().toISOString(),
+    }),
+  });
+
+  // Notify the ambassador their payout was paid. The DB trigger on
+  // notifications.INSERT fans out to web push via send-push.
+  const amountStr = `$${(amountCents / 100).toFixed(2)}`;
+  await supabaseFetch(`/rest/v1/notifications`, {
+    method: "POST",
+    headers: { "Prefer": "return=minimal" },
+    body: JSON.stringify({
+      user_id: amb.profile_id,
+      actor_id: userId,
+      type: "payout_paid",
+      text: `paid your ${amountStr} commission for ${periodMonthLabel}`,
     }),
   });
 
