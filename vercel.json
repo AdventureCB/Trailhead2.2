@@ -4,6 +4,7 @@
   "framework": null,
   "rewrites": [
     { "source": "/sitemap.xml", "destination": "/api/sitemap.xml" },
+    { "source": "/r/:code", "destination": "/api/r?code=:code" },
     { "source": "/trips/:slug", "destination": "/api/preview?type=trip&id=:slug" },
     { "source": "/plans/:slug", "destination": "/api/preview?type=plan&id=:slug" },
     { "source": "/spots/:id", "destination": "/api/preview?type=spot&id=:id" },
