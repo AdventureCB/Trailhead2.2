@@ -2,13 +2,17 @@
 //
 // Called by the client after `uploadPostPhotoList` resolves a public
 // storage URL. Sends the URL to Anthropic's Claude Haiku 4.5 vision API
-// and returns a short, SEO-friendly alt-text description suitable for
-// <img alt="…">, OG previews, and screen readers.
+// and returns:
+//   - alt        : short, SEO-friendly alt-text description
+//   - moderation : { adult: boolean, reason?: string } — used by the
+//                  client to block + delete adult uploads before they
+//                  hit the DB. Single round-trip per image keeps cost
+//                  identical to the prior alt-only flow.
 //
 // Request:  POST { "url": "https://…/post-photos/…jpg" }
 //   Required header: Authorization: Bearer <supabase JWT>
 //                    (supabase.functions.invoke() sends this automatically)
-// Response: 200  { "alt": "Red Toyota 4Runner parked at a dusty desert trailhead at sunset" }
+// Response: 200  { "alt": "…", "moderation": { "adult": false } }
 //           4xx/5xx { "error": "…" }  — caller treats as "no alt" and proceeds
 //
 // DEPLOY: `supabase functions deploy generate-alt-text`  (do NOT pass --no-verify-jwt)
@@ -27,6 +31,7 @@ const MODEL = Deno.env.get("MODEL_OVERRIDE") || "claude-haiku-4-5-20251001";
 const ALLOWED_URL_PREFIXES = [
   "https://babbgaziiyjfaqjsaxgd.supabase.co/storage/v1/object/public/post-photos/",
   "https://babbgaziiyjfaqjsaxgd.supabase.co/storage/v1/object/public/avatars/",
+  "https://babbgaziiyjfaqjsaxgd.supabase.co/storage/v1/object/public/dm-attachments/",
 ];
 
 // Per-user rate limit. In-memory per edge-instance — worst case attacker
@@ -59,14 +64,24 @@ function extractUserId(authHeader: string | null): string | null {
   } catch { return null; }
 }
 
-// One-sentence alt text. Avoids "image of"/"photo of" filler that hurts
-// SEO and screen-reader UX. Caps length to keep the persisted string
-// small in jsonb.
+// Single-shot prompt: returns JSON with alt + moderation flag. We ask
+// Claude to be conservative on `adult` — explicit nudity or sexual acts
+// only, NOT suggestive/swimwear/shirtless. False positives on overlanding
+// + camping content (people in swimsuits at a lake, etc.) would be worse
+// than missing edge cases.
 const PROMPT =
-  "Write a single-sentence alt-text description of this image for accessibility and SEO. " +
-  "Be specific: name vehicles (make/model if visible), terrain, weather, notable gear, location features. " +
-  "Avoid phrases like \"image of\" or \"photo of\". Max 180 characters. " +
-  "Reply with only the description — no preamble, no quotes.";
+  "You are reviewing an uploaded image for a public outdoors/overlanding community app. " +
+  "Reply with ONLY a JSON object on a single line — no preamble, no code fence, no quotes around the JSON. " +
+  "Schema: { \"alt\": string, \"moderation\": { \"adult\": boolean, \"reason\": string } }\n\n" +
+  "RULES:\n" +
+  "- alt: one specific sentence (max 180 chars) describing the image for accessibility and SEO. " +
+  "Name vehicles (make/model if visible), terrain, weather, notable gear, location features. " +
+  "Avoid phrases like \"image of\" or \"photo of\".\n" +
+  "- moderation.adult: true ONLY if the image contains explicit nudity, sexual acts, or pornographic content. " +
+  "Do NOT flag swimwear, shirtless people, breastfeeding, or non-sexual partial nudity. " +
+  "Be conservative — this is an outdoors community where people swim and camp.\n" +
+  "- moderation.reason: short string explaining why if adult=true, otherwise empty string.\n\n" +
+  "Example output: {\"alt\":\"Red Toyota 4Runner parked at a dusty desert trailhead at sunset\",\"moderation\":{\"adult\":false,\"reason\":\"\"}}";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -79,6 +94,19 @@ function json(body: unknown, status = 200): Response {
     status,
     headers: { ...CORS, "Content-Type": "application/json" },
   });
+}
+
+// Pull the first JSON-object substring out of Claude's text response.
+// Defensive: Claude usually obeys our "JSON only" instruction but we've
+// seen occasional leading/trailing whitespace or stray markdown fences.
+function extractJsonObject(text: string): { alt?: string; moderation?: { adult?: boolean; reason?: string } } | null {
+  if (typeof text !== "string") return null;
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) return null;
+  try {
+    return JSON.parse(text.slice(start, end + 1));
+  } catch { return null; }
 }
 
 Deno.serve(async (req: Request) => {
@@ -122,7 +150,7 @@ Deno.serve(async (req: Request) => {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 200,
+        max_tokens: 400,
         messages: [{
           role: "user",
           content: [
@@ -140,25 +168,39 @@ Deno.serve(async (req: Request) => {
     }
 
     const data = await resp.json();
-    // Defensive extraction — content is an array of blocks; the text block
-    // is typically the first one for our prompt.
-    let alt = "";
+    let raw = "";
     if (Array.isArray(data?.content)) {
       for (const block of data.content) {
         if (block?.type === "text" && typeof block.text === "string") {
-          alt = block.text;
+          raw = block.text;
           break;
         }
       }
     }
-    alt = (alt || "").trim();
+    const parsed = extractJsonObject(raw.trim());
+    let alt = "";
+    let moderation = { adult: false, reason: "" };
+    if (parsed) {
+      if (typeof parsed.alt === "string") alt = parsed.alt.trim();
+      if (parsed.moderation && typeof parsed.moderation === "object") {
+        moderation = {
+          adult: parsed.moderation.adult === true,
+          reason: typeof parsed.moderation.reason === "string" ? parsed.moderation.reason.trim() : "",
+        };
+      }
+    } else {
+      // Couldn't parse JSON — fall back to treating the raw text as alt.
+      // Moderation defaults to {adult:false} so we don't false-positive
+      // block uploads when the model misbehaves on formatting.
+      alt = raw.trim();
+    }
     // Strip stray surrounding quotes Claude sometimes adds.
     if ((alt.startsWith('"') && alt.endsWith('"')) || (alt.startsWith("'") && alt.endsWith("'"))) {
       alt = alt.slice(1, -1).trim();
     }
     // Hard cap to keep the persisted string small in jsonb.
     if (alt.length > 200) alt = alt.slice(0, 197) + "…";
-    return json({ alt });
+    return json({ alt, moderation });
   } catch (e) {
     console.error("[generate-alt-text] failed", e);
     return json({ error: "internal" }, 500);
