@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "layers": {
+    "padus": {
+      "source": "mapbox://tileset-source/lonepeakoverland/padus-source",
+      "minzoom": 4,
+      "maxzoom": 12,
+      "features": {
+        "attributes": {
+          "allowed_output": [
+            "Mang_Type",
+            "Mang_Name",
+            "Des_Tp",
+            "Unit_Nm",
+            "Loc_Nm",
+            "State_Nm",
+            "Pub_Access"
+          ]
+        }
+      }
+    }
+  }
+}

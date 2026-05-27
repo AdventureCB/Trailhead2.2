@@ -1,0 +1,18 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "0a438ce0c98d63c7d9d832129125b632"
+application_url = "https://trailhead.lonepeakoverland.com"
+embedded = false
+name = "Trailhead Ambassador Integrate"
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_customers,read_price_rules,write_price_rules,read_discounts,write_discounts,read_orders,read_products"
+optional_scopes = [ ]
+use_legacy_install_flow = false
+
+[auth]
+redirect_urls = [ "https://babbgaziiyjfaqjsaxgd.supabase.co/functions/v1/shopify-oauth-callback" ]
+
+[webhooks]
+api_version = "2026-04"
