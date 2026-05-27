@@ -150,13 +150,16 @@ Deno.serve(async (req: Request) => {
 
   // Look up this ambassador's codes (any status — including soft-deleted
   // so we can backfill orders that used a now-deleted code).
-  const codesResp = await supabaseFetch(`/rest/v1/ambassador_discount_codes?ambassador_id=eq.${ambassadorId}&select=code,internal_code,role`);
+  const codesResp = await supabaseFetch(`/rest/v1/ambassador_discount_codes?ambassador_id=eq.${ambassadorId}&select=id,code,internal_code,role`);
   if (!codesResp.ok) return json({ ok: false, error: "couldn't load ambassador's codes", detail: codesResp.data }, 502);
   const codeRows: any[] = Array.isArray(codesResp.data) ? codesResp.data : [];
   const codes = new Set<string>();
+  // Reverse map: code string → ambassador_discount_codes.id. Used at
+  // insert time to populate ambassador_orders.discount_code_id.
+  const codeToId: Record<string, string> = {};
   for (const r of codeRows) {
-    if (r.code) codes.add(r.code);
-    if (r.internal_code) codes.add(r.internal_code);
+    if (r.code) { codes.add(r.code); codeToId[r.code] = r.id; }
+    if (r.internal_code) { codes.add(r.internal_code); codeToId[r.internal_code] = r.id; }
   }
   if (codes.size === 0) {
     return json({ ok: false, error: "ambassador has no discount codes to backfill" }, 400);
@@ -254,9 +257,19 @@ Deno.serve(async (req: Request) => {
       const customerName = `${order.customer?.firstName || ""} ${order.customer?.lastName || ""}`.trim() || null;
       const customerNameNorm = normalizeName(order.customer?.firstName, order.customer?.lastName);
 
+      // Pick the attributing discount code id from the order's codes —
+      // walk discountCodes (GraphQL returns array of strings) and take
+      // the first one we own.
+      const orderDiscountCodes: string[] = Array.isArray(order.discountCodes) ? order.discountCodes : [];
+      let attributingCodeId: string | null = null;
+      for (const c of orderDiscountCodes) {
+        if (codeToId[c]) { attributingCodeId = codeToId[c]; break; }
+      }
+
       // Insert ambassador_orders (idempotent via shopify_order_id UNIQUE).
       const insertBody = {
         ambassador_id: ambassadorId,
+        discount_code_id: attributingCodeId,
         shopify_order_id: orderId,
         shopify_order_number: order.name || null,
         shopify_customer_id: customerShopifyId,

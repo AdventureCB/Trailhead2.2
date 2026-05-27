@@ -215,9 +215,15 @@ async function handleOrderPaid(order: any): Promise<Response> {
   const customerName = `${order.customer?.first_name || ""} ${order.customer?.last_name || ""}`.trim() || null;
   const customerNameNorm = normalizeName(order.customer?.first_name, order.customer?.last_name);
 
+  // Pick the discount code that earned attribution — first match belonging
+  // to the winning ambassador. Enables per-code breakdown without parsing
+  // raw_webhook.discount_codes downstream.
+  const attributingCodeId = matches.find(m => m.ambassador_id === ambassadorId)?.id || matches[0].id;
+
   // Idempotent insert — UNIQUE on shopify_order_id dedupes Shopify retries.
   const insertOrderBody = {
     ambassador_id: ambassadorId,
+    discount_code_id: attributingCodeId,
     shopify_order_id: String(order.id),
     shopify_order_number: order.name || null,
     shopify_customer_id: customerShopifyId,
