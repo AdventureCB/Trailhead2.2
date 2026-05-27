@@ -1,8 +1,11 @@
 // Trailhead — Edge Function: stripe-webhook
 //
-// Receives Stripe events. Phase 2A handles `account.updated` (Connect
-// onboarding state changes). Phase 2B will add transfer.failed /
-// transfer.reversed handlers for payout reconciliation.
+// Receives Stripe events:
+//   - account.updated   → Connect onboarding state changes (Phase 2A)
+//   - transfer.reversed → Stripe clawed back a previously-paid transfer
+//                         (rare; Phase 2B). Note: there is no transfer.failed
+//                         event — /v1/transfers failures are synchronous and
+//                         handled in stripe-transfer-payout's API response.
 //
 // Auth via Stripe's signed-webhook HMAC (STRIPE_WEBHOOK_SECRET). Stripe
 // doesn't send a Supabase JWT — deploy with `--no-verify-jwt`.
@@ -126,7 +129,52 @@ Deno.serve(async (req: Request) => {
     return ok({ ok: true, event: event.type, onboarded });
   }
 
-  // Other events: ack + log. Phase 2B will add transfer.* handlers.
+  // ─── transfer.reversed ────────────────────────────────────────────
+  // Stripe clawed back a previously-paid transfer (rare — e.g. payment
+  // dispute on the original charge). Flip payout status to 'failed' and
+  // revert linked journeys back to 'confirmed' so admin can re-handle.
+  if (event.type === "transfer.reversed") {
+    const transfer = event.data?.object;
+    const transferId = transfer?.id;
+    if (!transferId) return ok({ ok: false, error: "missing transfer id" }, 400);
+
+    // Find the payout row by stripe_transfer_id.
+    const payResp = await supabaseFetch(`/rest/v1/ambassador_payouts?stripe_transfer_id=eq.${transferId}&select=id,status`);
+    if (!Array.isArray(payResp.data) || !payResp.data[0]) {
+      console.log("[stripe-webhook] no payout found for transfer", transferId);
+      return ok({ ok: true, event: event.type, no_match: true });
+    }
+    const payout = payResp.data[0];
+    const failureMsg = transfer?.failure_message || transfer?.failure_code || event.type;
+
+    await supabaseFetch(`/rest/v1/ambassador_payouts?id=eq.${payout.id}`, {
+      method: "PATCH",
+      headers: { "Prefer": "return=minimal" },
+      body: JSON.stringify({
+        status: "failed",
+        transfer_failed_at: new Date().toISOString(),
+        transfer_failure_message: failureMsg,
+        updated_at: new Date().toISOString(),
+      }),
+    });
+    // Revert linked journeys from paid → their pre-paid state so they
+    // re-appear in PENDING REVIEW. We can't perfectly distinguish
+    // 'confirmed' vs 'walk_in' here without re-deriving, so flip all
+    // 'paid' journeys back to 'confirmed' (most common). Admin can
+    // visually verify in the dashboard.
+    await supabaseFetch(`/rest/v1/ambassador_journeys?payout_id=eq.${payout.id}&state=eq.paid`, {
+      method: "PATCH",
+      headers: { "Prefer": "return=minimal" },
+      body: JSON.stringify({
+        state: "confirmed",
+        updated_at: new Date().toISOString(),
+      }),
+    });
+
+    console.log(`[stripe-webhook] payout ${payout.id} reverted from paid → failed (${event.type})`);
+    return ok({ ok: true, event: event.type, payout_id: payout.id });
+  }
+
   console.log("[stripe-webhook] unhandled event", event.type);
   return ok({ ok: true, ignored: event.type });
 });
