@@ -6,8 +6,9 @@
 -- are filtered out). Admin attaches the order to the customer's open
 -- deposit_only journey, optionally overrides commission_eligible_subtotal
 -- (e.g. the post-refund amount), and the RPC recomputes + auto-promotes
--- deposit_only → confirmed if the cumulative eligible passes the
--- confirmation threshold.
+-- deposit_only → confirmed if the cumulative `confirmation_subtotal`
+-- (raw subtotal sum, INCLUDES the deposit) passes the confirmation
+-- threshold. Mirrors the webhook's promotion logic exactly.
 
 -- 1) Extend the audit-action enum.
 alter table public.admin_order_corrections
@@ -34,7 +35,7 @@ declare
   v_old_journey_id uuid;
   v_before jsonb;
   v_after jsonb;
-  v_total numeric;
+  v_confirm_subtotal numeric;
   v_min numeric;
   v_new_state text;
   v_actor_handle text;
@@ -74,7 +75,8 @@ begin
     'commission_eligible_subtotal', v_order.commission_eligible_subtotal,
     'classification', v_order.classification,
     'journey_state', v_journey.state,
-    'journey_total_before', v_journey.commission_eligible_total
+    'journey_confirmation_subtotal_before', v_journey.confirmation_subtotal,
+    'journey_commission_eligible_total_before', v_journey.commission_eligible_total
   );
 
   -- Link the order + apply the override + re-classify.
@@ -84,16 +86,29 @@ begin
       classification = v_new_classification
   where id = p_order_id;
 
-  -- Recompute the destination journey totals.
+  -- Recompute confirmation_subtotal manually — recompute_journey only
+  -- updates commission_eligible_total + commission_amount. The promotion
+  -- check (and the webhook) read confirmation_subtotal, so it MUST be in
+  -- sync with the actual linked-order set after the link.
+  update ambassador_journeys
+  set confirmation_subtotal = (
+    select coalesce(sum(subtotal), 0)
+    from ambassador_orders
+    where journey_id = p_journey_id and removed_at is null
+  )
+  where id = p_journey_id;
+
+  -- Recompute commission_eligible_total + commission_amount.
   perform recompute_journey(p_journey_id);
 
-  -- State promotion: deposit_only → confirmed when cumulative eligible
-  -- passes the configured confirmation_min (default $5,000).
+  -- State promotion: deposit_only → confirmed when cumulative
+  -- confirmation_subtotal (raw subtotal sum including the deposit's
+  -- $500) passes the configured confirmation_min (default $5,000).
   select coalesce((select confirmation_min from commission_config limit 1), 5000) into v_min;
-  select commission_eligible_total, state into v_total, v_new_state
+  select confirmation_subtotal, state into v_confirm_subtotal, v_new_state
     from ambassador_journeys where id = p_journey_id;
 
-  if v_new_state = 'deposit_only' and v_total >= v_min then
+  if v_new_state = 'deposit_only' and v_confirm_subtotal >= v_min then
     update ambassador_journeys
     set state = 'confirmed',
         confirmed_at = coalesce(confirmed_at, now())
@@ -102,7 +117,15 @@ begin
   end if;
 
   -- Recompute the old journey too (it loses this order's contribution).
+  -- Same dual-recompute pattern: subtotals first, then eligible.
   if v_old_journey_id is not null and v_old_journey_id <> p_journey_id then
+    update ambassador_journeys
+    set confirmation_subtotal = (
+      select coalesce(sum(subtotal), 0)
+      from ambassador_orders
+      where journey_id = v_old_journey_id and removed_at is null
+    )
+    where id = v_old_journey_id;
     perform recompute_journey(v_old_journey_id);
   end if;
 
@@ -111,7 +134,7 @@ begin
     'commission_eligible_subtotal', v_eligible_to_store,
     'classification', v_new_classification,
     'journey_state', v_new_state,
-    'journey_total_after', v_total
+    'journey_confirmation_subtotal_after', v_confirm_subtotal
   );
 
   select handle into v_actor_handle from profiles where id = auth.uid();
