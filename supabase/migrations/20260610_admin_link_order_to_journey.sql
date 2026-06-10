@@ -116,9 +116,15 @@ begin
     from ambassador_journeys where id = p_journey_id;
 
   if v_new_state = 'deposit_only' and v_confirm_subtotal >= v_min then
+    -- Stamp confirmed_at to the LINKED ORDER's order_date (not now()),
+    -- so the journey lands in the payout cycle for the month the order
+    -- actually happened. Otherwise admin manually linking an April
+    -- confirmation order in June would push the journey into the June
+    -- payout cycle, when it really belongs in April's (closed →
+    -- PENDING REVIEW tab).
     update ambassador_journeys
     set state = 'confirmed',
-        confirmed_at = coalesce(confirmed_at, now())
+        confirmed_at = coalesce(confirmed_at, v_order.order_date, now())
     where id = p_journey_id;
     v_new_state := 'confirmed';
   end if;
