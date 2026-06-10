@@ -7,8 +7,13 @@
 -- deposit_only journey, optionally overrides commission_eligible_subtotal
 -- (e.g. the post-refund amount), and the RPC recomputes + auto-promotes
 -- deposit_only → confirmed if the cumulative `confirmation_subtotal`
--- (raw subtotal sum, INCLUDES the deposit) passes the confirmation
--- threshold. Mirrors the webhook's promotion logic exactly.
+-- passes the confirmation threshold.
+--
+-- IMPORTANT semantic detail: `confirmation_subtotal` accumulates ONLY
+-- confirmation-part orders. The $500 deposit lives in a separate column
+-- (`deposit_subtotal`) and does NOT count toward the threshold — matches
+-- the webhook's promotion check exactly (handleOrderPaid:
+-- `if (wasDepositOnly && newConfirmation >= confirmationMin)`).
 
 -- 1) Extend the audit-action enum.
 alter table public.admin_order_corrections
@@ -86,15 +91,17 @@ begin
       classification = v_new_classification
   where id = p_order_id;
 
-  -- Recompute confirmation_subtotal manually — recompute_journey only
-  -- updates commission_eligible_total + commission_amount. The promotion
-  -- check (and the webhook) read confirmation_subtotal, so it MUST be in
-  -- sync with the actual linked-order set after the link.
+  -- Recompute confirmation_subtotal — sums NON-deposit orders' subtotals.
+  -- The deposit lives in a separate column (deposit_subtotal); including
+  -- it here would diverge from the webhook's semantics and break the
+  -- threshold check (which only cares about confirmation parts).
   update ambassador_journeys
   set confirmation_subtotal = (
     select coalesce(sum(subtotal), 0)
     from ambassador_orders
-    where journey_id = p_journey_id and removed_at is null
+    where journey_id = p_journey_id
+      and removed_at is null
+      and classification <> 'deposit'
   )
   where id = p_journey_id;
 
@@ -102,8 +109,8 @@ begin
   perform recompute_journey(p_journey_id);
 
   -- State promotion: deposit_only → confirmed when cumulative
-  -- confirmation_subtotal (raw subtotal sum including the deposit's
-  -- $500) passes the configured confirmation_min (default $5,000).
+  -- confirmation_subtotal passes the configured confirmation_min
+  -- (default $5,000). Matches the webhook's promotion logic exactly.
   select coalesce((select confirmation_min from commission_config limit 1), 5000) into v_min;
   select confirmation_subtotal, state into v_confirm_subtotal, v_new_state
     from ambassador_journeys where id = p_journey_id;
@@ -117,13 +124,14 @@ begin
   end if;
 
   -- Recompute the old journey too (it loses this order's contribution).
-  -- Same dual-recompute pattern: subtotals first, then eligible.
   if v_old_journey_id is not null and v_old_journey_id <> p_journey_id then
     update ambassador_journeys
     set confirmation_subtotal = (
       select coalesce(sum(subtotal), 0)
       from ambassador_orders
-      where journey_id = v_old_journey_id and removed_at is null
+      where journey_id = v_old_journey_id
+        and removed_at is null
+        and classification <> 'deposit'
     )
     where id = v_old_journey_id;
     perform recompute_journey(v_old_journey_id);
