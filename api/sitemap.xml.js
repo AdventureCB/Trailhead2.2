@@ -74,7 +74,7 @@ module.exports = async function handler(req, res) {
   // URL in the SPA — `openCategory` is internal state, not a route. Only
   // subcategories have indexable landings (`/forum/<sub-slug>`), and those
   // are already DB-driven below so renames/additions propagate next request.
-  const [forumSubcategories, forumThreads, tripReports, builds, campingSpots, profiles, posts] = await Promise.all([
+  const [forumSubcategories, forumThreads, tripReports, builds, campingSpots, profiles, posts, gearDrops] = await Promise.all([
     supabaseFetch("forum_subcategories", "select=slug,updated_at,created_at&order=sort_order.asc&limit=2000"),
     supabaseFetch("forum_threads", "select=slug,subcategory_slug,updated_at,created_at&order=updated_at.desc&limit=10000"),
     supabaseFetch("trip_reports", "status=eq.published&select=slug,updated_at,created_at,kind,visibility&order=updated_at.desc&limit=10000"),
@@ -90,6 +90,9 @@ module.exports = async function handler(req, res) {
     // others; if Trailhead ever blows past 50K total URLs we'll need to
     // split into a sitemap index.
     supabaseFetch("posts", "select=id,updated_at,created_at&order=updated_at.desc&limit=10000"),
+    // Gear drops — sponsored events. Drafts are filtered out at the
+    // query layer so they never leak into the sitemap.
+    supabaseFetch("gear_drops", "status=neq.draft&slug=not.is.null&select=slug,updated_at,created_at,status&order=updated_at.desc&limit=2000"),
   ]);
 
   const urls = [];
@@ -138,6 +141,16 @@ module.exports = async function handler(req, res) {
     if (!row || !row.id) return;
     const lastmod = row.updated_at || row.created_at || now;
     urls.push(urlEntry(`${origin}/spots/${row.id}`, lastmod, "monthly", "0.6"));
+  });
+
+  // Gear drops — sponsored events. Live + scheduled get higher
+  // frequency hints since the page changes (countdown / participant
+  // count); ended drops are stable archives.
+  (gearDrops || []).forEach(row => {
+    if (!row || !row.slug) return;
+    const lastmod = row.updated_at || row.created_at || now;
+    const isActive = row.status === "live" || row.status === "scheduled";
+    urls.push(urlEntry(`${origin}/drops/${row.slug}`, lastmod, isActive ? "daily" : "monthly", isActive ? "0.8" : "0.5"));
   });
 
   // User profile hubs — Person/ProfilePage for E-E-A-T anchoring across

@@ -405,6 +405,65 @@ async function resolveEntity(type, id) {
       },
     };
   }
+  if (type === "gear-drop") {
+    const row = await supabaseFetch(
+      "gear_drops",
+      `slug=eq.${encodeURIComponent(id)}&select=title,slug,brand_partner_name,brand_logo_url,hero_img,about,prize_title,prize_description,prize_value_cents,prize_photos,status,starts_at,ends_at,start_lat,start_lng,host_admin_id,winner_announced_at,created_at,updated_at&limit=1`
+    );
+    if (!row) return null;
+    // Don't surface drafts publicly.
+    if (row.status === "draft") return null;
+    const accent = "4A7C59"; // gear drops green
+    const startMap = (row.start_lat != null && row.start_lng != null)
+      ? staticMap(row.start_lng, row.start_lat, accent, "marker", 11)
+      : null;
+    const image = row.hero_img || startMap;
+    // Strip HTML for og:description (rich text source → plain text summary).
+    const stripHtml = (s) => (s || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    const aboutPlain = stripHtml(row.about);
+    const prizePlain = stripHtml(row.prize_description);
+    const description = aboutPlain
+      || (prizePlain ? `Prize: ${row.prize_title}. ${prizePlain}` : `Sponsored gear drop event with prize: ${row.prize_title || "TBA"}.`);
+    let imageAlt = "";
+    if (image && image === row.hero_img && Array.isArray(row.prize_photos)) {
+      imageAlt = findPhotoAlt(row.prize_photos, row.hero_img);
+    }
+    if (!imageAlt) imageAlt = `${row.title} gear drop — hosted by ${row.brand_partner_name || "Lone Peak Overland"}`;
+    const prizeValueUsd = row.prize_value_cents != null ? (row.prize_value_cents / 100).toFixed(2) : null;
+    return {
+      title: `${row.title} · Gear Drop`,
+      description: description.length > 240 ? description.slice(0, 237) + "…" : description,
+      image,
+      imageAlt,
+      jsonLd: {
+        kind: "GearDrop",
+        title: row.title,
+        slug: row.slug,
+        description: aboutPlain,
+        image,
+        startsAt: row.starts_at,
+        endsAt: row.ends_at,
+        startLat: row.start_lat,
+        startLng: row.start_lng,
+        brand: row.brand_partner_name,
+        brandLogoUrl: row.brand_logo_url,
+        prizeTitle: row.prize_title,
+        prizeDescription: prizePlain,
+        prizeValueUsd,
+        status: row.status,
+        winnerAnnouncedAt: row.winner_announced_at,
+        createdAt: row.created_at,
+        modifiedAt: row.updated_at && row.updated_at !== row.created_at ? row.updated_at : null,
+      },
+      breadcrumb: {
+        items: [
+          { name: "Trailhead", url: null },
+          { name: "Gear Drops", url: null },
+          { name: row.title, url: null },
+        ],
+      },
+    };
+  }
   if (type === "spot") {
     const row = await supabaseFetch(
       "camping_spots",
@@ -1000,6 +1059,60 @@ function buildTripArticleSSR(article, canonicalUrl, origin) {
 }
 
 // Camping spot SSR — name, location, description, key attributes (type, fee).
+// Gear drop SSR — sponsored event landing page. Brand chip + title hero,
+// prize summary, plain-text about (rich-text stripped server-side), date
+// + status row. Crawlers + people-on-slow-networks see the article before
+// the SPA mounts.
+function buildGearDropSSR(d, canonicalUrl, origin) {
+  if (!d || !d.title) return "";
+  const accent = "#4A7C59";
+  const crumbs = ssrCrumbs([
+    { name: "Trailhead", url: `${origin}/` },
+    { name: "Gear Drops" },
+    { name: d.title },
+  ], origin);
+  const brandChip = d.brand
+    ? `<div style="display:inline-flex;align-items:center;gap:10px;padding:8px 14px;background:#1A1A1A;border:1px solid #C49A6C;border-radius:28px;margin:0 0 14px;font-family:'Trebuchet MS',sans-serif;font-size:13px;color:#C49A6C;font-weight:700;letter-spacing:1px;text-transform:uppercase;">${d.brandLogoUrl ? `<img src="${escapeHtml(d.brandLogoUrl)}" alt="" style="width:24px;height:24px;border-radius:5px;object-fit:cover;">` : ""}<span>${escapeHtml(d.brand)}</span></div>`
+    : "";
+  const statusLabel =
+    d.status === "live" ? "LIVE NOW" :
+    d.status === "scheduled" ? "UPCOMING" :
+    d.status === "ended" ? (d.winnerAnnouncedAt ? "ENDED · WINNER DECLARED" : "ENDED") :
+    "";
+  const statusColor =
+    d.status === "live" ? "#BD472A" :
+    d.status === "scheduled" ? "#C49A6C" :
+    "#8B7D6B";
+  const statusChip = statusLabel
+    ? `<div style="display:inline-flex;align-items:center;gap:6px;padding:4px 12px;background:${statusColor};color:#fff;border-radius:8px;margin-right:10px;font-family:'Trebuchet MS',sans-serif;font-size:11px;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;">${statusLabel}</div>`
+    : "";
+  const dateLabel = d.startsAt
+    ? new Date(d.startsAt).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })
+    : "";
+  const dateRow = dateLabel
+    ? `<div style="margin:6px 0 18px;font-family:'Trebuchet MS',sans-serif;font-size:13px;color:#F5F2ED;">${statusChip}<span>${escapeHtml(dateLabel)}</span></div>`
+    : (statusChip ? `<div style="margin:6px 0 18px;">${statusChip}</div>` : "");
+  const prizeTitle = d.prizeTitle
+    ? `<div style="display:flex;align-items:center;gap:10px;padding:14px 16px;background:#1A1A1A;border-radius:10px;margin:0 0 18px;"><span style="font-family:'Trebuchet MS',sans-serif;font-size:10px;color:#C49A6C;font-weight:700;letter-spacing:0.8px;">PRIZE</span><strong style="font-family:'Trebuchet MS',sans-serif;font-size:15px;color:#F5F2ED;">${escapeHtml(d.prizeTitle)}</strong>${d.prizeValueUsd ? `<span style="margin-left:auto;font-family:'Trebuchet MS',sans-serif;font-size:13px;color:#8B7D6B;">$${escapeHtml(d.prizeValueUsd)}</span>` : ""}</div>`
+    : "";
+  const prizeBody = d.prizeDescription
+    ? `<div style="font-size:15px;color:#F5F2ED;margin:0 0 22px;line-height:1.7;">${escapeHtml(d.prizeDescription)}</div>`
+    : "";
+  const aboutBody = d.description
+    ? `<h2 style="font-family:'Trebuchet MS',sans-serif;font-size:14px;color:${accent};letter-spacing:0.8px;margin:0 0 8px;">ABOUT</h2><div style="font-size:16px;color:#F5F2ED;margin:0 0 22px;line-height:1.7;">${escapeHtml(d.description)}</div>`
+    : "";
+  return ssrArticleShell({
+    title: escapeHtml(d.title),
+    crumbs,
+    byline: brandChip,
+    hero: d.image ? escapeHtml(d.image) : null,
+    heroAlt: escapeHtml(`${d.title} gear drop hosted by ${d.brand || "Lone Peak Overland"}`),
+    body: dateRow + prizeTitle + prizeBody + aboutBody,
+    accent,
+    footerLabel: `Gear drop event on <a href="${origin}/" style="color:${accent};text-decoration:none;">Trailhead</a> — sponsored route + prize race hosted by Lone Peak Overland and brand partners.`,
+  });
+}
+
 function buildCampingSpotSSR(spot, canonicalUrl, origin) {
   if (!spot || !spot.name) return "";
   const accent = "#5B8C5A";
@@ -1299,6 +1412,7 @@ module.exports = async function handler(req, res) {
   const prettyPath =
     type === "trip" ? `/trips/${id}` :
     type === "plan" ? `/plans/${id}` :
+    type === "gear-drop" ? `/drops/${id}` :
     type === "spot" ? `/spots/${id}` :
     type === "build" ? `/builds/${id}` :
     type === "post" || type === "route" ? `/post/${id}` :
@@ -1647,6 +1761,64 @@ module.exports = async function handler(req, res) {
     };
     const clean = Object.fromEntries(Object.entries(ld).filter(([, v]) => v !== undefined));
     jsonLdTag = `<script type="application/ld+json">${JSON.stringify(clean).replace(/</g, "\\u003c")}</script>`;
+  } else if (meta.jsonLd && meta.jsonLd.kind === "GearDrop") {
+    // Schema.org Event for sponsored gear drops. eventStatus tracks the
+    // lifecycle so Google knows whether the event is upcoming, live, or
+    // has finished. sponsor carries the brand partner; organizer is LPO.
+    // offers covers the free entry signal Google needs to surface the
+    // event in rich results.
+    const j = meta.jsonLd;
+    const eventStatus =
+      j.status === "ended" || j.status === "archived" ? "https://schema.org/EventCompleted" :
+      j.status === "live" ? "https://schema.org/EventScheduled" :
+      "https://schema.org/EventScheduled";
+    const locationNode = (j.startLat != null && j.startLng != null)
+      ? {
+          "@type": "Place",
+          name: j.title || "Gear Drop Start Point",
+          geo: { "@type": "GeoCoordinates", latitude: j.startLat, longitude: j.startLng },
+        }
+      : undefined;
+    const sponsorNode = j.brand
+      ? Object.fromEntries(Object.entries({
+          "@type": "Organization",
+          name: j.brand,
+          logo: j.brandLogoUrl || undefined,
+        }).filter(([, v]) => v !== undefined))
+      : undefined;
+    const offersNode = {
+      "@type": "Offer",
+      url: canonicalUrl,
+      price: "0",
+      priceCurrency: "USD",
+      availability: j.status === "live" || j.status === "scheduled" ? "https://schema.org/InStock" : "https://schema.org/SoldOut",
+      validFrom: j.createdAt || undefined,
+    };
+    const ld = {
+      "@context": "https://schema.org",
+      "@type": "Event",
+      name: j.title,
+      description: j.description || undefined,
+      image: j.image || undefined,
+      url: canonicalUrl,
+      startDate: j.startsAt || undefined,
+      endDate: j.endsAt || undefined,
+      eventStatus,
+      eventAttendanceMode: "https://schema.org/OfflineEventAttendanceMode",
+      location: locationNode,
+      organizer: {
+        "@type": "Organization",
+        name: "Lone Peak Overland",
+        url: "https://www.lonepeakoverland.com/",
+        logo: { "@type": "ImageObject", url: `${origin}/lone-peak-flag.png` },
+      },
+      sponsor: sponsorNode,
+      offers: Object.fromEntries(Object.entries(offersNode).filter(([, v]) => v !== undefined)),
+      dateCreated: j.createdAt || undefined,
+      dateModified: j.modifiedAt || undefined,
+    };
+    const clean = Object.fromEntries(Object.entries(ld).filter(([, v]) => v !== undefined));
+    jsonLdTag = `<script type="application/ld+json">${JSON.stringify(clean).replace(/</g, "\\u003c")}</script>`;
   } else if (meta.jsonLd && meta.jsonLd.kind === "HQ") {
     // LocalBusiness for HQ — gives Google the address, geo, contact for
     // potential Google Business Profile enrichment.
@@ -1716,6 +1888,8 @@ module.exports = async function handler(req, res) {
   } else if (type === "forum-sub" && meta.article) {
     const subInfoWithSlug = { ...meta.article.subInfo, slug: sub };
     ssrHtml = buildForumSubSSR({ ...meta.article, subInfo: subInfoWithSlug }, origin);
+  } else if (type === "gear-drop" && meta.jsonLd && meta.jsonLd.kind === "GearDrop") {
+    ssrHtml = buildGearDropSSR(meta.jsonLd, canonicalUrl, origin);
   } else if ((type === "trip" || type === "plan") && meta.jsonLd && meta.jsonLd.kind === "TripReport") {
     ssrHtml = buildTripArticleSSR({ ...meta.jsonLd, imageAlt: meta.imageAlt }, canonicalUrl, origin);
   } else if (type === "spot" && meta.jsonLd && meta.jsonLd.kind === "CampingSpot") {
