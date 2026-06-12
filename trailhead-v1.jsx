@@ -24234,7 +24234,7 @@ const GD_RB_CSS = `<style>
 .gd-rb img{max-width:100%;border-radius:8px;display:block;margin:8px 0}
 </style>`;
 
-function GearDropDetailScreen({ dropId, currentUserId, isAdmin, onClose, onLoad, onJoin, onLeave, myRun, onOpenRun, onLoadComments, onAddComment, onDeleteComment, onLoadParticipants, onViewUser, onStartDirections, onOpenTrip }) {
+function GearDropDetailScreen({ dropId, currentUserId, isAdmin, onClose, onLoad, onJoin, onLeave, myRun, onOpenRun, onLoadComments, onAddComment, onDeleteComment, onLoadParticipants, onViewUser, onStartDirections, onOpenTrip, onBroadcastAnnouncement, onTransitionStatus }) {
   const [drop, setDrop] = useState(null);
   const [participantCount, setParticipantCount] = useState(null);
   const [joining, setJoining] = useState(false);
@@ -24261,6 +24261,14 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, onClose, onLoad,
   const [racers, setRacers] = useState([]);
   const [racersLoaded, setRacersLoaded] = useState(false);
   const [leaderboardOpen, setLeaderboardOpen] = useState(false);
+  // Host control panel — visible only to admin or the drop's host.
+  // `announcementOpen` toggles the send-message modal; `liveTrackerOpen`
+  // toggles the fullscreen map of racer pucks.
+  const [announcementOpen, setAnnouncementOpen] = useState(false);
+  const [announcementDraft, setAnnouncementDraft] = useState("");
+  const [announcementSending, setAnnouncementSending] = useState(false);
+  const [liveTrackerOpen, setLiveTrackerOpen] = useState(false);
+  const [statusTransitioning, setStatusTransitioning] = useState(false);
 
   // Heartbeat the clock once a minute for live countdown rerenders.
   useEffect(() => {
@@ -24689,6 +24697,71 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, onClose, onLoad,
           </button>
         </div>
 
+        {/* Host control panel — admin or host only. Surfaces the key
+            live-event actions (go live / end event, send announcement,
+            open the live tracker map) right where the host is already
+            looking. Co-hosts (gear_drop_editors) keep using the full
+            editor for now — only admin + host see this panel. */}
+        {(isAdmin || (drop.host_admin_id && drop.host_admin_id === currentUserId)) && (
+          <div style={{ padding: 14, background: T.darkCard, border: `1px solid ${T.copper}`, borderRadius: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <Settings size={14} color={T.copper} />
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 0.8 }}>HOST CONTROLS</span>
+            </div>
+            {/* Status quick action — scheduled → live, live → ended. */}
+            {drop.status === "scheduled" && onTransitionStatus && (
+              <button
+                disabled={statusTransitioning}
+                onClick={async () => {
+                  if (typeof confirm === "function" && !confirm("Take this drop live now? Participants can begin the race.")) return;
+                  setStatusTransitioning(true);
+                  try {
+                    const res = await onTransitionStatus(drop.id, "live");
+                    if (res && res.error) alert("Couldn't go live: " + res.error);
+                  } finally { setStatusTransitioning(false); }
+                }}
+                style={{ width: "100%", padding: "12px 14px", background: T.red, border: "none", borderRadius: 10, color: T.white, fontFamily: sans, fontSize: 12, fontWeight: 800, letterSpacing: 1, cursor: "pointer", marginBottom: 8 }}
+              >
+                {statusTransitioning ? "GOING LIVE…" : "GO LIVE NOW"}
+              </button>
+            )}
+            {drop.status === "live" && onTransitionStatus && (
+              <button
+                disabled={statusTransitioning}
+                onClick={async () => {
+                  if (typeof confirm === "function" && !confirm("End this drop? Runs will be frozen and further waypoint submissions blocked.")) return;
+                  setStatusTransitioning(true);
+                  try {
+                    const res = await onTransitionStatus(drop.id, "ended");
+                    if (res && res.error) alert("Couldn't end event: " + res.error);
+                  } finally { setStatusTransitioning(false); }
+                }}
+                style={{ width: "100%", padding: "12px 14px", background: T.tertiary, border: "none", borderRadius: 10, color: T.white, fontFamily: sans, fontSize: 12, fontWeight: 800, letterSpacing: 1, cursor: "pointer", marginBottom: 8 }}
+              >
+                {statusTransitioning ? "ENDING…" : "END EVENT"}
+              </button>
+            )}
+            <div style={{ display: "flex", gap: 8 }}>
+              {onBroadcastAnnouncement && (
+                <button
+                  onClick={() => setAnnouncementOpen(true)}
+                  style={{ flex: 1, padding: "10px 12px", background: T.darkBg, border: `1px solid ${T.copper}`, borderRadius: 10, color: T.copper, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.6, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+                >
+                  <Send size={12} color={T.copper} />
+                  SEND ANNOUNCEMENT
+                </button>
+              )}
+              <button
+                onClick={() => setLiveTrackerOpen(true)}
+                style={{ flex: 1, padding: "10px 12px", background: T.darkBg, border: `1px solid ${T.copper}`, borderRadius: 10, color: T.copper, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.6, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+              >
+                <Radio size={12} color={T.copper} />
+                LIVE TRACKER
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Live leaderboard — collapsible. Visible during live + ended
             states (any time there's been progress to look at). Same
             sort + chips as the run-screen leaderboard so a racer's
@@ -24939,6 +25012,71 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, onClose, onLoad,
         )}
       </div>
 
+      {/* Send announcement modal — host-only. Inserts a notification per
+          racer via gear_drop_broadcast_announcement; existing push
+          trigger fans out the web push. */}
+      {announcementOpen && (
+        <div onClick={() => !announcementSending && setAnnouncementOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 235, display: "flex", alignItems: "flex-end" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 430, margin: "0 auto", background: T.darkBg, borderRadius: "16px 16px 0 0", border: `1px solid ${T.copper}`, borderBottom: "none", padding: "18px 18px 22px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+              <Send size={14} color={T.copper} />
+              <span style={{ flex: 1, fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 0.8 }}>SEND ANNOUNCEMENT</span>
+              <button onClick={() => !announcementSending && setAnnouncementOpen(false)} disabled={announcementSending} style={{ background: "none", border: "none", padding: 4, cursor: announcementSending ? "default" : "pointer" }}>
+                <X size={18} color={T.white} />
+              </button>
+            </div>
+            <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 12px", lineHeight: 1.4 }}>
+              Goes to every joined racer's notifications + push. Use it for course updates, weather changes, prize swaps, etc.
+            </p>
+            <textarea
+              value={announcementDraft}
+              onChange={(e) => setAnnouncementDraft(e.target.value.slice(0, 280))}
+              placeholder="Type your message…"
+              rows={4}
+              maxLength={280}
+              disabled={announcementSending}
+              style={{ width: "100%", padding: 12, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10, color: T.white, fontFamily: serif, fontSize: 13, boxSizing: "border-box", resize: "vertical" }}
+            />
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, marginBottom: 14 }}>
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.4 }}>{announcementDraft.length}/280</span>
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>To {(racers || []).filter(r => r.user_id !== currentUserId).length} racer{(racers || []).filter(r => r.user_id !== currentUserId).length === 1 ? "" : "s"}</span>
+            </div>
+            <button
+              onClick={async () => {
+                if (!onBroadcastAnnouncement || announcementSending || !announcementDraft.trim()) return;
+                setAnnouncementSending(true);
+                try {
+                  const res = await onBroadcastAnnouncement(drop.id, announcementDraft.trim());
+                  if (res && res.ok) {
+                    setAnnouncementDraft("");
+                    setAnnouncementOpen(false);
+                    alert(`Sent to ${res.sent_to} racer${res.sent_to === 1 ? "" : "s"}.`);
+                  } else if (res && res.error) {
+                    alert("Send failed: " + res.error);
+                  }
+                } finally { setAnnouncementSending(false); }
+              }}
+              disabled={announcementSending || !announcementDraft.trim()}
+              style={{ width: "100%", padding: 14, background: announcementSending || !announcementDraft.trim() ? T.charcoal : T.copper, border: "none", borderRadius: 10, color: T.white, fontFamily: sans, fontSize: 13, fontWeight: 800, letterSpacing: 1, cursor: announcementSending || !announcementDraft.trim() ? "default" : "pointer" }}
+            >
+              {announcementSending ? "SENDING…" : "SEND TO RACERS"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Live tracker overlay — fullscreen Mapbox map with racer pucks
+          fed by Supabase Realtime presence + the route polyline. Host-
+          only; mounted on demand. */}
+      {liveTrackerOpen && (
+        <GearDropLiveTracker
+          drop={drop}
+          racers={racers}
+          currentUserId={currentUserId}
+          onClose={() => setLiveTrackerOpen(false)}
+        />
+      )}
+
       {/* Arrival-at-start popup. Fires once GPS shows the joined user is
           inside arrival_radius_m of the start point and they haven't
           started the run yet. START YOUR RUN if live; countdown if not. */}
@@ -25000,6 +25138,203 @@ function makeCircleGeoJSON(centerLat, centerLng, radiusM, points = 64) {
     coords.push([centerLng + dLng * Math.cos(t), centerLat + dLat * Math.sin(t)]);
   }
   return { type: "Feature", geometry: { type: "Polygon", coordinates: [coords] }, properties: {} };
+}
+
+// ─── Gear Drop live tracker (host-only race monitor) ──────────────────
+// Fullscreen Mapbox map showing every active racer's puck via Supabase
+// Realtime presence (channel `gd_track_<drop_id>` populated by each
+// participant's GearDropRunScreen). Renders the drop's pin/route layer
+// for context. No DB writes — presence state is ephemeral and lives on
+// the Realtime server. Stale racers (last_seen_at > 90s ago) fade so
+// the host can tell who's actively broadcasting vs paused or offline.
+function GearDropLiveTracker({ drop, racers, currentUserId, onClose }) {
+  const mapContainerRef = useRef(null);
+  const mapInst = useRef(null);
+  const markersRef = useRef({}); // user_id → mapboxgl.Marker
+  const [mapReady, setMapReady] = useState(false);
+  const [presence, setPresence] = useState({}); // user_id → state object
+  const [now, setNow] = useState(Date.now());
+
+  // Tick the clock every 10s so fade thresholds (last_seen > 90s)
+  // refresh without re-tracking.
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 10000);
+    return () => clearInterval(t);
+  }, []);
+
+  const pins = (drop && drop.route_data && Array.isArray(drop.route_data.pins)) ? drop.route_data.pins : [];
+
+  // Init Mapbox + fitBounds to pins.
+  useEffect(() => {
+    if (!drop || !mapContainerRef.current || mapInst.current) return;
+    let cancelled = false;
+    (async () => {
+      let mapboxgl;
+      try { mapboxgl = await loadMapbox(); } catch (e) { return; }
+      if (cancelled || !mapContainerRef.current || mapInst.current) return;
+      const valid = pins.filter(p => p && p.lat != null && p.lng != null);
+      const center = valid.length
+        ? [valid[0].lng, valid[0].lat]
+        : (drop.start_lng != null ? [drop.start_lng, drop.start_lat] : [-111.0, 39.5]);
+      const map = new mapboxgl.Map({
+        container: mapContainerRef.current,
+        style: MAPBOX_STYLE,
+        center,
+        zoom: valid.length ? 12 : 4,
+        attributionControl: false,
+      });
+      map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), "top-right");
+      mapInst.current = map;
+      const onLoad = () => {
+        if (cancelled) return;
+        setMapReady(true);
+        if (valid.length > 1) {
+          const bounds = new mapboxgl.LngLatBounds([valid[0].lng, valid[0].lat], [valid[0].lng, valid[0].lat]);
+          valid.forEach(p => bounds.extend([p.lng, p.lat]));
+          try { map.fitBounds(bounds, { padding: 60, maxZoom: 13, duration: 0 }); } catch (e) {}
+        }
+      };
+      if (map.isStyleLoaded()) onLoad(); else map.on("load", onLoad);
+    })();
+    return () => {
+      cancelled = true;
+      Object.values(markersRef.current).forEach(m => { try { m.remove(); } catch (e) {} });
+      markersRef.current = {};
+      if (mapInst.current) { try { mapInst.current.remove(); } catch (e) {} mapInst.current = null; }
+      setMapReady(false);
+    };
+  }, [drop && drop.id]);
+
+  // Render the route polyline + pin markers via the shared builder hook.
+  useGearDropPinBuilderLayer(mapInst, mapReady, pins, true, "pins");
+
+  // Subscribe to the presence channel. Each racer's RunScreen broadcasts
+  // {user_id, lat, lng, handle, full_name, avatar_url, unlocked, last_seen_at}
+  // every 15s; we collapse the multi-presence-per-key reality (Supabase
+  // can list a single key multiple times if the same user has the tab
+  // open in two places) by taking the most recent.
+  useEffect(() => {
+    if (!drop || !drop.id) return;
+    let cancelled = false;
+    const ch = supabase.channel(`gd_track_${drop.id}`, {
+      config: { presence: { key: currentUserId || "host" } }
+    });
+    const sync = () => {
+      if (cancelled || !ch) return;
+      const state = ch.presenceState();
+      const next = {};
+      Object.keys(state).forEach(key => {
+        const entries = state[key] || [];
+        // Pick the most recent entry with lat/lng. Multiple tabs of the
+        // same user can produce duplicate keys — take the latest.
+        let best = null;
+        entries.forEach(e => {
+          if (e && e.lat != null && e.lng != null) {
+            if (!best || (e.last_seen_at && best.last_seen_at && new Date(e.last_seen_at) > new Date(best.last_seen_at))) best = e;
+          }
+        });
+        if (best) next[best.user_id || key] = best;
+      });
+      setPresence(next);
+    };
+    ch.on("presence", { event: "sync" }, sync)
+      .on("presence", { event: "join" }, sync)
+      .on("presence", { event: "leave" }, sync)
+      .subscribe();
+    return () => {
+      cancelled = true;
+      try { supabase.removeChannel(ch); } catch (e) {}
+    };
+  }, [drop && drop.id, currentUserId]);
+
+  // Reconcile racer puck markers with presence state. Create on first
+  // appearance, update on subsequent ticks, remove on leave.
+  useEffect(() => {
+    const map = mapInst.current;
+    if (!map || !mapReady || !window.mapboxgl) return;
+    const liveIds = new Set(Object.keys(presence));
+    // Remove stale (left) markers.
+    Object.keys(markersRef.current).forEach(uid => {
+      if (!liveIds.has(uid)) {
+        try { markersRef.current[uid].remove(); } catch (e) {}
+        delete markersRef.current[uid];
+      }
+    });
+    // Create or update markers.
+    Object.keys(presence).forEach(uid => {
+      const state = presence[uid];
+      if (!state || state.lat == null || state.lng == null) return;
+      const isMe = uid === currentUserId;
+      const lastSeenMs = state.last_seen_at ? new Date(state.last_seen_at).getTime() : 0;
+      const ageMs = now - lastSeenMs;
+      const isStale = ageMs > 90000;
+      const opacity = isStale ? 0.45 : 1;
+      const existing = markersRef.current[uid];
+      if (existing) {
+        try { existing.setLngLat([state.lng, state.lat]); } catch (e) {}
+        try {
+          const el = existing.getElement();
+          if (el) el.style.opacity = String(opacity);
+        } catch (e) {}
+      } else {
+        const el = document.createElement("div");
+        el.style.cssText = `position:relative;width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:${opacity}`;
+        const ring = document.createElement("div");
+        const color = isMe ? T.copper : T.green;
+        ring.style.cssText = `width:32px;height:32px;border-radius:50%;background:${color};border:2px solid #fff;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center`;
+        if (state.avatar_url) {
+          const img = document.createElement("img");
+          img.src = state.avatar_url;
+          img.alt = "";
+          img.style.cssText = `width:100%;height:100%;object-fit:cover`;
+          ring.appendChild(img);
+        } else {
+          const initial = ((state.full_name || state.handle || "?").charAt(0) || "?").toUpperCase();
+          ring.style.color = "#fff";
+          ring.style.fontFamily = "sans-serif";
+          ring.style.fontSize = "13px";
+          ring.style.fontWeight = "700";
+          ring.textContent = initial;
+        }
+        el.appendChild(ring);
+        try {
+          const marker = new window.mapboxgl.Marker({ element: el, anchor: "center" })
+            .setLngLat([state.lng, state.lat])
+            .addTo(map);
+          markersRef.current[uid] = marker;
+        } catch (e) { /* non-fatal */ }
+      }
+    });
+  }, [presence, mapReady, currentUserId, now]);
+
+  const liveCount = Object.keys(presence).filter(uid => {
+    const s = presence[uid];
+    if (!s || !s.last_seen_at) return false;
+    return (now - new Date(s.last_seen_at).getTime()) <= 90000;
+  }).length;
+  const totalCount = Object.keys(presence).length;
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: T.darkBg, zIndex: 240, display: "flex", flexDirection: "column" }}>
+      <div style={{ position: "sticky", top: 0, padding: "14px 16px", background: T.darkBg, borderBottom: `1px solid ${T.charcoal}`, display: "flex", alignItems: "center", gap: 8, zIndex: 5 }}>
+        <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+          <ChevronLeft size={20} color={T.white} />
+        </button>
+        <Radio size={16} color={T.red} />
+        <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.8, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{drop.title} · LIVE TRACKER</span>
+        <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, fontWeight: 700, letterSpacing: 0.6 }}>{liveCount}/{totalCount} ACTIVE</span>
+      </div>
+      <div ref={mapContainerRef} style={{ flex: 1, minHeight: 0 }} />
+      {totalCount === 0 && (
+        <div style={{ position: "absolute", top: "50%", left: 0, right: 0, transform: "translateY(-50%)", textAlign: "center", padding: "0 32px", pointerEvents: "none" }}>
+          <div style={{ display: "inline-block", padding: "14px 18px", background: `${T.darkCard}E0`, border: `1px solid ${T.charcoal}`, borderRadius: 12 }}>
+            <p style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, margin: "0 0 4px" }}>Waiting for racers to broadcast</p>
+            <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: 0 }}>Pucks appear here when a participant has the run screen open.</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─── Gear Drop run screen (live race UX) ────────────────────────────────
@@ -25235,6 +25570,66 @@ function GearDropRunScreen({ runId, currentUserId, onClose, onLoadRun, onLoadDro
       try { supabase.removeChannel(ch); } catch (e) {}
     };
   }, [drop && drop.id, runId, onLoadParticipants, onLoadRun]);
+
+  // Live GPS broadcast to the host control panel via Supabase Realtime
+  // presence. Joins channel `gd_track_<drop_id>`, tracks {lat,lng,handle,
+  // full_name,avatar_url,progress,last_seen_at} so the host's live
+  // tracker can plot every active racer's puck without any DB writes.
+  // Re-tracks every 15s so a tab the host opens mid-race sees current
+  // coordinates immediately (presence state replays to new subscribers).
+  // Stops once the run is finished — no point broadcasting after the
+  // finish line.
+  const userLocRef = useRef(userLoc);
+  useEffect(() => { userLocRef.current = userLoc; }, [userLoc]);
+  useEffect(() => {
+    if (!drop || !drop.id || !currentUserId || !run) return;
+    if (run.finished_at) return;
+    let cancelled = false;
+    let intervalId = null;
+    let channel = null;
+    let myProfile = { handle: null, full_name: null, avatar_url: null };
+    (async () => {
+      try {
+        const { data } = await supabase.from("profiles")
+          .select("handle, full_name, avatar_url").eq("id", currentUserId).maybeSingle();
+        if (data) myProfile = data;
+      } catch (e) { /* non-fatal */ }
+      if (cancelled) return;
+      channel = supabase.channel(`gd_track_${drop.id}`, {
+        config: { presence: { key: currentUserId } }
+      });
+      const tick = () => {
+        if (!channel) return;
+        const loc = userLocRef.current;
+        if (!loc) return;
+        const unlockedNow = (run && run.progress && Array.isArray(run.progress.waypointsUnlocked))
+          ? run.progress.waypointsUnlocked.length : 0;
+        try {
+          channel.track({
+            user_id: currentUserId,
+            lat: loc.lat,
+            lng: loc.lng,
+            handle: myProfile.handle || null,
+            full_name: myProfile.full_name || null,
+            avatar_url: myProfile.avatar_url || null,
+            unlocked: unlockedNow,
+            last_seen_at: new Date().toISOString(),
+          });
+        } catch (e) { /* non-fatal */ }
+      };
+      channel.subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          tick();
+          intervalId = setInterval(tick, 15000);
+        }
+      });
+    })();
+    return () => {
+      cancelled = true;
+      if (intervalId) clearInterval(intervalId);
+      if (channel) { try { supabase.removeChannel(channel); } catch (e) {} }
+    };
+  }, [drop && drop.id, currentUserId, run && run.id, run && run.finished_at]);
 
   // Sort the leaderboard: finished first by finished_at asc (winner on top),
   // then in-progress by progress count desc, then last_unlocked_at asc (most
@@ -37267,6 +37662,38 @@ export default function Trailhead() {
     return { ok: true, data: res.data, id: newId };
   };
 
+  // Broadcast a free-form announcement to every racer in a live drop.
+  // Server-side gates on can_edit_gear_drop so admin + host + co-hosts
+  // can all send. Inserts a notification per participant; existing
+  // notifications_send_push trigger fans it out to web push.
+  const gearDropBroadcastAnnouncement = async (dropId, body) => {
+    if (!dropId) return { error: "Missing drop id" };
+    if (!body || !body.trim()) return { error: "Message required" };
+    try {
+      const { data, error } = await supabase.rpc("gear_drop_broadcast_announcement", {
+        p_drop_id: dropId,
+        p_body: body.trim(),
+      });
+      if (error) return { error: error.message || "Broadcast failed" };
+      return { ok: true, sent_to: (data && data.sent_to) || 0 };
+    } catch (e) {
+      console.error("[gearDropBroadcastAnnouncement] failed", e);
+      return { error: "Network error" };
+    }
+  };
+
+  // Status flip helper exposed for the host control panel (the editor
+  // has its own inline transitionStatus with the same confirm dialogs).
+  // Doesn't run confirms — the caller does, so the host panel can use
+  // its own UX (bottom-sheet, custom copy, etc.).
+  const transitionGearDropStatus = async (dropId, newStatus) => {
+    if (!dropId || !newStatus) return { error: "Missing id or status" };
+    if (newStatus === "scheduled") {
+      return await scheduleGearDrop(dropId);
+    }
+    return await updateGearDrop(dropId, { status: newStatus });
+  };
+
   // Per-drop co-host grants — temp editor access scoped to a single drop
   // (your "admin + toggle to assign temporary editing privileges" pattern).
   const grantGearDropEditor = async (dropId, userId) => {
@@ -42654,6 +43081,8 @@ export default function Trailhead() {
           onLeave={leaveGearDrop}
           onOpenRun={(rid) => setRunScreenRunId(rid)}
           onOpenTrip={(slug) => { setViewingGearDropId(null); setPendingTripNav(slug); }}
+          onBroadcastAnnouncement={gearDropBroadcastAnnouncement}
+          onTransitionStatus={transitionGearDropStatus}
         />
       )}
 
