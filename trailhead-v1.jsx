@@ -24435,6 +24435,35 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, onClose, onLoad,
     } finally { setJoining(false); }
   };
 
+  // Leaderboard sort — finished racers first by finish time asc (winner
+  // gets the trophy), then live racers by pin count desc + earliest
+  // last_unlocked_at as tiebreak (first to reach a pin ranks higher).
+  // Declared BEFORE the early-return so the hook count is stable across
+  // the loading vs loaded renders (React #310 — rules of hooks).
+  const sortedRacers = useMemo(() => {
+    const finishedRows = (racers || []).filter(p => p.finished_at)
+      .sort((a, b) => new Date(a.finished_at).getTime() - new Date(b.finished_at).getTime());
+    const liveRows = (racers || []).filter(p => !p.finished_at)
+      .sort((a, b) => {
+        const aP = (a.progress && Array.isArray(a.progress.waypointsUnlocked)) ? a.progress.waypointsUnlocked.length : 0;
+        const bP = (b.progress && Array.isArray(b.progress.waypointsUnlocked)) ? b.progress.waypointsUnlocked.length : 0;
+        if (aP !== bP) return bP - aP;
+        const aT = a.last_unlocked_at ? new Date(a.last_unlocked_at).getTime() : Infinity;
+        const bT = b.last_unlocked_at ? new Date(b.last_unlocked_at).getTime() : Infinity;
+        return aT - bT;
+      });
+    return [...finishedRows, ...liveRows];
+  }, [racers]);
+
+  // Racer recaps — only finishers whose run has been auto-promoted to a
+  // shareable memento (status='published' + has a slug). Mirrors the
+  // sortedRacers finished-first ordering so the trophy is on top.
+  const mementos = useMemo(() => {
+    return (racers || [])
+      .filter(r => r.finished_at && r.status === "published" && r.slug)
+      .sort((a, b) => new Date(a.finished_at).getTime() - new Date(b.finished_at).getTime());
+  }, [racers]);
+
   if (!drop) {
     return (
       <div style={{ position: "fixed", inset: 0, background: T.darkBg, zIndex: 200, display: "flex", flexDirection: "column" }}>
@@ -24481,33 +24510,6 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, onClose, onLoad,
 
   const statusColor = isLive ? T.red : isScheduled ? T.copper : T.tertiary;
   const statusLabel = isLive ? "LIVE NOW" : isScheduled ? "UPCOMING" : isEnded ? (hasWinner ? "ENDED · WINNER DECLARED" : "ENDED") : drop.status;
-
-  // Leaderboard sort — finished racers first by finish time asc (winner
-  // gets the trophy), then live racers by pin count desc + earliest
-  // last_unlocked_at as tiebreak (first to reach a pin ranks higher).
-  const sortedRacers = useMemo(() => {
-    const finishedRows = (racers || []).filter(p => p.finished_at)
-      .sort((a, b) => new Date(a.finished_at).getTime() - new Date(b.finished_at).getTime());
-    const liveRows = (racers || []).filter(p => !p.finished_at)
-      .sort((a, b) => {
-        const aP = (a.progress && Array.isArray(a.progress.waypointsUnlocked)) ? a.progress.waypointsUnlocked.length : 0;
-        const bP = (b.progress && Array.isArray(b.progress.waypointsUnlocked)) ? b.progress.waypointsUnlocked.length : 0;
-        if (aP !== bP) return bP - aP;
-        const aT = a.last_unlocked_at ? new Date(a.last_unlocked_at).getTime() : Infinity;
-        const bT = b.last_unlocked_at ? new Date(b.last_unlocked_at).getTime() : Infinity;
-        return aT - bT;
-      });
-    return [...finishedRows, ...liveRows];
-  }, [racers]);
-
-  // Racer recaps — only finishers whose run has been auto-promoted to a
-  // shareable memento (status='published' + has a slug). Mirrors the
-  // sortedRacers finished-first ordering so the trophy is on top.
-  const mementos = useMemo(() => {
-    return (racers || [])
-      .filter(r => r.finished_at && r.status === "published" && r.slug)
-      .sort((a, b) => new Date(a.finished_at).getTime() - new Date(b.finished_at).getTime());
-  }, [racers]);
 
   // Arrival-at-start gating. Pre-start (no submissions yet); GPS-driven.
   const submissionsCount = (myRun && myRun.progress && Array.isArray(myRun.progress.waypointsUnlocked)) ? myRun.progress.waypointsUnlocked.length : 0;
