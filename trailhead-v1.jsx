@@ -25140,6 +25140,49 @@ function makeCircleGeoJSON(centerLat, centerLng, radiusM, points = 64) {
   return { type: "Feature", geometry: { type: "Polygon", coordinates: [coords] }, properties: {} };
 }
 
+// Synthesizes a short two-note chime via Web Audio API — used to mark
+// a successful waypoint submission on the racer's run screen and to
+// alert the host on the live tracker when any racer advances. No audio
+// asset round trip; the AudioContext is closed after the chime so it
+// doesn't keep the page from suspending. iOS Safari only allows
+// AudioContext after a user gesture — the racer's submit + the host's
+// tap-to-open-tracker both qualify.
+function playGearDropWaypointChime() {
+  try {
+    const Ctx = typeof window !== "undefined" && (window.AudioContext || window.webkitAudioContext);
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const playTone = (freq, start, duration) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const t0 = ctx.currentTime + start;
+      gain.gain.setValueAtTime(0, t0);
+      gain.gain.linearRampToValueAtTime(0.22, t0 + 0.01);
+      gain.gain.linearRampToValueAtTime(0, t0 + duration);
+      osc.start(t0);
+      osc.stop(t0 + duration);
+    };
+    // Rising fifth: A5 → E6. Short and unmistakable.
+    playTone(880, 0, 0.14);
+    playTone(1320, 0.12, 0.18);
+    setTimeout(() => { try { ctx.close(); } catch (e) {} }, 600);
+  } catch (e) { /* non-fatal — sound is a bonus */ }
+}
+
+// Triggers a short haptic pattern (tap-pause-tap) on supported devices.
+// Mobile browsers expose navigator.vibrate; desktop just no-ops.
+function triggerGearDropWaypointHaptic() {
+  try {
+    if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+      navigator.vibrate([60, 30, 60]);
+    }
+  } catch (e) { /* non-fatal */ }
+}
+
 // ─── Gear Drop live tracker (host-only race monitor) ──────────────────
 // Fullscreen Mapbox map showing every active racer's puck via Supabase
 // Realtime presence (channel `gd_track_<drop_id>` populated by each
@@ -25154,6 +25197,14 @@ function GearDropLiveTracker({ drop, racers, currentUserId, onClose }) {
   const [mapReady, setMapReady] = useState(false);
   const [presence, setPresence] = useState({}); // user_id → state object
   const [now, setNow] = useState(Date.now());
+  // Live submission cards — a new card lands each time any racer
+  // submits a waypoint (detected via trip_reports UPDATE realtime sub).
+  // Cards expire after 45s so the overlay doesn't accumulate forever.
+  const [recentSubmissions, setRecentSubmissions] = useState([]);
+  // Racers list shoved into a ref so the realtime callback can read the
+  // latest snapshot without re-subscribing every time it updates.
+  const racersRef = useRef(racers);
+  useEffect(() => { racersRef.current = racers; }, [racers]);
 
   // Tick the clock every 10s so fade thresholds (last_seen > 90s)
   // refresh without re-tracking.
@@ -25247,6 +25298,58 @@ function GearDropLiveTracker({ drop, racers, currentUserId, onClose }) {
     };
   }, [drop && drop.id, currentUserId]);
 
+  // Live submission feed — every trip_reports UPDATE for this drop
+  // diffs old.progress.submissions vs new and queues a card for each
+  // freshly-added submission. The chime + haptic fire alongside so the
+  // host gets an unmissable signal a racer just hit a waypoint.
+  useEffect(() => {
+    if (!drop || !drop.id) return;
+    let cancelled = false;
+    const ch = supabase.channel(`gd_tracker_subs_${drop.id}`)
+      .on("postgres_changes",
+        { event: "UPDATE", schema: "public", table: "trip_reports", filter: `gear_drop_id=eq.${drop.id}` },
+        (payload) => {
+          if (cancelled || !payload || !payload.new) return;
+          const newSubs = (payload.new.progress && Array.isArray(payload.new.progress.submissions)) ? payload.new.progress.submissions : [];
+          const oldSubs = (payload.old && payload.old.progress && Array.isArray(payload.old.progress.submissions)) ? payload.old.progress.submissions : [];
+          if (newSubs.length <= oldSubs.length) return;
+          const fresh = newSubs.slice(oldSubs.length);
+          const racer = (racersRef.current || []).find(r => r.id === payload.new.id) || {
+            author: null,
+            user_id: payload.new.user_id,
+          };
+          const dropPins = (drop.route_data && Array.isArray(drop.route_data.pins)) ? drop.route_data.pins : [];
+          const totalStops = dropPins.length;
+          const cards = fresh.map(sub => {
+            const pin = dropPins[sub.waypointIdx];
+            return {
+              id: `${payload.new.id}_${sub.waypointIdx}_${sub.submittedAt || Date.now()}`,
+              racer,
+              photoUrl: sub.photoUrl,
+              note: sub.note,
+              waypointIdx: sub.waypointIdx,
+              waypointLabel: (pin && pin.label) || (sub.waypointIdx === 0 ? "Start" : sub.waypointIdx === totalStops - 1 ? "Endpoint" : `Waypoint ${sub.waypointIdx}`),
+              submittedAt: sub.submittedAt || new Date().toISOString(),
+            };
+          });
+          setRecentSubmissions(prev => [...cards, ...prev].slice(0, 6));
+          // Sound + haptic — bonus signals, ignored if unsupported.
+          playGearDropWaypointChime();
+          triggerGearDropWaypointHaptic();
+        }
+      )
+      .subscribe();
+    return () => {
+      cancelled = true;
+      try { supabase.removeChannel(ch); } catch (e) {}
+    };
+  }, [drop && drop.id]);
+
+  // Prune expired cards on the same 10s clock used for puck fade.
+  useEffect(() => {
+    setRecentSubmissions(prev => prev.filter(s => now - new Date(s.submittedAt).getTime() < 45000));
+  }, [now]);
+
   // Reconcile racer puck markers with presence state. Create on first
   // appearance, update on subsequent ticks, remove on leave.
   useEffect(() => {
@@ -25277,11 +25380,15 @@ function GearDropLiveTracker({ drop, racers, currentUserId, onClose }) {
           if (el) el.style.opacity = String(opacity);
         } catch (e) {}
       } else {
-        const el = document.createElement("div");
-        el.style.cssText = `position:relative;width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:${opacity}`;
+        // Wrap so the avatar + the name chip share one Mapbox element
+        // (the marker can only hold a single root). Anchor 'bottom' so
+        // the chip sits above the GPS point and the puck below — keeps
+        // the visual anchor at the actual coordinate.
+        const wrap = document.createElement("div");
+        wrap.style.cssText = `position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;opacity:${opacity};pointer-events:none`;
         const ring = document.createElement("div");
         const color = isMe ? T.copper : T.green;
-        ring.style.cssText = `width:32px;height:32px;border-radius:50%;background:${color};border:2px solid #fff;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center`;
+        ring.style.cssText = `width:36px;height:36px;border-radius:50%;background:${color};border:2px solid #fff;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center`;
         if (state.avatar_url) {
           const img = document.createElement("img");
           img.src = state.avatar_url;
@@ -25292,13 +25399,20 @@ function GearDropLiveTracker({ drop, racers, currentUserId, onClose }) {
           const initial = ((state.full_name || state.handle || "?").charAt(0) || "?").toUpperCase();
           ring.style.color = "#fff";
           ring.style.fontFamily = "sans-serif";
-          ring.style.fontSize = "13px";
-          ring.style.fontWeight = "700";
+          ring.style.fontSize = "14px";
+          ring.style.fontWeight = "800";
           ring.textContent = initial;
         }
-        el.appendChild(ring);
+        wrap.appendChild(ring);
+        // Name chip — handle preferred (shorter), full name fallback.
+        // High-contrast dark pill so it reads against any basemap.
+        const chip = document.createElement("div");
+        const label = state.handle ? `@${state.handle}` : (state.full_name || "racer");
+        chip.textContent = label.length > 14 ? label.slice(0, 13) + "…" : label;
+        chip.style.cssText = `padding:2px 6px;background:rgba(17,17,17,0.92);border:1px solid ${T.charcoal};border-radius:6px;color:#fff;font-family:sans-serif;font-size:9px;font-weight:700;letter-spacing:0.4px;white-space:nowrap;transform:translateY(-4px);box-shadow:0 1px 4px rgba(0,0,0,0.6)`;
+        wrap.appendChild(chip);
         try {
-          const marker = new window.mapboxgl.Marker({ element: el, anchor: "center" })
+          const marker = new window.mapboxgl.Marker({ element: wrap, anchor: "bottom" })
             .setLngLat([state.lng, state.lat])
             .addTo(map);
           markersRef.current[uid] = marker;
@@ -25331,6 +25445,48 @@ function GearDropLiveTracker({ drop, racers, currentUserId, onClose }) {
             <p style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, margin: "0 0 4px" }}>Waiting for racers to broadcast</p>
             <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: 0 }}>Pucks appear here when a participant has the run screen open.</p>
           </div>
+        </div>
+      )}
+      {/* Live submission feed — stacks at the bottom-left, most recent
+          on top, max 3 visible. Auto-dismissed after 45s; tap an X to
+          close one early. Photo + note give the host real-time eyes on
+          what the racer just submitted. */}
+      {recentSubmissions.length > 0 && (
+        <div style={{ position: "absolute", bottom: 16, left: 16, right: 16, display: "flex", flexDirection: "column", gap: 8, pointerEvents: "none" }}>
+          {recentSubmissions.slice(0, 3).map(card => {
+            const ageMs = now - new Date(card.submittedAt).getTime();
+            const ageLabel = ageMs < 5000 ? "just now"
+              : ageMs < 60000 ? `${Math.round(ageMs / 1000)}s ago`
+              : `${Math.floor(ageMs / 60000)}m ago`;
+            const author = card.racer && card.racer.author;
+            return (
+              <div key={card.id} style={{ background: `${T.darkBg}F0`, border: `1px solid ${T.copper}`, borderRadius: 12, padding: 10, display: "flex", gap: 10, alignItems: "stretch", pointerEvents: "auto", boxShadow: "0 6px 20px rgba(0,0,0,0.55)" }}>
+                {card.photoUrl ? (
+                  <div style={{ width: 64, height: 64, borderRadius: 8, background: `url(${card.photoUrl}) center/cover`, flexShrink: 0, border: `1px solid ${T.charcoal}` }} />
+                ) : (
+                  <div style={{ width: 64, height: 64, borderRadius: 8, background: T.charcoal, flexShrink: 0 }} />
+                )}
+                <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <div style={{ width: 18, height: 18, borderRadius: "50%", background: T.charcoal, overflow: "hidden", flexShrink: 0 }}>
+                      {author && author.avatar_url && <img src={author.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+                    </div>
+                    <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {(author && author.full_name) || "Racer"}
+                    </span>
+                    <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, marginLeft: "auto" }}>{ageLabel}</span>
+                  </div>
+                  <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 700, letterSpacing: 0.6 }}>
+                    {card.waypointLabel.toUpperCase()}
+                  </span>
+                  <p style={{ fontFamily: serif, fontSize: 11, color: T.white, opacity: 0.9, margin: 0, lineHeight: 1.35, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{card.note}</p>
+                </div>
+                <button onClick={() => setRecentSubmissions(prev => prev.filter(s => s.id !== card.id))} style={{ background: "none", border: "none", padding: 4, alignSelf: "flex-start", cursor: "pointer", color: T.tertiary }}>
+                  <X size={12} color={T.tertiary} />
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
@@ -25700,7 +25856,10 @@ function GearDropRunScreen({ runId, currentUserId, onClose, onLoadRun, onLoadDro
         }
         return;
       }
-      // Success — refresh run state.
+      // Success — refresh run state. Sound + haptic fire immediately so
+      // the racer gets confirmation even before the next-target re-renders.
+      playGearDropWaypointChime();
+      triggerGearDropWaypointHaptic();
       const r = await onLoadRun(runId);
       if (r) setRun(r);
       setSubmitPhoto(null);
