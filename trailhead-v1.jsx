@@ -23799,7 +23799,7 @@ function gdStatusBtn(color) {
 // fields on blur, toggles/selects fire immediately. Pins are tracked as
 // separate local state so multi-field pin edits don't race with each
 // other via the route_data jsonb round-trip.
-function GearDropEditor({ dropId, currentUserId, onClose, onLoad, onUpdate, onDelete, onLoadEditors, onGrantEditor, onRevokeEditor, onEnterPinBuilder, onSchedule }) {
+function GearDropEditor({ dropId, currentUserId, onClose, onLoad, onUpdate, onDelete, onLoadEditors, onGrantEditor, onRevokeEditor, onEnterPinBuilder, onSchedule, onDuplicate, onOpenEditor }) {
   const [drop, setDrop] = useState(null);
   const [pins, setPins] = useState([]);
   const [editors, setEditors] = useState([]);
@@ -24163,14 +24163,47 @@ function GearDropEditor({ dropId, currentUserId, onClose, onLoad, onUpdate, onDe
           </div>
         </GDSection>
 
-        {drop.status === "draft" && onDelete && (
+        {/* Duplicate — always available for admins (any status). Resets
+            lifecycle / winner state on the clone so admin can re-schedule
+            and re-publish the same route + prize again. */}
+        {onDuplicate && (
+          <GDSection title="DUPLICATE">
+            <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: "0 0 8px", lineHeight: 1.4 }}>
+              Clone this gear drop's title, brand, prize, route, and afterparty into a fresh draft. Schedule + winner are reset; co-hosts and comments are not carried over.
+            </p>
+            <button
+              onClick={async () => {
+                const res = await onDuplicate(drop.id);
+                if (res && res.ok && res.id && onOpenEditor) {
+                  onOpenEditor(res.id);
+                } else if (res && res.error) {
+                  alert("Duplicate failed: " + res.error);
+                }
+              }}
+              style={{ width: "100%", padding: "12px 14px", background: "none", border: `1px solid ${T.copper}`, borderRadius: 10, color: T.copper, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer" }}
+            >
+              DUPLICATE TO DRAFT
+            </button>
+          </GDSection>
+        )}
+
+        {/* Delete — drafts always; ended/archived drops also (test
+            cleanup). Live + scheduled drops with real participants don't
+            expose delete here on purpose — admin must end the event
+            first, which is the natural pause point. */}
+        {onDelete && (drop.status === "draft" || drop.status === "ended" || drop.status === "archived") && (
           <GDSection title="DANGER ZONE">
+            {drop.status !== "draft" && (
+              <p style={{ fontFamily: serif, fontSize: 11, color: T.red, opacity: 0.85, margin: "0 0 8px", lineHeight: 1.4 }}>
+                Permanently deletes the gear drop AND every participant run + memento attached to it. There's no undo.
+              </p>
+            )}
             <button onClick={async () => {
               const res = await onDelete(drop.id);
               if (res && res.ok) onClose();
               else if (res && res.error && res.error !== "Cancelled") alert("Delete failed: " + res.error);
             }} style={{ width: "100%", padding: "12px 14px", background: `${T.red}25`, border: `1px solid ${T.red}`, borderRadius: 10, color: T.red, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer" }}>
-              DELETE DRAFT
+              {drop.status === "draft" ? "DELETE DRAFT" : "DELETE GEAR DROP"}
             </button>
           </GDSection>
         )}
@@ -37157,18 +37190,81 @@ export default function Trailhead() {
 
   const deleteGearDrop = async (id) => {
     if (!isAdmin || !id) return { error: "Not authorized" };
-    if (typeof confirm === "function" && !confirm("Delete this gear drop? This cannot be undone.")) {
+    // Look up the row so the confirm message can reflect the run count.
+    // Drafts/scheduled/live drops typically have zero runs (drafts can't
+    // be joined; live/scheduled may have a few). Ended drops can have
+    // many. The UI shows DELETE GEAR DROP for ended drops with a stronger
+    // wording — the confirm here is the second gate.
+    const existing = (gearDrops || []).find(g => g.id === id) || null;
+    const isEnded = existing && (existing.status === "ended" || existing.status === "archived" || existing.winner_announced_at);
+    const promptMsg = isEnded
+      ? "Permanently delete this gear drop AND every participant run? This wipes mementos. Cannot be undone."
+      : "Delete this gear drop? This cannot be undone.";
+    if (typeof confirm === "function" && !confirm(promptMsg)) {
       return { error: "Cancelled" };
     }
     try {
-      const { error } = await supabase.from("gear_drops").delete().eq("id", id);
+      // Cascade RPC: drafts/scheduled/live with no runs collapse to a
+      // single-row delete; ended drops also wipe their participant
+      // trip_reports rows. RLS would otherwise block deleting other
+      // racers' runs.
+      const { data, error } = await supabase.rpc("admin_delete_gear_drop_cascade", { p_drop_id: id });
       if (error) return { error: error.message || "Delete failed" };
       setGearDrops(prev => prev.filter(g => g.id !== id));
-      return { ok: true };
+      return { ok: true, runs_deleted: (data && data.runs_deleted) || 0 };
     } catch (e) {
       console.error("[deleteGearDrop] failed", e);
       return { error: "Network error" };
     }
+  };
+
+  // Clone an existing drop's content fields into a fresh draft so admin
+  // can iterate on a successful event without re-entering the route.
+  // Resets all lifecycle / winner / scheduling state — the new draft is
+  // un-published, un-scheduled, with no winner declared. Editors are NOT
+  // copied (admin re-grants if the same brand rep is hosting again);
+  // comments are NOT copied. Returns the new draft's id so the caller
+  // can open the editor on it.
+  const duplicateGearDropAsDraft = async (id) => {
+    if (!isAdmin || !id) return { error: "Not authorized" };
+    const source = (gearDrops || []).find(g => g.id === id) || null;
+    if (!source) return { error: "Drop not found in cache" };
+    const payload = {
+      title: (source.title || "Untitled Drop") + " (copy)",
+      brand_partner_name: source.brand_partner_name || null,
+      brand_logo_url: source.brand_logo_url || null,
+      hero_img: source.hero_img || null,
+      prize_title: source.prize_title || "Prize",
+      prize_description: source.prize_description || null,
+      prize_value_cents: source.prize_value_cents || null,
+      route_data: source.route_data || { pins: [], points: [] },
+      start_lat: source.start_lat || null,
+      start_lng: source.start_lng || null,
+      // Lifecycle dates intentionally NOT carried over — admin re-schedules.
+      starts_at: null,
+      ends_at: null,
+      signup_open_until: null,
+      late_signup_window_min: source.late_signup_window_min != null ? source.late_signup_window_min : 30,
+      afterparty_lat: source.afterparty_lat || null,
+      afterparty_lng: source.afterparty_lng || null,
+      afterparty_label: source.afterparty_label || null,
+      afterparty_address: source.afterparty_address || null,
+      afterparty_starts_at: null,
+    };
+    const res = await createGearDrop(payload);
+    if (!res || res.error || !res.data) return res || { error: "Duplicate failed" };
+    // createGearDrop only inserts the named columns; carry the remaining
+    // content fields (about, prize_photos, arrival_radius_m) over via a
+    // follow-up patch so the cloned draft truly mirrors the source.
+    const newId = res.data.id;
+    const extra = {};
+    if (source.about) extra.about = source.about;
+    if (Array.isArray(source.prize_photos) && source.prize_photos.length > 0) extra.prize_photos = source.prize_photos;
+    if (source.arrival_radius_m != null) extra.arrival_radius_m = source.arrival_radius_m;
+    if (Object.keys(extra).length > 0) {
+      await updateGearDrop(newId, extra);
+    }
+    return { ok: true, data: res.data, id: newId };
   };
 
   // Per-drop co-host grants — temp editor access scoped to a single drop
@@ -41782,6 +41878,8 @@ export default function Trailhead() {
                       onLoad={loadGearDropById}
                       onUpdate={updateGearDrop}
                       onDelete={deleteGearDrop}
+                      onDuplicate={duplicateGearDropAsDraft}
+                      onOpenEditor={(id) => setEditingGearDropId(id)}
                       onLoadEditors={loadGearDropEditors}
                       onGrantEditor={grantGearDropEditor}
                       onRevokeEditor={revokeGearDropEditor}
