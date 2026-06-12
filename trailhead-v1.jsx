@@ -2297,7 +2297,17 @@ function useGearDropPinBuilderLayer(mapRef, ready, pins, active, mode) {
     markersRef.current = [];
     if (!active) return;
     const valid = (pins || []).filter(p => p && p.lat != null && p.lng != null);
+    // Loop course detection — start and last pin within 25m means the
+    // host explicitly wants the race to end back where it started. The
+    // submission gate is small (default 100m, configurable per pin) so
+    // 25m comfortably separates "intentionally identical" from "near but
+    // distinct". When detected, render the start as a split S/E badge
+    // and skip the duplicate endpoint marker.
+    const isLoopCourse = valid.length > 1 && haversine(valid[0].lat, valid[0].lng, valid[valid.length - 1].lat, valid[valid.length - 1].lng) < 25;
     valid.forEach((pin, i) => {
+      // Skip the endpoint marker on a loop course — it's drawn as part
+      // of the combined S/E badge at the start.
+      if (isLoopCourse && i === valid.length - 1) return;
       let el;
       if (isAfterparty) {
         // Diamond shape (rotated square) with inline star — visually
@@ -2320,10 +2330,19 @@ function useGearDropPinBuilderLayer(mapRef, ready, pins, active, mode) {
       } else {
         const isFirst = i === 0;
         const isLast = i === valid.length - 1 && valid.length > 1;
-        const color = isFirst ? T.copper : isLast ? T.red : T.green;
-        el = document.createElement("div");
-        el.style.cssText = `width:28px;height:28px;border-radius:50%;background:${color};border:2px solid #fff;display:flex;align-items:center;justify-content:center;color:#fff;font-family:sans-serif;font-size:11px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,0.4);cursor:pointer`;
-        el.textContent = isFirst ? "S" : isLast ? "E" : String(i);
+        if (isLoopCourse && isFirst) {
+          // Combined start+endpoint badge — half copper (S), half red (E)
+          // with an "S/E" label. Wider than the standard 28px chip so the
+          // two-character label fits without crowding.
+          el = document.createElement("div");
+          el.style.cssText = `width:36px;height:36px;border-radius:50%;border:2px solid #fff;background:linear-gradient(90deg, ${T.copper} 50%, ${T.red} 50%);display:flex;align-items:center;justify-content:center;color:#fff;font-family:sans-serif;font-size:11px;font-weight:800;letter-spacing:0.5px;box-shadow:0 2px 6px rgba(0,0,0,0.4);cursor:pointer`;
+          el.textContent = "S/E";
+        } else {
+          const color = isFirst ? T.copper : isLast ? T.red : T.green;
+          el = document.createElement("div");
+          el.style.cssText = `width:28px;height:28px;border-radius:50%;background:${color};border:2px solid #fff;display:flex;align-items:center;justify-content:center;color:#fff;font-family:sans-serif;font-size:11px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,0.4);cursor:pointer`;
+          el.textContent = isFirst ? "S" : isLast ? "E" : String(i);
+        }
       }
       const marker = new window.mapboxgl.Marker({ element: el, anchor: "center" })
         .setLngLat([pin.lng, pin.lat])
