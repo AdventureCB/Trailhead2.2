@@ -23752,6 +23752,14 @@ function GearDropEditor({ dropId, currentUserId, onClose, onLoad, onUpdate, onDe
   const [editorSearch, setEditorSearch] = useState("");
   const [editorSearchResults, setEditorSearchResults] = useState([]);
   const [transitioning, setTransitioning] = useState(false);
+  // Read-only route preview map. Renders the same numbered markers +
+  // routed/offroad polylines as the pin builder but with no tap-to-edit
+  // affordance — host can sanity-check manually-typed lat/lng without
+  // entering edit mode.
+  const [showRoutePreview, setShowRoutePreview] = useState(false);
+  const previewMapRef = useRef(null);
+  const previewMapInst = useRef(null);
+  const [previewMapReady, setPreviewMapReady] = useState(false);
 
   // Initial load
   useEffect(() => {
@@ -23803,6 +23811,69 @@ function GearDropEditor({ dropId, currentUserId, onClose, onLoad, onUpdate, onDe
     const res = await onUpdate(dropId, updates);
     if (res && res.error) alert("Pin save failed: " + res.error);
   };
+
+  // Mount the preview map when the toggle flips on; unmount + tear down
+  // the WebGL context when it flips off so we don't hold one open while
+  // the host edits unrelated sections.
+  useEffect(() => {
+    if (!showRoutePreview) return;
+    if (!previewMapRef.current || previewMapInst.current) return;
+    let cancelled = false;
+    (async () => {
+      let mapboxgl;
+      try { mapboxgl = await loadMapbox(); } catch (e) { return; }
+      if (cancelled || !previewMapRef.current || previewMapInst.current) return;
+      const valid = (pins || []).filter(p => p && p.lat != null && p.lng != null);
+      const center = valid.length
+        ? [valid[0].lng, valid[0].lat]
+        : (drop && drop.start_lng != null ? [drop.start_lng, drop.start_lat] : [-111.0, 39.5]);
+      const map = new mapboxgl.Map({
+        container: previewMapRef.current,
+        style: MAPBOX_STYLE,
+        center,
+        zoom: valid.length ? 12 : 4,
+        attributionControl: false,
+      });
+      map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), "top-right");
+      previewMapInst.current = map;
+      const onLoad = () => {
+        if (cancelled) return;
+        setPreviewMapReady(true);
+        // Snap-fit to all pins on first load. fitBounds runs again from
+        // the second effect whenever pins change.
+        if (valid.length > 1) {
+          const bounds = new mapboxgl.LngLatBounds([valid[0].lng, valid[0].lat], [valid[0].lng, valid[0].lat]);
+          valid.forEach(p => bounds.extend([p.lng, p.lat]));
+          try { map.fitBounds(bounds, { padding: 50, maxZoom: 14, duration: 0 }); } catch (e) {}
+        }
+      };
+      if (map.isStyleLoaded()) onLoad(); else map.on("load", onLoad);
+    })();
+    return () => {
+      cancelled = true;
+      if (previewMapInst.current) { try { previewMapInst.current.remove(); } catch (e) {} previewMapInst.current = null; }
+      setPreviewMapReady(false);
+    };
+  }, [showRoutePreview]);
+
+  // Re-fit the camera whenever the pin list changes so newly-typed
+  // coordinates pull into frame immediately.
+  useEffect(() => {
+    if (!showRoutePreview || !previewMapReady || !previewMapInst.current || !window.mapboxgl) return;
+    const valid = (pins || []).filter(p => p && p.lat != null && p.lng != null);
+    if (valid.length === 0) return;
+    if (valid.length === 1) {
+      try { previewMapInst.current.flyTo({ center: [valid[0].lng, valid[0].lat], zoom: 13 }); } catch (e) {}
+      return;
+    }
+    const bounds = new window.mapboxgl.LngLatBounds([valid[0].lng, valid[0].lat], [valid[0].lng, valid[0].lat]);
+    valid.forEach(p => bounds.extend([p.lng, p.lat]));
+    try { previewMapInst.current.fitBounds(bounds, { padding: 50, maxZoom: 14, duration: 600 }); } catch (e) {}
+  }, [pins, previewMapReady, showRoutePreview]);
+
+  // Render the numbered markers + routed/offroad polylines. Calling with
+  // active=showRoutePreview means the hook self-cleans when toggled off.
+  useGearDropPinBuilderLayer(previewMapInst, previewMapReady, pins, showRoutePreview, "pins");
 
   const addPin = () => {
     const idx = pins.length;
@@ -23954,6 +24025,19 @@ function GearDropEditor({ dropId, currentUserId, onClose, onLoad, onUpdate, onDe
               <MapPin size={14} color={T.white} />
               PLAN ROUTE ON MAP
             </button>
+          )}
+          {/* Read-only preview map — confirms pins typed in by hand land
+              where the host expects without entering edit mode. */}
+          <button
+            onClick={() => setShowRoutePreview(v => !v)}
+            disabled={pins.filter(p => p && p.lat != null && p.lng != null).length === 0}
+            style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px 14px", background: "none", border: `1px solid ${T.copper}`, borderRadius: 10, color: T.copper, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.8, cursor: pins.length ? "pointer" : "default", marginBottom: 8, opacity: pins.filter(p => p && p.lat != null && p.lng != null).length === 0 ? 0.5 : 1 }}
+          >
+            <MapPin size={14} color={T.copper} />
+            {showRoutePreview ? "HIDE ROUTE PREVIEW" : "PREVIEW ROUTE ON MAP"}
+          </button>
+          {showRoutePreview && (
+            <div ref={previewMapRef} style={{ width: "100%", height: 320, borderRadius: 10, overflow: "hidden", background: T.darkCard, border: `1px solid ${T.charcoal}`, marginBottom: 10 }} />
           )}
           {pins.length === 0 && <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, textAlign: "center", padding: 16 }}>No pins yet. Tap + ADD to seed the start point, then keep adding waypoints in order.</p>}
           {pins.map((pin, i) => (
