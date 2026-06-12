@@ -6198,8 +6198,12 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
           instead of the post stream. Replaces the old Maps → Trip Reports tab. */}
       {deferredFilter === "TRIP REPORTS" ? (() => {
         const trips = tripReports || [];
-        const myDrafts = trips.filter(t => t.status === "draft" && t.user_id === currentUserId);
-        const published = trips.filter(t => t.status === "published");
+        // Mementos (kind='gear_drop_run') are deliberately excluded from
+        // the listing — they live only on their parent gear drop's recap
+        // page. The gear drop itself appears here once it's ended.
+        const myDrafts = trips.filter(t => t.status === "draft" && t.user_id === currentUserId && (!t.kind || t.kind === "report"));
+        const published = trips.filter(t => t.status === "published" && (!t.kind || t.kind === "report"));
+        const completedDrops = (gearDrops || []).filter(g => g && (g.status === "ended" || g.status === "archived" || g.winner_announced_at));
         return (
           <div style={{ padding: "12px 16px 16px", display: "flex", flexDirection: "column", gap: 14 }}>
             <div style={{ display: "flex", gap: 8 }}>
@@ -6242,11 +6246,43 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
                 </div>
               </div>
             )}
-            {published.length === 0 && myDrafts.length === 0 && (
+            {published.length === 0 && myDrafts.length === 0 && completedDrops.length === 0 && (
               <div style={{ textAlign: "center", padding: "60px 20px" }}>
                 <Mountain size={36} color={T.tertiary} strokeWidth={1} style={{ opacity: 0.3, marginBottom: 12 }} />
                 <p style={{ fontFamily: serif, fontSize: 14, color: T.tertiary, margin: "0 0 6px" }}>No trip reports yet</p>
                 <p style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, opacity: 0.6 }}>Tap NEW to log a trip you've taken or are on right now.</p>
+              </div>
+            )}
+            {completedDrops.length > 0 && (
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+                  <Trophy size={12} color={T.copper} />
+                  <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.5, fontWeight: 600 }}>COMPLETED GEAR DROPS</span>
+                  <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>· {completedDrops.length}</span>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 }}>
+                  {completedDrops.map(g => (
+                    <button key={g.id} onClick={() => onOpenGearDrop && onOpenGearDrop(g.id)} style={{ display: "flex", gap: 12, padding: 0, borderRadius: 14, background: T.darkCard, border: `1px solid ${T.charcoal}`, cursor: "pointer", textAlign: "left", width: "100%", overflow: "hidden" }}>
+                      <div style={{ width: 96, minHeight: 110, background: g.hero_img ? `url(${g.hero_img}) center/cover` : `linear-gradient(135deg, ${T.charcoal}, ${T.darkCard})`, flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0, padding: "12px 12px 12px 0", display: "flex", flexDirection: "column", gap: 4 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                          <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: T.copper, padding: "2px 8px", borderRadius: 8, fontWeight: 700, letterSpacing: 0.6, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                            <Trophy size={10} color={T.white} />
+                            RECAP
+                          </span>
+                          {g.brand_partner_name && <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 0.6 }}>{g.brand_partner_name.toUpperCase()}</span>}
+                        </div>
+                        <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.title || "Untitled Drop"}</span>
+                        <span style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.prize_title || "—"}</span>
+                        {g.winner_announced_at && (
+                          <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.4 }}>
+                            Winner declared {new Date(g.winner_announced_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
             {published.length > 0 && (
@@ -24165,7 +24201,7 @@ const GD_RB_CSS = `<style>
 .gd-rb img{max-width:100%;border-radius:8px;display:block;margin:8px 0}
 </style>`;
 
-function GearDropDetailScreen({ dropId, currentUserId, isAdmin, onClose, onLoad, onJoin, onLeave, myRun, onOpenRun, onLoadComments, onAddComment, onDeleteComment, onLoadParticipants, onViewUser, onStartDirections }) {
+function GearDropDetailScreen({ dropId, currentUserId, isAdmin, onClose, onLoad, onJoin, onLeave, myRun, onOpenRun, onLoadComments, onAddComment, onDeleteComment, onLoadParticipants, onViewUser, onStartDirections, onOpenTrip }) {
   const [drop, setDrop] = useState(null);
   const [participantCount, setParticipantCount] = useState(null);
   const [joining, setJoining] = useState(false);
@@ -24184,6 +24220,14 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, onClose, onLoad,
   // close it and reopen via VIEW YOUR RUN later if they want.
   const [userLoc, setUserLoc] = useState(null);
   const [arrivalDismissed, setArrivalDismissed] = useState(false);
+  // Phase 4 — live leaderboard panel + per-racer memento recap cards.
+  // `participants` (above) is the lightweight participant chip list
+  // already in the JOINED modal; we keep a richer copy in `racers`
+  // here with progress + memento fields so the leaderboard and recap
+  // sections render without a separate query.
+  const [racers, setRacers] = useState([]);
+  const [racersLoaded, setRacersLoaded] = useState(false);
+  const [leaderboardOpen, setLeaderboardOpen] = useState(false);
 
   // Heartbeat the clock once a minute for live countdown rerenders.
   useEffect(() => {
@@ -24238,6 +24282,49 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, onClose, onLoad,
     })();
     return () => { cancelled = true; };
   }, [dropId, onLoad, onLoadComments]);
+
+  // Phase 4 — live leaderboard + racer recap fetch + realtime sync.
+  // Single channel watches BOTH the drop row (for status / winner
+  // announcement flips) and the run rows (for joiners, progress, and
+  // memento publication on finish). Debounced 500ms refetch coalesces
+  // a flurry of submits without hammering PostgREST.
+  useEffect(() => {
+    if (!dropId || !onLoadParticipants) return;
+    let cancelled = false;
+    let refetchTimer = null;
+    const refreshRacers = async () => {
+      if (cancelled) return;
+      const list = await onLoadParticipants(dropId);
+      if (cancelled) return;
+      setRacers(list || []);
+      setRacersLoaded(true);
+    };
+    const refreshDrop = async () => {
+      if (cancelled || !onLoad) return;
+      const row = await onLoad(dropId);
+      if (!cancelled && row) setDrop(row);
+    };
+    const scheduleRefetch = () => {
+      if (refetchTimer) clearTimeout(refetchTimer);
+      refetchTimer = setTimeout(refreshRacers, 500);
+    };
+    refreshRacers();
+    const ch = supabase.channel(`gd_detail_${dropId}`)
+      .on("postgres_changes",
+        { event: "*", schema: "public", table: "trip_reports", filter: `gear_drop_id=eq.${dropId}` },
+        () => scheduleRefetch()
+      )
+      .on("postgres_changes",
+        { event: "UPDATE", schema: "public", table: "gear_drops", filter: `id=eq.${dropId}` },
+        () => refreshDrop()
+      )
+      .subscribe();
+    return () => {
+      cancelled = true;
+      if (refetchTimer) clearTimeout(refetchTimer);
+      try { supabase.removeChannel(ch); } catch (e) {}
+    };
+  }, [dropId, onLoadParticipants, onLoad]);
 
   const refreshParticipants = async () => {
     if (!onLoadParticipants) return;
@@ -24353,6 +24440,33 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, onClose, onLoad,
 
   const statusColor = isLive ? T.red : isScheduled ? T.copper : T.tertiary;
   const statusLabel = isLive ? "LIVE NOW" : isScheduled ? "UPCOMING" : isEnded ? (hasWinner ? "ENDED · WINNER DECLARED" : "ENDED") : drop.status;
+
+  // Leaderboard sort — finished racers first by finish time asc (winner
+  // gets the trophy), then live racers by pin count desc + earliest
+  // last_unlocked_at as tiebreak (first to reach a pin ranks higher).
+  const sortedRacers = useMemo(() => {
+    const finishedRows = (racers || []).filter(p => p.finished_at)
+      .sort((a, b) => new Date(a.finished_at).getTime() - new Date(b.finished_at).getTime());
+    const liveRows = (racers || []).filter(p => !p.finished_at)
+      .sort((a, b) => {
+        const aP = (a.progress && Array.isArray(a.progress.waypointsUnlocked)) ? a.progress.waypointsUnlocked.length : 0;
+        const bP = (b.progress && Array.isArray(b.progress.waypointsUnlocked)) ? b.progress.waypointsUnlocked.length : 0;
+        if (aP !== bP) return bP - aP;
+        const aT = a.last_unlocked_at ? new Date(a.last_unlocked_at).getTime() : Infinity;
+        const bT = b.last_unlocked_at ? new Date(b.last_unlocked_at).getTime() : Infinity;
+        return aT - bT;
+      });
+    return [...finishedRows, ...liveRows];
+  }, [racers]);
+
+  // Racer recaps — only finishers whose run has been auto-promoted to a
+  // shareable memento (status='published' + has a slug). Mirrors the
+  // sortedRacers finished-first ordering so the trophy is on top.
+  const mementos = useMemo(() => {
+    return (racers || [])
+      .filter(r => r.finished_at && r.status === "published" && r.slug)
+      .sort((a, b) => new Date(a.finished_at).getTime() - new Date(b.finished_at).getTime());
+  }, [racers]);
 
   // Arrival-at-start gating. Pre-start (no submissions yet); GPS-driven.
   const submissionsCount = (myRun && myRun.progress && Array.isArray(myRun.progress.waypointsUnlocked)) ? myRun.progress.waypointsUnlocked.length : 0;
@@ -24493,6 +24607,40 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, onClose, onLoad,
           )}
         </div>
 
+        {/* Afterparty reveal — shown only after a winner is declared (or
+            preview-style to admin/host while editing). Address auto-fills
+            on pin save via reverse-geocode in commitGearDropPinBuilder. */}
+        {drop.afterparty_lat != null && drop.afterparty_lng != null && (drop.winner_announced_at || isAdmin || (drop.host_admin_id && drop.host_admin_id === currentUserId)) && (
+          <div style={{ padding: 0, background: T.darkCard, border: `1px solid ${T.copper}`, borderRadius: 12, overflow: "hidden" }}>
+            <div style={{ padding: "14px 16px 10px", display: "flex", alignItems: "center", gap: 8 }}>
+              <Award size={14} color={T.copper} />
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 0.8, flex: 1 }}>
+                {drop.winner_announced_at ? "AFTERPARTY UNLOCKED" : "AFTERPARTY · PREVIEW (HOST ONLY)"}
+              </span>
+            </div>
+            <img src={gearDropStaticMapUrl(drop.afterparty_lat, drop.afterparty_lng, { width: 900, height: 220, zoom: 13 })} alt="" style={{ width: "100%", display: "block", maxHeight: 220, objectFit: "cover" }} />
+            <div style={{ padding: "12px 16px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {drop.afterparty_label && <div style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, marginBottom: 2 }}>{drop.afterparty_label}</div>}
+                {drop.afterparty_address && <div style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.4 }}>{drop.afterparty_address}</div>}
+                {drop.afterparty_starts_at && (
+                  <div style={{ fontFamily: sans, fontSize: 10, color: T.copper, marginTop: 4, fontWeight: 700, letterSpacing: 0.6 }}>
+                    {new Date(drop.afterparty_starts_at).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => onStartDirections && onStartDirections(drop.afterparty_lat, drop.afterparty_lng, drop.afterparty_label || "Afterparty")}
+                disabled={!onStartDirections}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", background: T.copper, color: T.white, border: "none", borderRadius: 8, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.6, cursor: onStartDirections ? "pointer" : "default", opacity: onStartDirections ? 1 : 0.5 }}
+              >
+                <Navigation size={12} color={T.white} />
+                DIRECTIONS
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Stats row */}
         <div style={{ display: "flex", gap: 8 }}>
           <div style={{ flex: 1, padding: "12px 14px", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10 }}>
@@ -24507,6 +24655,109 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, onClose, onLoad,
             <div style={{ fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 }}>{participantCount != null ? participantCount : "—"}</div>
           </button>
         </div>
+
+        {/* Live leaderboard — collapsible. Visible during live + ended
+            states (any time there's been progress to look at). Same
+            sort + chips as the run-screen leaderboard so a racer's
+            mental model is consistent between detail and race views. */}
+        {(isLive || isEnded) && sortedRacers.length > 0 && (
+          <div style={{ background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 12, overflow: "hidden" }}>
+            <button
+              onClick={() => setLeaderboardOpen(o => !o)}
+              style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}
+            >
+              <Users size={14} color={T.copper} />
+              <span style={{ flex: 1, fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 0.8 }}>LEADERBOARD</span>
+              <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{sortedRacers.length}</span>
+              <ChevronRight size={14} color={T.tertiary} style={{ transform: leaderboardOpen ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
+            </button>
+            {leaderboardOpen && (
+              <div style={{ borderTop: `1px solid ${T.charcoal}`, padding: "8px 0" }}>
+                {!racersLoaded ? (
+                  <div style={{ padding: 14, fontFamily: serif, fontSize: 12, color: T.tertiary, textAlign: "center" }}>Loading…</div>
+                ) : sortedRacers.map((row, idx) => {
+                  const author = row.author;
+                  const progress = (row.progress && Array.isArray(row.progress.waypointsUnlocked)) ? row.progress.waypointsUnlocked.length : 0;
+                  const isMe = row.user_id === currentUserId;
+                  const isWinner = idx === 0 && row.finished_at && drop && drop.winner_run_id === row.id;
+                  return (
+                    <button
+                      key={row.id}
+                      onClick={() => onViewUser && row.user_id && onViewUser(row.user_id)}
+                      style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: isMe ? `${T.copper}18` : "none", border: "none", cursor: onViewUser ? "pointer" : "default", textAlign: "left" }}
+                    >
+                      <div style={{ width: 22, fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 700, textAlign: "center" }}>
+                        {isWinner ? <Trophy size={14} color={T.copper} /> : `#${idx + 1}`}
+                      </div>
+                      <div style={{ width: 30, height: 30, borderRadius: "50%", background: T.charcoal, overflow: "hidden", flexShrink: 0 }}>
+                        {author && author.avatar_url && <img src={author.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {(author && author.full_name) || "Racer"}{isMe && <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, marginLeft: 6, letterSpacing: 0.5 }}>YOU</span>}
+                        </div>
+                        <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>@{(author && author.handle) || "racer"}</div>
+                      </div>
+                      <div style={{ textAlign: "right", flexShrink: 0 }}>
+                        {row.finished_at ? (
+                          <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 700, letterSpacing: 0.6 }}>FINISHED</span>
+                        ) : (
+                          <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, fontWeight: 700 }}>{progress}/{waypointCount}</span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Racer recaps — every finisher's auto-published memento as a
+            tappable card. Opens the trip detail via onOpenTrip → /trips/<slug>.
+            Mementos are private from public listings (Explore map + Trip
+            Reports filter excludes kind='gear_drop_run') but reachable
+            via direct URL for share-on-social. */}
+        {mementos.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <FileText size={14} color={T.green} />
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.green, fontWeight: 700, letterSpacing: 0.8 }}>RACER RECAPS</span>
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>· {mementos.length}</span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {mementos.map((m, idx) => {
+                const author = m.author;
+                const isWinner = idx === 0 && drop && drop.winner_run_id === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => onOpenTrip && m.slug && onOpenTrip(m.slug)}
+                    disabled={!onOpenTrip || !m.slug}
+                    style={{ display: "flex", alignItems: "stretch", gap: 0, padding: 0, background: T.darkCard, border: `1px solid ${isWinner ? T.copper : T.charcoal}`, borderRadius: 12, cursor: onOpenTrip && m.slug ? "pointer" : "default", textAlign: "left", overflow: "hidden" }}
+                  >
+                    <div style={{ width: 88, flexShrink: 0, background: m.hero_img ? `url(${m.hero_img}) center/cover` : `linear-gradient(135deg, ${T.charcoal}, ${T.darkCard})` }} />
+                    <div style={{ flex: 1, padding: "12px 14px", minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                        {isWinner && <Trophy size={12} color={T.copper} />}
+                        <div style={{ fontFamily: sans, fontSize: 9, color: isWinner ? T.copper : T.tertiary, letterSpacing: 0.8, fontWeight: 700 }}>
+                          {isWinner ? "WINNER" : `#${idx + 1}`} · {new Date(m.finished_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                        </div>
+                      </div>
+                      <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {(author && author.full_name) || "Racer"}'s run
+                      </div>
+                      <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>@{(author && author.handle) || "racer"}</div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", paddingRight: 12 }}>
+                      <ChevronRight size={14} color={T.tertiary} />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* How it works hint (collapsed copy for now) */}
         <div style={{ padding: 14, background: `${T.charcoal}80`, border: `1px solid ${T.charcoal}`, borderRadius: 10 }}>
@@ -37145,9 +37396,13 @@ export default function Trailhead() {
   const loadGearDropParticipants = async (dropId) => {
     if (!dropId) return [];
     try {
+      // Also pull name/slug/hero_img/status so the detail page can render
+      // mementos (finished + published rows) without a second round trip.
+      // RLS still hides everyone else's drafts; published finisher rows
+      // are publicly readable per the Phase 4 SELECT policy widening.
       const { data, error } = await supabase
         .from("trip_reports")
-        .select("id, user_id, finished_at, last_unlocked_at, progress")
+        .select("id, user_id, name, slug, hero_img, status, finished_at, last_unlocked_at, progress")
         .eq("gear_drop_id", dropId)
         .eq("kind", "gear_drop_run");
       if (error) { console.error("[loadGearDropParticipants]", error); return []; }
@@ -42300,6 +42555,7 @@ export default function Trailhead() {
           onStartDirections={requireAuth(startDirectionsTo)}
           onLeave={leaveGearDrop}
           onOpenRun={(rid) => setRunScreenRunId(rid)}
+          onOpenTrip={(slug) => { setViewingGearDropId(null); setPendingTripNav(slug); }}
         />
       )}
 
