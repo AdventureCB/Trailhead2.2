@@ -70,6 +70,18 @@ async function resolvePostHeroImage(postId: string): Promise<string | null> {
   } catch (_) { return null; }
 }
 
+// Resolve the hero image + slug for a gear drop. Used when the
+// notification references gear_drop_id so the push card can carry a
+// large preview AND deep-link straight into /drops/<slug>.
+async function resolveGearDropPreview(gearDropId: string | null): Promise<{ image: string | null; slug: string | null; title: string | null }> {
+  if (!gearDropId) return { image: null, slug: null, title: null };
+  try {
+    const { data: drop } = await sb.from("gear_drops").select("slug, title, hero_img").eq("id", gearDropId).maybeSingle();
+    if (!drop) return { image: null, slug: null, title: null };
+    return { image: drop.hero_img || null, slug: drop.slug || null, title: drop.title || null };
+  } catch (_) { return { image: null, slug: null, title: null }; }
+}
+
 // Build the push payload for a notifications row (likes/comments/etc.).
 // Title is the actor's @handle (Meta-style: who interacted is the headline);
 // body is the verb phrase + target (e.g. `liked your post: "Trail Report"`).
@@ -87,7 +99,19 @@ async function buildNotifPayload(n: any) {
   }
   const text = n.text || "sent you a notification";
   const target = n.target ? `: "${n.target}"` : "";
-  const image = await resolvePostHeroImage(n.post_id);
+  // Gear drop notifications carry gear_drop_id (not post_id) — route to
+  // /drops/<slug> when present and use the drop's hero as the preview.
+  const isGearDrop = typeof n.type === "string" && n.type.startsWith("gear_drop_");
+  let url = "/";
+  let image: string | null = null;
+  if (isGearDrop && n.gear_drop_id) {
+    const drop = await resolveGearDropPreview(n.gear_drop_id);
+    if (drop.slug) url = `/drops/${drop.slug}`;
+    image = drop.image;
+  } else if (n.post_id) {
+    url = `/post/${n.post_id}`;
+    image = await resolvePostHeroImage(n.post_id);
+  }
   return {
     title,
     body: `${text}${target}`,
@@ -95,8 +119,10 @@ async function buildNotifPayload(n: any) {
     badge: "/lone-peak-flag.png",
     image: image || undefined,
     // Tag dedupes spam: rapid likes on the same post collapse to one banner.
-    tag: n.post_id ? `post:${n.post_id}:${n.type}` : `notif:${n.id}`,
-    data: { url: n.post_id ? `/post/${n.post_id}` : "/", notifId: n.id, type: n.type },
+    tag: isGearDrop && n.gear_drop_id
+      ? `gd:${n.gear_drop_id}:${n.type}`
+      : n.post_id ? `post:${n.post_id}:${n.type}` : `notif:${n.id}`,
+    data: { url, notifId: n.id, type: n.type },
   };
 }
 

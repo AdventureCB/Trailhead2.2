@@ -1,14 +1,54 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback, useDeferredValue, memo } from "react";
 import { createRoot } from "react-dom/client";
-import { Heart, MessageCircle, MapPin, Clock, Mountain, ChevronRight, ChevronLeft, ChevronDown, Search, Plus, Home, Compass, Map, Wrench, Trophy, AlertTriangle, Navigation, Star, Share2, Bookmark, MoreHorizontal, MoreVertical, ArrowUp, Users, Radio, CloudSun, CheckCircle, Target, Gift, ChevronUp, ExternalLink, Lock, Globe, Shield, ShieldCheck, UserPlus, UserCheck, Settings, Camera, Eye, EyeOff, X, Bell, ThumbsUp, UserPlus as UserPlusIcon, AtSign, Mail, Send, Image, Smartphone, Trash2, Edit3, Award, Zap, TrendingUp, Flame, DollarSign, Route, Video, Play, Maximize2, Minimize2, LogOut, Binoculars, Layers, Tent, BookOpen, Link2, PlusSquare, Disc, Cog, MoveVertical, CircleDashed, Anchor, Tag } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Heart, MessageCircle, MapPin, Clock, Mountain, ChevronRight, ChevronLeft, ChevronDown, Search, Plus, Home, Compass, Map, Wrench, Trophy, AlertTriangle, Navigation, Star, Share2, Bookmark, MoreHorizontal, MoreVertical, ArrowUp, ArrowRight, Users, Radio, CloudSun, CheckCircle, Target, Gift, ChevronUp, ExternalLink, Lock, Globe, Shield, ShieldCheck, UserPlus, UserCheck, Settings, Camera, Eye, EyeOff, X, Bell, ThumbsUp, UserPlus as UserPlusIcon, AtSign, Mail, Send, Image, Smartphone, Trash2, Edit2, Edit3, Award, Zap, TrendingUp, Flame, DollarSign, Route, Video, Play, Maximize2, Minimize2, LogOut, Binoculars, Layers, Tent, BookOpen, Link2, PlusSquare, Disc, Cog, MoveVertical, CircleDashed, Anchor, Tag, Flag, FileText, ZoomIn, ZoomOut } from "lucide-react";
 import { supabase } from "./supabase-client.js";
 
 // Hard cap for any file uploaded to Supabase Storage. Free tier enforces
 // a 50 MB ceiling at the storage layer regardless of bucket settings, so we
 // keep a small buffer below that. Pre-upload checks reject larger files
 // with a friendly message instead of letting them silently fail.
-const MAX_UPLOAD_BYTES = 45 * 1024 * 1024; // 45 MB
-const MAX_UPLOAD_LABEL = "45 MB";
+const MAX_UPLOAD_BYTES = 200 * 1024 * 1024; // 200 MB — Supabase Pro tier; raised from 45 MB (which was a margin below the old free-tier 50 MB cap)
+const MAX_UPLOAD_LABEL = "200 MB";
+// Per-surface video duration caps. Bytes alone aren't enough — a user
+// can upload a 10-minute low-bitrate clip that fits under 200 MB but
+// blows the inbox / feed signal-to-noise budget. Probed via a temp
+// <video> element by validateVideoDuration().
+const VIDEO_MAX_SEC = { feed: 60, trip: 90, dm: 30 };
+
+// Probes a video file for its duration in seconds. Returns null when
+// the browser can't read metadata (corrupt file, unsupported codec,
+// etc.) — fail-open so a metadata-probe failure doesn't reject the
+// upload outright. ~50ms typical, longer for big files on slow disks.
+function probeVideoDuration(file) {
+  return new Promise((resolve) => {
+    let url;
+    try { url = URL.createObjectURL(file); } catch (_) { return resolve(null); }
+    const vid = document.createElement("video");
+    vid.preload = "metadata";
+    vid.muted = true;
+    const done = (val) => { try { URL.revokeObjectURL(url); } catch (_) {} resolve(val); };
+    vid.onloadedmetadata = () => {
+      const dur = vid.duration;
+      done(typeof dur === "number" && isFinite(dur) && dur > 0 ? dur : null);
+    };
+    vid.onerror = () => done(null);
+    // Hard timeout — some codecs hang on metadata; fail-open after 4s.
+    setTimeout(() => done(null), 4000);
+    vid.src = url;
+  });
+}
+
+// Returns null if the video file is within the duration cap, else a
+// user-facing rejection message. Pass `maxSec` from VIDEO_MAX_SEC.
+async function validateVideoDuration(file, maxSec) {
+  if (!file || !file.type || !file.type.startsWith("video/")) return null;
+  const dur = await probeVideoDuration(file);
+  if (dur != null && dur > maxSec) {
+    return `${file.name} is ${Math.ceil(dur)}s long. Max ${maxSec}s — please trim in your Photos / Files app first.`;
+  }
+  return null;
+}
 
 // Web Push VAPID public key. Safe to embed (the corresponding PRIVATE key
 // lives only on the Edge Function as a Supabase secret). If you ever rotate
@@ -25,6 +65,12 @@ const VAPID_PUBLIC_KEY = "BKNmoN_428cxssoAL_Jca5zquLJnTKyfq3QAihVqpeP_4VNin8lxNr
 //   2. dashed "SIMULATE ARRIVAL (TESTING)" button in the responder's nav view
 //   3. "Responder Arrived" confirm modal on the requester's app
 const RECOVERY_PROXIMITY_CONFIRM_ENABLED = false;
+
+// Master kill switch for the Gear Drops feature. While true, the UI is
+// gated to admins + opted-in beta testers (profiles.is_beta_tester=true).
+// Flip to false to instantly hide all Gear Drops surfaces (admin entry,
+// public feed pill, run screen, push notifications) without a redeploy.
+const GEAR_DROPS_ENABLED = true;
 
 // Convert a base64url VAPID key into the Uint8Array applicationServerKey
 // that PushManager.subscribe() expects.
@@ -458,6 +504,12 @@ function tripStaticMapUrl(lat, lng, kind, { width = 600, height = 320, zoom = 11
 // HQ — fixed Lone Peak Overland coords with a brand-red star pin.
 function hqStaticMapUrl({ width = 600, height = 320, zoom = 13 } = {}) {
   return `https://api.mapbox.com/styles/v1/mapbox/outdoors-v12/static/pin-l-star+BD472A(${LPO_HQ.lng},${LPO_HQ.lat})/${LPO_HQ.lng},${LPO_HQ.lat},${zoom}/${width}x${height}@2x?access_token=${MAPBOX_TOKEN}`;
+}
+// Gear-drop start point — green pin matching the gear drops accent.
+// Used on the public detail screen + DM/feed share cards once Phase 4 ships.
+function gearDropStaticMapUrl(lat, lng, { width = 600, height = 320, zoom = 11 } = {}) {
+  if (lat == null || lng == null || !isFinite(lat) || !isFinite(lng)) return null;
+  return `https://api.mapbox.com/styles/v1/mapbox/outdoors-v12/static/pin-l+4A7C59(${lng},${lat})/${lng},${lat},${zoom}/${width}x${height}@2x?access_token=${MAPBOX_TOKEN}`;
 }
 // Static map with the full route line as an overlay. Used by TripReportCard
 // for plans (which rarely have user-uploaded hero images — the route IS
@@ -1145,7 +1197,7 @@ async function fetchTripReportsInBbox(bbox) {
   if ([south, west, north, east].some(v => v == null || !isFinite(v))) return [];
   try {
     let q = supabase.from("trip_reports")
-      .select("id, user_id, slug, name, description, status, kind, visibility, planned_start, planned_end, party_size, start_lat, start_lng, start_label, end_lat, end_lng, route_geom, hero_img, distance_mi, duration_min, elev_gain_ft, max_elev_ft, difficulty, region, state_code, terrains, tags, view_count, like_count, comment_count, published_at, created_at, updated_at")
+      .select("id, user_id, slug, name, description, status, kind, visibility, planned_start, planned_end, party_size, start_lat, start_lng, start_label, end_lat, end_lng, route_geom, hero_img, distance_mi, duration_min, elev_gain_ft, max_elev_ft, difficulty, region, state_code, build_id, terrains, tags, view_count, like_count, comment_count, published_at, created_at, updated_at")
       .eq("status", "published")
       .eq("kind", "report")
       .gte("start_lat", south).lte("start_lat", north);
@@ -1173,7 +1225,7 @@ async function fetchTripPlansInBbox(bbox) {
   if ([south, west, north, east].some(v => v == null || !isFinite(v))) return [];
   try {
     let q = supabase.from("trip_reports")
-      .select("id, user_id, slug, name, description, status, kind, visibility, planned_start, planned_end, party_size, start_lat, start_lng, start_label, end_lat, end_lng, route_geom, hero_img, distance_mi, duration_min, elev_gain_ft, max_elev_ft, difficulty, region, state_code, terrains, tags, view_count, like_count, comment_count, published_at, created_at, updated_at")
+      .select("id, user_id, slug, name, description, status, kind, visibility, planned_start, planned_end, party_size, start_lat, start_lng, start_label, end_lat, end_lng, route_geom, hero_img, distance_mi, duration_min, elev_gain_ft, max_elev_ft, difficulty, region, state_code, build_id, terrains, tags, view_count, like_count, comment_count, published_at, created_at, updated_at")
       .eq("status", "published")
       .eq("kind", "plan")
       // Explicit visibility filter — RLS already masks private rows for
@@ -2103,6 +2155,188 @@ function ShareRecipientPicker({ followingIdsArr, searchUsers, onCancel, onSubmit
 // onMarkerTap fires when the user taps an existing point on the map; the
 // caller opens the per-point note sheet so the user can edit the type +
 // note + delete inline.
+// Gear-drop pin builder layer: ordered markers + per-segment road-routed
+// lines (Mapbox Directions, same as the plan builder) with off-road
+// fallback for points beyond OFFROAD_THRESHOLD_M of any snapped road.
+// Per-pin `showSnapLineFromPrev` toggle suppresses the connector to the
+// previous pin. In mode='afterparty', renders a single diamond marker
+// with a distinct copper-and-star treatment and skips all line work.
+function useGearDropPinBuilderLayer(mapRef, ready, pins, active, mode) {
+  const markersRef = useRef([]);
+  const OFFROAD_THRESHOLD_M = 50;
+  const segmentCacheRef = useRef({});
+  const [segmentTick, setSegmentTick] = useState(0);
+  const isAfterparty = mode === "afterparty";
+
+  const segmentKey = (from, to) => `${from.lng.toFixed(5)},${from.lat.toFixed(5)}|${to.lng.toFixed(5)},${to.lat.toFixed(5)}`;
+
+  // Build segments from pins + cache. A pin with showSnapLineFromPrev=false
+  // skips the connector from the prior pin (host hides that leg).
+  const segments = useMemo(() => {
+    if (!active || isAfterparty) return [];
+    const valid = (pins || []).filter(p => p && p.lat != null && p.lng != null);
+    if (valid.length < 2) return [];
+    const out = [];
+    for (let i = 0; i < valid.length - 1; i++) {
+      const from = valid[i];
+      const to = valid[i + 1];
+      if (to.showSnapLineFromPrev === false) continue;
+      const key = segmentKey(from, to);
+      const cached = segmentCacheRef.current[key] || { status: "pending" };
+      out.push({ from, to, key, ...cached });
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pins, active, isAfterparty, segmentTick]);
+
+  // Render line layers (routed green + offroad red).
+  useEffect(() => {
+    const map = mapRef && mapRef.current;
+    if (!map || !ready || !window.mapboxgl) return;
+    const removeLines = () => {
+      try {
+        if (map.getLayer("gd-pin-builder-line-routed")) map.removeLayer("gd-pin-builder-line-routed");
+        if (map.getSource("gd-pin-builder-line-routed")) map.removeSource("gd-pin-builder-line-routed");
+        if (map.getLayer("gd-pin-builder-line-offroad")) map.removeLayer("gd-pin-builder-line-offroad");
+        if (map.getSource("gd-pin-builder-line-offroad")) map.removeSource("gd-pin-builder-line-offroad");
+      } catch (_) {}
+    };
+    if (!active || isAfterparty) { removeLines(); return; }
+    const ensure = () => {
+      if (!map.getSource("gd-pin-builder-line-routed")) {
+        map.addSource("gd-pin-builder-line-routed",  { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+        map.addSource("gd-pin-builder-line-offroad", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+        map.addLayer({
+          id: "gd-pin-builder-line-routed",
+          type: "line",
+          source: "gd-pin-builder-line-routed",
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: { "line-color": T.green, "line-width": 3, "line-opacity": 0.9, "line-dasharray": [2, 2] },
+        });
+        map.addLayer({
+          id: "gd-pin-builder-line-offroad",
+          type: "line",
+          source: "gd-pin-builder-line-offroad",
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: { "line-color": T.red, "line-width": 3, "line-opacity": 0.95, "line-dasharray": [1, 1.4] },
+        });
+      }
+      const routed = [];
+      const offroad = [];
+      segments.forEach(s => {
+        if (s.status === "routed" && s.coords) {
+          routed.push({ type: "Feature", geometry: { type: "LineString", coordinates: s.coords }, properties: {} });
+          if (s.snappedStart && haversine(s.from.lat, s.from.lng, s.snappedStart[1], s.snappedStart[0]) > OFFROAD_THRESHOLD_M) {
+            offroad.push({ type: "Feature", geometry: { type: "LineString", coordinates: [[s.from.lng, s.from.lat], s.snappedStart] }, properties: {} });
+          }
+          if (s.snappedEnd && haversine(s.to.lat, s.to.lng, s.snappedEnd[1], s.snappedEnd[0]) > OFFROAD_THRESHOLD_M) {
+            offroad.push({ type: "Feature", geometry: { type: "LineString", coordinates: [s.snappedEnd, [s.to.lng, s.to.lat]] }, properties: {} });
+          }
+        } else if (s.status === "offroad") {
+          offroad.push({ type: "Feature", geometry: { type: "LineString", coordinates: [[s.from.lng, s.from.lat], [s.to.lng, s.to.lat]] }, properties: {} });
+        } else {
+          routed.push({ type: "Feature", geometry: { type: "LineString", coordinates: [[s.from.lng, s.from.lat], [s.to.lng, s.to.lat]] }, properties: {} });
+        }
+      });
+      const sR = map.getSource("gd-pin-builder-line-routed");  if (sR) sR.setData({ type: "FeatureCollection", features: routed });
+      const sO = map.getSource("gd-pin-builder-line-offroad"); if (sO) sO.setData({ type: "FeatureCollection", features: offroad });
+      try { map.moveLayer("gd-pin-builder-line-routed"); } catch (_) {}
+      try { map.moveLayer("gd-pin-builder-line-offroad"); } catch (_) {}
+    };
+    if (map.isStyleLoaded()) ensure();
+    else map.once("load", ensure);
+  }, [mapRef, ready, segments, active, isAfterparty]);
+
+  // Per-segment Directions fetch. Debounced 400ms so rapid taps coalesce.
+  useEffect(() => {
+    if (!active || isAfterparty) return;
+    const valid = (pins || []).filter(p => p && p.lat != null && p.lng != null);
+    if (valid.length < 2) return;
+    const toFetch = [];
+    for (let i = 0; i < valid.length - 1; i++) {
+      const from = valid[i];
+      const to = valid[i + 1];
+      if (to.showSnapLineFromPrev === false) continue;
+      const key = segmentKey(from, to);
+      if (!segmentCacheRef.current[key]) {
+        segmentCacheRef.current[key] = { status: "pending" };
+        toFetch.push({ from, to, key });
+      }
+    }
+    if (toFetch.length === 0) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const results = await Promise.all(toFetch.map(s => mapboxDirections(s.from, s.to)));
+      if (cancelled) return;
+      results.forEach((dir, idx) => {
+        const { key } = toFetch[idx];
+        if (dir && dir.geometry && Array.isArray(dir.geometry.coordinates) && dir.geometry.coordinates.length >= 2) {
+          const wpStart = dir.waypoints && dir.waypoints[0] && dir.waypoints[0].location;
+          const wpEnd   = dir.waypoints && dir.waypoints[dir.waypoints.length - 1] && dir.waypoints[dir.waypoints.length - 1].location;
+          segmentCacheRef.current[key] = {
+            status: "routed",
+            coords: dir.geometry.coordinates,
+            snappedStart: wpStart || null,
+            snappedEnd: wpEnd || null,
+          };
+        } else {
+          segmentCacheRef.current[key] = { status: "offroad" };
+        }
+      });
+      setSegmentTick(t => t + 1);
+    }, 400);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [pins, active, isAfterparty]);
+
+  // Markers. Afterparty mode renders a single distinct diamond marker so
+  // it can't be confused with a route start/waypoint/endpoint.
+  useEffect(() => {
+    const map = mapRef && mapRef.current;
+    if (!map || !ready || !window.mapboxgl) return;
+    markersRef.current.forEach(m => { try { m.remove(); } catch (_) {} });
+    markersRef.current = [];
+    if (!active) return;
+    const valid = (pins || []).filter(p => p && p.lat != null && p.lng != null);
+    valid.forEach((pin, i) => {
+      let el;
+      if (isAfterparty) {
+        // Diamond shape (rotated square) with inline star — visually
+        // distinct from any of the circular route markers.
+        el = document.createElement("div");
+        el.style.cssText = `position:relative;width:42px;height:42px;display:flex;align-items:center;justify-content:center;cursor:pointer`;
+        const diamond = document.createElement("div");
+        diamond.style.cssText = `width:28px;height:28px;background:${T.copper};border:3px solid #fff;transform:rotate(45deg);box-shadow:0 3px 10px rgba(0,0,0,0.55)`;
+        el.appendChild(diamond);
+        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.setAttribute("width", "18");
+        svg.setAttribute("height", "18");
+        svg.setAttribute("viewBox", "0 0 24 24");
+        svg.style.cssText = `position:absolute;pointer-events:none`;
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+        path.setAttribute("points", "12,2 15,9 22,9 17,14 19,22 12,17 5,22 7,14 2,9 9,9");
+        path.setAttribute("fill", "#fff");
+        svg.appendChild(path);
+        el.appendChild(svg);
+      } else {
+        const isFirst = i === 0;
+        const isLast = i === valid.length - 1 && valid.length > 1;
+        const color = isFirst ? T.copper : isLast ? T.red : T.green;
+        el = document.createElement("div");
+        el.style.cssText = `width:28px;height:28px;border-radius:50%;background:${color};border:2px solid #fff;display:flex;align-items:center;justify-content:center;color:#fff;font-family:sans-serif;font-size:11px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,0.4);cursor:pointer`;
+        el.textContent = isFirst ? "S" : isLast ? "E" : String(i);
+      }
+      const marker = new window.mapboxgl.Marker({ element: el, anchor: "center" })
+        .setLngLat([pin.lng, pin.lat])
+        .addTo(map);
+      markersRef.current.push(marker);
+    });
+    return () => {
+      markersRef.current.forEach(m => { try { m.remove(); } catch (_) {} });
+      markersRef.current = [];
+    };
+  }, [mapRef, ready, pins, active, isAfterparty]);
+}
+
 function usePlanBuilderLayer(mapRef, ready, points, onMarkerTap, endAnchorId, accent) {
   const markersRef = useRef([]);
   const handlerRef = useRef(onMarkerTap);
@@ -3545,7 +3779,7 @@ function RecoveryNotifPanel({ onClose, onGoToRecovery, alerts, onDismiss, onClea
   );
 }
 
-function UnifiedNotifPanel({ onClose, onViewUser, onGoToPost, onGoToBuild, onGoToForumThread, onGoToAdminBugs, notifs, onDismissNotif, onClearNotifs, recoveryAlerts, onDismissAlert, onClearAlerts, onGoToRecovery, onOpenMap, onOpenDM, onRespondToRecovery, initialTab }) {
+function UnifiedNotifPanel({ onClose, onViewUser, onGoToPost, onGoToBuild, onGoToForumThread, onGoToAdminBugs, onGoToAdminReports, notifs, onDismissNotif, onClearNotifs, recoveryAlerts, onDismissAlert, onClearAlerts, onGoToRecovery, onOpenMap, onOpenDM, onRespondToRecovery, initialTab }) {
   const [tab, setTab] = useState(initialTab || "general");
   const urgencyColor = (u) => u === "HIGH" ? T.red : T.copper;
   const tabBtn = (key, label, count, color) => (
@@ -3602,7 +3836,7 @@ function UnifiedNotifPanel({ onClose, onViewUser, onGoToPost, onGoToBuild, onGoT
           ) : notifs.map((n) => {
             const Icon = n.icon;
             return (
-              <div key={n.id} onClick={() => { if (n.type === "bug_report") { onGoToAdminBugs && onGoToAdminBugs(); } else if (n.forumThreadId) { onGoToForumThread && onGoToForumThread(n.forumThreadId); } else if (n.buildId) { onGoToBuild && onGoToBuild(n.buildId, n.target); } else if (n.postId) { onGoToPost && onGoToPost(n.postId); } }} style={{ display: "flex", gap: 10, padding: "12px 16px", borderBottom: `1px solid ${T.charcoal}22`, cursor: "pointer", transition: "background 0.15s", position: "relative" }} onMouseEnter={(e) => e.currentTarget.style.background = `${T.charcoal}` } onMouseLeave={(e) => e.currentTarget.style.background = "transparent" }>
+              <div key={n.id} onClick={() => { if (n.type === "bug_report") { onGoToAdminBugs && onGoToAdminBugs(); } else if (n.type === "content_report") { onGoToAdminReports && onGoToAdminReports(); } else if (n.forumThreadId) { onGoToForumThread && onGoToForumThread(n.forumThreadId); } else if (n.buildId) { onGoToBuild && onGoToBuild(n.buildId, n.target); } else if (n.postId) { onGoToPost && onGoToPost(n.postId); } }} style={{ display: "flex", gap: 10, padding: "12px 16px", borderBottom: `1px solid ${T.charcoal}22`, cursor: "pointer", transition: "background 0.15s", position: "relative" }} onMouseEnter={(e) => e.currentTarget.style.background = `${T.charcoal}` } onMouseLeave={(e) => e.currentTarget.style.background = "transparent" }>
                 <div style={{ width: 32, height: 32, borderRadius: "50%", background: `${n.iconColor}18`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2 }}>
                   <Icon size={14} color={n.iconColor} strokeWidth={1.8} />
                 </div>
@@ -3680,7 +3914,7 @@ function UnifiedNotifPanel({ onClose, onViewUser, onGoToPost, onGoToBuild, onGoT
   );
 }
 
-function TopBar({ onProfile, onBack, showBack, title, onViewUser, onGoToPost, onGoToBuild, onGoToForumThread, onGoToRecovery, onGoToAdminBugs, onOpenMap, onSearch, onOpenDM, onRespondToRecovery, dmUnread, bellNotifs, onDismissNotif, onClearNotifs, profilePic, notifPrefs, recoveryAlerts, setRecoveryAlerts }) {
+function TopBar({ onProfile, onBack, showBack, title, onHome, onViewUser, onGoToPost, onGoToBuild, onGoToForumThread, onGoToRecovery, onGoToAdminBugs, onGoToAdminReports, onOpenMap, onSearch, onOpenDM, onRespondToRecovery, dmUnread, bellNotifs, onDismissNotif, onClearNotifs, profilePic, notifPrefs, recoveryAlerts, setRecoveryAlerts }) {
   const notifTypeMap = { like: "likes", comment: "comments", reply: "replies", follow: "follows", mention: "mentions" };
   const filteredNotifs = bellNotifs.filter(n => { const pref = notifTypeMap[n.type]; return !pref || (notifPrefs && notifPrefs[pref] !== false); });
   const [openPanel, setOpenPanel] = useState(null); // null | "notif"
@@ -3706,7 +3940,14 @@ function TopBar({ onProfile, onBack, showBack, title, onViewUser, onGoToPost, on
             <ChevronLeft size={22} color={T.white} strokeWidth={1.5} />
           </button>
         )}
-        <span style={{ fontFamily: sans, fontSize: 16, fontWeight: 700, color: T.white, letterSpacing: 3 }}>{title || "TRAILHEAD"}</span>
+        {/* Default "TRAILHEAD" wordmark is tappable — acts as a home
+            button back to the feed. Custom titles (Compose / Recovery /
+            Profile) stay non-interactive; back button handles those. */}
+        {title ? (
+          <span style={{ fontFamily: sans, fontSize: 16, fontWeight: 700, color: T.white, letterSpacing: 3 }}>{title}</span>
+        ) : (
+          <button onClick={() => onHome && onHome()} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: sans, fontSize: 16, fontWeight: 700, color: T.white, letterSpacing: 3 }}>TRAILHEAD</button>
+        )}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
         <button onClick={() => onSearch && onSearch()} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center" }}>
@@ -3744,6 +3985,7 @@ function TopBar({ onProfile, onBack, showBack, title, onViewUser, onGoToPost, on
           onGoToBuild={(buildId, name) => { setOpenPanel(null); onGoToBuild && onGoToBuild(buildId, name); }}
           onGoToForumThread={(threadId) => { setOpenPanel(null); onGoToForumThread && onGoToForumThread(threadId); }}
           onGoToAdminBugs={() => { setOpenPanel(null); onGoToAdminBugs && onGoToAdminBugs(); }}
+          onGoToAdminReports={() => { setOpenPanel(null); onGoToAdminReports && onGoToAdminReports(); }}
           notifs={filteredNotifs}
           onDismissNotif={onDismissNotif}
           onClearNotifs={onClearNotifs}
@@ -4352,20 +4594,68 @@ const extractMentions = (text) => {
 };
 
 /* ─── IMAGE CAROUSEL LIGHTBOX ─── */
+// Detect video URLs by extension. Used by ImageCarousel to swap <img>
+// for <video> on a per-item basis without forcing every caller to
+// restructure its array.
+function isVideoUrl(u) {
+  if (typeof u !== "string") return false;
+  return /\.(mp4|mov|webm|m4v)(\?|#|$)/i.test(u);
+}
+
 function ImageCarousel({ images, startIndex, onClose }) {
   const [idx, setIdx] = useState(startIndex || 0);
-  const touchStartX = useRef(null);
+  // Live drag offset in pixels — added to the track's translate during a
+  // touch drag so the image feels attached to the finger. Reset to 0 on
+  // release; the index commits if the drag passes the threshold.
+  const [drag, setDrag] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const viewportRef = useRef(null);
+  const touchStartXRef = useRef(null);
+  const touchStartYRef = useRef(null);
+  const touchLastXRef = useRef(null);
+  const axisLockedRef = useRef(null); // 'x' | 'y' | null — locks once direction is decided
   if (!images || images.length === 0) return null;
 
   const prev = () => setIdx(i => (i - 1 + images.length) % images.length);
   const next = () => setIdx(i => (i + 1) % images.length);
 
-  const handleTouchStart = (e) => { touchStartX.current = e.touches[0].clientX; };
-  const handleTouchEnd = (e) => {
-    if (touchStartX.current === null) return;
-    const diff = e.changedTouches[0].clientX - touchStartX.current;
-    if (Math.abs(diff) > 50) { diff > 0 ? prev() : next(); }
-    touchStartX.current = null;
+  const handleTouchStart = (e) => {
+    if (images.length < 2) return;
+    touchStartXRef.current = e.touches[0].clientX;
+    touchStartYRef.current = e.touches[0].clientY;
+    touchLastXRef.current = e.touches[0].clientX;
+    axisLockedRef.current = null;
+    setIsDragging(true);
+  };
+  const handleTouchMove = (e) => {
+    if (touchStartXRef.current === null) return;
+    const x = e.touches[0].clientX;
+    const y = e.touches[0].clientY;
+    const dx = x - touchStartXRef.current;
+    const dy = y - touchStartYRef.current;
+    // Lock to the axis the user moved the most after a small dead zone.
+    // If they're scrolling vertically (e.g. trying to scroll the page on a
+    // page-embedded carousel), bail out and stop hijacking their gesture.
+    if (axisLockedRef.current === null && Math.abs(dx) + Math.abs(dy) > 8) {
+      axisLockedRef.current = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+    }
+    if (axisLockedRef.current !== "x") return;
+    touchLastXRef.current = x;
+    setDrag(dx);
+  };
+  const handleTouchEnd = () => {
+    if (touchStartXRef.current === null) return;
+    const width = (viewportRef.current && viewportRef.current.clientWidth) || 320;
+    const delta = (touchLastXRef.current || touchStartXRef.current) - touchStartXRef.current;
+    const threshold = Math.max(50, width * 0.18);
+    setIsDragging(false);
+    setDrag(0);
+    if (delta > threshold) prev();
+    else if (delta < -threshold) next();
+    touchStartXRef.current = null;
+    touchStartYRef.current = null;
+    touchLastXRef.current = null;
+    axisLockedRef.current = null;
   };
 
   return (
@@ -4378,27 +4668,80 @@ function ImageCarousel({ images, startIndex, onClose }) {
       <div style={{ position: "absolute", top: 20, left: "50%", transform: "translateX(-50%)", fontFamily: sans, fontSize: 12, color: T.warmBg, letterSpacing: 1, zIndex: 10 }}>
         {idx + 1} / {images.length}
       </div>
-      {/* Image area */}
-      <div onClick={e => e.stopPropagation()} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} style={{ width: "100%", maxWidth: 430, flex: 1, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", padding: "50px 0" }}>
-        <img src={txImg(images[idx], 1200)} alt="" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 4 }} />
+      {/* Viewport — swipeable track inside. Each slide is 100% of viewport
+          width; the track translates -idx viewport-widths plus the live
+          finger-drag offset in pixels (via CSS calc) so the slide tracks
+          the finger 1:1 instead of snapping at the end of the gesture. */}
+      <div ref={viewportRef}
+           onClick={e => e.stopPropagation()}
+           onTouchStart={handleTouchStart}
+           onTouchMove={handleTouchMove}
+           onTouchEnd={handleTouchEnd}
+           onTouchCancel={handleTouchEnd}
+           style={{ width: "100%", maxWidth: 430, flex: 1, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", padding: "50px 0", overflow: "hidden", touchAction: "pan-y" }}>
+        <div style={{
+          display: "flex",
+          width: "100%",
+          height: "100%",
+          transform: `translate3d(calc(${-idx * 100}% + ${drag}px), 0, 0)`,
+          transition: isDragging ? "none" : "transform 280ms cubic-bezier(0.25, 1, 0.4, 1)",
+          willChange: "transform",
+        }}>
+          {images.map((url, i) => {
+            const vid = isVideoUrl(url);
+            const isCurrent = i === idx;
+            return (
+              <div key={i} style={{ width: "100%", height: "100%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                {vid ? (
+                  // Only the current slide gets a live <video controls
+                  // autoPlay> — non-current slides show a play-icon
+                  // placeholder so we don't autoplay every video in the
+                  // track when the carousel opens.
+                  isCurrent ? (
+                    <video key={url} src={url} controls autoPlay playsInline style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 4, background: "#000" }} />
+                  ) : (
+                    <div style={{ width: "70%", aspectRatio: "16 / 9", background: "#000", borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <Play size={28} color={T.white} fill={T.white} />
+                    </div>
+                  )
+                ) : (
+                  <img src={txImg(url, 1200)} alt="" draggable={false} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 4, pointerEvents: "none", userSelect: "none" }} />
+                )}
+              </div>
+            );
+          })}
+        </div>
         {/* Nav arrows */}
         {images.length > 1 && (
           <>
-            <button onClick={(e) => { e.stopPropagation(); prev(); }} style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", background: `${T.charcoal}AA`, border: "none", borderRadius: "50%", width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+            <button onClick={(e) => { e.stopPropagation(); prev(); }} style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", background: `${T.charcoal}AA`, border: "none", borderRadius: "50%", width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", zIndex: 2 }}>
               <ChevronLeft size={22} color={T.white} />
             </button>
-            <button onClick={(e) => { e.stopPropagation(); next(); }} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: `${T.charcoal}AA`, border: "none", borderRadius: "50%", width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+            <button onClick={(e) => { e.stopPropagation(); next(); }} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: `${T.charcoal}AA`, border: "none", borderRadius: "50%", width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", zIndex: 2 }}>
               <ChevronRight size={22} color={T.white} />
             </button>
           </>
         )}
       </div>
-      {/* Thumbnail strip */}
+      {/* Thumbnail strip — video items show their first frame via a
+          muted preload-metadata <video> with a play-icon overlay so
+          they're visually distinct from images. */}
       {images.length > 1 && (
         <div onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 6, padding: "12px 16px", overflowX: "auto", maxWidth: 430, width: "100%" }}>
-          {images.map((img, i) => (
-            <img key={i} src={img} alt="" onClick={() => setIdx(i)} style={{ width: 48, height: 48, borderRadius: 6, objectFit: "cover", flexShrink: 0, cursor: "pointer", border: i === idx ? `2px solid ${T.copper}` : `2px solid transparent`, opacity: i === idx ? 1 : 0.5, transition: "opacity 0.15s, border 0.15s" }} />
-          ))}
+          {images.map((img, i) => {
+            const thumbStyle = { width: 48, height: 48, borderRadius: 6, objectFit: "cover", flexShrink: 0, cursor: "pointer", border: i === idx ? `2px solid ${T.copper}` : `2px solid transparent`, opacity: i === idx ? 1 : 0.5, transition: "opacity 0.15s, border 0.15s" };
+            if (isVideoUrl(img)) {
+              return (
+                <div key={i} onClick={() => setIdx(i)} style={{ position: "relative", ...thumbStyle, padding: 0, background: "#000" }}>
+                  <video src={img + "#t=0.1"} preload="metadata" muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 4 }} />
+                  <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+                    <Play size={14} color={T.white} fill={T.white} />
+                  </div>
+                </div>
+              );
+            }
+            return <img key={i} src={img} alt="" onClick={() => setIdx(i)} style={thumbStyle} />;
+          })}
         </div>
       )}
     </div>
@@ -4409,7 +4752,7 @@ function ImageCarousel({ images, startIndex, onClose }) {
 // Feed posts are now persisted to public.posts and hydrated on sign-in.
 // The legacy defaultFeedItems seed array was removed once the backend landed.
 
-function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShareCompose, onOpenShareIntent, onViewBuild, onOpenTripDetail, onOpenConvoy, feedItems, onUpdateFeed, onUpdatePost, likedPostIds, onTogglePostLike, postComments, onAddComment, onDeleteComment, likedCommentIds, onToggleCommentLike, currentUserId, currentUserName, currentUserHandle, currentUserAvatar, isAdmin, onDeletePost, onEditPost, onAddNotification, forumUserReplies, forumViewCounts, savedRoutes, onSaveRoute, onUnsaveRoute, onStartNav, onStartDirections, onAwardPoints, isGuest, onGuestTap, pendingPostNav, onConsumePendingPostNav, onSharedPostMissing, convoyRsvps, onRsvpConvoy, onSearchUsers, filterFn, hideFilters, onlineUserIds, tripReports, tripPlans, tripAuthors, onNewTripReport, onOpenTripDraft, onOpenSpotOnMap, onOpenHQOnMap, onLoadMore, hasMore, loadingMore, onLoadTripRouteData, activeFilter: controlledFilter, setActiveFilter: setControlledFilter }) {
+function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShareCompose, onOpenShareIntent, onViewBuild, onOpenTripDetail, onOpenConvoy, feedItems, onUpdateFeed, onUpdatePost, likedPostIds, onTogglePostLike, postComments, onAddComment, onDeleteComment, likedCommentIds, onToggleCommentLike, currentUserId, currentUserName, currentUserHandle, currentUserAvatar, isAdmin, isModerator, isBetaTester, onDeletePost, onEditPost, onAddNotification, forumUserReplies, forumViewCounts, savedRoutes, onSaveRoute, onUnsaveRoute, onStartNav, onStartDirections, onAwardPoints, isGuest, onGuestTap, pendingPostNav, onConsumePendingPostNav, onSharedPostMissing, convoyRsvps, onRsvpConvoy, onSearchUsers, filterFn, hideFilters, onlineUserIds, tripReports, tripPlans, tripAuthors, onNewTripReport, onOpenTripDraft, onOpenSpotOnMap, onOpenHQOnMap, onLoadMore, hasMore, loadingMore, onLoadTripRouteData, onReportContent, activeFilter: controlledFilter, setActiveFilter: setControlledFilter, gearDrops, myGearDropRuns, onOpenGearDrop }) {
   // Infinite-scroll sentinel — bottom of the feed list. When it scrolls
   // into view, ask the root to load the next page. Disabled when the
   // active filter is anything but ALL (filter-narrowed lists don't drive
@@ -4434,7 +4777,8 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
   // list (drafts + published) instead of filtering the post stream by type.
   // Underlying posts of type "ROUTES" are still reachable from "ALL" — this
   // is purely a navigation surface for the trip-reports listing.
-  const filters = ["ALL", "BUILDS", "CONVOYS", "TRIP REPORTS", "PHOTOS", "FORUM"];
+  const showGearDropsPill = GEAR_DROPS_ENABLED && (isAdmin || isBetaTester);
+  const filters = ["ALL", "BUILDS", "CONVOYS", "TRIP REPORTS", ...(showGearDropsPill ? ["GEAR DROPS"] : []), "PHOTOS", "FORUM"];
   // Likes and comments are now hoisted to the root and backed by Supabase.
   // FeedScreen just reflects the props it's given. We kept `openComments`
   // local because it's pure UI state (which post's drawer is expanded).
@@ -4716,28 +5060,53 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
     );
   };
 
-  // Three-dot overflow menu for the current user's own posts.
+  // Three-dot overflow menu — shown to (a) post owner, (b) admin (always,
+  // for moderation), (c) any signed-in non-owner (for the Report option).
+  // Server-side RLS allows the admin override on actual edit/delete; the
+  // Report option inserts into content_reports via the root-level handler.
   const ownPostMenu = (item) => {
-    // Owner sees the menu; admins see it on every post (for moderation).
-    // Server-side RLS allows the admin override on the actual delete/edit.
     if (!currentUserId) return null;
-    if (item.userId !== currentUserId && !isAdmin) return null;
+    const isOwner = item.userId === currentUserId;
+    // Edit stays admin-only for non-owners (preserves authorship intent).
+    // Delete is additive — owner OR admin OR moderator.
+    const canEdit = isOwner || isAdmin;
+    const canDelete = isOwner || isAdmin || isModerator;
+    const canReport = !isOwner && !!onReportContent;
+    if (!canEdit && !canDelete && !canReport) return null;
     const isOpen = postMenuOpen === item.id;
+    const buildReportTarget = () => ({
+      targetType: "post",
+      targetId: item.id,
+      targetOwnerId: item.userId || null,
+      targetOwnerHandle: item.handle || null,
+      targetSnapshot: item.title || item.body || "",
+      targetUrl: typeof item.id === "string" ? `/post/${item.id}` : null,
+    });
     return (
       <div style={{ position: "relative", marginLeft: "auto", flexShrink: 0 }}>
         <button onClick={(e) => { e.stopPropagation(); setPostMenuOpen(isOpen ? null : item.id); setDeleteConfirmFeed(null); setEditingFeedPost(null); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex", alignItems: "center" }}>
           <MoreHorizontal size={16} color={T.tertiary} />
         </button>
         {isOpen && (
-          <div style={{ position: "absolute", top: "100%", right: 0, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", zIndex: 50, minWidth: 130, overflow: "hidden" }}>
-            <button onClick={(e) => { e.stopPropagation(); setEditingFeedPost(item.id); setEditFeedText(item.title || ""); setPostMenuOpen(null); }} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "10px 14px", background: "none", border: "none", cursor: "pointer", borderBottom: `1px solid ${T.charcoal}` }}>
-              <Settings size={13} color={T.tertiary} />
-              <span style={{ fontFamily: sans, fontSize: 12, color: T.white }}>Edit</span>
-            </button>
-            <button onClick={(e) => { e.stopPropagation(); setDeleteConfirmFeed(item.id); setPostMenuOpen(null); }} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "10px 14px", background: "none", border: "none", cursor: "pointer" }}>
-              <Trash2 size={13} color={T.red} />
-              <span style={{ fontFamily: sans, fontSize: 12, color: T.red }}>Delete</span>
-            </button>
+          <div style={{ position: "absolute", top: "100%", right: 0, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", zIndex: 50, minWidth: 140, overflow: "hidden" }}>
+            {canEdit && (
+              <button onClick={(e) => { e.stopPropagation(); setEditingFeedPost(item.id); setEditFeedText(item.title || ""); setPostMenuOpen(null); }} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "10px 14px", background: "none", border: "none", cursor: "pointer", borderBottom: `1px solid ${T.charcoal}` }}>
+                <Settings size={13} color={T.tertiary} />
+                <span style={{ fontFamily: sans, fontSize: 12, color: T.white }}>Edit</span>
+              </button>
+            )}
+            {canDelete && (
+              <button onClick={(e) => { e.stopPropagation(); setDeleteConfirmFeed(item.id); setPostMenuOpen(null); }} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "10px 14px", background: "none", border: "none", cursor: "pointer", borderBottom: canReport ? `1px solid ${T.charcoal}` : undefined }}>
+                <Trash2 size={13} color={T.red} />
+                <span style={{ fontFamily: sans, fontSize: 12, color: T.red }}>Delete</span>
+              </button>
+            )}
+            {canReport && (
+              <button onClick={(e) => { e.stopPropagation(); setPostMenuOpen(null); onReportContent && onReportContent(buildReportTarget()); }} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "10px 14px", background: "none", border: "none", cursor: "pointer" }}>
+                <Flag size={13} color={T.red} />
+                <span style={{ fontFamily: sans, fontSize: 12, color: T.red }}>Report</span>
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -5592,14 +5961,55 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
 
     if (item.type === "FORUM") {
       const snippet = item.body && item.body.length > 120 ? item.body.slice(0, 120) + "..." : item.body;
+      const isMarketplaceCard = item.categorySlug === "marketplace";
+      const listingDet = item.listingDetails || {};
+      const priceFree = !!listingDet.priceFree;
+      const priceOBO = !!listingDet.priceOBO;
+      const status = item.listingStatus || "active";
+      const priceText = priceFree
+        ? "FREE"
+        : (item.listingPrice != null ? `$${Number(item.listingPrice).toLocaleString()}` : null);
       return (
         <div key={item.id} onClick={() => onOpenThread && onOpenThread(item.threadId, item.forumCat, item.forumSub)} style={{ ...cardStyle, cursor: "pointer" }}>
           <div style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 8, borderBottom: `1px solid ${T.charcoal}` }}>
-            <MessageCircle size={14} color={T.copper} />
-            <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1, fontWeight: 600 }}>FORUM THREAD</span>
+            {isMarketplaceCard ? <Tag size={14} color={T.copper} /> : <MessageCircle size={14} color={T.copper} />}
+            <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1, fontWeight: 600 }}>{isMarketplaceCard ? "MARKETPLACE LISTING" : "FORUM THREAD"}</span>
             <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginLeft: 4 }}>{item.forumCat} &gt; {item.forumSub}</span>
             <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginLeft: "auto" }}>{formatPostTime(item.time)}</span>
+            {ownPostMenu(item)}
           </div>
+          {/* Marketplace price + status banner. Renders only on
+              shared marketplace listings; non-marketplace forum cards
+              skip this row entirely. */}
+          {isMarketplaceCard && (priceText || status !== "active") && (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", borderBottom: `1px solid ${T.charcoal}` }}>
+              {priceText && (
+                <span style={{ fontFamily: sans, fontSize: 20, color: priceFree ? T.green : T.white, fontWeight: 800, letterSpacing: -0.3 }}>
+                  {priceText}
+                </span>
+              )}
+              {!priceFree && priceOBO && priceText && (
+                <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 1 }}>OBO</span>
+              )}
+              {status !== "active" && (
+                <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: 10, color: T.white, background: status === "sold" ? T.green : T.tertiary, padding: "3px 10px", borderRadius: 4, fontWeight: 700, letterSpacing: 1.2 }}>
+                  {status === "sold" ? "SOLD" : "WITHDRAWN"}
+                </span>
+              )}
+              {listingDet.condition && status === "active" && (
+                <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: 10, color: T.white, background: T.charcoal, padding: "3px 8px", borderRadius: 4, fontWeight: 600, letterSpacing: 0.5 }}>{listingDet.condition}</span>
+              )}
+            </div>
+          )}
+          {feedEditBar(item)}
+          {feedDeleteConfirm(item)}
+          {/* User-supplied caption on a manual share — reads above the
+              thread snippet so the sharer's commentary is the first thing
+              the viewer sees. Auto-shares-at-thread-creation leave caption
+              null so this block is hidden in that path. */}
+          {item.caption && (
+            <p style={{ fontFamily: serif, fontSize: 14, color: T.white, margin: 0, padding: "12px 16px 0", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{item.caption}</p>
+          )}
           <div style={{ padding: 16 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
               <div onClick={(e) => { e.stopPropagation(); onViewUser && onViewUser(item.userId || item.handle || item.user.replace(/\s/g, "_")); }} style={{ width: 28, height: 28, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", cursor: "pointer", flexShrink: 0 }}>
@@ -5610,6 +6020,16 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
               <span onClick={(e) => { e.stopPropagation(); onViewUser && onViewUser(item.userId || item.handle || item.user.replace(/\s/g, "_")); }} style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, cursor: "pointer" }}>{item.user}</span>
               <RankBadge points={getPoints(item.user)} size={11} />
             </div>
+            {/* Reshare provenance — only renders when the original thread
+                author differs from the sharer (so a marketplace seller
+                auto-sharing their own listing doesn't get a misleading
+                "shared from himself" line). Tapping routes to the seller's
+                profile so a buyer can vet them before opening the thread. */}
+            {item.sharedFromOwnerHandle && item.sharedFromOwnerHandle !== (item.handle || "").replace(/^@/, "") && (item.sharedFromOwnerUserId == null || item.sharedFromOwnerUserId !== item.userId) && (
+              <span onClick={(e) => { e.stopPropagation(); onViewUser && onViewUser(item.sharedFromOwnerUserId || item.sharedFromOwnerHandle); }} style={{ fontFamily: sans, fontSize: 11, color: T.copper, display: "flex", alignItems: "center", gap: 4, marginBottom: 8, fontWeight: 600, cursor: "pointer" }}>
+                <Share2 size={10} color={T.copper} />Shared from @{item.sharedFromOwnerHandle}'s {isMarketplaceCard ? "listing" : "thread"}
+              </span>
+            )}
             <h3 style={{ fontFamily: serif, fontSize: 15, color: T.white, margin: "0 0 6px", lineHeight: 1.3 }}>{item.title}</h3>
             {snippet && <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "0 0 12px", lineHeight: 1.5 }}>{snippet}</p>}
             {item.image && (
@@ -5695,6 +6115,66 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
         </div>
       )}
 
+      {/* GEAR DROPS filter — beta+admin gated. Shows the public list of
+          sponsored events. Each row opens the GearDropDetailScreen overlay
+          via onOpenGearDrop. */}
+      {deferredFilter === "GEAR DROPS" ? (() => {
+        const drops = (gearDrops || []).filter(g => g && g.status !== "draft");
+        const live = drops.filter(g => g.status === "live");
+        const scheduled = drops.filter(g => g.status === "scheduled");
+        const ended = drops.filter(g => g.status === "ended" || g.status === "archived");
+        const myRunsMap = myGearDropRuns || {};
+        const renderSection = (label, accent, list) => {
+          if (!list.length) return null;
+          return (
+            <div key={label}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+                <Gift size={12} color={accent} />
+                <span style={{ fontFamily: sans, fontSize: 10, color: accent, letterSpacing: 1.5, fontWeight: 600 }}>{label}</span>
+                <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>· {list.length}</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 18 }}>
+                {list.map(g => {
+                  const joined = !!myRunsMap[g.id];
+                  return (
+                    <button key={g.id} onClick={() => onOpenGearDrop && onOpenGearDrop(g.id)} style={{ display: "flex", gap: 12, padding: 0, borderRadius: 14, background: T.darkCard, border: `1px solid ${joined ? T.green : T.charcoal}`, cursor: "pointer", textAlign: "left", width: "100%", overflow: "hidden" }}>
+                      <div style={{ width: 96, minHeight: 110, background: g.hero_img ? `url(${g.hero_img}) center/cover` : `linear-gradient(135deg, ${T.charcoal}, ${T.darkCard})`, flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0, padding: "12px 12px 12px 0", display: "flex", flexDirection: "column", gap: 4 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                          <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: accent, padding: "2px 8px", borderRadius: 8, fontWeight: 700, letterSpacing: 0.6 }}>{label}</span>
+                          {g.brand_partner_name && <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 0.6 }}>{g.brand_partner_name.toUpperCase()}</span>}
+                          {joined && <span style={{ fontFamily: sans, fontSize: 9, color: T.green, fontWeight: 700, letterSpacing: 0.6 }}>· ATTENDING</span>}
+                        </div>
+                        <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.title || "Untitled Drop"}</span>
+                        <span style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.prize_title || "—"}</span>
+                        {g.starts_at && <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.4 }}>{label === "ENDED" ? "Ended " : "Starts "}{new Date(g.starts_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</span>}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        };
+        return (
+          <div style={{ padding: "12px 16px 16px", display: "flex", flexDirection: "column" }}>
+            {drops.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "60px 20px" }}>
+                <Gift size={36} color={T.tertiary} strokeWidth={1} style={{ opacity: 0.3, marginBottom: 12 }} />
+                <p style={{ fontFamily: serif, fontSize: 14, color: T.tertiary, margin: "0 0 6px" }}>No gear drops yet</p>
+                <p style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, opacity: 0.6 }}>Check back soon — Lone Peak hosts sponsored events here.</p>
+              </div>
+            ) : (
+              <>
+                {renderSection("LIVE", T.red, live)}
+                {renderSection("UPCOMING", T.copper, scheduled)}
+                {renderSection("ENDED", T.tertiary, ended)}
+              </>
+            )}
+          </div>
+        );
+      })() : null}
+
       {/* TRIP REPORTS filter — show the trip-reports list (drafts + published)
           instead of the post stream. Replaces the old Maps → Trip Reports tab. */}
       {deferredFilter === "TRIP REPORTS" ? (() => {
@@ -5776,7 +6256,7 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
             )}
           </div>
         );
-      })() : (
+      })() : deferredFilter === "GEAR DROPS" ? null : (
       <div style={{ padding: "12px 16px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
         {filtered.length === 0 ? (
           <div style={{ padding: "40px 0", textAlign: "center" }}>
@@ -6130,7 +6610,7 @@ function ForumSectionEditor({ subheading, onSubheadingChange, value, onChange, o
   );
 }
 
-function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onConsumePendingForumSubNav, pendingForumCatNav, onConsumePendingForumCatNav, onAddNotification, onOpenDM, onOpenShareCompose, onOpenShareIntent, onAddFeedPost, threadsBySub, repliesByThread, onAddForumThread, onUpdateForumThread, onDeleteForumThread, onAddForumReply, onDeleteForumReply, onLoadForumReplies, likedForumThreadIds, forumThreadLikeCounts, onToggleForumThreadLike, likedForumReplyIds, forumReplyLikeCounts, onToggleForumReplyLike, onBumpForumThreadView, onAwardPoints, isGuest, onGuestTap, currentUserId, currentUserName, currentUserHandle, currentUserAvatar, isAdmin, isAmbassador, categoriesList, onAddCategory, onUpdateCategory, onDeleteCategory, onAddSubcategory, onUpdateSubcategory, onDeleteSubcategory }) {
+function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onConsumePendingForumSubNav, pendingForumCatNav, onConsumePendingForumCatNav, onAddNotification, onOpenDM, onOpenShareCompose, onOpenShareIntent, onAddFeedPost, threadsBySub, repliesByThread, onAddForumThread, onUpdateForumThread, onDeleteForumThread, onAddForumReply, onDeleteForumReply, onLoadForumReplies, likedForumThreadIds, forumThreadLikeCounts, onToggleForumThreadLike, likedForumReplyIds, forumReplyLikeCounts, onToggleForumReplyLike, onBumpForumThreadView, onAwardPoints, isGuest, onGuestTap, currentUserId, currentUserName, currentUserHandle, currentUserAvatar, isAdmin, isModerator, isAmbassador, categoriesList, onAddCategory, onUpdateCategory, onDeleteCategory, onAddSubcategory, onUpdateSubcategory, onDeleteSubcategory, onReportContent, onViewUser }) {
   // Phase 2 brings cats + subs in from the DB-backed `categoriesList` prop.
   // The brief race window between mount and the first hydrate returning
   // shows an empty grid; once hydrate completes the grid populates.
@@ -6249,6 +6729,10 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
   };
   const [forumReplyText, setForumReplyText] = useState("");
   const [replyPhotos, setReplyPhotos] = useState([]);
+  // Full-screen photo lightbox state — used by the marketplace listing
+  // carousel. setCarouselImages([urls]) + setCarouselIndex(i) opens it.
+  const [carouselImages, setCarouselImages] = useState(null);
+  const [carouselIndex, setCarouselIndex] = useState(0);
   const replyFileRef = React.useRef(null);
   const handleReplyPhoto = (e) => {
     const files = e.target.files;
@@ -6289,39 +6773,77 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
     if (onBumpForumThreadView) onBumpForumThreadView(threadId);
   };
 
-  // Deep-link: open a specific thread when navigated from feed.
+  // Deep-link: open a specific thread when navigated from feed / bell / etc.
+  //
+  // Robustness rules (the earlier version dumped the user on the categories
+  // page whenever ANY lookup missed — cats not hydrated, threadsBySub empty
+  // for the sub, or cat/sub names renamed since the feed-share snapshot):
+  //   1. Fast path — caller's catName+subName match a cat in `cats` AND the
+  //      sub list contains the thread. Open it.
+  //   2. Fallback — scan EVERY sub in threadsBySub by id. If found, derive
+  //      cat/sub from the thread's own `catName`/`subName` (the source of
+  //      truth on the row), which sidesteps any feed-snapshot drift.
+  //   3. Miss — leave pendingThread set so the effect re-runs when
+  //      threadsBySub or cats hydrate (loadForumThreadBySlugFast on the root
+  //      will populate forumThreads in flight). Only clear it if we have
+  //      enough state to be sure the thread genuinely isn't here.
   useEffect(() => {
     if (!pendingThread) return;
     const { threadId, catName, subName } = pendingThread;
-    for (const cat of cats) {
-      if (cat.name !== catName) continue;
-      for (const sub of cat.subs) {
-        if (sub.name !== subName) continue;
-        const allThreads = (threadsBySub || {})[sub.name] || [];
-        const thread = allThreads.find(t => t.id === threadId);
-        if (thread) {
-          setSelectedCat(cat);
-          setSelectedSub(sub);
-          setSelectedThread(thread);
-          setView("thread");
-          if (onLoadForumReplies) onLoadForumReplies(thread.id);
-          trackView(thread.id);
-          onPendingHandled && onPendingHandled();
-          return;
+    if (!threadId) { onPendingHandled && onPendingHandled(); return; }
+    const resolveBy = (cat, sub, thread) => {
+      setSelectedCat(cat);
+      setSelectedSub(sub);
+      setSelectedThread(thread);
+      setView("thread");
+      if (onLoadForumReplies) onLoadForumReplies(thread.id);
+      trackView(thread.id);
+      onPendingHandled && onPendingHandled();
+    };
+    // Fast path
+    if (catName && subName) {
+      for (const cat of cats) {
+        if (cat.name !== catName) continue;
+        for (const sub of cat.subs) {
+          if (sub.name !== subName) continue;
+          const allThreads = (threadsBySub || {})[sub.name] || [];
+          const thread = allThreads.find(t => t.id === threadId);
+          if (thread) { resolveBy(cat, sub, thread); return; }
         }
       }
     }
-    onPendingHandled && onPendingHandled();
-  }, [pendingThread, threadsBySub]);
+    // Fallback — scan every sub for the id; use the thread's own cat/sub.
+    for (const sn of Object.keys(threadsBySub || {})) {
+      const thread = (threadsBySub[sn] || []).find(t => t.id === threadId);
+      if (!thread) continue;
+      const tCat = thread.catName, tSub = thread.subName || sn;
+      let foundCat = null, foundSub = null;
+      for (const c of cats) {
+        for (const s of c.subs) {
+          if (s.name !== tSub) continue;
+          if (tCat && c.name !== tCat) continue;
+          foundCat = c; foundSub = s; break;
+        }
+        if (foundCat) break;
+      }
+      if (foundCat && foundSub) { resolveBy(foundCat, foundSub, thread); return; }
+    }
+    // Couldn't resolve yet — keep pendingThread alive so the next
+    // threadsBySub / cats update gives the effect another try. Root-side
+    // openForumThread kicks off a supabase fetch for unknown threads.
+  }, [pendingThread, threadsBySub, cats]);
   // Subcategory landing deep-link — `/forum/<sub-slug>` lands here. Walk
   // forumData.categories to find the matching cat/sub display objects and
   // jump straight into the threads list for that subcategory.
+  // Check `sub.slug` FIRST (DB source of truth — admins can edit slug
+  // independently of name), then fall back to slugified-name match for
+  // legacy seed subs without an explicit slug field.
   useEffect(() => {
     if (!pendingForumSubNav) return;
     const subSlug = pendingForumSubNav;
     for (const cat of cats) {
       for (const sub of cat.subs) {
-        if (forumSlugify(sub.name) === subSlug) {
+        if (sub.slug === subSlug || forumSlugify(sub.name) === subSlug) {
           setSelectedCat(cat);
           setSelectedSub(sub);
           setView("threads");
@@ -6332,7 +6854,7 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
     }
     // Unknown slug — clear pending so we don't loop.
     onConsumePendingForumSubNav && onConsumePendingForumSubNav();
-  }, [pendingForumSubNav]);
+  }, [pendingForumSubNav, cats]);
   // Category landing deep-link — sidebar nav (and any future per-cat deep
   // link) sets this with the cat's slug. Resolves to selectedCat + the
   // subcategories list view.
@@ -6513,6 +7035,11 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
   const [ntModelYear, setNtModelYear] = useState("");
   const [ntLocation, setNtLocation] = useState("");
   const [ntListingDesc, setNtListingDesc] = useState("");
+  // In-flight guard for thread submission — photo upload + alt-text +
+  // Supabase insert + feed-share is several seconds, and impatient users
+  // tap POST THREAD multiple times. setPosting(true) early so the button
+  // disables; finally{} clears it on success OR error.
+  const [posting, setPosting] = useState(false);
   const FORUM_LISTING_CONDITIONS = ["New", "Like New", "Good", "Fair", "For Parts", "N/A"];
   // Search state
   const [searchQuery, setSearchQuery] = useState("");
@@ -6589,9 +7116,12 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
     const activeSub = ntFromHome ? ntPickSub : selectedSub;
     const isMarketplace = activeCat && activeCat.slug === "marketplace";
     const submitThread = async () => {
+      if (posting) return; // double-tap guard
       if (!ntTitle.trim()) return;
       if (ntFromHome && (!ntPickCat || !ntPickSub)) return;
       if (!onAddForumThread) return; // guest / not signed in
+      setPosting(true);
+      try {
       const cat = activeCat || ntPickCat;
       const sub = activeSub || ntPickSub;
       const subName = sub.name;
@@ -6679,6 +7209,14 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
           threadId: created.id,
           forumCat: catName,
           forumSub: subName,
+          // Marketplace context — populated when the thread is a listing.
+          // Drives the price chip + MARKETPLACE LISTING header on the
+          // FORUM feed card. Null for non-marketplace threads.
+          categorySlug: created.categorySlug || (isMarketplace ? "marketplace" : null),
+          listingPrice: created.listingPrice != null ? created.listingPrice : null,
+          listingCurrency: created.listingCurrency || (isMarketplace ? "USD" : null),
+          listingStatus: created.listingStatus || (isMarketplace ? "active" : null),
+          listingDetails: created.listingDetails || (isMarketplace ? listingDetails : null),
         });
       }
       // Send mention notifications across title + body content. For marketplace,
@@ -6708,6 +7246,9 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
         setView("threads");
       } else {
         setView("threads");
+      }
+      } finally {
+        setPosting(false);
       }
     };
     const canPostStandard = ntTitle.trim() && ntSections.some(s => (s.subheading || "").trim() || (s.body || "").replace(/<[^>]+>/g, "").trim()) && (!ntFromHome || (ntPickCat && ntPickSub));
@@ -6844,9 +7385,10 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
             [contenteditable] img { max-width: 100%; border-radius: 8px; display: block; margin: 8px 0; }
           `}</style>
 
-          {/* Hero image */}
+          {/* Photos — singular hero on standard threads, swipeable
+              carousel on marketplace listings (up to 10). */}
           <div style={{ marginBottom: 16 }}>
-            <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>HERO IMAGE</span>
+            <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>{isMarketplace ? "LISTING PHOTOS · UP TO 10" : "HERO IMAGE"}</span>
             <PhotoUploader photos={ntPhotos} onChange={setNtPhotos} />
           </div>
 
@@ -6877,9 +7419,13 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
             </div>
           )}
 
-          <button onClick={submitThread} disabled={!canPost} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "14px", borderRadius: 8, background: canPost ? T.red : T.charcoal, border: "none", cursor: canPost ? "pointer" : "default", opacity: canPost ? 1 : 0.5 }}>
-            <Plus size={16} color={T.white} />
-            <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>POST THREAD</span>
+          <button onClick={submitThread} disabled={!canPost || posting} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "14px", borderRadius: 8, background: (canPost && !posting) ? T.red : T.charcoal, border: "none", cursor: (canPost && !posting) ? "pointer" : "default", opacity: (canPost && !posting) ? 1 : 0.5 }}>
+            {posting ? (
+              <div style={{ width: 16, height: 16, borderRadius: "50%", border: `2px solid ${T.white}40`, borderTopColor: T.white, animation: "th-spin 0.7s linear infinite" }} />
+            ) : (
+              <Plus size={16} color={T.white} />
+            )}
+            <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>{posting ? "POSTING…" : "POST THREAD"}</span>
           </button>
         </div>
       </div>
@@ -6915,6 +7461,18 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
             forumSub: selectedSub?.name || "",
             threadId: selectedThread.id,
             image: (selectedThread.photos && selectedThread.photos[0]) || null,
+            categorySlug: selectedThread.categorySlug || null,
+            listingPrice: selectedThread.listingPrice != null ? selectedThread.listingPrice : null,
+            listingCurrency: selectedThread.listingCurrency || "USD",
+            listingStatus: selectedThread.listingStatus || "active",
+            listingDetails: selectedThread.listingDetails || null,
+            // Reshare provenance — original thread author. Drives the
+            // "Shared from @X's listing" line on the feed card so user A
+            // resharing user B's thread doesn't look like user A is the
+            // seller. Render condition guards on sharedFrom != sharer.
+            sharedFromOwnerHandle: (selectedThread.handle || "").replace(/^@/, "") || null,
+            sharedFromOwnerName: selectedThread.author || null,
+            sharedFromOwnerUserId: selectedThread.userId || null,
           },
         });
         return;
@@ -6952,6 +7510,14 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
             forumSub: selectedSub?.name || "",
             threadId: selectedThread.id,
             image: (selectedThread.photos && selectedThread.photos[0]) || null,
+            categorySlug: selectedThread.categorySlug || null,
+            listingPrice: selectedThread.listingPrice != null ? selectedThread.listingPrice : null,
+            listingCurrency: selectedThread.listingCurrency || "USD",
+            listingStatus: selectedThread.listingStatus || "active",
+            listingDetails: selectedThread.listingDetails || null,
+            sharedFromOwnerHandle: (selectedThread.handle || "").replace(/^@/, "") || null,
+            sharedFromOwnerName: selectedThread.author || null,
+            sharedFromOwnerUserId: selectedThread.userId || null,
           },
         });
         return;
@@ -7012,11 +7578,25 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
             <MessageCircle size={12} color={T.tertiary} strokeWidth={1.5} />
             <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>Reply</span>
           </button>
-          <button onClick={() => onOpenShareIntent && onOpenShareIntent({ kind: "forum", data: { id: selectedThread.id, threadId: selectedThread.id, title: selectedThread.title, body: post.body, author: post.author, forumCat: selectedCat?.name || "", forumSub: selectedSub?.name || "", subSlug: forumSlugify(selectedSub?.name || ""), slug: selectedThread.slug, image: (selectedThread.photos && selectedThread.photos[0]) || null } })} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px" }}>
+          <button onClick={() => onOpenShareIntent && onOpenShareIntent({ kind: "forum", data: { id: selectedThread.id, threadId: selectedThread.id, title: selectedThread.title, body: post.body, author: post.author, forumCat: selectedCat?.name || "", forumSub: selectedSub?.name || "", subSlug: forumSlugify(selectedSub?.name || ""), slug: selectedThread.slug, image: (selectedThread.photos && selectedThread.photos[0]) || null, categorySlug: selectedThread.categorySlug || null, listingPrice: selectedThread.listingPrice != null ? selectedThread.listingPrice : null, listingCurrency: selectedThread.listingCurrency || "USD", listingStatus: selectedThread.listingStatus || "active", listingDetails: selectedThread.listingDetails || null, sharedFromOwnerHandle: (selectedThread.handle || "").replace(/^@/, "") || null, sharedFromOwnerName: selectedThread.author || null, sharedFromOwnerUserId: selectedThread.userId || null } })} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px" }}>
             <Share2 size={12} color={T.tertiary} strokeWidth={1.5} />
           </button>
+          {/* Report reply — non-owner, signed-in. Comes before Delete so
+              Delete sits at the far right (owner-only). */}
+          {replyId && onReportContent && currentUserId && post.userId && currentUserId !== post.userId && (
+            <button onClick={() => onReportContent({
+              targetType: "forum_reply",
+              targetId: replyId,
+              targetOwnerId: post.userId || null,
+              targetOwnerHandle: post.handle || (typeof post.author === "string" ? post.author.replace(/^@/, "") : null),
+              targetSnapshot: (post.body || "").slice(0, 400),
+              targetUrl: selectedSub && selectedThread.slug ? `/forum/${forumSlugify(selectedSub.name || "")}/${selectedThread.slug}` : null,
+            })} title="Report reply" style={{ display: "flex", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", padding: "4px 6px" }}>
+              <Flag size={12} color={T.tertiary} strokeWidth={1.5} />
+            </button>
+          )}
           {/* Owner OR admin can delete a reply. Server-side RLS enforces. */}
-          {replyId && ((post.userId && currentUserId === post.userId) || isAdmin) && onDeleteForumReply && (
+          {replyId && ((post.userId && currentUserId === post.userId) || isAdmin || isModerator) && onDeleteForumReply && (
             <button onClick={() => onDeleteForumReply(selectedThread.id, replyId)} title="Delete reply" style={{ display: "flex", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", padding: "4px 6px" }}>
               <Trash2 size={12} color={T.tertiary} strokeWidth={1.5} />
               <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>Delete</span>
@@ -7031,7 +7611,9 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
     const threadShareOpen = forumShareMenu === ("thread_" + selectedThread.id);
     // Owner OR admin can edit/delete. Server-side RLS enforces the same
     // (admin-override policy on forum_threads update + delete).
-    const isOwnThread = !!(currentUserId && ((selectedThread.userId && currentUserId === selectedThread.userId) || isAdmin));
+    // Moderators get delete access too — they see the edit overlay (which
+    // contains the delete confirmation) but RLS still blocks UPDATE attempts.
+    const isOwnThread = !!(currentUserId && ((selectedThread.userId && currentUserId === selectedThread.userId) || isAdmin || isModerator));
 
     // Inline CSS for rich body rendering
     const thRbCSS = `<style>
@@ -7055,8 +7637,57 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
 
     return (
       <div style={{ padding: "0 0 16px" }}>
-        {/* Hero image + title header */}
-        {selectedThread.photos && selectedThread.photos.length > 0 ? (
+        {/* Marketplace listings get a swipeable photo carousel instead of a
+            single hero. Plain header + title sit above so wide listings
+            (lots of detail shots) read like an e-commerce gallery. */}
+        {selectedThread.categorySlug === "marketplace" && selectedThread.photos && selectedThread.photos.length > 0 ? (
+          <>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <button onClick={goBack} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" }}>
+                  <ChevronLeft size={20} color={T.white} strokeWidth={1.5} />
+                </button>
+                <span style={{ fontFamily: sans, fontSize: 12, color: T.tertiary }}>{selectedSub?.name}</span>
+              </div>
+              {isOwnThread && (
+                <button onClick={() => { beginEditThread(selectedThread); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex" }}>
+                  <Edit3 size={16} color={T.tertiary} strokeWidth={1.5} />
+                </button>
+              )}
+            </div>
+            <div style={{ margin: "0 16px 8px" }}>
+              {selectedThread.pinned && (
+                <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, background: `${T.copper}20`, padding: "2px 6px", borderRadius: 3, letterSpacing: 1, marginBottom: 8, display: "inline-block" }}>PINNED</span>
+              )}
+              <h2 style={{ fontFamily: sans, fontSize: 20, color: T.white, fontWeight: 700, margin: 0, lineHeight: 1.25 }}>{selectedThread.title}</h2>
+            </div>
+            <div style={{ display: "flex", gap: 8, overflowX: "auto", scrollSnapType: "x mandatory", scrollBehavior: "smooth", padding: "8px 16px 14px" }}>
+              {selectedThread.photos.map((p, i) => {
+                const url = (p && p.url) || p;
+                if (!url) return null;
+                const isVid = p && p.type === "video";
+                if (isVid) {
+                  return (
+                    <video key={i} src={url + "#t=0.001"} preload="metadata" playsInline controls muted onLoadedMetadata={(e) => { try { e.currentTarget.currentTime = 0.001; } catch (err) {} }} style={{ flex: "0 0 88%", scrollSnapAlign: "center", aspectRatio: "4/3", objectFit: "cover", borderRadius: 12, background: "#000" }} />
+                  );
+                }
+                const imageUrls = selectedThread.photos.map(ph => (ph && ph.url) || ph).filter(u => typeof u === "string");
+                return (
+                  <button
+                    key={i}
+                    onClick={() => { setCarouselImages(imageUrls); setCarouselIndex(i); }}
+                    style={{ flex: "0 0 88%", scrollSnapAlign: "center", aspectRatio: "4/3", background: `url(${txImg(url, 720)}) center/cover`, border: `1px solid ${T.charcoal}`, borderRadius: 12, padding: 0, cursor: "pointer" }}
+                  />
+                );
+              })}
+            </div>
+            {selectedThread.photos.length > 1 && (
+              <div style={{ textAlign: "center", margin: "-6px 0 8px", fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.6 }}>
+                {selectedThread.photos.length} photos · swipe to see more
+              </div>
+            )}
+          </>
+        ) : selectedThread.photos && selectedThread.photos.length > 0 ? (
           <div style={{ position: "relative", width: "100%", height: 220 }}>
             {(() => { const firstP = selectedThread.photos[0]; const firstUrl = firstP.url || firstP; const isVid = firstP.type === "video"; return isVid ? (
               <><video src={firstUrl + "#t=0.001"} preload="metadata" playsInline onLoadedMetadata={(e) => { try { e.currentTarget.currentTime = 0.001; } catch (err) {} }} muted style={{ width: "100%", height: "100%", objectFit: "cover" }} /><div style={{ position: "absolute", top: 12, right: 50, background: "rgba(0,0,0,0.6)", borderRadius: 4, padding: "2px 8px", display: "flex", alignItems: "center", gap: 4, zIndex: 2 }}><Video size={10} color={T.white} /><span style={{ fontFamily: sans, fontSize: 9, color: T.white, fontWeight: 600 }}>VIDEO</span></div></>
@@ -7162,6 +7793,37 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
                     {d.location && <><span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600 }}>LOCATION</span><span style={{ fontFamily: sans, fontSize: 13, color: T.white }}>{d.location}</span></>}
                   </div>
                 )}
+                {!isOwn && status === "active" && onOpenDM && (
+                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${T.charcoal}` }}>
+                    <button onClick={() => {
+                      const handleClean = (selectedThread.handle || "").replace(/^@/, "");
+                      const target = handleClean || selectedThread.userId;
+                      if (!target) { alert("Couldn't find the seller's handle."); return; }
+                      const priceLabel = isFree ? "FREE" : (price != null ? `$${Number(price).toLocaleString()}${isOBO ? " OBO" : ""}` : "");
+                      const prefill = `Hi! I'm interested in your "${selectedThread.title}"${priceLabel ? ` (${priceLabel})` : ""} listing. Is it still available?`;
+                      const heroImg = (selectedThread.photos && selectedThread.photos[0] && (selectedThread.photos[0].url || selectedThread.photos[0])) || null;
+                      const sharedPost = {
+                        id: selectedThread.id,
+                        type: "FORUM",
+                        title: selectedThread.title,
+                        user: selectedThread.author || (selectedThread.handle ? "@" + selectedThread.handle.replace(/^@/, "") : "Seller"),
+                        initial: ((selectedThread.author || "U")[0] || "U").toUpperCase(),
+                        threadId: selectedThread.id,
+                        forumCat: selectedCat?.name || "",
+                        forumSub: selectedSub?.name || "",
+                        image: heroImg,
+                        categorySlug: "marketplace",
+                        listingPrice: price != null ? price : null,
+                        listingDetails: d,
+                        listingStatus: status,
+                      };
+                      onOpenDM(target, prefill, sharedPost);
+                    }} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px 14px", borderRadius: 8, background: T.copper, border: "none", cursor: "pointer", color: T.white, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.8 }}>
+                      <Send size={14} color={T.white} />
+                      SEND OFFER
+                    </button>
+                  </div>
+                )}
                 {isOwn && status === "active" && (
                   <div style={{ display: "flex", gap: 6, marginTop: 12, paddingTop: 12, borderTop: `1px solid ${T.charcoal}` }}>
                     <button onClick={async () => { if (onUpdateForumThread) { await onUpdateForumThread(selectedThread.id, { listingStatus: "sold" }); setSelectedThread(prev => prev ? { ...prev, listingStatus: "sold" } : prev); } }} style={{ flex: 1, padding: "8px 12px", borderRadius: 6, background: T.green, border: "none", cursor: "pointer", color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5 }}>MARK SOLD</button>
@@ -7202,9 +7864,22 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
               <Eye size={14} color={T.tertiary} />
               <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{getViewCount(selectedThread)} views</span>
             </div>
-            <button onClick={() => onOpenShareIntent && onOpenShareIntent({ kind: "forum", data: { id: selectedThread.id, threadId: selectedThread.id, title: selectedThread.title, body: selectedThread.body, author: selectedThread.author, forumCat: selectedCat?.name || "", forumSub: selectedSub?.name || "", subSlug: forumSlugify(selectedSub?.name || ""), slug: selectedThread.slug, image: (selectedThread.photos && selectedThread.photos[0]) || null } })} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px", marginLeft: "auto" }}>
+            <button onClick={() => onOpenShareIntent && onOpenShareIntent({ kind: "forum", data: { id: selectedThread.id, threadId: selectedThread.id, title: selectedThread.title, body: selectedThread.body, author: selectedThread.author, forumCat: selectedCat?.name || "", forumSub: selectedSub?.name || "", subSlug: forumSlugify(selectedSub?.name || ""), slug: selectedThread.slug, image: (selectedThread.photos && selectedThread.photos[0]) || null, categorySlug: selectedThread.categorySlug || null, listingPrice: selectedThread.listingPrice != null ? selectedThread.listingPrice : null, listingCurrency: selectedThread.listingCurrency || "USD", listingStatus: selectedThread.listingStatus || "active", listingDetails: selectedThread.listingDetails || null, sharedFromOwnerHandle: (selectedThread.handle || "").replace(/^@/, "") || null, sharedFromOwnerName: selectedThread.author || null, sharedFromOwnerUserId: selectedThread.userId || null } })} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px", marginLeft: "auto" }}>
               <Share2 size={14} color={T.tertiary} strokeWidth={1.5} />
             </button>
+            {/* Report thread — hidden for owner + when not signed in. */}
+            {onReportContent && currentUserId && selectedThread.userId !== currentUserId && (
+              <button onClick={() => onReportContent({
+                targetType: "forum_thread",
+                targetId: selectedThread.id,
+                targetOwnerId: selectedThread.userId || null,
+                targetOwnerHandle: selectedThread.handle || null,
+                targetSnapshot: selectedThread.title || "",
+                targetUrl: selectedSub && selectedThread.slug ? `/forum/${forumSlugify(selectedSub.name || "")}/${selectedThread.slug}` : null,
+              })} title="Report thread" style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px" }}>
+                <Flag size={14} color={T.tertiary} strokeWidth={1.5} />
+              </button>
+            )}
           </div>
         </div>
 
@@ -7940,7 +8615,7 @@ function ForumSubcategoryModal({ modal, onClose, onAdd, onUpdate }) {
 
 /* ─── ROUTES SCREEN ─── */
 /* ─── Route Recorder Overlay ─── */
-function RouteRecorder({ onClose, onSave, skipDetailsForm, userBuilds, campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, onAddCampingSpot, onMapViewportChange, tripReports, showTripReports, setShowTripReports, onStartDirections }) {
+function RouteRecorder({ onClose, onSave, skipDetailsForm, userBuilds, campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, onAddCampingSpot, onMapViewportChange, tripReports, showTripReports, setShowTripReports, tripPlans, showTripPlans, setShowTripPlans, showSatellite, setShowSatellite, onStartDirections }) {
   const mapRef = useRef(null);
   const mapInst = useRef(null);
   // trackCoordsRef holds the raw [lng, lat] pairs that drive the live
@@ -7990,10 +8665,18 @@ function RouteRecorder({ onClose, onSave, skipDetailsForm, userBuilds, campingSp
   // is set. Tap callbacks open the matching popup; opening one closes the other.
   const [selectedTrip, setSelectedTrip] = useState(null);
   const [selectedHQ, setSelectedHQ] = useState(null);
-  useCampingSpotsLayer(mapInst, mapReady, campingSpots, showCampingSpots, (spot) => { setSelectedSpot(spot); setSelectedLand(null); setSelectedTrip(null); setSelectedHQ(null); });
-  usePublicLandsLayer(mapInst, mapReady, showPublicLands, (land) => { setSelectedLand(land); setSelectedSpot(null); setSelectedTrip(null); setSelectedHQ(null); });
-  useTripReportsLayer(mapInst, mapReady, tripReports || [], !!showTripReports, (trip) => { setSelectedTrip(trip); setSelectedSpot(null); setSelectedLand(null); setSelectedHQ(null); }, selectedTrip && selectedTrip.id);
-  useLonePeakHQMarker(mapInst, mapReady, (hq) => { setSelectedHQ(hq); setSelectedSpot(null); setSelectedLand(null); setSelectedTrip(null); });
+  const [selectedPlan, setSelectedPlan] = useState(null);
+  useSatelliteLayer(mapInst, mapReady, !!showSatellite);
+  useCampingSpotsLayer(mapInst, mapReady, campingSpots, showCampingSpots, (spot) => { setSelectedSpot(spot); setSelectedLand(null); setSelectedTrip(null); setSelectedHQ(null); setSelectedPlan(null); });
+  usePublicLandsLayer(mapInst, mapReady, showPublicLands, (land) => { setSelectedLand(land); setSelectedSpot(null); setSelectedTrip(null); setSelectedHQ(null); setSelectedPlan(null); });
+  useTripReportsLayer(mapInst, mapReady, tripReports || [], !!showTripReports, (trip) => { setSelectedTrip(trip); setSelectedSpot(null); setSelectedLand(null); setSelectedHQ(null); setSelectedPlan(null); }, selectedTrip && selectedTrip.id);
+  useTripPlansLayer(mapInst, mapReady, tripPlans || [], !!showTripPlans, (plan) => { setSelectedPlan(plan); setSelectedSpot(null); setSelectedLand(null); setSelectedTrip(null); setSelectedHQ(null); }, selectedPlan && selectedPlan.id);
+  useLonePeakHQMarker(mapInst, mapReady, (hq) => { setSelectedHQ(hq); setSelectedSpot(null); setSelectedLand(null); setSelectedTrip(null); setSelectedPlan(null); });
+  // Live user-location puck — shown BEFORE recording starts so the user
+  // can see where they are while picking a place to start. Disabled while
+  // recording because the recorder creates + manages its own marker
+  // (userDotRef) during a session.
+  useUserLocationPuck(mapInst, mapReady, null, !recording);
   // Viewport-driven camping + trip-reports fetch — refreshes both bbox
   // slices on each pan via the unified handler at root.
   useMapViewport(mapInst, mapReady, onMapViewportChange);
@@ -8413,13 +9096,13 @@ function RouteRecorder({ onClose, onSave, skipDetailsForm, userBuilds, campingSp
         <div ref={mapRef} style={{ width: "100%", height: "100%" }} />
         {!mapReady && <ContentLoader accent={T.red} spinnerSize={28} />}
         {/* Layer toggle (top-left) */}
-        <MapLayerToggle showCamping={showCampingSpots} setShowCamping={setShowCampingSpots} showPublicLands={showPublicLands} setShowPublicLands={setShowPublicLands} showTripReports={showTripReports} setShowTripReports={setShowTripReports} />
-        {/* Add-camping-spot button (bottom-left). When tapped, the next map
-            click drops a pin and opens the name/notes form. */}
+        <MapLayerToggle showCamping={showCampingSpots} setShowCamping={setShowCampingSpots} showPublicLands={showPublicLands} setShowPublicLands={setShowPublicLands} showTripReports={showTripReports} setShowTripReports={setShowTripReports} showTripPlans={showTripPlans} setShowTripPlans={setShowTripPlans} showSatellite={showSatellite} setShowSatellite={setShowSatellite} />
+        {/* Add-camping-spot button — anchored to the bottom-RIGHT so it
+            doesn't sit on top of the bottom-left MapLayerToggle chip. */}
         <button
           onClick={() => setAddingMode(v => !v)}
           style={{
-            position: "absolute", left: 10, bottom: 10, zIndex: 5,
+            position: "absolute", right: 10, bottom: 10, zIndex: 5,
             padding: "8px 12px", borderRadius: 8,
             background: addingMode ? T.green : `${T.darkCard}E6`,
             border: `1px solid ${addingMode ? T.green : T.charcoal}`,
@@ -10861,28 +11544,40 @@ function TripPinFullscreen({ initialPins, initialPhotos, onClose, onSave, curren
     return photos.filter(p => p && p.lat != null && p.lng != null && Math.abs(p.lat - pin.lat) < 0.0001 && Math.abs(p.lng - pin.lng) < 0.0001);
   };
 
-  const handleAddPhotoFiles = (e) => {
+  const handleAddPhotoFiles = async (e) => {
     const files = Array.from(e.target.files || []);
     e.target.value = "";
     const i = selectedIdx;
     if (i == null || !pins[i]) return;
     const pin = pins[i];
-    files.forEach(file => {
-      if (file.size > MAX_UPLOAD_BYTES) return;
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        setPhotos(prev => [...prev, {
-          url: ev.target.result,
-          name: file.name,
-          type: file.type.startsWith("video/") ? "video" : "image",
-          lat: pin.lat,
-          lng: pin.lng,
-        }]);
-        // Mark the pin as photo-bearing so the map marker shows the icon.
-        setPinsRaw(prev => prev.map((p, idx) => idx === i ? { ...p, photo: true } : p));
-      };
-      reader.readAsDataURL(file);
-    });
+    for (const file of files) {
+      if (file.size > MAX_UPLOAD_BYTES) {
+        if (typeof window !== "undefined") { try { window.dispatchEvent(new CustomEvent("trailhead:upload_rejected", { detail: { reason: `${file.name} too large (max ${MAX_UPLOAD_LABEL}).` } })); } catch (_) {} }
+        continue;
+      }
+      const durErr = await validateVideoDuration(file, VIDEO_MAX_SEC.trip);
+      if (durErr) {
+        if (typeof window !== "undefined") { try { window.dispatchEvent(new CustomEvent("trailhead:upload_rejected", { detail: { reason: durErr } })); } catch (_) {} }
+        continue;
+      }
+      await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          setPhotos(prev => [...prev, {
+            url: ev.target.result,
+            name: file.name,
+            type: file.type.startsWith("video/") ? "video" : "image",
+            lat: pin.lat,
+            lng: pin.lng,
+          }]);
+          // Mark the pin as photo-bearing so the map marker shows the icon.
+          setPinsRaw(prev => prev.map((p, idx) => idx === i ? { ...p, photo: true } : p));
+          resolve();
+        };
+        reader.onerror = () => resolve();
+        reader.readAsDataURL(file);
+      });
+    }
   };
 
   const removePinAt = (i) => {
@@ -11020,7 +11715,7 @@ function TripPinFullscreen({ initialPins, initialPhotos, onClose, onSave, curren
   );
 }
 
-function TripReportEditor({ trip, onClose, onSave, onPublish, onDelete, onAddRouteManual, onAddRouteLive, currentUserId }) {
+function TripReportEditor({ trip, onClose, onSave, onPublish, onDelete, onAddRouteManual, onAddRouteLive, currentUserId, userBuilds }) {
   const safe = trip || {};
   const isMine = currentUserId && safe.user_id === currentUserId;
   const isPlan = safe.kind === "plan";
@@ -11053,6 +11748,10 @@ function TripReportEditor({ trip, onClose, onSave, onPublish, onDelete, onAddRou
   const [distanceMi, setDistanceMi] = useState(safe.distance_mi != null ? String(safe.distance_mi) : "");
   const [elevGainFt, setElevGainFt] = useState(safe.elev_gain_ft != null ? String(safe.elev_gain_ft) : "");
   const [maxElevFt, setMaxElevFt] = useState(safe.max_elev_ft != null ? String(safe.max_elev_ft) : "");
+  // Build (vehicle) link — picks one of the current user's builds (or
+  // none). Aggregated stats on the build profile sum across all linked
+  // trip_reports, so leaving this null on legacy trips just contributes 0.
+  const [buildId, setBuildId] = useState(safe.build_id || "");
   const [tagInput, setTagInput] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [confirmingPublish, setConfirmingPublish] = useState(false);
@@ -11132,15 +11831,26 @@ function TripReportEditor({ trip, onClose, onSave, onPublish, onDelete, onAddRou
   // Photo upload — uses the existing post-photos bucket helpers via the
   // file picker → reader → uploadPostPhotoList path. Images are stored as
   // {url, lat?, lng?, caption?} objects on the route_data.photos array.
-  const handlePhotoFiles = (e) => {
+  const handlePhotoFiles = async (e) => {
     const files = Array.from(e.target.files || []);
     e.target.value = "";
-    files.forEach(file => {
-      if (file.size > MAX_UPLOAD_BYTES) return;
-      const reader = new FileReader();
-      reader.onload = (ev) => setPhotos(prev => [...prev, { url: ev.target.result, name: file.name, type: file.type.startsWith("video/") ? "video" : "image" }]);
-      reader.readAsDataURL(file);
-    });
+    for (const file of files) {
+      if (file.size > MAX_UPLOAD_BYTES) {
+        if (typeof window !== "undefined") { try { window.dispatchEvent(new CustomEvent("trailhead:upload_rejected", { detail: { reason: `${file.name} too large (max ${MAX_UPLOAD_LABEL}).` } })); } catch (_) {} }
+        continue;
+      }
+      const durErr = await validateVideoDuration(file, VIDEO_MAX_SEC.trip);
+      if (durErr) {
+        if (typeof window !== "undefined") { try { window.dispatchEvent(new CustomEvent("trailhead:upload_rejected", { detail: { reason: durErr } })); } catch (_) {} }
+        continue;
+      }
+      await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (ev) => { setPhotos(prev => [...prev, { url: ev.target.result, name: file.name, type: file.type.startsWith("video/") ? "video" : "image" }]); resolve(); };
+        reader.onerror = () => resolve();
+        reader.readAsDataURL(file);
+      });
+    }
   };
   const removePhoto = (idx) => setPhotos(prev => prev.filter((_, i) => i !== idx));
 
@@ -11184,6 +11894,7 @@ function TripReportEditor({ trip, onClose, onSave, onPublish, onDelete, onAddRou
       distance_mi: isNaN(distNum) ? null : distNum,
       elev_gain_ft: isNaN(elevGainNum) ? null : elevGainNum,
       max_elev_ft: isNaN(maxElevNum) ? null : maxElevNum,
+      build_id: buildId || null,
       route_data: { ...rd, pins: mergedPins, photos: uploadedPhotos },
     };
     // Plan-only fields. Reports never edit these so we don't write them on
@@ -11420,6 +12131,30 @@ function TripReportEditor({ trip, onClose, onSave, onPublish, onDelete, onAddRou
           </div>
         )}
 
+        {/* Vehicle picker — only on REPORTS (plans don't have a rig yet,
+            they're aspirational). Hidden when the viewer isn't the owner
+            (build_id is owner-controlled). Aggregates into the build's
+            "trips completed / miles / elev gain" totals when published. */}
+        {!isPlan && isMine && Array.isArray(userBuilds) && userBuilds.length > 0 && (
+          <div style={{ padding: "0 16px 16px" }}>
+            <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 8 }}>VEHICLE</span>
+            <select
+              value={buildId}
+              onChange={(e) => setBuildId(e.target.value)}
+              style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, outline: "none", appearance: "none", WebkitAppearance: "none", backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238B7D6B' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 14px center" }}
+            >
+              <option value="" style={{ background: T.darkCard, color: T.tertiary }}>— None (no vehicle attributed) —</option>
+              {userBuilds.map(b => {
+                const name = b.name || `${b.year || ""} ${b.make || ""} ${b.model || ""}`.trim() || "Unnamed";
+                return <option key={b.id || b.rawId} value={b.rawId || b.id} style={{ background: T.darkCard, color: T.white }}>{name}</option>;
+              })}
+            </select>
+            <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: "6px 0 0", lineHeight: 1.4 }}>
+              Trip stats roll up onto the selected build's profile (miles, elevation, trip count).
+            </p>
+          </div>
+        )}
+
         {/* Trip metadata — SEO-critical */}
         <div style={{ padding: "0 16px 16px" }}>
           <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 8 }}>TRIP DETAILS</span>
@@ -11552,10 +12287,11 @@ function TripReportEditor({ trip, onClose, onSave, onPublish, onDelete, onAddRou
         )}
       </div>
 
-      {/* Publish confirm */}
-      {confirmingPublish && (
-        <div onClick={() => setConfirmingPublish(false)} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 10 }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 12, padding: 20, width: "100%" }}>
+      {/* Publish confirm — portaled to document.body so it always overlays
+          the viewport, not the scrolling editor pane. */}
+      {confirmingPublish && createPortal(
+        <div onClick={() => setConfirmingPublish(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 1500 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 12, padding: 20, width: "100%", maxWidth: 360 }}>
             <p style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, margin: "0 0 8px" }}>Publish this trip report?</p>
             <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 16px", lineHeight: 1.5 }}>Anyone in the community will be able to read it. You can still edit after publishing.</p>
             <div style={{ display: "flex", gap: 8 }}>
@@ -11563,13 +12299,15 @@ function TripReportEditor({ trip, onClose, onSave, onPublish, onDelete, onAddRou
               <button onClick={async () => { setConfirmingPublish(false); await handleSave(); await onPublish(); }} style={{ flex: 1, padding: "11px", borderRadius: 8, background: T.green, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>PUBLISH</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Delete confirm */}
-      {confirmingDelete && (
-        <div onClick={() => setConfirmingDelete(false)} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 10 }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: T.darkCard, border: `1px solid ${T.red}40`, borderRadius: 12, padding: 20, width: "100%" }}>
+      {/* Delete confirm — portaled to document.body so it always overlays
+          the viewport, not the scrolling editor pane. */}
+      {confirmingDelete && createPortal(
+        <div onClick={() => setConfirmingDelete(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 1500 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: T.darkCard, border: `1px solid ${T.red}40`, borderRadius: 12, padding: 20, width: "100%", maxWidth: 360 }}>
             <p style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, margin: "0 0 8px" }}>Delete this {safe.status === "published" ? "report" : "draft"}?</p>
             <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 16px", lineHeight: 1.5 }}>This can't be undone.</p>
             <div style={{ display: "flex", gap: 8 }}>
@@ -11577,7 +12315,8 @@ function TripReportEditor({ trip, onClose, onSave, onPublish, onDelete, onAddRou
               <button onClick={async () => { setConfirmingDelete(false); await onDelete(); }} style={{ flex: 1, padding: "11px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>DELETE</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -11598,22 +12337,23 @@ const TripReportCard = memo(function TripReportCardImpl({ trip, author, onOpen }
   const authorName = (author && author.handle) ? `@${author.handle}` : (author && author.full_name) || "@user";
   const initial = (authorName.replace(/^@/, "")[0] || "?").toUpperCase();
   const diffColor = trip.difficulty === "Expert" ? T.red : trip.difficulty === "Hard" ? T.copper : trip.difficulty === "Moderate" ? T.tertiary : T.green;
-  // Plans rarely have a user-uploaded hero image — the route IS the
-  // visual. Build a static-map preview from the persisted route_geom (or
-  // fall back to a single start-pin static when the plan has no route
-  // points yet). Reports keep their hero_img / Mountain placeholder
-  // behavior unchanged.
+  // Hero precedence:
+  //   1. Plans always show the route static map (the route IS the visual).
+  //   2. Reports show their hero_img if uploaded.
+  //   3. Reports without a hero fall back to the route static map (was
+  //      previously a Mountain placeholder — confusing because most reports
+  //      have a real route persisted, just no hero photo).
+  //   4. Nothing available → Mountain placeholder.
   const isPlan = trip.kind === "plan";
-  let planMapUrl = null;
-  if (isPlan) {
-    planMapUrl = tripRouteStaticMapUrl(trip.route_geom, "plan")
-      || tripStaticMapUrl(trip.start_lat, trip.start_lng, "plan", { width: 900, height: 360 });
-  }
+  const accentKind = isPlan ? "plan" : "trip";
+  const routeMapUrl = tripRouteStaticMapUrl(trip.route_geom, accentKind)
+    || tripStaticMapUrl(trip.start_lat, trip.start_lng, accentKind, { width: 900, height: 360 });
+  const useRouteMap = isPlan ? !!routeMapUrl : (!trip.hero_img && !!routeMapUrl);
   return (
     <div onClick={() => onOpen && onOpen(trip.id)} style={{ ...cardStyle, overflow: "hidden", cursor: "pointer" }}>
-      {isPlan && planMapUrl ? (
+      {useRouteMap ? (
         <div style={{ position: "relative", height: 180, background: T.charcoal }}>
-          <LoadingImage src={planMapUrl} accent={T.copper} width={900} style={{ width: "100%", height: "100%" }} />
+          <LoadingImage src={routeMapUrl} accent={isPlan ? T.copper : T.purple} width={900} style={{ width: "100%", height: "100%" }} />
           {trip.difficulty && (
             <div style={{ position: "absolute", top: 10, right: 10, background: `${T.darkBg}DD`, padding: "4px 10px", borderRadius: 4, backdropFilter: "blur(6px)" }}>
               <span style={{ fontFamily: sans, fontSize: 9, color: diffColor, fontWeight: 700, letterSpacing: 1 }}>{trip.difficulty.toUpperCase()}</span>
@@ -11712,7 +12452,7 @@ const TripReportCard = memo(function TripReportCardImpl({ trip, author, onOpen }
 // title + author + difficulty/region pills → terrain/tag chips →
 // description → trip stats → trailhead + Get Directions → full route map
 // → per-pin notes → photo grid → footer with author profile link.
-function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onEdit, onUpdate, onDelete, onEditPlanRoute, onLoadRouteData, onBumpView, isLiked, likeCount, onToggleLike, onShareToFeed, onStartDirections, onStartNav, onPlanConvoy, onReorderPins, initialEditMode, isSaved, onToggleSave }) {
+function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onEdit, onUpdate, onDelete, onPublish, onEditPlanRoute, onLoadRouteData, onBumpView, isLiked, likeCount, onToggleLike, onShareToFeed, onStartDirections, onStartNav, onPlanConvoy, onReorderPins, initialEditMode, isSaved, onToggleSave, userBuilds }) {
   if (!trip) return null;
   const isPlan = trip.kind === "plan";
   const isOwner = !!(currentUserId && trip.user_id === currentUserId);
@@ -11730,6 +12470,13 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
   // Plan-owner delete confirmation modal — only reachable via the
   // DELETE PLAN button rendered while editingMode is on.
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // Draft → published confirmation (reports only, inline edit mode).
+  // Lets owners publish without backing out to the legacy form editor.
+  const [confirmPublish, setConfirmPublish] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  // Save-as-draft vs publish prompt — fires when an owner taps DONE on a
+  // draft report so they don't have to scroll to the bottom to publish.
+  const [donePrompt, setDonePrompt] = useState(false);
   // Pin-note → map highlight. Tapping a pin row bounces + pans the
   // corresponding marker on the hero map (and the fullscreen overlay
   // when open). Cleared on re-tap so the same row toggles.
@@ -11737,7 +12484,7 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
   const togglePinHighlight = (idx) => setHighlightedPinIdx(prev => (prev === idx ? null : idx));
   // Reset when the trip swaps so opening a different plan starts in
   // read-only.
-  useEffect(() => { setEditingMode(!!initialEditMode); setHeroFullscreen(false); setConfirmDelete(false); setHighlightedPinIdx(null); }, [trip.id]);
+  useEffect(() => { setEditingMode(!!initialEditMode); setHeroFullscreen(false); setConfirmDelete(false); setConfirmPublish(false); setPublishing(false); setDonePrompt(false); setHighlightedPinIdx(null); }, [trip.id]);
   const canEditInline = isOwner && editingMode && typeof onUpdate === "function";
   // Local drafts so typing doesn't fire a write per keystroke. Each
   // field flushes on blur via flush(field). Drafts reset when the trip
@@ -11760,6 +12507,7 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
   const [trailheadLabelDraft, setTrailheadLabelDraft] = useState(trip.start_label || "");
   const [terrainsDraft, setTerrainsDraft] = useState(Array.isArray(trip.terrains) ? trip.terrains : []);
   const [tagsDraft, setTagsDraft] = useState(Array.isArray(trip.tags) ? trip.tags : []);
+  const [buildIdDraft, setBuildIdDraft] = useState(trip.build_id || "");
   const [tagInput, setTagInput] = useState("");
   const [savedTick, setSavedTick] = useState(0);
   const photoFileRef = useRef(null);
@@ -11772,6 +12520,7 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
     setDifficultyDraft(trip.difficulty || "");
     setRegionDraft(trip.region || "");
     setStateCodeDraft(trip.state_code || "");
+    setBuildIdDraft(trip.build_id || "");
     setTrailheadLabelDraft(trip.start_label || "");
     setTerrainsDraft(Array.isArray(trip.terrains) ? trip.terrains : []);
     setTagsDraft(Array.isArray(trip.tags) ? trip.tags : []);
@@ -11923,6 +12672,14 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
     if ((val || null) === (trip.state_code || null)) return;
     setStateCodeDraft(val || "");
     flush({ state_code: val || null });
+  };
+  // Vehicle (build) — sets/clears build_id. Aggregates onto the build's
+  // profile stats (TOTAL TRAIL MILES / ELEVATION GAIN / TRIPS COMPLETED).
+  const flushBuildId = (val) => {
+    if (!canEditInline) return;
+    if ((val || null) === (trip.build_id || null)) return;
+    setBuildIdDraft(val || "");
+    flush({ build_id: val || null });
   };
   const flushTrailheadLabel = () => {
     const v = trailheadLabelDraft.trim();
@@ -12164,7 +12921,17 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
           )}
           {isMine && (
             <button
-              onClick={() => setEditingMode((m) => !m)}
+              onClick={() => {
+                // DONE on a draft report → ask "save as draft / publish now"
+                // so the user doesn't accidentally leave a never-published
+                // draft sitting in their YOUR DRAFTS list. Plans and
+                // already-published reports just exit edit mode normally.
+                if (editingMode && !isPlan && trip.status === "draft" && typeof onPublish === "function") {
+                  setDonePrompt(true);
+                  return;
+                }
+                setEditingMode((m) => !m);
+              }}
               style={{ background: editingMode ? T.copper : T.charcoal, border: `1px solid ${T.copper}${editingMode ? "" : "40"}`, padding: "6px 12px", borderRadius: 6, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
               {editingMode ? <CheckCircle size={12} color={T.white} /> : <Edit3 size={12} color={T.copper} />}
               <span style={{ fontFamily: sans, fontSize: 10, color: editingMode ? T.white : T.copper, fontWeight: 600, letterSpacing: 0.5 }}>{editingMode ? "DONE" : "EDIT"}</span>
@@ -12349,6 +13116,27 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
                   })}
                 </div>
               </div>
+              {/* Vehicle picker — always rendered in edit mode. Empty-build
+                  case just shows "— None —" + a hint. Aggregates into the
+                  selected build's profile totals (TOTAL TRAIL MILES,
+                  ELEVATION GAIN, TRIPS COMPLETED). */}
+              <div>
+                <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600, display: "block", marginBottom: 6 }}>VEHICLE</span>
+                <select value={buildIdDraft} onChange={e => flushBuildId(e.target.value)}
+                        style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, outline: "none" }}>
+                  <option value="">— None —</option>
+                  {Array.isArray(userBuilds) && userBuilds.map(b => {
+                    const id = b.rawId || b.id;
+                    const name = b.name || `${b.year || ""} ${b.make || ""} ${b.model || ""}`.trim() || "Unnamed";
+                    return <option key={id} value={id}>{name}</option>;
+                  })}
+                </select>
+                {(!Array.isArray(userBuilds) || userBuilds.length === 0) && (
+                  <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: "6px 0 0", lineHeight: 1.4 }}>
+                    Add a build under Profile → Builds to attribute this trip to a vehicle.
+                  </p>
+                )}
+              </div>
               <div>
                 <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600, display: "block", marginBottom: 6 }}>TAGS</span>
                 <div style={{ display: "flex", gap: 6, marginBottom: tagsDraft.length > 0 ? 8 : 0 }}>
@@ -12443,18 +13231,8 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
         );
       })()}
 
-      {/* Delete — owner-only, visible while editingMode is on. Both
-          plans and reports live in trip_reports and share the same
-          deleteTripDraft path. */}
-      {isOwner && editingMode && typeof onDelete === "function" && (
-        <div style={{ padding: "0 16px 16px" }}>
-          <button onClick={() => setConfirmDelete(true)}
-                  style={{ width: "100%", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px 14px", borderRadius: 8, background: "transparent", border: `1px solid ${T.red}60`, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.red, fontWeight: 700, letterSpacing: 0.6 }}>
-            <Trash2 size={13} color={T.red} />
-            <span>{isPlan ? "DELETE PLAN" : "DELETE TRIP REPORT"}</span>
-          </button>
-        </div>
-      )}
+      {/* (DELETE button moved to the bottom of the form — see end of
+          edit-mode sections, just before the author footer.) */}
 
       {/* Stats — distance / elev gain / max elev */}
       {(trip.distance_mi != null || trip.elev_gain_ft != null || trip.max_elev_ft != null || trip.duration_min != null) && (
@@ -12716,6 +13494,35 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
         </div>
       )}
 
+      {/* Publish — owner-only, drafts (reports) only. Visible while
+          editingMode is on so the user can publish without backing out to
+          the legacy form editor. Disabled until the draft has a route. */}
+      {isOwner && editingMode && !isPlan && trip.status === "draft" && typeof onPublish === "function" && (
+        <div style={{ padding: "0 16px 12px" }}>
+          <button onClick={() => hasMap && setConfirmPublish(true)}
+                  disabled={!hasMap}
+                  style={{ width: "100%", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "14px", borderRadius: 10, background: hasMap ? T.green : T.charcoal, border: "none", cursor: hasMap ? "pointer" : "default", fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 1, opacity: hasMap ? 1 : 0.5 }}>
+            <CheckCircle size={14} color={T.white} />
+            <span>{hasMap ? "PUBLISH TRIP REPORT" : "ADD A ROUTE TO PUBLISH"}</span>
+          </button>
+        </div>
+      )}
+
+      {/* Delete — owner-only, visible while editingMode is on. Both
+          plans and reports live in trip_reports and share the same
+          deleteTripDraft path. Placed at the bottom of the form (after
+          PHOTOS, before the author footer) so it doesn't sit awkwardly
+          between editable sections. */}
+      {isOwner && editingMode && typeof onDelete === "function" && (
+        <div style={{ padding: "0 16px 16px" }}>
+          <button onClick={() => setConfirmDelete(true)}
+                  style={{ width: "100%", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px 14px", borderRadius: 8, background: "transparent", border: `1px solid ${T.red}60`, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.red, fontWeight: 700, letterSpacing: 0.6 }}>
+            <Trash2 size={13} color={T.red} />
+            <span>{isPlan ? "DELETE PLAN" : "DELETE TRIP REPORT"}</span>
+          </button>
+        </div>
+      )}
+
       {/* Author footer */}
       <div style={{ padding: "0 16px 24px" }}>
         <div style={{ ...cardStyle, padding: 14, display: "flex", alignItems: "center", gap: 12, cursor: author ? "pointer" : "default" }}
@@ -12733,8 +13540,64 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
         </div>
       </div>
 
-      {/* Delete confirm */}
-      {confirmDelete && (
+      {/* DONE prompt — save-as-draft vs publish-now. Fires when the owner
+          taps DONE while editing a draft report. Same portal pattern as
+          the other confirms so it overlays the viewport correctly. */}
+      {donePrompt && createPortal(
+        <div onClick={() => !publishing && setDonePrompt(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 1500 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 12, padding: 20, width: "100%", maxWidth: 360 }}>
+            <p style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, margin: "0 0 8px" }}>Save or publish?</p>
+            <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 16px", lineHeight: 1.5 }}>
+              {hasMap
+                ? "Save as a draft to keep editing later, or publish now to share with the community."
+                : "Add a route before publishing. You can save as a draft and come back to it any time."}
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <button disabled={publishing || !hasMap} onClick={async () => {
+                if (!hasMap) return;
+                setPublishing(true);
+                try { await onPublish(trip.id); } catch (e) {}
+                setPublishing(false);
+                setDonePrompt(false);
+                setEditingMode(false);
+              }} style={{ padding: "12px", borderRadius: 8, background: hasMap ? T.green : T.charcoal, border: "none", cursor: (publishing || !hasMap) ? "default" : "pointer", fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 0.6, opacity: (publishing || !hasMap) ? 0.5 : 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                <CheckCircle size={14} color={T.white} />
+                <span>{publishing ? "PUBLISHING…" : (hasMap ? "PUBLISH NOW" : "ADD A ROUTE TO PUBLISH")}</span>
+              </button>
+              <button disabled={publishing} onClick={() => { setDonePrompt(false); setEditingMode(false); }} style={{ padding: "12px", borderRadius: 8, background: T.charcoal, border: `1px solid ${T.tertiary}40`, cursor: publishing ? "default" : "pointer", fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, letterSpacing: 0.6, opacity: publishing ? 0.5 : 1 }}>SAVE AS DRAFT</button>
+              <button disabled={publishing} onClick={() => setDonePrompt(false)} style={{ padding: "10px", borderRadius: 8, background: "transparent", border: "none", cursor: publishing ? "default" : "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 600, letterSpacing: 0.5 }}>KEEP EDITING</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Publish confirm — portaled to body, same reasoning as delete. */}
+      {confirmPublish && createPortal(
+        <div onClick={() => !publishing && setConfirmPublish(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 1500 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: T.darkCard, border: `1px solid ${T.green}40`, borderRadius: 12, padding: 20, width: "100%", maxWidth: 360 }}>
+            <p style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, margin: "0 0 8px" }}>Publish this trip report?</p>
+            <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 16px", lineHeight: 1.5 }}>Anyone in the community will be able to read it. You can still edit after publishing.</p>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button disabled={publishing} onClick={() => setConfirmPublish(false)} style={{ flex: 1, padding: "11px", borderRadius: 8, background: T.charcoal, border: "none", cursor: publishing ? "default" : "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 600, opacity: publishing ? 0.5 : 1 }}>CANCEL</button>
+              <button disabled={publishing} onClick={async () => {
+                setPublishing(true);
+                try { await onPublish(trip.id); } catch (e) {}
+                setPublishing(false);
+                setConfirmPublish(false);
+                setEditingMode(false);
+              }} style={{ flex: 1, padding: "11px", borderRadius: 8, background: T.green, border: "none", cursor: publishing ? "default" : "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5, opacity: publishing ? 0.6 : 1 }}>{publishing ? "PUBLISHING…" : "PUBLISH"}</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Delete confirm — portaled to document.body so it overlays the
+          viewport regardless of scroll position inside the detail wrapper
+          (whose transform: translateX(-50%) would otherwise scope our
+          position: fixed to the wrapper's scroll container). */}
+      {confirmDelete && createPortal(
         <div onClick={() => setConfirmDelete(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 1500 }}>
           <div onClick={e => e.stopPropagation()} style={{ background: T.darkCard, border: `1px solid ${T.red}40`, borderRadius: 12, padding: 20, width: "100%", maxWidth: 360 }}>
             <p style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, margin: "0 0 8px" }}>Delete this {isPlan ? "plan" : "trip report"}?</p>
@@ -12744,7 +13607,11 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
               <button onClick={async () => { setConfirmDelete(false); try { await onDelete(trip.id); } catch (e) {} }} style={{ flex: 1, padding: "11px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>DELETE</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
+      )}
+      {carouselImages && carouselImages.length > 0 && (
+        <ImageCarousel images={carouselImages} startIndex={carouselIndex} onClose={() => setCarouselImages(null)} />
       )}
     </div>
   );
@@ -13168,7 +14035,7 @@ function ConvoyDetail({ item, linkedPlan, currentUserId, currentUserName, curren
   );
 }
 
-function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onAddPhotoToSpot, onDeletePhotoFromSpot, onLoadCampingSpotPhotos, onLoadCampingSpotElevation, spotAuthors, tripAuthors, onLoadRouteData, onViewUser, onStartNav, onNewTripReport, onNewTripPlan, currentUserId, isAdmin, onMapViewportChange, tripReports, showTripReports, setShowTripReports, tripPlans, showTripPlans, setShowTripPlans, onOpenTripDetail, onOpenTripPlanDraft, pendingSpotNav, onConsumePendingSpotNav, pendingHQOpen, onConsumePendingHQOpen, pendingPlanNav, onConsumePendingPlanNav, onShareCampingSpotToFeed, onShareHQToFeed, onShareTripToFeed, onShareTripPlanToFeed, onOpenDM, onShowToast, onOpenShareCompose, onOpenShareIntent, planBuilder, isGuest, onGuestTap, savedTripIds, onToggleSaveTrip }) {
+function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onAddPhotoToSpot, onDeletePhotoFromSpot, onLoadCampingSpotPhotos, onLoadCampingSpotElevation, spotAuthors, tripAuthors, onLoadRouteData, onViewUser, onStartNav, onNewTripReport, onNewTripPlan, currentUserId, isAdmin, onMapViewportChange, tripReports, showTripReports, setShowTripReports, tripPlans, showTripPlans, setShowTripPlans, onOpenTripDetail, onOpenTripPlanDraft, pendingSpotNav, onConsumePendingSpotNav, pendingHQOpen, onConsumePendingHQOpen, pendingPlanNav, onConsumePendingPlanNav, onShareCampingSpotToFeed, onShareHQToFeed, onShareTripToFeed, onShareTripPlanToFeed, onOpenDM, onShowToast, onOpenShareCompose, onOpenShareIntent, planBuilder, gearDropPinBuilder, isGuest, onGuestTap, savedTripIds, onToggleSaveTrip }) {
   const mapRef = useRef(null);
   const mapInst = useRef(null);
   const [mapReady, setMapReady] = useState(false);
@@ -13198,6 +14065,54 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
   // overlay with the image. Holds { urls, index, photos, spotId } so
   // navigation + per-photo delete (admin/adder/spot-owner gated) work.
   const [lightbox, setLightbox] = useState(null);
+  // Finger-tracked swipe state for the camping-spot photo lightbox.
+  // Mirrors the pattern used in <ImageCarousel> — track translates by
+  // -idx viewport-widths plus the live drag in pixels.
+  const [lightboxDrag, setLightboxDrag] = useState(0);
+  const [lightboxDragging, setLightboxDragging] = useState(false);
+  const lightboxViewportRef = useRef(null);
+  const lightboxTouchStartXRef = useRef(null);
+  const lightboxTouchStartYRef = useRef(null);
+  const lightboxTouchLastXRef = useRef(null);
+  const lightboxAxisRef = useRef(null);
+  const lightboxAdvance = (dir) => {
+    setLightbox(prev => prev ? { ...prev, index: (prev.index + dir + prev.urls.length) % prev.urls.length } : prev);
+  };
+  const onLightboxTouchStart = (e) => {
+    if (!lightbox || lightbox.urls.length < 2) return;
+    lightboxTouchStartXRef.current = e.touches[0].clientX;
+    lightboxTouchStartYRef.current = e.touches[0].clientY;
+    lightboxTouchLastXRef.current = e.touches[0].clientX;
+    lightboxAxisRef.current = null;
+    setLightboxDragging(true);
+  };
+  const onLightboxTouchMove = (e) => {
+    if (lightboxTouchStartXRef.current === null) return;
+    const x = e.touches[0].clientX;
+    const y = e.touches[0].clientY;
+    const dx = x - lightboxTouchStartXRef.current;
+    const dy = y - lightboxTouchStartYRef.current;
+    if (lightboxAxisRef.current === null && Math.abs(dx) + Math.abs(dy) > 8) {
+      lightboxAxisRef.current = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+    }
+    if (lightboxAxisRef.current !== "x") return;
+    lightboxTouchLastXRef.current = x;
+    setLightboxDrag(dx);
+  };
+  const onLightboxTouchEnd = () => {
+    if (lightboxTouchStartXRef.current === null) return;
+    const width = (lightboxViewportRef.current && lightboxViewportRef.current.clientWidth) || 320;
+    const delta = (lightboxTouchLastXRef.current || lightboxTouchStartXRef.current) - lightboxTouchStartXRef.current;
+    const threshold = Math.max(50, width * 0.18);
+    setLightboxDragging(false);
+    setLightboxDrag(0);
+    if (delta > threshold) lightboxAdvance(-1);
+    else if (delta < -threshold) lightboxAdvance(1);
+    lightboxTouchStartXRef.current = null;
+    lightboxTouchStartYRef.current = null;
+    lightboxTouchLastXRef.current = null;
+    lightboxAxisRef.current = null;
+  };
   // Community-contributed photos. The "ADD PHOTO" button on any spot
   // popup opens this hidden file picker; the in-flight spot id is stashed
   // so onChange knows which spot to attach the upload to.
@@ -13399,21 +14314,65 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
   // payload. Cleared once they pick a position or cancel.
   const [planInsertTarget, setPlanInsertTarget] = useState(null);
   usePlanBuilderLayer(mapInst, mapReady, (planBuilder && planBuilder.points) || [], (id) => setSelectedPlanPointId(id), (planBuilder && planBuilder.endAnchorId) || null, (planBuilder && planBuilder.accent) || null);
+  const gdPinActive = !!(gearDropPinBuilder && gearDropPinBuilder.active);
+  useGearDropPinBuilderLayer(mapInst, mapReady, (gearDropPinBuilder && gearDropPinBuilder.pins) || [], gdPinActive, (gearDropPinBuilder && gearDropPinBuilder.mode) || "pins");
+  // Tap-to-add for gear drop pin builder. Wins over plan-mode handler when
+  // both are somehow active (shouldn't happen but defensive).
+  useEffect(() => {
+    if (!gdPinActive || !mapInst.current || !mapReady) return;
+    const map = mapInst.current;
+    const onClick = (e) => {
+      const features = map.queryRenderedFeatures(e.point, { layers: ["camping-spots-points", "camping-spots-clusters", "trip-reports-points", "trip-reports-end-points", "trip-reports-line-hit", "trip-plans-points", "trip-plans-end-points", "trip-plans-line-hit"].filter(id => map.getLayer(id)) });
+      if (features && features.length > 0) return;
+      if (gearDropPinBuilder && gearDropPinBuilder.addPin) {
+        gearDropPinBuilder.addPin({ lat: e.lngLat.lat, lng: e.lngLat.lng });
+      }
+    };
+    map.on("click", onClick);
+    map.getCanvas().style.cursor = "crosshair";
+    return () => {
+      try { map.off("click", onClick); } catch (_) {}
+      try { map.getCanvas().style.cursor = ""; } catch (_) {}
+    };
+  }, [gdPinActive, mapReady, gearDropPinBuilder]);
+  // Mirror the deep-link nav props into refs so the async GPS recenter
+  // callback (inside the init useEffect) can re-check at fire time.
+  // Without this, a spot tap that lands after map mount but before GPS
+  // resolves would still get overridden.
+  const pendingSpotNavRef = useRef(pendingSpotNav);
+  const pendingHQOpenRef = useRef(pendingHQOpen);
+  const pendingPlanNavRef = useRef(pendingPlanNav);
+  useEffect(() => { pendingSpotNavRef.current = pendingSpotNav; }, [pendingSpotNav]);
+  useEffect(() => { pendingHQOpenRef.current = pendingHQOpen; }, [pendingHQOpen]);
+  useEffect(() => { pendingPlanNavRef.current = pendingPlanNav; }, [pendingPlanNav]);
+
   // Deep-link resolution — open the popup + flyTo when a /spots/<id> or /hq
   // link arrives. Spot resolution waits for the row to appear in
   // campingSpots (root-level effect prefetches it if not in viewport).
+  // Compute a flyTo offset that lands the target in the top third of the
+  // visible map. Mapbox `offset: [0, y]` shifts the target's screen
+  // position by y pixels (positive = down). A NEGATIVE y pushes the pin
+  // toward the top of the canvas, clearing the bottom-anchored info card.
+  const computeDeepLinkOffset = () => {
+    const map = mapInst.current;
+    if (!map) return [0, 0];
+    let h = 0;
+    try { h = (map.getCanvas() && map.getCanvas().clientHeight) || 0; } catch (_) {}
+    if (!h) h = (typeof window !== "undefined" && window.innerHeight) || 600;
+    return [0, -Math.round(h * 0.2)];
+  };
   useEffect(() => {
     if (!pendingSpotNav || !mapReady) return;
     const spot = (campingSpots || []).find(s => s.id === pendingSpotNav);
     if (!spot) return;
     setSelectedSpot(spot); setSelectedLand(null); setSelectedTrip(null); setSelectedHQ(null);
-    if (mapInst.current) { try { mapInst.current.flyTo({ center: [spot.lng, spot.lat], zoom: 13, duration: 800 }); } catch (e) {} }
+    if (mapInst.current) { try { mapInst.current.flyTo({ center: [spot.lng, spot.lat], zoom: 13, duration: 800, offset: computeDeepLinkOffset() }); } catch (e) {} }
     onConsumePendingSpotNav && onConsumePendingSpotNav();
   }, [pendingSpotNav, campingSpots, mapReady]);
   useEffect(() => {
     if (!pendingHQOpen || !mapReady) return;
     setSelectedHQ(LPO_HQ); setSelectedSpot(null); setSelectedLand(null); setSelectedTrip(null);
-    if (mapInst.current) { try { mapInst.current.flyTo({ center: [LPO_HQ.lng, LPO_HQ.lat], zoom: 14, duration: 800 }); } catch (e) {} }
+    if (mapInst.current) { try { mapInst.current.flyTo({ center: [LPO_HQ.lng, LPO_HQ.lat], zoom: 14, duration: 800, offset: computeDeepLinkOffset() }); } catch (e) {} }
     onConsumePendingHQOpen && onConsumePendingHQOpen();
   }, [pendingHQOpen, mapReady]);
   // Plan deep-link — opens the plan popup once the row appears in tripPlans.
@@ -13425,7 +14384,7 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
     if (!plan) return;
     clearOtherSelections(); setSelectedPlan(plan);
     if (mapInst.current && plan.start_lat != null && plan.start_lng != null) {
-      try { mapInst.current.flyTo({ center: [plan.start_lng, plan.start_lat], zoom: 13, duration: 800 }); } catch (e) {}
+      try { mapInst.current.flyTo({ center: [plan.start_lng, plan.start_lat], zoom: 13, duration: 800, offset: computeDeepLinkOffset() }); } catch (e) {}
     }
     onConsumePendingPlanNav && onConsumePendingPlanNav();
   }, [pendingPlanNav, tripPlans, mapReady]);
@@ -13451,10 +14410,23 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
       const onMapLoad = () => {
         if (cancelled) return;
         // Best-effort recenter on the user's location — silently no-ops if
-        // permission is denied or the call times out.
-        if (navigator.geolocation) {
+        // permission is denied or the call times out. SKIPPED when the
+        // user arrived via a deep link (DM camp-site share, /spots/<id>,
+        // /hq, /plans/<slug>); otherwise the late-resolving GPS flyTo
+        // would override the deep-link's flyTo and yank the camera off
+        // the shared pin. Same applies if the SPA mounted with any of
+        // these prop targets already set.
+        const hasDeepLinkNav = !!(pendingSpotNav || pendingHQOpen || pendingPlanNav);
+        if (navigator.geolocation && !hasDeepLinkNav) {
           navigator.geolocation.getCurrentPosition(
-            (p) => { if (!cancelled && mapInst.current) mapInst.current.flyTo({ center: [p.coords.longitude, p.coords.latitude], zoom: 9, duration: 800 }); },
+            (p) => {
+              // Re-check at fire time too — the deep-link prop may have
+              // landed during the async GPS lookup (e.g. campingSpots
+              // hydrated and the user tapped a card immediately).
+              if (cancelled || !mapInst.current) return;
+              if (pendingSpotNavRef.current || pendingHQOpenRef.current || pendingPlanNavRef.current) return;
+              mapInst.current.flyTo({ center: [p.coords.longitude, p.coords.latitude], zoom: 9, duration: 800 });
+            },
             () => {},
             { enableHighAccuracy: false, timeout: 5000 }
           );
@@ -13753,11 +14725,74 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
         {/* Shimmer + spinner until the Mapbox CDN + style settle so the
             user doesn't see a dark void on first visit. */}
         {!mapReady && <ContentLoader accent={T.copper} spinnerSize={28} />}
+        {/* Gear-drop pin builder banner — sibling to the plan banner. Mutually
+            exclusive in practice (admin can't be planning a trip and a gear
+            drop simultaneously). Pins are ordered tap-order; first = start
+            (copper), last = endpoint (red), middle = waypoints (green).
+            SAVE writes back to gear_drops.route_data + returns to editor. */}
+        {gdPinActive && gearDropPinBuilder && (() => {
+          const isAfterparty = gearDropPinBuilder.mode === "afterparty";
+          const accent = isAfterparty ? T.copper : T.green;
+          const titleText = isAfterparty ? "PICKING AFTERPARTY" : "PLANNING GEAR DROP ROUTE";
+          const subText = isAfterparty
+            ? (gearDropPinBuilder.pins.length === 0 ? "Tap the map to set the afterparty location" : "Tap again to fine-tune the location")
+            : (gearDropPinBuilder.pins.length === 0 ? "Tap the map to set the start point" : `${gearDropPinBuilder.pins.length} pin${gearDropPinBuilder.pins.length === 1 ? "" : "s"} · tap to add more`);
+          return (<>
+            <div style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 12, background: accent, color: T.white, padding: "10px 14px", boxShadow: "0 4px 14px rgba(0,0,0,0.4)", display: "flex", alignItems: "center", gap: 10 }}>
+              <Gift size={16} color={T.white} strokeWidth={2} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 1.2 }}>{titleText}</div>
+                <div style={{ fontFamily: sans, fontSize: 10, opacity: 0.9 }}>{subText}</div>
+              </div>
+              <button onClick={() => gearDropPinBuilder.exit && gearDropPinBuilder.exit()}
+                      style={{ background: "rgba(0,0,0,0.25)", border: `1px solid rgba(255,255,255,0.35)`, color: T.white, padding: "6px 12px", borderRadius: 6, cursor: "pointer", fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.6 }}>
+                CANCEL
+              </button>
+              <button onClick={() => gearDropPinBuilder.commit && gearDropPinBuilder.commit()}
+                      disabled={gearDropPinBuilder.saving || gearDropPinBuilder.pins.length === 0}
+                      style={{ background: gearDropPinBuilder.pins.length > 0 ? T.white : "rgba(255,255,255,0.3)", border: "none", color: accent, padding: "6px 14px", borderRadius: 6, cursor: gearDropPinBuilder.pins.length > 0 ? "pointer" : "default", fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, opacity: gearDropPinBuilder.pins.length > 0 ? 1 : 0.6 }}>
+                {gearDropPinBuilder.saving ? "SAVING…" : "SAVE"}
+              </button>
+            </div>
+            {!isAfterparty && (
+            <div style={{ position: "absolute", left: 12, right: 12, bottom: 12, zIndex: 11, background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 12, padding: "10px 12px", maxHeight: 220, overflowY: "auto", boxShadow: "0 8px 24px rgba(0,0,0,0.5)" }}>
+              <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, fontWeight: 700, letterSpacing: 0.8, marginBottom: 6 }}>PINS · IN ORDER</div>
+              {gearDropPinBuilder.pins.length === 0 && (
+                <div style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, padding: "10px 4px", lineHeight: 1.4 }}>Tap the map to drop the start point, then continue tapping for waypoints.</div>
+              )}
+              {gearDropPinBuilder.pins.map((pin, i) => {
+                const isFirst = i === 0;
+                const isLast = i === gearDropPinBuilder.pins.length - 1 && gearDropPinBuilder.pins.length > 1;
+                const role = isFirst ? "START" : isLast ? "ENDPOINT" : "WAYPOINT";
+                const color = isFirst ? T.copper : isLast ? T.red : T.green;
+                return (
+                  <div key={pin.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderTop: i > 0 ? `1px solid ${T.charcoal}` : "none" }}>
+                    <span style={{ width: 22, height: 22, borderRadius: "50%", background: color, color: T.white, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: sans, fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{i}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>{role}</div>
+                      <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>{pin.lat.toFixed(5)}, {pin.lng.toFixed(5)}</div>
+                    </div>
+                    <button onClick={() => gearDropPinBuilder.movePin && gearDropPinBuilder.movePin(pin.id, "up")} disabled={i === 0} style={{ background: "none", border: "none", padding: 4, cursor: i === 0 ? "default" : "pointer", opacity: i === 0 ? 0.3 : 1 }}>
+                      <ArrowUp size={12} color={T.tertiary} />
+                    </button>
+                    <button onClick={() => gearDropPinBuilder.movePin && gearDropPinBuilder.movePin(pin.id, "down")} disabled={i === gearDropPinBuilder.pins.length - 1} style={{ background: "none", border: "none", padding: 4, cursor: i === gearDropPinBuilder.pins.length - 1 ? "default" : "pointer", opacity: i === gearDropPinBuilder.pins.length - 1 ? 0.3 : 1 }}>
+                      <ChevronDown size={12} color={T.tertiary} />
+                    </button>
+                    <button onClick={() => gearDropPinBuilder.removePin && gearDropPinBuilder.removePin(pin.id)} style={{ background: "none", border: "none", padding: 4, cursor: "pointer" }}>
+                      <Trash2 size={12} color={T.red} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            )}
+          </>);
+        })()}
         {/* Plan-builder banner — only mounted while the builder is active.
             Floats above the search bar so it's the first thing the user
             sees in plan mode. Cancel discards everything; Save opens the
             details prompt (name + description) before persisting. */}
-        {planActive && (
+        {planActive && !gdPinActive && (
           <div style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 10, background: T.copper, color: T.white, padding: "10px 14px", boxShadow: "0 4px 14px rgba(0,0,0,0.4)", display: "flex", alignItems: "center", gap: 10 }}>
             <Route size={16} color={T.white} strokeWidth={2} />
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -13788,10 +14823,12 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
         {/* Search overlay — anchored along the top edge of the map (where
             the layers chip used to sit). Results dropdown floats below the
             input. zIndex bumped above other map overlays so it sits on top.
+            right:56 reserves room for Mapbox's NavigationControl zoom
+            buttons (top-right) so they stay tappable.
             Hidden for guests — they're only here via /hq or /spots/:id
             deep links and shouldn't be able to browse the rest of the map. */}
         {!isGuest && (
-        <div style={{ position: "absolute", top: planActive ? 60 : 10, left: 10, right: 10, zIndex: 7 }}>
+        <div style={{ position: "absolute", top: planActive ? 60 : 10, left: 10, right: 56, zIndex: 7 }}>
           <div style={{ display: "flex", alignItems: "center", background: `${T.darkCard}F0`, backdropFilter: "blur(10px)", borderRadius: 10, padding: "10px 14px", border: `1px solid ${searchOpen ? T.copper : T.charcoal}`, boxShadow: "0 4px 12px rgba(0,0,0,0.4)", transition: "border-color 0.15s" }}>
             <Search size={16} color={T.tertiary} />
             <input
@@ -14769,7 +15806,7 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
         <div onClick={() => setLightbox(null)}
              style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
           <button onClick={(e) => { e.stopPropagation(); setLightbox(null); }}
-                  style={{ position: "absolute", top: 16, right: 16, background: "rgba(0,0,0,0.5)", border: "none", borderRadius: "50%", width: 36, height: 36, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: T.white }}>
+                  style={{ position: "absolute", top: 16, right: 16, background: "rgba(0,0,0,0.5)", border: "none", borderRadius: "50%", width: 36, height: 36, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: T.white, zIndex: 3 }}>
             <X size={20} />
           </button>
           {canDeletePhoto && onDeletePhotoFromSpot && lightbox.spotId && (
@@ -14788,7 +15825,7 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
                         });
                       }
                     }}
-                    style={{ position: "absolute", top: 16, left: 16, background: `${T.red}D0`, border: "none", borderRadius: 6, padding: "8px 12px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1 }}>
+                    style={{ position: "absolute", top: 16, left: 16, background: `${T.red}D0`, border: "none", borderRadius: 6, padding: "8px 12px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, zIndex: 3 }}>
               <Trash2 size={12} />DELETE
             </button>
           )}
@@ -14804,8 +15841,32 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
               <ChevronRight size={22} />
             </button>
           )}
-          <img src={txImg(curUrl, 1200)} alt="" onClick={(e) => e.stopPropagation()}
-               style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 8 }} />
+          {/* Swipeable track — single image case still works (no-op track
+              with one slide). Track translates -idx viewport-widths plus
+              the live finger drag in pixels so the image feels attached
+              to the finger 1:1. */}
+          <div ref={lightboxViewportRef}
+               onClick={(e) => e.stopPropagation()}
+               onTouchStart={onLightboxTouchStart}
+               onTouchMove={onLightboxTouchMove}
+               onTouchEnd={onLightboxTouchEnd}
+               onTouchCancel={onLightboxTouchEnd}
+               style={{ width: "100%", height: "100%", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", touchAction: "pan-y" }}>
+            <div style={{
+              display: "flex",
+              width: "100%",
+              height: "100%",
+              transform: `translate3d(calc(${-lightbox.index * 100}% + ${lightboxDrag}px), 0, 0)`,
+              transition: lightboxDragging ? "none" : "transform 280ms cubic-bezier(0.25, 1, 0.4, 1)",
+              willChange: "transform",
+            }}>
+              {lightbox.urls.map((u, i) => (
+                <div key={i} style={{ width: "100%", height: "100%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <img src={txImg(u, 1200)} alt="" draggable={false} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 8, pointerEvents: "none", userSelect: "none" }} />
+                </div>
+              ))}
+            </div>
+          </div>
           {/* Footer overlay — "Added by @handle" credit on the left when
               the photo has attribution; counter on the right when multi.
               Both share a single row so they don't stack awkwardly. */}
@@ -14839,7 +15900,7 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
   );
 }
 
-function RoutesScreen({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, currentUserId, isAdmin, tripReports, showTripReports, setShowTripReports, tripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onAddPhotoToSpot, onDeletePhotoFromSpot, onLoadCampingSpotPhotos, onLoadCampingSpotElevation, spotAuthors, tripAuthors, onLoadRouteData, onOpenTripDetail, onOpenTripPlanDraft, onNewTripReport, onNewTripPlan, pendingSpotNav, onConsumePendingSpotNav, pendingHQOpen, onConsumePendingHQOpen, pendingPlanNav, onConsumePendingPlanNav, onShareCampingSpotToFeed, onShareHQToFeed, onShareTripToFeed, onShareTripPlanToFeed, onOpenDM, onShowToast, onOpenShareCompose, onOpenShareIntent, onViewUser, onStartNav, planBuilder, isGuest, onGuestTap, savedTripIds, onToggleSaveTrip }) {
+function RoutesScreen({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, currentUserId, isAdmin, tripReports, showTripReports, setShowTripReports, tripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onAddPhotoToSpot, onDeletePhotoFromSpot, onLoadCampingSpotPhotos, onLoadCampingSpotElevation, spotAuthors, tripAuthors, onLoadRouteData, onOpenTripDetail, onOpenTripPlanDraft, onNewTripReport, onNewTripPlan, pendingSpotNav, onConsumePendingSpotNav, pendingHQOpen, onConsumePendingHQOpen, pendingPlanNav, onConsumePendingPlanNav, onShareCampingSpotToFeed, onShareHQToFeed, onShareTripToFeed, onShareTripPlanToFeed, onOpenDM, onShowToast, onOpenShareCompose, onOpenShareIntent, onViewUser, onStartNav, planBuilder, gearDropPinBuilder, isGuest, onGuestTap, savedTripIds, onToggleSaveTrip }) {
   // Maps screen — full-height ExploreMap with no chrome. Trip-reports list,
   // create modal, and detail overlay all live at the root now (the list
   // moved to the Feed under the renamed TRIP REPORTS filter; the modal +
@@ -14897,6 +15958,7 @@ function RoutesScreen({ campingSpots, showCampingSpots, setShowCampingSpots, sho
         onOpenShareCompose={onOpenShareCompose}
         onOpenShareIntent={onOpenShareIntent}
         planBuilder={planBuilder}
+        gearDropPinBuilder={gearDropPinBuilder}
         isGuest={isGuest}
         onGuestTap={onGuestTap}
         savedTripIds={savedTripIds}
@@ -15087,7 +16149,7 @@ function BuildCommentsSection({ buildId, comments, likedCommentIds, commentLikeC
 }
 
 /* ─── BUILDS / PROFILE SCREEN ─── */
-function BuildsScreen({ onViewUser, userBuilds, allBuilds: allBuildsProp, onLoadAllBuilds, onLoadBuildById, allBuildsLoaded, currentUserId, isAdmin, followingIds, onAddBuild, onUpdateBuild, onDeleteBuild, onPostBuildToFeed, onOpenDM, onOpenShareCompose, onOpenShareIntent, userRoutes, pendingBuildNav, onConsumePendingBuildNav, isGuest, onGuestTap, likedBuildIds, buildLikeCounts, onToggleBuildLike, buildComments, onLoadBuildComments, onAddBuildComment, onDeleteBuildComment, likedBuildCommentIds, buildCommentLikeCounts, onToggleBuildCommentLike, currentUserName, currentUserHandle, currentUserAvatar }) {
+function BuildsScreen({ onViewUser, userBuilds, allBuilds: allBuildsProp, onLoadAllBuilds, onLoadBuildById, allBuildsLoaded, buildSaving, currentUserId, isAdmin, followingIds, onAddBuild, onUpdateBuild, onDeleteBuild, onPostBuildToFeed, onOpenDM, onOpenShareCompose, onOpenShareIntent, userRoutes, pendingBuildNav, onConsumePendingBuildNav, isGuest, onGuestTap, likedBuildIds, buildLikeCounts, onToggleBuildLike, buildComments, onLoadBuildComments, onAddBuildComment, onDeleteBuildComment, likedBuildCommentIds, buildCommentLikeCounts, onToggleBuildCommentLike, currentUserName, currentUserHandle, currentUserAvatar, allTripReports }) {
   // Trigger the cross-user builds load the first time the gallery mounts.
   // Root tracks idempotency via a ref, so re-mounts here are no-ops.
   useEffect(() => { if (typeof onLoadAllBuilds === "function") onLoadAllBuilds(); }, []);
@@ -15450,9 +16512,9 @@ function BuildsScreen({ onViewUser, userBuilds, allBuilds: allBuildsProp, onLoad
                           </div>
                         )}
                         {m.link && (
-                          <div style={{ marginTop: 10 }}>
-                            <a href={ensureUrl(m.link)} target="_blank" rel="noopener noreferrer" style={{ fontFamily: sans, fontSize: 11, color: T.copper, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 5 }}>
-                              <ExternalLink size={11} /> View Product
+                          <div style={{ marginTop: 12, display: "flex", justifyContent: "center" }}>
+                            <a href={ensureUrl(m.link)} target="_blank" rel="noopener noreferrer" style={{ fontFamily: sans, fontSize: 12, color: T.copper, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 7, padding: "10px 18px", border: `1px solid ${T.copper}`, borderRadius: 8, fontWeight: 700, letterSpacing: 0.6 }}>
+                              <ExternalLink size={13} /> VIEW PRODUCT
                             </a>
                           </div>
                         )}
@@ -15465,32 +16527,40 @@ function BuildsScreen({ onViewUser, userBuilds, allBuilds: allBuildsProp, onLoad
           )}
         </div>
 
-        {/* Camper section */}
+        {/* Camper section — header row + content area mirrors the mod card
+            layout so the photos can take the full card width (matches the
+            280×280 sizing mods use instead of the old 60×60 thumbnails). */}
         {detailBuild.hasCamper && (
           <div style={{ padding: "18px 16px 0" }}>
             <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 12 }}>CAMPER SETUP</span>
-            <div style={{ ...cardStyle, padding: 14, display: "flex", alignItems: "flex-start", gap: 12 }}>
-              <div style={{ width: 38, height: 38, borderRadius: 8, background: `${T.copper}25`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <Home size={17} color={T.copper} />
+            <div style={{ ...cardStyle, overflow: "hidden" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, padding: 14 }}>
+                <div style={{ width: 38, height: 38, borderRadius: 8, background: `${T.copper}25`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <Home size={17} color={T.copper} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.2, display: "block", marginBottom: 2 }}>CAMPER</span>
+                  <div style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, letterSpacing: 0.3 }}>{detailBuild.camperMake} {detailBuild.camperModel}</div>
+                </div>
               </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.2, display: "block", marginBottom: 2 }}>CAMPER</span>
-                <div style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, letterSpacing: 0.3 }}>{detailBuild.camperMake} {detailBuild.camperModel}</div>
-                {bd && bd.camperPhoto && bd.camperPhoto.length > 0 && (
-                  <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
-                    {bd.camperPhoto.map((p, pi) => (
-                      <img key={pi} src={p.url} alt="" onClick={() => openGalleryCarousel(detailBuild, 0)} style={{ width: 60, height: 60, borderRadius: 6, objectFit: "cover", cursor: "pointer" }} />
-                    ))}
-                  </div>
-                )}
-                {bd && bd.camperLink && (
-                  <div style={{ marginTop: 6 }}>
-                    <a href={ensureUrl(bd.camperLink)} target="_blank" rel="noopener noreferrer" style={{ fontFamily: sans, fontSize: 10, color: T.copper, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
-                      <ExternalLink size={10} /> View Product
-                    </a>
-                  </div>
-                )}
-              </div>
+              {((bd && bd.camperPhoto && bd.camperPhoto.length > 0) || (bd && bd.camperLink)) && (
+                <div style={{ padding: "0 14px 14px", borderTop: `1px solid ${T.charcoal}` }}>
+                  {bd && bd.camperPhoto && bd.camperPhoto.length > 0 && (
+                    <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap", justifyContent: "center" }}>
+                      {bd.camperPhoto.map((p, pi) => (
+                        <img key={pi} src={txImg(p.url, 700)} alt="" onClick={() => openGalleryCarousel(detailBuild, 0)} style={{ width: 280, height: 280, maxWidth: "100%", borderRadius: 10, objectFit: "cover", cursor: "pointer", display: "block" }} />
+                      ))}
+                    </div>
+                  )}
+                  {bd && bd.camperLink && (
+                    <div style={{ marginTop: 12, display: "flex", justifyContent: "center" }}>
+                      <a href={ensureUrl(bd.camperLink)} target="_blank" rel="noopener noreferrer" style={{ fontFamily: sans, fontSize: 12, color: T.copper, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 7, padding: "10px 18px", border: `1px solid ${T.copper}`, borderRadius: 8, fontWeight: 700, letterSpacing: 0.6 }}>
+                        <ExternalLink size={13} /> VIEW PRODUCT
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -15518,26 +16588,39 @@ function BuildsScreen({ onViewUser, userBuilds, allBuilds: allBuildsProp, onLoad
           );
         })()}
 
-        {/* Stats footer */}
-        <div style={{ padding: "20px 16px 0" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <div style={{ ...cardStyle, padding: 16 }}>
-              <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.5, display: "block", marginBottom: 4 }}>TOTAL TRAIL MILES</span>
-              <span style={{ fontFamily: sans, fontSize: 28, color: T.white, fontWeight: 800, letterSpacing: 0.5 }}>{detailBuild.miles}</span>
-              <div style={{ width: 24, height: 2, background: T.red, marginTop: 6 }} />
+        {/* Stats footer — aggregated from trip_reports where build_id
+            matches this build AND status='published'. Legacy trips with
+            no build_id contribute nothing; user can edit old trips and
+            link them retroactively to backfill. */}
+        {(() => {
+          const linked = (allTripReports || []).filter(t => t && t.build_id === detailBuild.rawId && t.status === "published");
+          const totalMiles = linked.reduce((acc, t) => acc + (Number(t.distance_mi) || 0), 0);
+          const totalElev = linked.reduce((acc, t) => acc + (Number(t.elev_gain_ft) || 0), 0);
+          const totalTrips = linked.length;
+          const milesLabel = totalMiles > 0 ? `${Math.round(totalMiles).toLocaleString()}` : "0";
+          const elevLabel = totalElev > 0 ? `${Math.round(totalElev).toLocaleString()}` : "0";
+          return (
+            <div style={{ padding: "20px 16px 0" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div style={{ ...cardStyle, padding: 16 }}>
+                  <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.5, display: "block", marginBottom: 4 }}>TOTAL TRAIL MILES</span>
+                  <span style={{ fontFamily: sans, fontSize: 28, color: T.white, fontWeight: 800, letterSpacing: 0.5 }}>{milesLabel}</span>
+                  <div style={{ width: 24, height: 2, background: T.red, marginTop: 6 }} />
+                </div>
+                <div style={{ ...cardStyle, padding: 16 }}>
+                  <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.5, display: "block", marginBottom: 4 }}>ELEVATION GAIN</span>
+                  <span style={{ fontFamily: sans, fontSize: 28, color: T.white, fontWeight: 800, letterSpacing: 0.5 }}>{elevLabel}</span>
+                  <div style={{ width: 24, height: 2, background: T.copper, marginTop: 6 }} />
+                </div>
+              </div>
+              <div style={{ ...cardStyle, padding: 16, marginTop: 10 }}>
+                <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.5, display: "block", marginBottom: 4 }}>TRIPS COMPLETED</span>
+                <span style={{ fontFamily: sans, fontSize: 28, color: T.white, fontWeight: 800, letterSpacing: 0.5 }}>{totalTrips}</span>
+                <div style={{ width: 24, height: 2, background: T.green, marginTop: 6 }} />
+              </div>
             </div>
-            <div style={{ ...cardStyle, padding: 16 }}>
-              <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.5, display: "block", marginBottom: 4 }}>ELEVATION GAIN</span>
-              <span style={{ fontFamily: sans, fontSize: 28, color: T.white, fontWeight: 800, letterSpacing: 0.5 }}>{detailBuild.elevation}</span>
-              <div style={{ width: 24, height: 2, background: T.copper, marginTop: 6 }} />
-            </div>
-          </div>
-          <div style={{ ...cardStyle, padding: 16, marginTop: 10 }}>
-            <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.5, display: "block", marginBottom: 4 }}>ROUTES COMPLETED</span>
-            <span style={{ fontFamily: sans, fontSize: 28, color: T.white, fontWeight: 800, letterSpacing: 0.5 }}>{detailBuild.routes}</span>
-            <div style={{ width: 24, height: 2, background: T.green, marginTop: 6 }} />
-          </div>
-        </div>
+          );
+        })()}
 
         {/* Comments */}
         <BuildCommentsSection
@@ -15611,23 +16694,25 @@ function BuildsScreen({ onViewUser, userBuilds, allBuilds: allBuildsProp, onLoad
         </div>
       </div>
 
-      {/* Results count */}
-      <div style={{ padding: "0 16px", marginBottom: 12 }}>
-        <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5 }}>{filtered.length} BUILD{filtered.length !== 1 ? "S" : ""} FOUND</span>
-      </div>
+      {/* Results count — hidden during a save so it doesn't read
+          "0 BUILDS FOUND" right above the SAVING BUILD spinner. */}
+      {!(buildSaving && filtered.length === 0) && (
+        <div style={{ padding: "0 16px", marginBottom: 12 }}>
+          <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5 }}>{filtered.length} BUILD{filtered.length !== 1 ? "S" : ""} FOUND</span>
+        </div>
+      )}
 
       {/* Build Grid */}
       {filtered.length === 0 ? (
-        // Distinguish "still loading the cross-user gallery" from "truly
-        // empty / no matches". For filter==="mine" the userBuilds slice is
-        // hydrated in Tier 2 (always loaded by the time the user lands
-        // here) so we always show the empty state. For "all"/"following"
-        // the cross-user fetch may still be in flight on cold boot —
-        // show a spinner instead of the misleading "no builds match" text.
-        (!allBuildsLoaded && filter !== "mine" && !search) ? (
+        // Distinguish "still loading the cross-user gallery" / "save in
+        // flight" from "truly empty / no matches". `buildSaving` covers
+        // the window between SAVE BUILD tap and userBuilds receiving the
+        // new row (photo upload + insert can take 1-2s on cellular).
+        // `!allBuildsLoaded` covers cold-boot of the cross-user gallery.
+        ((buildSaving && !search) || (!allBuildsLoaded && filter !== "mine" && !search)) ? (
           <div style={{ padding: "48px 16px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
             <div style={{ width: 28, height: 28, borderRadius: "50%", border: `2px solid ${T.copper}30`, borderTopColor: T.copper, animation: "th-spin 0.8s linear infinite" }} />
-            <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, letterSpacing: 1.5, fontWeight: 600 }}>LOADING BUILDS…</span>
+            <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, letterSpacing: 1.5, fontWeight: 600 }}>{buildSaving ? "SAVING BUILD…" : "LOADING BUILDS…"}</span>
           </div>
         ) : (
           <div style={{ padding: "40px 16px", textAlign: "center" }}>
@@ -15652,10 +16737,15 @@ function BuildsScreen({ onViewUser, userBuilds, allBuilds: allBuildsProp, onLoad
                       <Wrench size={60} color={T.tertiary} strokeWidth={0.2} style={{ opacity: 0.06 }} />
                     </div>
                   )}
-                  {/* Owner badge */}
+                  {/* Owner badge — avatar img with initial fallback (matches
+                      the pattern used on feed cards). avatarUrl comes from
+                      dbRowToLocalBuild which grafts the profile's avatar
+                      onto every build row. */}
                   <div style={{ position: "absolute", top: 10, left: 10, display: "flex", alignItems: "center", gap: 6, background: `${T.darkBg}CC`, padding: "5px 10px 5px 5px", borderRadius: 20 }}>
-                    <div style={{ width: 22, height: 22, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <span style={{ fontFamily: sans, fontSize: 9, fontWeight: 700, color: T.white }}>{b.initial}</span>
+                    <div style={{ width: 22, height: 22, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+                      {b.avatarUrl
+                        ? <img src={txImg(b.avatarUrl, 64)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        : <span style={{ fontFamily: sans, fontSize: 9, fontWeight: 700, color: T.white }}>{b.initial}</span>}
                     </div>
                     <span style={{ fontFamily: sans, fontSize: 10, color: T.white }}>{b.owner}</span>
                   </div>
@@ -15682,21 +16772,32 @@ function BuildsScreen({ onViewUser, userBuilds, allBuilds: allBuildsProp, onLoad
                   </div>
                 </div>
 
-                {/* Stats row */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", borderTop: `1px solid ${T.charcoal}` }}>
-                  <div style={{ padding: "10px 12px", textAlign: "center", borderRight: `1px solid ${T.charcoal}` }}>
-                    <span style={{ fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 1, display: "block", marginBottom: 1 }}>TRAIL MILES</span>
-                    <span style={{ fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 }}>{b.miles}</span>
-                  </div>
-                  <div style={{ padding: "10px 12px", textAlign: "center", borderRight: `1px solid ${T.charcoal}` }}>
-                    <span style={{ fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 1, display: "block", marginBottom: 1 }}>ELEVATION</span>
-                    <span style={{ fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 }}>{b.elevation}</span>
-                  </div>
-                  <div style={{ padding: "10px 12px", textAlign: "center" }}>
-                    <span style={{ fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 1, display: "block", marginBottom: 1 }}>ROUTES</span>
-                    <span style={{ fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 }}>{b.routes}</span>
-                  </div>
-                </div>
+                {/* Stats row — same aggregate the detail page uses: sum
+                    distance + elevation gain + trip count across published
+                    trip_reports linked to this build via build_id. Legacy
+                    trips without a build_id contribute nothing. */}
+                {(() => {
+                  const linked = (allTripReports || []).filter(t => t && t.build_id === b.rawId && t.status === "published");
+                  const totalMiles = linked.reduce((acc, t) => acc + (Number(t.distance_mi) || 0), 0);
+                  const totalElev = linked.reduce((acc, t) => acc + (Number(t.elev_gain_ft) || 0), 0);
+                  const totalTrips = linked.length;
+                  return (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", borderTop: `1px solid ${T.charcoal}` }}>
+                      <div style={{ padding: "10px 12px", textAlign: "center", borderRight: `1px solid ${T.charcoal}` }}>
+                        <span style={{ fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 1, display: "block", marginBottom: 1 }}>TRAIL MILES</span>
+                        <span style={{ fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 }}>{Math.round(totalMiles).toLocaleString()}</span>
+                      </div>
+                      <div style={{ padding: "10px 12px", textAlign: "center", borderRight: `1px solid ${T.charcoal}` }}>
+                        <span style={{ fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 1, display: "block", marginBottom: 1 }}>ELEVATION</span>
+                        <span style={{ fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 }}>{Math.round(totalElev).toLocaleString()}</span>
+                      </div>
+                      <div style={{ padding: "10px 12px", textAlign: "center" }}>
+                        <span style={{ fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 1, display: "block", marginBottom: 1 }}>TRIPS</span>
+                        <span style={{ fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 }}>{totalTrips}</span>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Expanded Detail — DISABLED: click now navigates to full BuildDetailPage */}
@@ -17427,7 +18528,7 @@ function AddBuildForm({ onClose, onSave, onDelete, initialData }) {
             <span style={{ position: "absolute", top: 8, left: 8, fontFamily: sans, fontSize: 9, color: T.white, background: `${T.red}CC`, padding: "4px 8px", borderRadius: 4, letterSpacing: 1, fontWeight: 600 }}>HERO</span>
           </div>
         ) : (
-          <PhotoUploader photos={[]} onChange={(p) => setMainPhotos(prev => [...p.slice(0, 1), ...prev])} maxPhotos={1} />
+          <PhotoUploader photos={[]} onChange={(p) => setMainPhotos(prev => [...p.slice(0, 1), ...prev])} maxPhotos={1} acceptVideo={false} />
         )}
         <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, display: "block" }}>This is the featured photo on your build card</span>
       </div>
@@ -17437,13 +18538,27 @@ function AddBuildForm({ onClose, onSave, onDelete, initialData }) {
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
             {mainPhotos.slice(1).map((p, pi) => {
               const absoluteIdx = pi + 1;
+              const isVideo = p && p.type === "video";
               return (
                 <div key={p.id || pi} style={{ position: "relative" }}>
-                  <img src={txImg(p.url, 480)} alt="" style={{ width: 90, height: 90, borderRadius: 8, objectFit: "cover", border: `1px solid ${T.charcoal}` }} />
+                  {isVideo ? (
+                    <div style={{ position: "relative", width: 90, height: 90, borderRadius: 8, overflow: "hidden", border: `1px solid ${T.charcoal}`, background: T.darkBg }}>
+                      <video src={p.url + "#t=0.1"} preload="metadata" muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      <div style={{ position: "absolute", bottom: 4, right: 4, background: "rgba(0,0,0,0.6)", borderRadius: 4, padding: "1px 5px", display: "flex", alignItems: "center", gap: 3 }}>
+                        <Video size={9} color={T.white} />
+                        <span style={{ fontFamily: sans, fontSize: 8, color: T.white, fontWeight: 700, letterSpacing: 0.3 }}>VIDEO</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <img src={txImg(p.url, 480)} alt="" style={{ width: 90, height: 90, borderRadius: 8, objectFit: "cover", border: `1px solid ${T.charcoal}` }} />
+                  )}
                   <button onClick={() => setMainPhotos(prev => prev.filter((_, i) => i !== absoluteIdx))} style={{ position: "absolute", top: 4, right: 4, width: 22, height: 22, borderRadius: "50%", background: `${T.darkBg}CC`, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     <X size={11} color={T.white} />
                   </button>
-                  <button onClick={() => setMainPhotos(prev => { const next = [...prev]; const [item] = next.splice(absoluteIdx, 1); next.unshift(item); return next; })} style={{ position: "absolute", bottom: 4, left: 4, padding: "3px 6px", borderRadius: 4, background: `${T.copper}CC`, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 8, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>SET HERO</button>
+                  {/* SET HERO hidden for videos — the hero slot is image-only. */}
+                  {!isVideo && (
+                    <button onClick={() => setMainPhotos(prev => { const next = [...prev]; const [item] = next.splice(absoluteIdx, 1); next.unshift(item); return next; })} style={{ position: "absolute", bottom: 4, left: 4, padding: "3px 6px", borderRadius: 4, background: `${T.copper}CC`, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 8, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>SET HERO</button>
+                  )}
                 </div>
               );
             })}
@@ -17961,7 +19076,7 @@ function BugReportForm({ currentUserId, currentUserHandle, onClose, onSubmitted 
 }
 
 /* ─── PROFILE SCREEN (Own Profile) ─── */
-function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, initialUserBio, initialIsPublic, onViewUser, onLogout, userBuilds, onAddBuild, onUpdateBuild, onDeleteBuild, profilePic, onSetProfilePic, notifPrefs, onSetNotifPrefs, feedItems, onDeletePost, onEditPost, onUpdateConvoy, onGoToPost, myPoints: myPointsProp, onSaveProfile, followerCount, followingCount, convoyRsvps, onSubscribePush, onUnsubscribePush, renderFeedScopedTo, onViewBuild, savedRoutes, onUnsaveRoute, onStartNav, myTripPlans, onOpenTripPlan, onNewTripPlan, isAdmin, savedTrips, onUnsaveTrip, onOpenSavedTrip, pendingScroll, onConsumePendingScroll, onOpenAdminDashboard }) {
+function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, initialUserBio, initialIsPublic, onViewUser, onLogout, userBuilds, onAddBuild, onUpdateBuild, onDeleteBuild, profilePic, onSetProfilePic, notifPrefs, onSetNotifPrefs, feedItems, onDeletePost, onEditPost, onUpdateConvoy, onGoToPost, myPoints: myPointsProp, onSaveProfile, followerCount, followingCount, convoyRsvps, onSubscribePush, onUnsubscribePush, renderFeedScopedTo, onViewBuild, savedRoutes, onUnsaveRoute, onStartNav, myTripPlans, onOpenTripPlan, onNewTripPlan, isAdmin, currentRole, savedTrips, onUnsaveTrip, onOpenSavedTrip, pendingScroll, onConsumePendingScroll, onOpenAdminDashboard, onOpenAmbassadorDashboard, onOpenFollowList }) {
   const [isPublic, setIsPublic] = useState(initialIsPublic == null ? true : !!initialIsPublic);
   const [activeTab, setActiveTab] = useState("builds");
   const [activeBuild, setActiveBuild] = useState(0);
@@ -18450,17 +19565,19 @@ function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, init
           </div>
         ); })()}
 
-        {/* Stats Row — POINTS column gated to admin while Ranks is a v2 feature */}
+        {/* Stats Row — POINTS column gated to admin while Ranks is a v2 feature.
+            FOLLOWERS / FOLLOWING are tappable: opens a list overlay so the user
+            can see WHO follows them / they follow. */}
         <div style={{ display: "flex", justifyContent: "center", gap: 24, marginBottom: 16 }}>
-          <div style={{ textAlign: "center" }}>
+          <button onClick={() => onOpenFollowList && currentUserId && onOpenFollowList(currentUserId, "followers")} style={{ background: "none", border: "none", padding: 0, textAlign: "center", cursor: "pointer" }}>
             <span style={{ fontFamily: sans, fontSize: 18, color: T.white, fontWeight: 700, display: "block" }}>{user.followers}</span>
             <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1 }}>FOLLOWERS</span>
-          </div>
+          </button>
           <div style={{ width: 1, background: T.charcoal }} />
-          <div style={{ textAlign: "center" }}>
+          <button onClick={() => onOpenFollowList && currentUserId && onOpenFollowList(currentUserId, "following")} style={{ background: "none", border: "none", padding: 0, textAlign: "center", cursor: "pointer" }}>
             <span style={{ fontFamily: sans, fontSize: 18, color: T.white, fontWeight: 700, display: "block" }}>{user.following}</span>
             <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1 }}>FOLLOWING</span>
-          </div>
+          </button>
           {isAdmin && (
             <>
               <div style={{ width: 1, background: T.charcoal }} />
@@ -18510,7 +19627,7 @@ function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, init
           <p style={{ fontFamily: serif, fontSize: 13, color: T.warmBg, margin: "0 0 12px", lineHeight: 1.5, maxWidth: 300, marginLeft: "auto", marginRight: "auto" }}>{userBio}</p>
         )}
 
-        {/* Settings + Report Bug Buttons */}
+        {/* Settings + Report Bug + Ambassador Dashboard Buttons */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
           <button onClick={() => setShowSettings(true)} style={{ display: "flex", alignItems: "center", gap: 6, background: T.darkCard, padding: "10px 20px", borderRadius: 8, border: "none", cursor: "pointer" }}>
             <Settings size={14} color={T.tertiary} />
@@ -18520,6 +19637,14 @@ function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, init
             <AlertTriangle size={14} color={T.red} />
             <span style={{ fontFamily: sans, fontSize: 11, color: T.red, letterSpacing: 1, fontWeight: 600 }}>REPORT A BUG</span>
           </button>
+          {/* Ambassador Dashboard — visible only to approved ambassadors (and
+              admins, who can also view it to QA the surface). */}
+          {onOpenAmbassadorDashboard && (currentRole === "ambassador" || isAdmin) && (
+            <button onClick={onOpenAmbassadorDashboard} style={{ display: "flex", alignItems: "center", gap: 6, background: T.darkCard, padding: "10px 20px", borderRadius: 8, border: `1px solid ${T.copper}40`, cursor: "pointer" }}>
+              <Tag size={14} color={T.copper} />
+              <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, letterSpacing: 1, fontWeight: 600 }}>AMBASSADOR</span>
+            </button>
+          )}
         </div>
 
         {/* Follow Requests (only when private) */}
@@ -19008,7 +20133,7 @@ function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, init
 }
 
 /* ─── OTHER USER PROFILE (Public view / Follow logic) ─── */
-function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, isAdmin, onAdminUpdateUserRole, onAdminDeclineAmbassador, followingIds, onFollow, onUnfollow, fetchFollowCounts, renderFeedScopedTo, currentProfile, convoyRsvps, onViewBuild, allBuilds, onLoadAllBuilds, onlineUserIds, allTripPlans, onOpenTripPlan }) {
+function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, isAdmin, onAdminUpdateUserRole, onAdminDeclineAmbassador, onAdminToggleModerator, onAdminToggleBetaTester, onAdminViewAsAmbassador, onReportContent, followingIds, onFollow, onUnfollow, fetchFollowCounts, renderFeedScopedTo, currentProfile, convoyRsvps, onViewBuild, allBuilds, onLoadAllBuilds, onlineUserIds, allTripPlans, onOpenTripPlan, onOpenFollowList }) {
   // Trigger the cross-user builds load — the builds tab below filters
   // allBuilds for the viewed user. Root is idempotent via a ref.
   useEffect(() => { if (typeof onLoadAllBuilds === "function") onLoadAllBuilds(); }, []);
@@ -19082,11 +20207,27 @@ function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, isAdmin,
           avatarUrl: data.avatar_url || null,
           // Role surface for the admin panel — `role` is the current
           // privilege; `requestedRole` is set when the user applied for
-          // an upgrade at signup that hasn't been reviewed.
+          // an upgrade at signup that hasn't been reviewed. `ambassadorTier`
+          // is loaded async below so admin picker knows whether to show
+          // AMBASSADOR or INSTALLER as selected. `isModerator` is the
+          // additive delete privilege admin can grant non-admin users.
           role: data.role || "user",
           requestedRole: data.requested_role || null,
+          ambassadorTier: null,
+          isModerator: !!data.is_moderator,
+          isBetaTester: !!data.is_beta_tester,
           builds: [], trips: [], activity: [],
         });
+        // Side-fetch ambassador tier so the admin role-picker knows
+        // whether the user is currently set up as an ambassador or
+        // installer (only meaningful when role=ambassador).
+        if (data.role === "ambassador") {
+          supabase.from("ambassadors").select("tier")
+            .eq("profile_id", data.id).maybeSingle()
+            .then(({ data: ambRow }) => {
+              if (ambRow?.tier) setDbProfile(prev => prev ? { ...prev, ambassadorTier: ambRow.tier } : prev);
+            });
+        }
         // Fetch real builds / posts / RSVP'd convoys in parallel and map to
         // the shapes the render expects below. Each is independent so a
         // failure on one doesn't kill the others.
@@ -19095,7 +20236,7 @@ function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, isAdmin,
           // and kept in sync by realtime). We just filter to the target user
           // — done below in the dbProfile setter via the allBuilds prop.
           const [postsRes, rsvpsRes] = await Promise.all([
-            supabase.from("posts").select("*").eq("user_id", data.id).order("created_at", { ascending: false }).limit(30),
+            supabase.from("posts").select("*").eq("user_id", data.id).is("hidden_at", null).order("created_at", { ascending: false }).limit(30),
             supabase.from("convoy_rsvps").select("post_id, status, posts(id, title, data, user_id, created_at)").eq("user_id", data.id).in("status", ["going", "maybe"]),
           ]);
           if (postsRes.error) console.error("[OtherProfile] posts error", postsRes.error);
@@ -19256,6 +20397,21 @@ function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, isAdmin,
           <button onClick={() => onMessage && onMessage(userId)} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "10px 24px", borderRadius: 8, cursor: "pointer", fontFamily: sans, fontSize: 12, fontWeight: 600, letterSpacing: 1, background: T.darkCard, border: `1px solid ${T.copper}40`, color: T.copper, transition: "all 0.2s" }}>
             <Mail size={14} /> MESSAGE
           </button>
+          {/* Report user — only when viewer is signed in + not viewing their
+              own profile. Hooks the existing content-report bottom-sheet
+              flow with target_type='user'. */}
+          {onReportContent && currentUserId && resolvedTargetId && resolvedTargetId !== currentUserId && (
+            <button onClick={() => onReportContent({
+              targetType: "user",
+              targetId: resolvedTargetId,
+              targetOwnerId: resolvedTargetId,
+              targetOwnerHandle: (p.handle || "").replace(/^@/, ""),
+              targetSnapshot: `@${(p.handle || "").replace(/^@/, "")} · ${p.name || ""}`,
+              targetUrl: p.handle ? `/users/${(p.handle || "").replace(/^@/, "")}` : null,
+            })} title="Report this user" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 10, borderRadius: 8, cursor: "pointer", background: T.darkCard, border: `1px solid ${T.tertiary}40`, color: T.tertiary, transition: "all 0.2s" }}>
+              <Flag size={14} />
+            </button>
+          )}
         </div>
 
         {/* Admin role panel — only visible when the viewer is an admin and
@@ -19271,42 +20427,135 @@ function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, isAdmin,
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, fontFamily: sans, fontSize: 12, color: T.warmStone }}>
               <span>Current role:</span>
-              <span style={{ padding: "2px 8px", borderRadius: 4, background: p.role === "admin" ? T.red : p.role === "ambassador" ? T.copper : T.charcoal, color: T.white, fontWeight: 700, letterSpacing: 1, fontSize: 10 }}>{(p.role || "user").toUpperCase()}</span>
+              {(() => {
+                // Installer = role=ambassador + tier=installer. Distinguish
+                // visually since the underlying role is still "ambassador".
+                const isInstaller = p.role === "ambassador" && p.ambassadorTier === "installer";
+                const label = isInstaller ? "INSTALLER" : (p.role || "user").toUpperCase();
+                const bg = p.role === "admin" ? T.red : isInstaller ? T.green : p.role === "ambassador" ? T.copper : T.charcoal;
+                return <span style={{ padding: "2px 8px", borderRadius: 4, background: bg, color: T.white, fontWeight: 700, letterSpacing: 1, fontSize: 10 }}>{label}</span>;
+              })()}
             </div>
             {p.requestedRole === "ambassador" && (
               <div style={{ background: `${T.copper}15`, border: `1px solid ${T.copper}40`, borderRadius: 8, padding: 12, marginBottom: 12 }}>
-                <p style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, margin: "0 0 8px" }}>Ambassador request pending</p>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button onClick={() => onAdminUpdateUserRole && onAdminUpdateUserRole(resolvedTargetId, "ambassador").then((res) => { if (res && res.ok) setDbProfile(prev => prev ? { ...prev, role: "ambassador", requestedRole: null } : prev); else if (res && res.error) alert("Role change failed: " + res.error); })} style={{ flex: 1, padding: "8px 12px", borderRadius: 6, background: T.copper, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>APPROVE</button>
-                  <button onClick={() => onAdminDeclineAmbassador && onAdminDeclineAmbassador(resolvedTargetId).then((res) => { if (res && res.ok) setDbProfile(prev => prev ? { ...prev, requestedRole: null } : prev); else if (res && res.error) alert("Decline failed: " + res.error); })} style={{ flex: 1, padding: "8px 12px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}40`, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 600, letterSpacing: 0.5 }}>DECLINE</button>
+                <p style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, margin: "0 0 8px" }}>Ambassador / Installer request pending</p>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <button onClick={() => onAdminUpdateUserRole && onAdminUpdateUserRole(resolvedTargetId, "ambassador", { tier: "ambassador" }).then((res) => { if (res && res.ok) setDbProfile(prev => prev ? { ...prev, role: "ambassador", requestedRole: null, ambassadorTier: "ambassador" } : prev); else if (res && res.error) alert("Role change failed: " + res.error); })} style={{ flex: 1, minWidth: 110, padding: "8px 10px", borderRadius: 6, background: T.copper, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>AMBASSADOR (5%)</button>
+                  <button onClick={() => onAdminUpdateUserRole && onAdminUpdateUserRole(resolvedTargetId, "ambassador", { tier: "installer" }).then((res) => { if (res && res.ok) setDbProfile(prev => prev ? { ...prev, role: "ambassador", requestedRole: null, ambassadorTier: "installer" } : prev); else if (res && res.error) alert("Role change failed: " + res.error); })} style={{ flex: 1, minWidth: 110, padding: "8px 10px", borderRadius: 6, background: T.green, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>INSTALLER (15%)</button>
+                  <button onClick={() => onAdminDeclineAmbassador && onAdminDeclineAmbassador(resolvedTargetId).then((res) => { if (res && res.ok) setDbProfile(prev => prev ? { ...prev, requestedRole: null } : prev); else if (res && res.error) alert("Decline failed: " + res.error); })} style={{ padding: "8px 12px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}40`, cursor: "pointer", fontFamily: sans, fontSize: 10, color: T.tertiary, fontWeight: 600, letterSpacing: 0.5 }}>DECLINE</button>
                 </div>
               </div>
             )}
-            <div style={{ display: "flex", gap: 6 }}>
-              {["user", "ambassador", "admin"].map(r => {
-                const sel = (p.role || "user") === r;
-                const color = r === "admin" ? T.red : r === "ambassador" ? T.copper : T.tertiary;
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {[
+                { key: "user",       label: "USER",       role: "user",       tier: null,         color: T.tertiary },
+                { key: "ambassador", label: "AMBASSADOR", role: "ambassador", tier: "ambassador", color: T.copper },
+                { key: "installer",  label: "INSTALLER",  role: "ambassador", tier: "installer",  color: T.green },
+                { key: "admin",      label: "ADMIN",      role: "admin",      tier: null,         color: T.red },
+              ].map(opt => {
+                // AMBASSADOR + INSTALLER both map to role=ambassador but
+                // distinct tiers. Selection state needs the loaded tier.
+                const sel = opt.key === "ambassador"
+                  ? (p.role === "ambassador" && (p.ambassadorTier || "ambassador") === "ambassador")
+                  : opt.key === "installer"
+                  ? (p.role === "ambassador" && p.ambassadorTier === "installer")
+                  : ((p.role || "user") === opt.role);
                 return (
-                  <button key={r} onClick={() => { if (sel) return; if (r === "admin" && !confirm("Promote this user to admin? They'll be able to moderate any content.")) return; if (!sel) onAdminUpdateUserRole && onAdminUpdateUserRole(resolvedTargetId, r).then((res) => { if (res && res.ok) setDbProfile(prev => prev ? { ...prev, role: r, requestedRole: null } : prev); else if (res && res.error) alert("Role change failed: " + res.error); }); }} style={{ flex: 1, padding: "8px 10px", borderRadius: 6, background: sel ? color : "none", border: sel ? "none" : `1px solid ${T.charcoal}`, cursor: sel ? "default" : "pointer", fontFamily: sans, fontSize: 10, color: sel ? T.white : T.tertiary, fontWeight: 700, letterSpacing: 0.8 }}>
-                    {r.toUpperCase()}
+                  <button key={opt.key} onClick={() => {
+                    if (sel) return;
+                    if (opt.role === "admin" && !confirm("Promote this user to admin? They'll be able to moderate any content.")) return;
+                    onAdminUpdateUserRole && onAdminUpdateUserRole(resolvedTargetId, opt.role, { tier: opt.tier }).then((res) => {
+                      if (res && res.ok) setDbProfile(prev => prev ? { ...prev, role: opt.role, requestedRole: null, ambassadorTier: opt.tier } : prev);
+                      else if (res && res.error) alert("Role change failed: " + res.error);
+                    });
+                  }} style={{ flex: 1, minWidth: 70, padding: "8px 6px", borderRadius: 6, background: sel ? opt.color : "none", border: sel ? "none" : `1px solid ${T.charcoal}`, cursor: sel ? "default" : "pointer", fontFamily: sans, fontSize: 10, color: sel ? T.white : T.tertiary, fontWeight: 700, letterSpacing: 0.8 }}>
+                    {opt.label}
                   </button>
                 );
               })}
             </div>
+
+            {/* Moderator toggle — additive delete privilege admin can grant
+                to any non-admin user. Hidden when role=admin (admins
+                inherently have all moderation perms). */}
+            {p.role !== "admin" && onAdminToggleModerator && (() => {
+              const isMod = !!p.isModerator;
+              return (
+                <button onClick={() => {
+                  if (!confirm(isMod ? "Remove moderator privileges from this user?" : "Grant moderator privileges to this user? They'll be able to delete inappropriate content sitewide.")) return;
+                  onAdminToggleModerator(resolvedTargetId, !isMod).then(res => {
+                    if (res && res.ok) setDbProfile(prev => prev ? { ...prev, isModerator: !isMod } : prev);
+                    else if (res && res.error) alert("Moderator toggle failed: " + res.error);
+                  });
+                }} style={{ marginTop: 8, width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", background: isMod ? `${T.copper}25` : T.darkCard, border: `1px solid ${isMod ? T.copper : T.charcoal}`, borderRadius: 8, cursor: "pointer" }}>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
+                    <span style={{ fontFamily: sans, fontSize: 11, color: isMod ? T.copper : T.white, fontWeight: 700, letterSpacing: 0.5 }}>MODERATOR PRIVILEGES</span>
+                    <span style={{ fontFamily: serif, fontSize: 10, color: T.tertiary, lineHeight: 1.3 }}>Can delete inappropriate content sitewide.</span>
+                  </div>
+                  <span style={{ width: 36, height: 20, borderRadius: 10, background: isMod ? T.copper : T.charcoal, position: "relative", flexShrink: 0, transition: "background 120ms" }}>
+                    <span style={{ position: "absolute", top: 2, left: isMod ? 18 : 2, width: 16, height: 16, borderRadius: "50%", background: T.white, transition: "left 120ms" }} />
+                  </span>
+                </button>
+              );
+            })()}
+
+            {/* Beta tester toggle — additive feature-flag access. Currently
+                gates Gear Drops UI pre-launch. Admin can flip for self too
+                (admins inherit it automatically; toggle still shown to admins
+                so they can see their own flag state). */}
+            {onAdminToggleBetaTester && (() => {
+              const isBeta = !!p.isBetaTester;
+              return (
+                <button onClick={() => {
+                  if (!confirm(isBeta ? "Remove beta tester access from this user?" : "Grant beta tester access? They'll see in-development features before public launch.")) return;
+                  onAdminToggleBetaTester(resolvedTargetId, !isBeta).then(res => {
+                    if (res && res.ok) setDbProfile(prev => prev ? { ...prev, isBetaTester: !isBeta } : prev);
+                    else if (res && res.error) alert("Beta tester toggle failed: " + res.error);
+                  });
+                }} style={{ marginTop: 8, width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", background: isBeta ? `${T.green}25` : T.darkCard, border: `1px solid ${isBeta ? T.green : T.charcoal}`, borderRadius: 8, cursor: "pointer" }}>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
+                    <span style={{ fontFamily: sans, fontSize: 11, color: isBeta ? T.green : T.white, fontWeight: 700, letterSpacing: 0.5 }}>BETA TESTER</span>
+                    <span style={{ fontFamily: serif, fontSize: 10, color: T.tertiary, lineHeight: 1.3 }}>Early access to in-development features (Gear Drops, etc).</span>
+                  </div>
+                  <span style={{ width: 36, height: 20, borderRadius: 10, background: isBeta ? T.green : T.charcoal, position: "relative", flexShrink: 0, transition: "background 120ms" }}>
+                    <span style={{ position: "absolute", top: 2, left: isBeta ? 18 : 2, width: 16, height: 16, borderRadius: "50%", background: T.white, transition: "left 120ms" }} />
+                  </span>
+                </button>
+              );
+            })()}
+
+            {/* Admin troubleshooting — opens the ambassador's own dashboard
+                view (read-only mode; Stripe onboarding action disabled to
+                prevent the admin from accidentally re-onboarding the
+                ambassador's Stripe account). Only shown when target is an
+                ambassador or installer (both share role='ambassador'). */}
+            {p.role === "ambassador" && onAdminViewAsAmbassador && resolvedTargetId && (
+              <button onClick={() => onAdminViewAsAmbassador(resolvedTargetId)}
+                      style={{ marginTop: 8, width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", background: T.darkCard, border: `1px solid ${T.copper}40`, borderRadius: 8, cursor: "pointer" }}>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
+                  <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 0.5 }}>VIEW AMBASSADOR DASHBOARD</span>
+                  <span style={{ fontFamily: serif, fontSize: 10, color: T.tertiary, lineHeight: 1.3 }}>Open this ambassador's dashboard for troubleshooting (read-only).</span>
+                </div>
+                <ChevronRight size={16} color={T.copper} style={{ flexShrink: 0 }} />
+              </button>
+            )}
           </div>
         )}
 
-        {/* Stats Row — POINTS column gated to admin while Ranks is a v2 feature */}
+        {/* Stats Row — POINTS column gated to admin while Ranks is a v2 feature.
+            FOLLOWERS / FOLLOWING are tappable: opens the list overlay so the
+            viewer can see who follows the user / they follow, and follow
+            anyone from that list without leaving the sheet. */}
         <div style={{ display: "flex", justifyContent: "center", gap: 24, marginBottom: 16 }}>
-          <div style={{ textAlign: "center" }}>
+          <button onClick={() => onOpenFollowList && resolvedTargetId && onOpenFollowList(resolvedTargetId, "followers")} style={{ background: "none", border: "none", padding: 0, textAlign: "center", cursor: "pointer" }}>
             <span style={{ fontFamily: sans, fontSize: 18, color: T.white, fontWeight: 700, display: "block" }}>{(liveCounts ? liveCounts.followers : p.followers).toLocaleString()}</span>
             <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1 }}>FOLLOWERS</span>
-          </div>
+          </button>
           <div style={{ width: 1, background: T.charcoal }} />
-          <div style={{ textAlign: "center" }}>
+          <button onClick={() => onOpenFollowList && resolvedTargetId && onOpenFollowList(resolvedTargetId, "following")} style={{ background: "none", border: "none", padding: 0, textAlign: "center", cursor: "pointer" }}>
             <span style={{ fontFamily: sans, fontSize: 18, color: T.white, fontWeight: 700, display: "block" }}>{(liveCounts ? liveCounts.following : p.following).toLocaleString()}</span>
             <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1 }}>FOLLOWING</span>
-          </div>
+          </button>
           {isAdmin && <>
           <div style={{ width: 1, background: T.charcoal }} />
           <div style={{ textAlign: "center" }}>
@@ -19491,7 +20740,7 @@ function AdminStatCard({ label, value, pulse, accent }) {
         <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600, textTransform: "uppercase" }}>{label}</div>
       </div>
       <div style={{ fontFamily: serif, fontSize: 28, color: accent || T.white, fontWeight: 600, lineHeight: 1 }}>
-        {value != null ? Number(value).toLocaleString() : "—"}
+        {value == null ? "—" : (typeof value === "string" ? value : Number(value).toLocaleString())}
       </div>
     </div>
   );
@@ -19647,10 +20896,13 @@ function InteractiveChart({ kind, values, series, dayLabels, color, types, typeC
 // Full-screen modal that opens when admin taps a chart card. Shows the
 // chart at large size with interactive tooltip + raw data table + CSV
 // export button. Date range picker lifts state up to the parent dashboard.
-function ChartDetailModal({ chartKey, dateRange, setDateRange, signupDaily, dauDaily, postsByType, onClose }) {
+function ChartDetailModal({ chartKey, dateRange, setDateRange, signupDaily, dauDaily, postsByType, commissionByMonth, onClose }) {
   if (!chartKey) return null;
   // Build chart props from current dashboard state based on which chart is open.
+  // `monthly` flag suppresses the day-range pills for chart kinds that are
+  // already month-bucketed (e.g. commission vs payouts).
   let title, kind, values, series, dayLabels, color, csvFilename, csvHeaders, csvRows;
+  let monthly = false;
   if (chartKey === "signups") {
     title = "SIGNUPS";
     kind = "sparkline";
@@ -19686,6 +20938,25 @@ function ChartDetailModal({ chartKey, dateRange, setDateRange, signupDaily, dauD
     csvFilename = `posts-by-type-${dateRange}d.csv`;
     csvHeaders = ["Date", ...types];
     csvRows = days.map((d, i) => [d, ...types.map((_, si) => series[si].data[i])]);
+  } else if (chartKey === "commission-vs-payouts") {
+    title = "EARNED VS PAID — LAST 6 MONTHS";
+    kind = "stacked";
+    monthly = true;
+    const rows = commissionByMonth || [];
+    const fmtMonth = (m) => {
+      if (!m) return "";
+      const d = new Date(typeof m === "string" && m.length === 10 ? m + "T00:00:00" : m);
+      if (isNaN(d.getTime())) return String(m);
+      return d.toLocaleDateString(undefined, { month: "short", year: "2-digit" });
+    };
+    series = [
+      { label: "Earned", color: T.copper, data: rows.map(r => Number(r.earned || 0)) },
+      { label: "Paid",   color: T.green,  data: rows.map(r => Number(r.paid   || 0)) },
+    ];
+    dayLabels = rows.map(r => fmtMonth(r.month));
+    csvFilename = "commission-vs-payouts-6mo.csv";
+    csvHeaders = ["Month", "Earned", "Paid"];
+    csvRows = rows.map(r => [fmtMonth(r.month), Number(r.earned || 0).toFixed(2), Number(r.paid || 0).toFixed(2)]);
   } else {
     return null;
   }
@@ -19699,16 +20970,19 @@ function ChartDetailModal({ chartKey, dateRange, setDateRange, signupDaily, dauD
             <X size={20} color={T.white} />
           </button>
         </div>
-        {/* Date range picker */}
-        <div style={{ display: "flex", gap: 6, padding: "10px 14px", borderBottom: `1px solid ${T.charcoal}` }}>
-          {[7, 30, 90].map(d => {
-            const sel = dateRange === d;
-            return (
-              <button key={d} onClick={() => setDateRange(d)}
-                      style={{ flex: 1, padding: "6px 4px", borderRadius: 6, background: sel ? T.copper : "transparent", border: `1px solid ${sel ? T.copper : T.charcoal}`, color: sel ? T.darkBg : T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>{d} DAYS</button>
-            );
-          })}
-        </div>
+        {/* Date range picker — hidden for monthly-bucketed charts where
+            the data is already aggregated by month over a fixed window. */}
+        {!monthly && (
+          <div style={{ display: "flex", gap: 6, padding: "10px 14px", borderBottom: `1px solid ${T.charcoal}` }}>
+            {[7, 30, 90].map(d => {
+              const sel = dateRange === d;
+              return (
+                <button key={d} onClick={() => setDateRange(d)}
+                        style={{ flex: 1, padding: "6px 4px", borderRadius: 6, background: sel ? T.copper : "transparent", border: `1px solid ${sel ? T.copper : T.charcoal}`, color: sel ? T.darkBg : T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>{d} DAYS</button>
+              );
+            })}
+          </div>
+        )}
         <div style={{ flex: 1, overflowY: "auto", padding: 14 }}>
           <InteractiveChart kind={kind} values={values} series={series} dayLabels={dayLabels} color={color} height={240} />
           {kind === "stacked" && (
@@ -19732,7 +21006,15 @@ function ChartDetailModal({ chartKey, dateRange, setDateRange, signupDaily, dauD
             </div>
             {csvRows.map((row, i) => (
               <div key={i} style={{ display: "grid", gridTemplateColumns: kind === "stacked" ? `1.2fr repeat(${(series || []).length}, 1fr)` : "1.5fr 1fr", padding: "6px 12px", borderTop: i > 0 ? `1px solid ${T.charcoal}` : "none", fontFamily: serif, fontSize: 12, color: T.white }}>
-                {row.map((v, j) => <div key={j} style={{ color: j === 0 ? T.tertiary : T.white }}>{j === 0 ? fmtChartDay(v) : Number(v || 0).toLocaleString()}</div>)}
+                {row.map((v, j) => (
+                  <div key={j} style={{ color: j === 0 ? T.tertiary : T.white }}>
+                    {j === 0
+                      ? (monthly ? v : fmtChartDay(v))
+                      : (monthly
+                          ? `$${Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                          : Number(v || 0).toLocaleString())}
+                  </div>
+                ))}
               </div>
             ))}
           </div>
@@ -19742,17 +21024,4319 @@ function ChartDetailModal({ chartKey, dateRange, setDateRange, signupDaily, dauD
   );
 }
 
-function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserName, onBack, onViewUser, onOpenAdminEntity, initialTab, onInitialTabConsumed }) {
-  const [tab, setTab] = useState(initialTab || "overview");
+// ─── Content report — bottom-sheet form ─────────────────────────────────
+// Hoisted to module scope so its useState doesn't get wiped when the parent
+// re-renders. Opened from feed-post / forum-thread / forum-reply overflow
+// menus. The actual insert into content_reports lives at the root
+// (`submitContentReport`) so the rate-limit / dedupe knobs live in one
+// place.
+const CONTENT_REPORT_REASONS = [
+  { code: "spam",       label: "Spam or scam" },
+  { code: "harassment", label: "Harassment or bullying" },
+  { code: "adult",      label: "Adult / sexual content" },
+  { code: "violence",   label: "Violence or graphic content" },
+  { code: "hate",       label: "Hate speech or discrimination" },
+  { code: "illegal",    label: "Illegal activity" },
+  { code: "offtopic",   label: "Off-topic / wrong category" },
+  { code: "other",      label: "Other" },
+];
+
+// ─── Moderator hide-for-review modal ────────────────────────────────────
+// Bottom-sheet modal opened when a moderator (non-admin, non-owner) clicks
+// Delete on a content item. Requires a reason — content is soft-hidden
+// (hidden_at set) and queued for admin review. Admin then Allows (unhide)
+// or confirms Delete (hard remove).
+function ModeratorHideModal({ target, onClose, onSubmit }) {
+  const [reason, setReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState("");
+  if (!target) return null;
+  const targetLabel = target.targetType === "post" ? "post"
+    : target.targetType === "forum_thread" ? "thread"
+    : target.targetType === "forum_reply" ? "reply"
+    : "content";
+  const snippet = (target.targetSnapshot || "").slice(0, 240);
+  const handleSubmit = async () => {
+    if (!reason.trim() || submitting) return;
+    setSubmitting(true); setErr("");
+    try {
+      const ok = await onSubmit({ ...target, reason: reason.trim() });
+      if (ok === false) throw new Error("submit failed");
+      onClose && onClose();
+    } catch (e) { setErr((e && (e.message || e.code)) || "Couldn't hide content — try again."); }
+    setSubmitting(false);
+  };
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 430, background: T.darkBg, borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: "18px 18px 28px", maxHeight: "90vh", overflowY: "auto", border: `1px solid ${T.charcoal}` }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Shield size={16} color={T.copper} />
+            <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, letterSpacing: 0.8 }}>HIDE {targetLabel.toUpperCase()}</span>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><X size={18} color={T.tertiary} /></button>
+        </div>
+        <p style={{ fontFamily: serif, fontSize: 12, color: T.warmStone, margin: "0 0 14px", lineHeight: 1.5 }}>
+          The content will be hidden immediately and queued for admin review. Admin can confirm the delete or allow it back.
+        </p>
+        {snippet && (
+          <div style={{ background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10, padding: "10px 12px", marginBottom: 14 }}>
+            <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 700 }}>CONTENT</span>
+            <p style={{ fontFamily: serif, fontSize: 13, color: T.warmStone, margin: "4px 0 0", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{snippet}</p>
+          </div>
+        )}
+        <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 700, display: "block", marginBottom: 6 }}>REASON <span style={{ color: T.red, opacity: 0.9 }}>(REQUIRED)</span></span>
+        <textarea value={reason} onChange={e => setReason(e.target.value.slice(0, 500))} rows={4} autoFocus placeholder="Why is this content being hidden? Admin will see this when reviewing." style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, lineHeight: 1.5, resize: "vertical", outline: "none", marginBottom: 14 }} />
+        {err && <p style={{ fontFamily: sans, fontSize: 11, color: T.red, margin: "0 0 10px" }}>{err}</p>}
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={onClose} disabled={submitting} style={{ flex: 1, padding: "12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.tertiary, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}>CANCEL</button>
+          <button onClick={handleSubmit} disabled={!reason.trim() || submitting} style={{ flex: 1, padding: "12px", borderRadius: 8, background: T.red, border: "none", color: T.white, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.5, cursor: (!reason.trim() || submitting) ? "default" : "pointer", opacity: (!reason.trim() || submitting) ? 0.5 : 1 }}>{submitting ? "HIDING…" : "HIDE FOR REVIEW"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ContentReportForm({ target, onClose, onSubmit }) {
+  const [reasonCode, setReasonCode] = useState("");
+  const [details, setDetails] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState("");
+  if (!target) return null;
+  const targetLabel = target.targetType === "post"
+    ? "post"
+    : target.targetType === "forum_thread"
+      ? "forum thread"
+      : target.targetType === "forum_reply"
+        ? "forum reply"
+        : target.targetType === "user"
+          ? "user"
+          : "content";
+  const snippet = (target.targetSnapshot || "").slice(0, 200);
+  const handleSubmit = async () => {
+    if (!reasonCode || submitting) return;
+    setSubmitting(true); setErr("");
+    try {
+      const ok = await onSubmit({
+        ...target,
+        reasonCode,
+        reasonDetails: details.trim() || null,
+      });
+      if (ok === false) throw new Error("submit failed");
+      onClose && onClose();
+    } catch (e) {
+      setErr((e && (e.message || e.code)) || "Couldn't submit report — try again.");
+    }
+    setSubmitting(false);
+  };
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 1000, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 430, background: T.darkBg, borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: "18px 18px 28px", maxHeight: "90vh", overflowY: "auto", border: `1px solid ${T.charcoal}` }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Flag size={16} color={T.red} />
+            <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, letterSpacing: 0.8 }}>REPORT {targetLabel.toUpperCase()}</span>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><X size={18} color={T.tertiary} /></button>
+        </div>
+        {snippet && (
+          <div style={{ background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10, padding: "10px 12px", marginBottom: 14 }}>
+            <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 700 }}>REPORTING</span>
+            <p style={{ fontFamily: serif, fontSize: 13, color: T.warmStone, margin: "4px 0 0", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{snippet}</p>
+          </div>
+        )}
+        <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 700, display: "block", marginBottom: 10 }}>WHY ARE YOU REPORTING THIS?</span>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
+          {CONTENT_REPORT_REASONS.map(r => {
+            const active = reasonCode === r.code;
+            return (
+              <button key={r.code} onClick={() => setReasonCode(r.code)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, background: active ? `${T.red}18` : T.darkCard, border: `1px solid ${active ? T.red : T.charcoal}`, cursor: "pointer", textAlign: "left" }}>
+                <span style={{ width: 14, height: 14, borderRadius: "50%", border: `1.5px solid ${active ? T.red : T.tertiary}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  {active && <span style={{ width: 7, height: 7, borderRadius: "50%", background: T.red }} />}
+                </span>
+                <span style={{ fontFamily: sans, fontSize: 13, color: active ? T.white : T.warmStone, fontWeight: active ? 600 : 500 }}>{r.label}</span>
+              </button>
+            );
+          })}
+        </div>
+        <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 700, display: "block", marginBottom: 6 }}>ADDITIONAL DETAILS <span style={{ color: T.tertiary, opacity: 0.6 }}>(OPTIONAL)</span></span>
+        <textarea value={details} onChange={e => setDetails(e.target.value.slice(0, 600))} rows={3} placeholder="Add any context that will help admin review this report…" style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, lineHeight: 1.5, resize: "vertical", outline: "none", marginBottom: 14 }} />
+        {err && <p style={{ fontFamily: sans, fontSize: 12, color: T.red, margin: "0 0 12px" }}>{err}</p>}
+        <button onClick={handleSubmit} disabled={!reasonCode || submitting} style={{ width: "100%", padding: "14px", borderRadius: 10, background: reasonCode ? T.red : T.charcoal, border: "none", cursor: reasonCode && !submitting ? "pointer" : "default", color: T.white, fontFamily: sans, fontSize: 13, fontWeight: 700, letterSpacing: 1, opacity: submitting ? 0.6 : 1 }}>
+          {submitting ? "SUBMITTING…" : "SUBMIT REPORT"}
+        </button>
+        <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: "12px 0 0", lineHeight: 1.5 }}>
+          Your report is sent to Trailhead admins for review. Repeat reports on the same content help us prioritize.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Follow list overlay ────────────────────────────────────────────────
+// Bottom-sheet (mobile) / centered modal-ish full-height (desktop) listing
+// either who follows a user (`kind: "followers"`) or who that user is
+// following (`kind: "following"`). Tapping a row opens that user's profile.
+// Tapping the FOLLOW/FOLLOWING button toggles the viewer's follow state on
+// that user without leaving the list. Self-row hides the button.
+function FollowListOverlay({ target, currentUserId, followingIds, onFollow, onUnfollow, fetchFollowList, onViewUser, onClose }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
+  const userId = target && target.userId;
+  const kind = target && target.kind;
+  useEffect(() => {
+    let cancelled = false;
+    if (!userId || !kind || !fetchFollowList) return;
+    setLoading(true); setErr("");
+    fetchFollowList(userId, kind).then(list => {
+      if (cancelled) return;
+      setRows(Array.isArray(list) ? list : []);
+      setLoading(false);
+    }).catch(e => {
+      if (cancelled) return;
+      setErr((e && (e.message || e.code)) || "Couldn't load list");
+      setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [userId, kind]);
+  if (!target) return null;
+  const title = kind === "followers" ? "Followers" : "Following";
+  const empty = kind === "followers" ? "No followers yet." : "Not following anyone yet.";
+  const followSet = followingIds && typeof followingIds.has === "function" ? followingIds : new Set();
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 430, background: T.darkBg, borderTopLeftRadius: 18, borderTopRightRadius: 18, maxHeight: "90vh", display: "flex", flexDirection: "column", border: `1px solid ${T.charcoal}` }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 18px 12px", borderBottom: `1px solid ${T.charcoal}` }}>
+          <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, letterSpacing: 0.8 }}>{title.toUpperCase()}</span>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex" }}><X size={18} color={T.tertiary} /></button>
+        </div>
+        <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
+          {loading && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "32px 0" }}>
+              <div style={{ width: 24, height: 24, borderRadius: "50%", border: `2px solid ${T.copper}40`, borderTopColor: T.copper, animation: "th-spin 0.7s linear infinite" }} />
+              <style>{`@keyframes th-spin { to { transform: rotate(360deg); } }`}</style>
+            </div>
+          )}
+          {!loading && err && (
+            <p style={{ fontFamily: sans, fontSize: 12, color: T.red, textAlign: "center", padding: "24px 18px" }}>{err}</p>
+          )}
+          {!loading && !err && rows.length === 0 && (
+            <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, textAlign: "center", padding: "32px 18px" }}>{empty}</p>
+          )}
+          {!loading && !err && rows.map(p => {
+            const isSelf = currentUserId && p.id === currentUserId;
+            const isFollowing = followSet.has(p.id);
+            const initial = (p.full_name || "U").charAt(0).toUpperCase();
+            return (
+              <div key={p.id} onClick={() => { onClose && onClose(); onViewUser && onViewUser(p.handle || p.id); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 18px", cursor: "pointer" }}>
+                <div style={{ width: 40, height: 40, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 }}>
+                  {p.avatar_url
+                    ? <img src={txImg ? txImg(p.avatar_url, 96) : p.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    : <span style={{ fontFamily: sans, fontSize: 13, fontWeight: 700, color: T.white }}>{initial}</span>}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: "block", fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.full_name || "User"}</span>
+                  {p.handle && <span style={{ display: "block", fontFamily: sans, fontSize: 11, color: T.tertiary }}>@{p.handle}</span>}
+                </div>
+                {!isSelf && currentUserId && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (isFollowing) onUnfollow && onUnfollow(p.id);
+                      else onFollow && onFollow(p.id);
+                    }}
+                    style={{
+                      padding: "6px 14px", borderRadius: 8, cursor: "pointer",
+                      fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5,
+                      background: isFollowing ? T.darkCard : T.red,
+                      color: isFollowing ? T.green : T.white,
+                      border: isFollowing ? `1px solid ${T.green}40` : "none",
+                      flexShrink: 0,
+                      display: "inline-flex", alignItems: "center", gap: 4,
+                    }}
+                  >
+                    {isFollowing ? <><UserCheck size={12} /> FOLLOWING</> : <><UserPlus size={12} /> FOLLOW</>}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReportSubmittedToast({ onDone }) {
+  useEffect(() => {
+    const t = setTimeout(() => { onDone && onDone(); }, 2400);
+    return () => clearTimeout(t);
+  }, []);
+  return (
+    <div style={{ position: "fixed", left: "50%", bottom: 90, transform: "translateX(-50%)", background: T.green, color: T.white, padding: "10px 16px", borderRadius: 24, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.5, zIndex: 1100, display: "flex", alignItems: "center", gap: 8, boxShadow: "0 8px 24px rgba(0,0,0,0.4)" }}>
+      <CheckCircle size={14} color={T.white} />
+      Report sent — thanks
+    </div>
+  );
+}
+
+// ─── Ambassador Dashboard ───────────────────────────────────────────────
+// Phase 1A shell. Shows the ambassador's discount code + status. Phase 1B
+// will populate sales data + commission totals once the orders/paid webhook
+// is wired up.
+// ─── Admin order-action modals ──────────────────────────────────────────
+// Module-scope so hooks survive parent re-renders + we don't accidentally
+// remount on every keystroke. All four share the same chrome: a bottom-sheet
+// at 430px max width, a required reason field at the bottom, an action
+// button that disables while submitting. Each calls a single RPC and bubbles
+// the result up via onSubmit which the caller handles (refetches data, etc.)
+
+// Generic confirmation modal — used for REMOVE (simplest action, just needs
+// a reason). Action button text + accent passed in so we can reuse for any
+// reason-required confirm flow.
+function AdminOrderRemoveModal({ order, onClose, onSubmit }) {
+  const [reason, setReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState("");
+  if (!order) return null;
+  const handleSubmit = async () => {
+    if (!reason.trim() || submitting) return;
+    setSubmitting(true); setErr("");
+    try {
+      const ok = await onSubmit({ orderId: order.id, reason: reason.trim() });
+      if (ok === false) throw new Error("submit failed");
+      onClose && onClose();
+    } catch (e) { setErr((e && (e.message || e.code)) || "Couldn't remove order — try again."); }
+    setSubmitting(false);
+  };
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 430, background: T.darkBg, borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: "18px 18px 28px", maxHeight: "90vh", overflowY: "auto", border: `1px solid ${T.charcoal}` }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Trash2 size={16} color={T.red} />
+            <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, letterSpacing: 0.8 }}>REMOVE ORDER</span>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><X size={18} color={T.tertiary} /></button>
+        </div>
+        <p style={{ fontFamily: serif, fontSize: 12, color: T.warmStone, margin: "0 0 14px", lineHeight: 1.5 }}>
+          Soft-deletes order {order.shopify_order_number || order.id} from this ambassador's attribution. Journey commission totals recompute automatically. Action is logged in the corrections audit log.
+        </p>
+        <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 700, display: "block", marginBottom: 6 }}>REASON <span style={{ color: T.red, opacity: 0.9 }}>(REQUIRED)</span></span>
+        <textarea value={reason} onChange={e => setReason(e.target.value.slice(0, 500))} rows={3} autoFocus placeholder="Why is this order being removed? (e.g. wrong ambassador code at confirmation)" style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, lineHeight: 1.5, resize: "vertical", outline: "none", marginBottom: 14 }} />
+        {err && <p style={{ fontFamily: sans, fontSize: 11, color: T.red, margin: "0 0 10px" }}>{err}</p>}
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={onClose} disabled={submitting} style={{ flex: 1, padding: "12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.tertiary, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}>CANCEL</button>
+          <button onClick={handleSubmit} disabled={!reason.trim() || submitting} style={{ flex: 1, padding: "12px", borderRadius: 8, background: T.red, border: "none", color: T.white, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.5, cursor: (!reason.trim() || submitting) ? "default" : "pointer", opacity: (!reason.trim() || submitting) ? 0.5 : 1 }}>{submitting ? "REMOVING…" : "REMOVE ORDER"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// EDIT eligible — number input + reason. Used for accounting corrections
+// (e.g. partial refund that didn't come through Shopify webhook).
+function AdminOrderEditEligibleModal({ order, onClose, onSubmit }) {
+  const [eligible, setEligible] = useState(order ? String(order.commission_eligible_subtotal ?? "") : "");
+  const [reason, setReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState("");
+  if (!order) return null;
+  const handleSubmit = async () => {
+    const num = parseFloat(eligible);
+    if (!reason.trim() || submitting || isNaN(num) || num < 0) return;
+    setSubmitting(true); setErr("");
+    try {
+      const ok = await onSubmit({ orderId: order.id, newEligible: num, reason: reason.trim() });
+      if (ok === false) throw new Error("submit failed");
+      onClose && onClose();
+    } catch (e) { setErr((e && (e.message || e.code)) || "Couldn't update — try again."); }
+    setSubmitting(false);
+  };
+  const num = parseFloat(eligible);
+  const valid = !isNaN(num) && num >= 0;
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 430, background: T.darkBg, borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: "18px 18px 28px", maxHeight: "90vh", overflowY: "auto", border: `1px solid ${T.charcoal}` }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Edit2 size={16} color={T.copper} />
+            <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, letterSpacing: 0.8 }}>EDIT COMMISSION-ELIGIBLE</span>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><X size={18} color={T.tertiary} /></button>
+        </div>
+        <p style={{ fontFamily: serif, fontSize: 12, color: T.warmStone, margin: "0 0 14px", lineHeight: 1.5 }}>
+          Override the commission base for order {order.shopify_order_number || order.id}. Journey total recomputes after save. Current subtotal: <strong>${parseFloat(String(order.subtotal || "0")).toLocaleString()}</strong>.
+        </p>
+        <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 700, display: "block", marginBottom: 6 }}>NEW COMMISSION-ELIGIBLE ($)</span>
+        <input type="number" step="0.01" min="0" value={eligible} onChange={e => setEligible(e.target.value)} autoFocus style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: "ui-monospace, Menlo, monospace", fontSize: 14, outline: "none", marginBottom: 14 }} />
+        <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 700, display: "block", marginBottom: 6 }}>REASON <span style={{ color: T.red, opacity: 0.9 }}>(REQUIRED)</span></span>
+        <textarea value={reason} onChange={e => setReason(e.target.value.slice(0, 500))} rows={3} placeholder="Why is this being adjusted?" style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, lineHeight: 1.5, resize: "vertical", outline: "none", marginBottom: 14 }} />
+        {err && <p style={{ fontFamily: sans, fontSize: 11, color: T.red, margin: "0 0 10px" }}>{err}</p>}
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={onClose} disabled={submitting} style={{ flex: 1, padding: "12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.tertiary, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}>CANCEL</button>
+          <button onClick={handleSubmit} disabled={!reason.trim() || !valid || submitting} style={{ flex: 1, padding: "12px", borderRadius: 8, background: T.copper, border: "none", color: T.darkBg, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.5, cursor: (!reason.trim() || !valid || submitting) ? "default" : "pointer", opacity: (!reason.trim() || !valid || submitting) ? 0.5 : 1 }}>{submitting ? "SAVING…" : "SAVE"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// LINK TO JOURNEY — attach the order to an existing journey for the same
+// ambassador (typically the customer's open deposit_only journey). Lets
+// admin override the commission-eligible too so partial-refund cases land
+// the post-refund amount on the journey. RPC promotes deposit_only →
+// confirmed if cumulative eligible passes the confirmation threshold.
+function AdminOrderLinkJourneyModal({ order, onClose, onSubmit }) {
+  const [journeys, setJourneys] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [pickedId, setPickedId] = useState(null);
+  const [eligible, setEligible] = useState(order ? String(order.commission_eligible_subtotal ?? "") : "");
+  const [reason, setReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState("");
+
+  // ordersByJourneyId — fetched alongside the journeys so each row can
+  // show the deposit order's Shopify order number + the customer's
+  // display name (not just the normalized email). The first order
+  // chronologically is treated as the journey's anchor.
+  const [ordersByJourney, setOrdersByJourney] = useState({});
+  useEffect(() => {
+    if (!order || !order.ambassador_id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("ambassador_journeys")
+          .select("id, state, commission_eligible_total, confirmation_subtotal, deposit_subtotal, commission_amount, deposit_started_at, customer_email, customer_name_normalized, expires_at")
+          .eq("ambassador_id", order.ambassador_id)
+          .in("state", ["deposit_only", "walk_in", "confirmed"])
+          .order("deposit_started_at", { ascending: false })
+          .limit(50);
+        if (cancelled) return;
+        if (error) { setErr(`Couldn't load journeys: ${error.message || "unknown"}`); setLoading(false); return; }
+        setJourneys(data || []);
+        // Follow-up: orders for those journeys.
+        const ids = (data || []).map(j => j.id).filter(Boolean);
+        if (ids.length > 0) {
+          const { data: orderRows } = await supabase
+            .from("ambassador_orders")
+            .select("id, journey_id, shopify_order_number, customer_name, order_date, classification")
+            .in("journey_id", ids)
+            .is("removed_at", null)
+            .order("order_date", { ascending: true });
+          if (cancelled) return;
+          const byId = {};
+          (orderRows || []).forEach(o => {
+            if (!o.journey_id) return;
+            if (!byId[o.journey_id]) byId[o.journey_id] = [];
+            byId[o.journey_id].push(o);
+          });
+          setOrdersByJourney(byId);
+        }
+        setLoading(false);
+      } catch (e) {
+        if (!cancelled) { setErr("Couldn't load journeys"); setLoading(false); }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [order]);
+
+  if (!order) return null;
+
+  const handleSubmit = async () => {
+    if (!pickedId || !reason.trim() || submitting) return;
+    const num = parseFloat(eligible);
+    if (isNaN(num) || num < 0) return;
+    setSubmitting(true); setErr("");
+    try {
+      const ok = await onSubmit({ orderId: order.id, journeyId: pickedId, newEligible: num, reason: reason.trim() });
+      if (ok === false) throw new Error("submit failed");
+      onClose && onClose();
+    } catch (e) { setErr((e && (e.message || e.code)) || "Couldn't link — try again."); }
+    setSubmitting(false);
+  };
+
+  const num = parseFloat(eligible);
+  const valid = !isNaN(num) && num >= 0;
+  const stateColor = (s) => s === "deposit_only" ? T.copper : s === "walk_in" ? T.tertiary : s === "confirmed" ? T.green : T.white;
+  // Pre-emptive UX hint — show the projected commission base + threshold.
+  //
+  // Projection uses `commission_eligible_total` (the running commission
+  // base, which INCLUDES the deposit's eligible contribution) plus the
+  // admin-typed eligible for this order. That's the amount the ambassador
+  // ultimately earns commission on.
+  //
+  // Threshold gate is separate — webhook promotes deposit_only → confirmed
+  // when `confirmation_subtotal >= $5,000` (deposit doesn't count toward
+  // this gate by design — the confirmation order alone has to clear it).
+  // So we surface both signals.
+  const picked = journeys.find(j => j.id === pickedId);
+  const alreadyInPicked = picked && order.journey_id === picked.id;
+  const orderCurrentEligible = Number(order.commission_eligible_subtotal || 0);
+  const orderRawSubtotal = Number(order.subtotal || orderCurrentEligible || 0);
+  const journeyEligibleCurrent = picked ? Number(picked.commission_eligible_total || 0) : 0;
+  const journeyConfirmCurrent = picked ? Number(picked.confirmation_subtotal || 0) : 0;
+  const projectedEligible = picked && valid
+    ? journeyEligibleCurrent + num - (alreadyInPicked ? orderCurrentEligible : 0)
+    : null;
+  const projectedConfirm = picked
+    ? journeyConfirmCurrent + (alreadyInPicked ? 0 : orderRawSubtotal)
+    : null;
+  const willConfirm = projectedConfirm != null && projectedConfirm >= 5000;
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 430, background: T.darkBg, borderTopLeftRadius: 18, borderTopRightRadius: 18, maxHeight: "92vh", display: "flex", flexDirection: "column", border: `1px solid ${T.charcoal}` }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 18px 12px", borderBottom: `1px solid ${T.charcoal}` }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Link2 size={16} color={T.green} />
+            <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, letterSpacing: 0.8 }}>LINK ORDER TO JOURNEY</span>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><X size={18} color={T.tertiary} /></button>
+        </div>
+        <div style={{ padding: "12px 18px 8px" }}>
+          <p style={{ fontFamily: serif, fontSize: 12, color: T.warmStone, margin: "0 0 10px", lineHeight: 1.5 }}>
+            Attach order {order.shopify_order_number || order.id} to an existing journey. The journey total recomputes; if the destination is <span style={{ color: T.copper, fontWeight: 700 }}>deposit_only</span> and the new cumulative eligible passes the threshold, it auto-promotes to <span style={{ color: T.green, fontWeight: 700 }}>confirmed</span>. Use the eligible override to apply the post-refund amount.
+          </p>
+        </div>
+        <div style={{ flex: 1, overflowY: "auto", padding: "0 12px" }}>
+          {loading && <p style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, textAlign: "center", padding: 16 }}>Loading journeys…</p>}
+          {!loading && journeys.length === 0 && <p style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, textAlign: "center", padding: 16 }}>No open journeys for this ambassador. Use MANUAL ADD ORDER instead.</p>}
+          {journeys.map(j => {
+            // Use the deposit order as the journey's anchor when one
+            // exists; fall back to the earliest linked order. The
+            // customer's display NAME (not the normalized email) lives
+            // on ambassador_orders.customer_name.
+            const linkedOrders = ordersByJourney[j.id] || [];
+            const anchor = linkedOrders.find(o => o.classification === "deposit") || linkedOrders[0] || null;
+            const orderNumber = anchor && anchor.shopify_order_number ? anchor.shopify_order_number : "(no orders)";
+            const customerName = (anchor && anchor.customer_name) || j.customer_name_normalized || "—";
+            const fmtMoney = (v) => `$${Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+            const dateLabel = j.deposit_started_at ? new Date(j.deposit_started_at).toLocaleDateString() : "";
+            const isPicked = pickedId === j.id;
+            return (
+              <button key={j.id} onClick={() => setPickedId(j.id)} style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: 4, width: "100%", padding: "10px 12px", marginBottom: 6, borderRadius: 8, background: isPicked ? `${T.green}20` : "none", border: `1px solid ${isPicked ? T.green : T.charcoal}`, cursor: "pointer", textAlign: "left" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontFamily: sans, fontSize: 9, color: stateColor(j.state), letterSpacing: 1, fontWeight: 700, padding: "2px 6px", border: `1px solid ${stateColor(j.state)}50`, borderRadius: 3, flexShrink: 0 }}>{(j.state || "").toUpperCase().replace("_", " ")}</span>
+                  <span style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 11, color: T.copper, fontWeight: 700, flexShrink: 0 }}>{orderNumber}</span>
+                  <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{customerName}</span>
+                  <span style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 11, color: T.white, fontWeight: 700, flexShrink: 0 }}>{fmtMoney(j.commission_eligible_total)}</span>
+                </div>
+                <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>{dateLabel}{j.expires_at && j.state === "deposit_only" ? ` · expires ${new Date(j.expires_at).toLocaleDateString()}` : ""}</div>
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ padding: "12px 18px 16px", borderTop: `1px solid ${T.charcoal}`, background: T.darkBg }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-end", marginBottom: 10 }}>
+            <div style={{ flex: 1 }}>
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 700, display: "block", marginBottom: 6 }}>ELIGIBLE ($)</span>
+              <input type="number" step="0.01" min="0" value={eligible} onChange={e => setEligible(e.target.value)}
+                     style={{ width: "100%", boxSizing: "border-box", padding: "9px 10px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: "ui-monospace, Menlo, monospace", fontSize: 13, outline: "none" }} />
+            </div>
+            {projectedEligible != null && (
+              <div style={{ flex: 1, padding: "6px 0" }}>
+                <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 700, display: "block", marginBottom: 2 }}>JOURNEY AFTER LINK</span>
+                <span style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 14, color: willConfirm ? T.green : T.warmStone, fontWeight: 700 }}>${Math.round(projectedEligible).toLocaleString()}</span>
+                <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, marginTop: 2 }}>
+                  {alreadyInPicked
+                    ? "order is already in this journey"
+                    : `$${Math.round(journeyEligibleCurrent).toLocaleString()} current + $${Math.round(num).toLocaleString()} this order`}
+                </div>
+                <div style={{ fontFamily: sans, fontSize: 9, color: willConfirm ? T.green : T.tertiary, fontWeight: 600, marginTop: 2 }}>{willConfirm ? "will confirm ✓" : "below $5,000 threshold"}</div>
+              </div>
+            )}
+          </div>
+          <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 700, display: "block", marginBottom: 6 }}>REASON <span style={{ color: T.red, opacity: 0.9 }}>(REQUIRED)</span></span>
+          <textarea value={reason} onChange={e => setReason(e.target.value.slice(0, 500))} rows={2} placeholder="Why is this being linked?" style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, lineHeight: 1.5, resize: "vertical", outline: "none", marginBottom: 10 }} />
+          {err && <p style={{ fontFamily: sans, fontSize: 11, color: T.red, margin: "0 0 10px" }}>{err}</p>}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={onClose} disabled={submitting} style={{ flex: 1, padding: "12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.tertiary, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}>CANCEL</button>
+            <button onClick={handleSubmit} disabled={!pickedId || !reason.trim() || !valid || submitting} style={{ flex: 1, padding: "12px", borderRadius: 8, background: T.green, border: "none", color: T.white, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.5, cursor: (!pickedId || !reason.trim() || !valid || submitting) ? "default" : "pointer", opacity: (!pickedId || !reason.trim() || !valid || submitting) ? 0.5 : 1 }}>{submitting ? "LINKING…" : "LINK"}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// REASSIGN — typeahead ambassador picker + reason. Reassigns
+// ambassador_id + detaches from old journey (new ambassador's admin
+// can manually link via MANUAL ADD if needed). Old journey recomputes.
+function AdminOrderReassignModal({ order, ambassadors, onClose, onSubmit }) {
+  const [search, setSearch] = useState("");
+  const [pickedId, setPickedId] = useState(null);
+  const [reason, setReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState("");
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const list = (ambassadors || []).filter(a => a.id !== order?.ambassador_id);
+    if (!q) return list.slice(0, 20);
+    return list.filter(a =>
+      (a.handle || "").toLowerCase().includes(q) ||
+      (a.full_name || "").toLowerCase().includes(q) ||
+      (a.base_code || "").toLowerCase().includes(q)
+    ).slice(0, 20);
+  }, [search, ambassadors, order]);
+  if (!order) return null;
+  const handleSubmit = async () => {
+    if (!pickedId || !reason.trim() || submitting) return;
+    setSubmitting(true); setErr("");
+    try {
+      const ok = await onSubmit({ orderId: order.id, newAmbassadorId: pickedId, reason: reason.trim() });
+      if (ok === false) throw new Error("submit failed");
+      onClose && onClose();
+    } catch (e) { setErr((e && (e.message || e.code)) || "Couldn't reassign — try again."); }
+    setSubmitting(false);
+  };
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 430, background: T.darkBg, borderTopLeftRadius: 18, borderTopRightRadius: 18, maxHeight: "90vh", display: "flex", flexDirection: "column", border: `1px solid ${T.charcoal}` }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 18px 12px", borderBottom: `1px solid ${T.charcoal}` }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <ArrowRight size={16} color={T.copper} />
+            <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, letterSpacing: 0.8 }}>REASSIGN ORDER</span>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><X size={18} color={T.tertiary} /></button>
+        </div>
+        <div style={{ padding: "12px 18px 0" }}>
+          <p style={{ fontFamily: serif, fontSize: 12, color: T.warmStone, margin: "0 0 12px", lineHeight: 1.5 }}>
+            Move order {order.shopify_order_number || order.id} to a different ambassador. The destination ambassador's journey link is left empty — use MANUAL ADD ORDER on their dashboard if you need to attach it to a specific journey.
+          </p>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by handle / name / base_code…" style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, outline: "none", marginBottom: 10 }} />
+        </div>
+        <div style={{ flex: 1, overflowY: "auto", padding: "0 12px", maxHeight: 280 }}>
+          {filtered.length === 0 && <p style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, textAlign: "center", padding: 16 }}>No matches</p>}
+          {filtered.map(a => (
+            <button key={a.id} onClick={() => setPickedId(a.id)} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 12px", marginBottom: 4, borderRadius: 8, background: pickedId === a.id ? `${T.copper}25` : "none", border: `1px solid ${pickedId === a.id ? T.copper : T.charcoal}`, cursor: "pointer", textAlign: "left" }}>
+              <div style={{ width: 28, height: 28, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: sans, fontSize: 11, fontWeight: 700, color: T.white, flexShrink: 0 }}>{(a.full_name || a.handle || "?").charAt(0).toUpperCase()}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>{a.full_name || a.handle || "—"}</div>
+                <div style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 10, color: T.copper }}>{a.base_code} {a.tier === "installer" ? "· INSTALLER" : ""}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+        <div style={{ padding: "12px 18px 16px", borderTop: `1px solid ${T.charcoal}` }}>
+          <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 700, display: "block", marginBottom: 6 }}>REASON <span style={{ color: T.red, opacity: 0.9 }}>(REQUIRED)</span></span>
+          <textarea value={reason} onChange={e => setReason(e.target.value.slice(0, 500))} rows={2} placeholder="Why is this being reassigned?" style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, lineHeight: 1.5, resize: "vertical", outline: "none", marginBottom: 10 }} />
+          {err && <p style={{ fontFamily: sans, fontSize: 11, color: T.red, margin: "0 0 10px" }}>{err}</p>}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={onClose} disabled={submitting} style={{ flex: 1, padding: "12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.tertiary, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}>CANCEL</button>
+            <button onClick={handleSubmit} disabled={!pickedId || !reason.trim() || submitting} style={{ flex: 1, padding: "12px", borderRadius: 8, background: T.copper, border: "none", color: T.darkBg, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.5, cursor: (!pickedId || !reason.trim() || submitting) ? "default" : "pointer", opacity: (!pickedId || !reason.trim() || submitting) ? 0.5 : 1 }}>{submitting ? "REASSIGNING…" : "REASSIGN"}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// MANUAL ADD — biggest modal. Two modes:
+//   shopify (default): admin types order number → shopify-lookup-order edge
+//     function fetches real data → pre-fills the form. Prevents typos.
+//   manual: free-form fields for off-platform corrections. Toggle to switch.
+function AdminManualAddOrderModal({ ambassador, onClose, onSubmit }) {
+  const [mode, setMode] = useState("shopify"); // 'shopify' | 'manual'
+  const [orderNumber, setOrderNumber] = useState("");
+  const [looking, setLooking] = useState(false);
+  const [lookupErr, setLookupErr] = useState("");
+  const [shopifyOrderId, setShopifyOrderId] = useState("");
+  const [subtotal, setSubtotal] = useState("");
+  const [eligible, setEligible] = useState("");
+  const [classification, setClassification] = useState("confirmation_part");
+  const [orderDate, setOrderDate] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
+  const [customerName, setCustomerName] = useState("");
+  const [reason, setReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState("");
+  if (!ambassador) return null;
+
+  const handleLookup = async () => {
+    if (!orderNumber.trim() || looking) return;
+    setLooking(true); setLookupErr("");
+    try {
+      const { data, error } = await supabase.functions.invoke("shopify-lookup-order", {
+        body: { order_number: orderNumber.trim() },
+      });
+      if (error || !data?.ok) {
+        setLookupErr(((error && error.message) || data?.error || "Lookup failed"));
+        setLooking(false); return;
+      }
+      const o = data.order;
+      setShopifyOrderId(o.shopify_order_id || "");
+      setSubtotal(String(o.subtotal ?? ""));
+      setEligible(String(o.suggested_eligible ?? o.subtotal ?? ""));
+      setOrderDate(o.order_date ? new Date(o.order_date).toISOString().slice(0, 10) : "");
+      setCustomerEmail(o.customer_email || "");
+      setCustomerName(o.customer_name || "");
+    } catch (e) { setLookupErr((e && e.message) || String(e)); }
+    setLooking(false);
+  };
+
+  const handleSubmit = async () => {
+    if (submitting) return;
+    if (!reason.trim()) { setErr("Reason is required."); return; }
+    const subNum = parseFloat(subtotal);
+    const eligNum = parseFloat(eligible);
+    if (isNaN(subNum) || subNum < 0 || isNaN(eligNum) || eligNum < 0) {
+      setErr("Subtotal + eligible must be valid numbers ≥ 0."); return;
+    }
+    setSubmitting(true); setErr("");
+    try {
+      const ok = await onSubmit({
+        ambassadorId: ambassador.id,
+        shopifyOrderId: mode === "shopify" ? shopifyOrderId : null,
+        shopifyOrderNumber: orderNumber.trim() || null,
+        subtotal: subNum,
+        eligible: eligNum,
+        classification,
+        orderDate: orderDate ? new Date(orderDate).toISOString() : null,
+        customerEmail: customerEmail.trim() || null,
+        customerName: customerName.trim() || null,
+        reason: reason.trim(),
+      });
+      if (ok === false) throw new Error("submit failed");
+      onClose && onClose();
+    } catch (e) { setErr((e && (e.message || e.code)) || "Couldn't add order — try again."); }
+    setSubmitting(false);
+  };
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 430, background: T.darkBg, borderTopLeftRadius: 18, borderTopRightRadius: 18, maxHeight: "92vh", display: "flex", flexDirection: "column", border: `1px solid ${T.charcoal}` }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 18px 12px", borderBottom: `1px solid ${T.charcoal}` }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Plus size={16} color={T.green} />
+            <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, letterSpacing: 0.8 }}>MANUAL ADD ORDER</span>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><X size={18} color={T.tertiary} /></button>
+        </div>
+        <div style={{ flex: 1, overflowY: "auto", padding: "12px 18px" }}>
+          <p style={{ fontFamily: serif, fontSize: 11, color: T.warmStone, margin: "0 0 12px", lineHeight: 1.5 }}>
+            Manually attribute an order to <strong>{ambassador.handle || ambassador.full_name || ambassador.base_code}</strong>. Journey commission recomputes after save. Action is logged.
+          </p>
+          {/* Mode toggle */}
+          <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+            <button onClick={() => setMode("shopify")} style={{ flex: 1, padding: "8px 10px", borderRadius: 6, background: mode === "shopify" ? T.copper : T.darkCard, border: `1px solid ${mode === "shopify" ? T.copper : T.charcoal}`, color: mode === "shopify" ? T.darkBg : T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer" }}>SHOPIFY LOOKUP</button>
+            <button onClick={() => setMode("manual")} style={{ flex: 1, padding: "8px 10px", borderRadius: 6, background: mode === "manual" ? T.copper : T.darkCard, border: `1px solid ${mode === "manual" ? T.copper : T.charcoal}`, color: mode === "manual" ? T.darkBg : T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer" }}>FREE-FORM</button>
+          </div>
+
+          {/* Shopify mode: lookup → pre-fill */}
+          {mode === "shopify" && (
+            <>
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 700, display: "block", marginBottom: 6 }}>SHOPIFY ORDER NUMBER</span>
+              <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                <input value={orderNumber} onChange={e => setOrderNumber(e.target.value)} placeholder="#12345" style={{ flex: 1, padding: "10px 12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: "ui-monospace, Menlo, monospace", fontSize: 13, outline: "none" }} />
+                <button onClick={handleLookup} disabled={!orderNumber.trim() || looking} style={{ padding: "10px 14px", borderRadius: 8, background: T.copper, border: "none", color: T.darkBg, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, cursor: (!orderNumber.trim() || looking) ? "default" : "pointer", opacity: (!orderNumber.trim() || looking) ? 0.5 : 1 }}>{looking ? "LOOKING…" : "LOOKUP"}</button>
+              </div>
+              {lookupErr && <p style={{ fontFamily: sans, fontSize: 11, color: T.red, margin: "0 0 10px" }}>{lookupErr}</p>}
+              {shopifyOrderId && <p style={{ fontFamily: sans, fontSize: 10, color: T.green, margin: "0 0 10px" }}>✓ Found · pre-filled below</p>}
+            </>
+          )}
+          {mode === "manual" && (
+            <>
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 700, display: "block", marginBottom: 6 }}>ORDER NUMBER (optional)</span>
+              <input value={orderNumber} onChange={e => setOrderNumber(e.target.value)} placeholder="e.g. OFFLINE-2026-001" style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: "ui-monospace, Menlo, monospace", fontSize: 13, outline: "none", marginBottom: 10 }} />
+            </>
+          )}
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+            <div>
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 700, display: "block", marginBottom: 6 }}>SUBTOTAL ($)</span>
+              <input type="number" step="0.01" min="0" value={subtotal} onChange={e => setSubtotal(e.target.value)} style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: "ui-monospace, Menlo, monospace", fontSize: 13, outline: "none" }} />
+            </div>
+            <div>
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 700, display: "block", marginBottom: 6 }}>ELIGIBLE ($)</span>
+              <input type="number" step="0.01" min="0" value={eligible} onChange={e => setEligible(e.target.value)} style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: "ui-monospace, Menlo, monospace", fontSize: 13, outline: "none" }} />
+            </div>
+          </div>
+          <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 700, display: "block", marginBottom: 6 }}>CLASSIFICATION</span>
+          <select value={classification} onChange={e => setClassification(e.target.value)} style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, outline: "none", marginBottom: 10 }}>
+            <option value="deposit">DEPOSIT</option>
+            <option value="confirmation_part">CONFIRMATION PART</option>
+            <option value="walk_in_part">WALK-IN PART</option>
+            <option value="excluded">EXCLUDED</option>
+          </select>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+            <div>
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 700, display: "block", marginBottom: 6 }}>ORDER DATE</span>
+              <input type="date" value={orderDate} onChange={e => setOrderDate(e.target.value)} style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, outline: "none" }} />
+            </div>
+            <div>
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 700, display: "block", marginBottom: 6 }}>CUSTOMER NAME</span>
+              <input value={customerName} onChange={e => setCustomerName(e.target.value)} style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, outline: "none" }} />
+            </div>
+          </div>
+          <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 700, display: "block", marginBottom: 6 }}>CUSTOMER EMAIL (optional)</span>
+          <input value={customerEmail} onChange={e => setCustomerEmail(e.target.value)} style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, outline: "none", marginBottom: 14 }} />
+          <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 700, display: "block", marginBottom: 6 }}>REASON <span style={{ color: T.red, opacity: 0.9 }}>(REQUIRED)</span></span>
+          <textarea value={reason} onChange={e => setReason(e.target.value.slice(0, 500))} rows={2} placeholder="Why is this being added manually?" style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, lineHeight: 1.5, resize: "vertical", outline: "none" }} />
+        </div>
+        <div style={{ padding: "12px 18px 16px", borderTop: `1px solid ${T.charcoal}` }}>
+          {err && <p style={{ fontFamily: sans, fontSize: 11, color: T.red, margin: "0 0 10px" }}>{err}</p>}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={onClose} disabled={submitting} style={{ flex: 1, padding: "12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.tertiary, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}>CANCEL</button>
+            <button onClick={handleSubmit} disabled={submitting} style={{ flex: 1, padding: "12px", borderRadius: 8, background: T.green, border: "none", color: T.white, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.5, cursor: submitting ? "default" : "pointer", opacity: submitting ? 0.5 : 1 }}>{submitting ? "SAVING…" : "ADD ORDER"}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Profile picture cropper modal ──────────────────────────────────────
+// Opens after the user picks a source image. Square viewport with a
+// circle overlay; drag to pan, slider / wheel / pinch to zoom. SAVE
+// crops the visible square to a 512×512 JPEG blob and hands it to the
+// existing handleSetProfilePic flow (which already compresses + uploads).
+// Module-scope so the hooks survive parent re-renders + the file can be
+// crossfaded into the same image element without remount jitter.
+function ProfilePicCropperModal({ file, onClose, onCropped }) {
+  const containerSize = 280;  // px — the visible crop window
+  const outputSize    = 512;  // px — final uploaded resolution
+  const [src, setSrc] = useState(null);                 // data URL
+  const [imgDims, setImgDims] = useState({ w: 0, h: 0 });
+  const [zoom, setZoom] = useState(1);                  // user multiplier; 1 = fits container
+  const [offset, setOffset] = useState({ x: 0, y: 0 }); // user pan offset (px)
+  const [dragging, setDragging] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const startRef = useRef({ x: 0, y: 0, ox: 0, oy: 0 });
+  const pinchRef = useRef(null);
+
+  // Load source file into a data URL the moment the modal opens.
+  useEffect(() => {
+    if (!file) return;
+    let cancelled = false;
+    const r = new FileReader();
+    r.onload = () => {
+      if (cancelled) return;
+      const url = String(r.result || "");
+      setSrc(url);
+      // document.createElement("img") instead of new Image() — the
+      // lucide-react `Image` import shadows the global constructor.
+      const probe = document.createElement("img");
+      probe.onload = () => { if (!cancelled) setImgDims({ w: probe.naturalWidth || 0, h: probe.naturalHeight || 0 }); };
+      probe.src = url;
+    };
+    r.onerror = () => { if (!cancelled) setErr("Couldn't read image."); };
+    r.readAsDataURL(file);
+    return () => { cancelled = true; };
+  }, [file]);
+
+  // Derived: base scale that fits the source image into the container
+  // (whichever side is shorter rules so the image covers the square).
+  const scaleBase = (imgDims.w > 0 && imgDims.h > 0)
+    ? Math.max(containerSize / imgDims.w, containerSize / imgDims.h)
+    : 1;
+  const effectiveScale = scaleBase * zoom;
+  const displayedW = imgDims.w * effectiveScale;
+  const displayedH = imgDims.h * effectiveScale;
+
+  // Clamp offsets so the user can't drag the image past the edges of
+  // the crop window (otherwise the cropped square would include blank
+  // background pixels).
+  const maxOffsetX = Math.max(0, (displayedW - containerSize) / 2);
+  const maxOffsetY = Math.max(0, (displayedH - containerSize) / 2);
+  const clampOffset = (o) => ({
+    x: Math.max(-maxOffsetX, Math.min(maxOffsetX, o.x)),
+    y: Math.max(-maxOffsetY, Math.min(maxOffsetY, o.y)),
+  });
+
+  // Re-clamp whenever zoom changes (zooming out can leave offset out of bounds).
+  useEffect(() => { setOffset(o => clampOffset(o)); /* eslint-disable-next-line */ }, [zoom, imgDims]);
+
+  // ── Pointer events: drag to pan, wheel to zoom, pinch via 2-touch ──
+  const handlePointerDown = (e) => {
+    if (e.touches && e.touches.length >= 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      pinchRef.current = { dist: Math.hypot(dx, dy), zoom };
+      return;
+    }
+    const p = e.touches ? e.touches[0] : e;
+    setDragging(true);
+    startRef.current = { x: p.clientX, y: p.clientY, ox: offset.x, oy: offset.y };
+  };
+  const handlePointerMove = (e) => {
+    if (e.touches && e.touches.length >= 2 && pinchRef.current) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const dist = Math.hypot(dx, dy);
+      const next = pinchRef.current.zoom * (dist / pinchRef.current.dist);
+      setZoom(Math.max(1, Math.min(4, next)));
+      e.preventDefault();
+      return;
+    }
+    if (!dragging) return;
+    const p = e.touches ? e.touches[0] : e;
+    setOffset(clampOffset({
+      x: startRef.current.ox + (p.clientX - startRef.current.x),
+      y: startRef.current.oy + (p.clientY - startRef.current.y),
+    }));
+    if (e.touches) e.preventDefault();
+  };
+  const handlePointerUp = () => { setDragging(false); pinchRef.current = null; };
+  const handleWheel = (e) => {
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 1.08 : 1 / 1.08;
+    setZoom(z => Math.max(1, Math.min(4, z * factor)));
+  };
+
+  // ── Crop + return Blob ──
+  const handleSave = async () => {
+    if (busy || !src || imgDims.w === 0) return;
+    setBusy(true); setErr("");
+    try {
+      // document.createElement("img") instead of new Image() — same
+      // lucide shadow trap as above.
+      const img = document.createElement("img");
+      await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = src; });
+      // Translate visible viewport coords → source image coords.
+      // (offset.x, offset.y) is the displayed image translation from center.
+      // imgLeft/imgTop are the top-left of the displayed image inside the container.
+      const imgLeft = (containerSize - displayedW) / 2 + offset.x;
+      const imgTop  = (containerSize - displayedH) / 2 + offset.y;
+      const srcX = (-imgLeft) / effectiveScale;
+      const srcY = (-imgTop)  / effectiveScale;
+      const srcSize = containerSize / effectiveScale;
+      const clamped = {
+        x: Math.max(0, Math.min(srcX, imgDims.w - srcSize)),
+        y: Math.max(0, Math.min(srcY, imgDims.h - srcSize)),
+      };
+      const canvas = document.createElement("canvas");
+      canvas.width = outputSize; canvas.height = outputSize;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, clamped.x, clamped.y, srcSize, srcSize, 0, 0, outputSize, outputSize);
+      const blob = await new Promise((resolve) => canvas.toBlob(b => resolve(b), "image/jpeg", 0.92));
+      if (!blob) throw new Error("crop failed");
+      // Tag with a name so downstream Storage upload code treats it as a real file
+      try { blob.name = `avatar-${Date.now()}.jpg`; } catch (e) {}
+      onCropped && onCropped(blob);
+      onClose && onClose();
+    } catch (e) {
+      setErr((e && e.message) || "Couldn't save crop.");
+    }
+    setBusy(false);
+  };
+
+  if (!file) return null;
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 1200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 430, background: T.darkBg, borderRadius: 18, padding: 18, border: `1px solid ${T.charcoal}` }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+          <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, letterSpacing: 0.8 }}>FRAME YOUR PHOTO</span>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><X size={18} color={T.tertiary} /></button>
+        </div>
+        <p style={{ fontFamily: serif, fontSize: 12, color: T.warmStone, margin: "0 0 14px", lineHeight: 1.5 }}>
+          Drag to position. Scroll, pinch, or use the slider to zoom.
+        </p>
+        <div
+          onMouseDown={handlePointerDown}
+          onMouseMove={handlePointerMove}
+          onMouseUp={handlePointerUp}
+          onMouseLeave={handlePointerUp}
+          onTouchStart={handlePointerDown}
+          onTouchMove={handlePointerMove}
+          onTouchEnd={handlePointerUp}
+          onWheel={handleWheel}
+          style={{
+            width: containerSize, height: containerSize, margin: "0 auto",
+            position: "relative", overflow: "hidden", borderRadius: 8,
+            background: T.charcoal, cursor: dragging ? "grabbing" : "grab",
+            touchAction: "none", userSelect: "none",
+          }}
+        >
+          {src && imgDims.w > 0 && (
+            <img
+              src={src}
+              alt=""
+              draggable={false}
+              style={{
+                position: "absolute",
+                left: "50%", top: "50%",
+                width: displayedW + "px",
+                height: displayedH + "px",
+                marginLeft: -displayedW / 2,
+                marginTop: -displayedH / 2,
+                transform: `translate(${offset.x}px, ${offset.y}px)`,
+                pointerEvents: "none",
+              }}
+            />
+          )}
+          {/* Circle overlay — radial gradient darkens corners outside the
+              circle and a 2px ring marks the circle edge. */}
+          <div style={{
+            position: "absolute", inset: 0,
+            background: `radial-gradient(circle at center, transparent 49.5%, rgba(0,0,0,0.55) 50%)`,
+            pointerEvents: "none",
+          }} />
+          <div style={{
+            position: "absolute", inset: 0,
+            boxShadow: `inset 0 0 0 2px ${T.white}30`,
+            borderRadius: "50%",
+            pointerEvents: "none",
+          }} />
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 14 }}>
+          <ZoomOut size={14} color={T.tertiary} />
+          <input
+            type="range" min={1} max={4} step={0.01} value={zoom}
+            onChange={(e) => setZoom(parseFloat(e.target.value))}
+            style={{ flex: 1, accentColor: T.copper }}
+          />
+          <ZoomIn size={14} color={T.tertiary} />
+        </div>
+        {err && <p style={{ fontFamily: sans, fontSize: 11, color: T.red, margin: "10px 0 0" }}>{err}</p>}
+        <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+          <button onClick={onClose} disabled={busy} style={{ flex: 1, padding: "12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.tertiary, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}>CANCEL</button>
+          <button onClick={handleSave} disabled={busy || !src || imgDims.w === 0} style={{ flex: 1, padding: "12px", borderRadius: 8, background: T.copper, border: "none", color: T.darkBg, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.5, cursor: (busy || !src) ? "default" : "pointer", opacity: (busy || !src) ? 0.5 : 1 }}>{busy ? "SAVING…" : "SAVE PHOTO"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AmbassadorDashboardScreen({ currentUserId, currentUserHandle, onBack, viewAsProfileId, viewAsHandle, viewAsName, adminAmbassadorList, onAdminOrderRemove, onAdminOrderReassign, onAdminOrderEditEligible, onAdminLinkOrderToJourney }) {
+  // viewAsProfileId is set when an admin opens this dashboard via the
+  // "VIEW AMBASSADOR DASHBOARD" button on OtherProfileScreen. It overrides
+  // currentUserId for all data fetches so the admin sees the target
+  // ambassador's view. RLS allows admins to read every ambassador's rows
+  // (admin SELECT policies on ambassadors / ambassador_discount_codes /
+  // ambassador_orders / ambassador_journeys / ambassador_payouts /
+  // discount_code_clicks all exist). Stripe onboarding action is disabled
+  // in this mode so the admin can't accidentally take over the
+  // ambassador's Stripe account.
+  const isAdminView = !!viewAsProfileId;
+  const effectiveProfileId = viewAsProfileId || currentUserId;
+  const [ambassador, setAmbassador] = useState(null);
+  const [codes, setCodes] = useState([]);
+  const [journeys, setJourneys] = useState([]);
+  const [allOrders, setAllOrders] = useState([]);
+  const [payouts, setPayouts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [copiedCodeId, setCopiedCodeId] = useState(null);
+  const [journeyFilter, setJourneyFilter] = useState("open"); // "all" | "open" | "earned" | "paid"
+  const [expandedJourneyId, setExpandedJourneyId] = useState(null);
+  const [stripeBusy, setStripeBusy] = useState(false);  // in-flight onboard/status call
+  const [stripeMsg, setStripeMsg] = useState("");
+  const [expandedCommissionBucket, setExpandedCommissionBucket] = useState(null); // "mtd" | "pendingPayout" | "allTime"
+  const [paidStatementsExpanded, setPaidStatementsExpanded] = useState(false);
+  // Admin order-action modals — only fire from the admin view (isAdminView).
+  // Each holds the order object the action targets; null = closed.
+  // Which 3-dot order menu is open + the trigger button's screen-space
+  // anchor rect (top/right). The menu is portaled to document.body so it
+  // escapes the journey card's overflow: hidden clipping; we need fixed
+  // coords from the anchor button instead of CSS position: absolute.
+  const [adminOrderMenu, setAdminOrderMenu] = useState(null);  // { id, top, right } | null
+  const adminOrderMenuId = adminOrderMenu && adminOrderMenu.id;
+  const setAdminOrderMenuId = (id) => setAdminOrderMenu(id ? { id, top: 0, right: 0 } : null);
+  const [adminOrderRemoving, setAdminOrderRemoving] = useState(null);
+  const [adminOrderReassigning, setAdminOrderReassigning] = useState(null);
+  const [adminOrderEditing, setAdminOrderEditing] = useState(null);
+  const [adminOrderLinking, setAdminOrderLinking] = useState(null);
+  // Last 12 weeks of /r/CODE share-link clicks rolled up across ALL of
+  // the ambassador's codes. Server returns N back-filled rows so the
+  // chart renders zero weeks instead of gaps. Fed from
+  // ambassador_clicks_by_week RPC + realtime on discount_code_clicks
+  // INSERT (debounced 500ms like the other dashboard subscriptions).
+  const [weeklyClicks, setWeeklyClicks] = useState([]); // [{week_start, clicks}]
+
+  // Start (or resume) Stripe Connect onboarding. Server creates the
+  // Stripe account on first call, returns a one-time AccountLink URL we
+  // open in the same tab. Stripe redirects back to ?stripe_return=1 on
+  // completion, which the root effect picks up to refresh status.
+  const startStripeOnboarding = async () => {
+    if (!ambassador) return;
+    if (isAdminView) {
+      alert("Admin view is read-only. The ambassador must initiate Stripe onboarding themselves.");
+      return;
+    }
+    setStripeBusy(true);
+    setStripeMsg("");
+    try {
+      const { data, error } = await supabase.functions.invoke("stripe-connect-onboard", {
+        body: { ambassador_id: ambassador.id },
+      });
+      if (error || !data?.ok) {
+        setStripeMsg(`Couldn't start onboarding: ${(error && error.message) || data?.error || "unknown error"}`);
+        setStripeBusy(false);
+        return;
+      }
+      // Same-tab navigation works in browser + PWA webview. User returns
+      // to ?stripe_return=1 → root effect refreshes status.
+      window.location.href = data.url;
+    } catch (e) {
+      setStripeMsg(`Couldn't start onboarding: ${(e && e.message) || String(e)}`);
+      setStripeBusy(false);
+    }
+  };
+
+  // Manual REFRESH STATUS — re-queries Stripe + updates the row. Helpful
+  // if the webhook missed an update or user is impatient.
+  const refreshStripeStatus = async () => {
+    if (!ambassador) return;
+    setStripeBusy(true);
+    setStripeMsg("");
+    try {
+      const { data, error } = await supabase.functions.invoke("stripe-connect-status", {
+        body: { ambassador_id: ambassador.id },
+      });
+      if (error || !data?.ok) {
+        setStripeMsg(`Couldn't refresh: ${(error && error.message) || data?.error || "unknown error"}`);
+      } else {
+        // Mutate local copy so the card re-renders without a full reload.
+        setAmbassador(prev => prev ? { ...prev, stripe_onboarded: data.onboarded, stripe_account_id: data.account_id || prev.stripe_account_id } : prev);
+        setStripeMsg(data.onboarded ? "Bank account ready." : "Onboarding still in progress.");
+      }
+    } catch (e) {
+      setStripeMsg(`Couldn't refresh: ${(e && e.message) || String(e)}`);
+    }
+    setStripeBusy(false);
+  };
+
+  // Reusable fetch — called on mount AND from the realtime subscription
+  // (debounced) so admin actions reflect on the ambassador's dashboard
+  // without a full app refresh.
+  const refetchData = useCallback(async () => {
+    if (!effectiveProfileId) return;
+    try {
+      const { data: ambRow, error: e } = await supabase
+        .from("ambassadors")
+        .select("*")
+        .eq("profile_id", effectiveProfileId)
+        .maybeSingle();
+      if (e) { setError(e.message || "Couldn't load ambassador profile."); setLoading(false); return; }
+      setAmbassador(ambRow || null);
+      if (ambRow) {
+        const [codeRes, journeyRes, ordersRes, payoutRes] = await Promise.all([
+          // Fetch ALL codes (not just active+visible). The top "Your codes"
+          // section filters to visible+active for copy-paste UX; the new
+          // PER-CODE PERFORMANCE breakdown below uses the full set so legacy
+          // codes can show their attributed orders too.
+          supabase.from("ambassador_discount_codes")
+            .select("*")
+            .eq("ambassador_id", ambRow.id)
+            .order("role", { ascending: true })
+            .order("created_at", { ascending: true }),
+          supabase.from("ambassador_journeys")
+            .select("*")
+            .eq("ambassador_id", ambRow.id)
+            .order("created_at", { ascending: false }),
+          // All orders (not just last 10) so we can group under their
+          // journey. order_date desc keeps the legacy recent-orders feed
+          // working off the same data without a second query.
+          supabase.from("ambassador_orders")
+            .select("id, ambassador_id, shopify_order_id, shopify_order_number, subtotal, classification, order_date, customer_name, journey_id, refunded_amount, commission_eligible_subtotal, is_manual")
+            .eq("ambassador_id", ambRow.id)
+            .is("removed_at", null)
+            .order("order_date", { ascending: false })
+            .limit(500),
+          supabase.from("ambassador_payouts")
+            .select("*")
+            .eq("ambassador_id", ambRow.id)
+            .order("period_end", { ascending: false }),
+        ]);
+        setCodes(codeRes.data || []);
+        setJourneys(journeyRes.data || []);
+        setAllOrders(ordersRes.data || []);
+        setPayouts(payoutRes.data || []);
+      }
+    } catch (e) {
+      setError((e && e.message) || String(e));
+    }
+    setLoading(false);
+  }, [effectiveProfileId]);
+
+  useEffect(() => { refetchData(); }, [refetchData]);
+
+  // Separate fetch path for the weekly clicks chart — kept off the
+  // 4-table refetchData so click bursts don't trigger journey/order/
+  // payout queries that don't need to re-run.
+  const refetchClicks = useCallback(async (ambId) => {
+    if (!ambId) return;
+    try {
+      const { data, error } = await supabase.rpc("ambassador_clicks_by_week", {
+        p_ambassador_id: ambId,
+        p_weeks: 12,
+      });
+      if (error) { console.warn("[clicks] rpc failed", error); return; }
+      setWeeklyClicks(Array.isArray(data) ? data : []);
+    } catch (e) { console.warn("[clicks] fetch threw", e); }
+  }, []);
+  useEffect(() => {
+    if (!ambassador?.id) { setWeeklyClicks([]); return; }
+    refetchClicks(ambassador.id);
+  }, [ambassador?.id, refetchClicks]);
+
+  // Live updates — subscribe to changes on this ambassador's rows.
+  // Debounced 500ms so a burst of changes (e.g. admin approval flips
+  // journey.payout_id + inserts payout + inserts notification) triggers
+  // exactly one refetch.
+  useEffect(() => {
+    if (!ambassador?.id) return;
+    let debounceTimer = null;
+    const scheduleRefetch = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => { refetchData(); }, 500);
+    };
+    const ambId = ambassador.id;
+    // Separate debouncer for clicks so high-traffic days don't trigger
+    // the heavier 4-table refetch above.
+    let clicksTimer = null;
+    const scheduleClicksRefetch = () => {
+      if (clicksTimer) clearTimeout(clicksTimer);
+      clicksTimer = setTimeout(() => { refetchClicks(ambId); }, 500);
+    };
+    const ch = supabase.channel(`amb_dash_${ambId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "ambassador_payouts",        filter: `ambassador_id=eq.${ambId}` }, scheduleRefetch)
+      .on("postgres_changes", { event: "*", schema: "public", table: "ambassador_journeys",       filter: `ambassador_id=eq.${ambId}` }, scheduleRefetch)
+      .on("postgres_changes", { event: "*", schema: "public", table: "ambassador_orders",         filter: `ambassador_id=eq.${ambId}` }, scheduleRefetch)
+      .on("postgres_changes", { event: "*", schema: "public", table: "ambassador_discount_codes", filter: `ambassador_id=eq.${ambId}` }, scheduleRefetch)
+      .on("postgres_changes", { event: "*", schema: "public", table: "ambassadors",               filter: `id=eq.${ambId}` },             scheduleRefetch)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "discount_code_clicks", filter: `ambassador_id=eq.${ambId}` }, scheduleClicksRefetch)
+      .subscribe();
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      if (clicksTimer) clearTimeout(clicksTimer);
+      try { supabase.removeChannel(ch); } catch (_) {}
+    };
+  }, [ambassador?.id, refetchData, refetchClicks]);
+
+  // Group orders by journey_id → []. Used by the JOURNEYS section to
+  // render each customer's full arc (deposit → confirmation → paid).
+  // Orders without journey_id (orphan / excluded) are excluded here;
+  // the raw recent-orders list still shows them.
+  const ordersByJourneyId = useMemo(() => {
+    const m = {};
+    (allOrders || []).forEach(o => {
+      if (!o.journey_id) return;
+      if (!m[o.journey_id]) m[o.journey_id] = [];
+      m[o.journey_id].push(o);
+    });
+    // Sort each journey's orders chronologically (oldest first) so the
+    // timeline reads deposit → confirmation.
+    Object.keys(m).forEach(k => m[k].sort((a, b) => new Date(a.order_date) - new Date(b.order_date)));
+    return m;
+  }, [allOrders]);
+
+  // 6-month commission chart — bucket earned commission by the month it
+  // was earned (confirmed_at for confirmed/paid, deposit_started_at as
+  // fallback for walk_in). Clawbacks subtract from their original month.
+  const commissionByMonth = useMemo(() => {
+    const now = new Date();
+    const buckets = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      buckets.push({ key, label: d.toLocaleDateString(undefined, { month: "short" }), total: 0 });
+    }
+    (journeys || []).forEach(j => {
+      const amt = parseFloat(String(j.commission_amount || "0")) || 0;
+      if (amt === 0) return;
+      // Anchor date: confirmed_at if present, else deposit_started_at.
+      const anchor = j.confirmed_at || j.deposit_started_at;
+      if (!anchor) return;
+      const d = new Date(anchor);
+      if (isNaN(d.getTime())) return;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const b = buckets.find(x => x.key === key);
+      if (!b) return; // outside 6-month window
+      if (j.state === "clawed_back") b.total -= amt;
+      else if (j.state === "confirmed" || j.state === "walk_in" || j.state === "paid") b.total += amt;
+    });
+    return buckets;
+  }, [journeys]);
+
+  // Aggregate commission numbers from journeys.
+  // - PENDING: confirmed/walk_in journeys that haven't been paid yet
+  // - THIS MONTH: paid journeys with paid_at in the current calendar month
+  // - ALL TIME: sum of commission_amount for paid + confirmed/walk_in (everything earned)
+  // Three commission buckets with their contributing journeys, for an
+  // expandable per-bucket breakdown:
+  //   mtd           — earned this calendar month (confirmed_at in current month)
+  //   pendingPayout — earned last calendar month (the cycle that pays out
+  //                   THIS month per the M → M+1 rule)
+  //   allTime       — lifetime earnings minus clawbacks
+  const commissionAgg = (() => {
+    const now = new Date();
+    const currMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    let mtd = 0;
+    let pendingPayout = 0;
+    let allTime = 0;
+    const mtdList = [];
+    const pendingPayoutList = [];
+    const allTimeList = [];
+    (journeys || []).forEach(j => {
+      const amt = parseFloat(String(j.commission_amount || "0")) || 0;
+      const earnedAnchor = j.confirmed_at ? new Date(j.confirmed_at) : null;
+      const inCurrentMonth = earnedAnchor && earnedAnchor >= currMonthStart;
+      const inPrevMonth    = earnedAnchor && earnedAnchor >= prevMonthStart && earnedAnchor < currMonthStart;
+      const earnsAmt = j.state === "confirmed" || j.state === "walk_in" || j.state === "paid";
+      const reducesAmt = j.state === "clawed_back";
+      if (earnsAmt) {
+        allTime += amt;
+        allTimeList.push(j);
+        if (inCurrentMonth) { mtd += amt; mtdList.push(j); }
+        if (inPrevMonth)    { pendingPayout += amt; pendingPayoutList.push(j); }
+      } else if (reducesAmt) {
+        allTime -= amt;
+        allTimeList.push(j);
+        if (inCurrentMonth) { mtd -= amt; mtdList.push(j); }
+        if (inPrevMonth)    { pendingPayout -= amt; pendingPayoutList.push(j); }
+      }
+    });
+    return { mtd, pendingPayout, allTime, mtdList, pendingPayoutList, allTimeList };
+  })();
+
+  const fmtMoney = (n) => `$${(Number(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+
+  const copyCode = (codeId, code) => {
+    if (!code) return;
+    try { navigator.clipboard.writeText(code); } catch (_) {}
+    setCopiedCodeId(codeId);
+    setTimeout(() => setCopiedCodeId(null), 1500);
+  };
+
+  // Share-link URL — routes through our Vercel redirect at /r/:code, which
+  // (a) increments click_count via bump_discount_code_click RPC and
+  // (b) 302s to Shopify's /discount/CODE pattern (sets session cookie, more
+  // reliable than the ?discount= query param).
+  const TRAILHEAD_BASE = (typeof window !== "undefined" && window.location && window.location.origin) || "https://trailhead.lonepeakoverland.com";
+  const shareLinkFor = (code) => `${TRAILHEAD_BASE}/r/${encodeURIComponent(code || "")}`;
+  const [copiedLinkId, setCopiedLinkId] = useState(null);
+  const copyLink = (codeId, code) => {
+    if (!code) return;
+    try { navigator.clipboard.writeText(shareLinkFor(code)); } catch (_) {}
+    setCopiedLinkId(codeId);
+    setTimeout(() => setCopiedLinkId(null), 1500);
+  };
+
+  // Sort: primary first, then bulk_promo. (No deposit_tracking role —
+  // every public code uses free shipping for $0 effective discount;
+  // the real discount is applied by Lone Peak staff via a paired internal
+  // code at confirmation/walk-in time.)
+  // Top "Your codes" section shows only active+visible (legacy hidden).
+  const sortedCodes = (codes || [])
+    .filter(c => c.status === "active" && c.visibility === "visible")
+    .sort((a, b) => {
+      const order = { primary: 0, bulk_promo: 1 };
+      return (order[a.role] ?? 99) - (order[b.role] ?? 99);
+    });
+
+  // Per-code performance — aggregates from orders + journeys against the
+  // full codes set (includes legacy + hidden so historical attribution
+  // shows up too). Order subtotal is post-refund; commission is attributed
+  // to whichever code initiated the journey (earliest order in journey).
+  const perCodeStats = useMemo(() => {
+    // 1. Map journey_id → originating code id (earliest order's discount_code_id).
+    const ordersByJourney = {};
+    (allOrders || []).forEach(o => {
+      if (!o.journey_id || !o.discount_code_id) return;
+      if (!ordersByJourney[o.journey_id]) ordersByJourney[o.journey_id] = [];
+      ordersByJourney[o.journey_id].push(o);
+    });
+    const journeyToCode = {};
+    Object.entries(ordersByJourney).forEach(([jId, list]) => {
+      const sorted = list.slice().sort((a, b) => new Date(a.order_date) - new Date(b.order_date));
+      journeyToCode[jId] = sorted[0].discount_code_id;
+    });
+
+    // 2. Initialize stats for every code (so a 0-orders code can still
+    //    appear in the breakdown — useful for "your new code hasn't been
+    //    used yet" visibility).
+    const stats = {};
+    (codes || []).forEach(c => {
+      stats[c.id] = { code: c, orderCount: 0, subtotal: 0, commission: 0 };
+    });
+
+    // 3. Walk orders → count + sum subtotal per code (post-refund).
+    (allOrders || []).forEach(o => {
+      const id = o.discount_code_id;
+      if (!id || !stats[id]) return;
+      const sub = (parseFloat(String(o.subtotal || "0")) || 0) - (parseFloat(String(o.refunded_amount || "0")) || 0);
+      stats[id].orderCount += 1;
+      stats[id].subtotal += Math.max(0, sub);
+    });
+
+    // 4. Walk journeys → attribute commission to originating code.
+    (journeys || []).forEach(j => {
+      const codeId = journeyToCode[j.id];
+      if (!codeId || !stats[codeId]) return;
+      const amt = parseFloat(String(j.commission_amount || "0")) || 0;
+      if (j.state === "paid" || j.state === "confirmed" || j.state === "walk_in") {
+        stats[codeId].commission += amt;
+      } else if (j.state === "clawed_back") {
+        // commission_amount already reflects post-clawback reduction;
+        // surface it as the residual (could be 0 if fully clawed back).
+        stats[codeId].commission += amt;
+      }
+    });
+
+    // 5. Show codes with at least one order; sort by commission desc,
+    //    then subtotal desc.
+    return Object.values(stats)
+      .filter(s => s.orderCount > 0)
+      .sort((a, b) => (b.commission - a.commission) || (b.subtotal - a.subtotal));
+  }, [allOrders, journeys, codes]);
+
+  const roleLabel = (role) => role === "primary" ? "PRIMARY" : "PROMO";
+  const roleColor = (role) => role === "primary" ? T.copper : T.green;
+  const codeDescription = (c) => {
+    // Primary code surfaces the deposit→confirmation flow so the
+    // ambassador knows exactly when + why a customer uses it.
+    if (c.role === "primary") {
+      return "Customers use this code when placing a deposit for $500 off a new camper order. Discount applied at confirmation.";
+    }
+    // Promo / bulk codes describe what the STAFF-applied internal code
+    // does on qualifying orders — the public code is always $0 at checkout.
+    if (c.kind === "fixed_amount" && c.value != null) {
+      const mm = c.min_purchase_amount ? ` on orders $${Number(c.min_purchase_amount).toLocaleString()}+` : "";
+      return `Customer earns $${Number(c.value).toLocaleString()} off${mm} (applied by Lone Peak at order processing)`;
+    }
+    if (c.kind === "percentage" && c.value != null) {
+      const mm = c.min_purchase_amount ? ` on orders $${Number(c.min_purchase_amount).toLocaleString()}+` : "";
+      return `Customer earns ${c.value}% off${mm} (applied by Lone Peak at order processing)`;
+    }
+    if (c.kind === "free_shipping") return "Customer earns free shipping (applied by Lone Peak)";
+    return c.label || "—";
+  };
+
+  return (
+    <div style={{ height: "100%", display: "flex", flexDirection: "column", background: T.darkBg }}>
+      {/* Admin-view banner — surfaces the troubleshooting context so the
+          admin doesn't confuse this with their own dashboard. Stripe
+          onboarding action is server-gated to alert when triggered here. */}
+      {isAdminView && (
+        <div style={{ background: `${T.red}25`, borderBottom: `1px solid ${T.red}60`, padding: "8px 16px", display: "flex", alignItems: "center", gap: 8 }}>
+          <Shield size={14} color={T.red} />
+          <span style={{ fontFamily: sans, fontSize: 10, color: T.red, letterSpacing: 1.2, fontWeight: 700 }}>
+            ADMIN VIEW · TROUBLESHOOTING{viewAsHandle ? ` · @${viewAsHandle}` : (viewAsName ? ` · ${viewAsName}` : "")}
+          </span>
+        </div>
+      )}
+      <div style={{ display: "flex", alignItems: "center", padding: "12px 16px", borderBottom: `1px solid ${T.charcoal}` }}>
+        <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, marginRight: 10 }}>
+          <ChevronLeft size={22} color={T.white} />
+        </button>
+        <div style={{ fontFamily: sans, fontSize: 14, fontWeight: 700, color: T.white, letterSpacing: 1.5 }}>{ambassador?.tier === "installer" ? "INSTALLER" : "AMBASSADOR"}</div>
+        <Tag size={14} color={ambassador?.tier === "installer" ? T.green : T.copper} style={{ marginLeft: 8 }} />
+      </div>
+      <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
+        {loading ? (
+          <div style={{ padding: "48px 16px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+            <div style={{ width: 28, height: 28, borderRadius: "50%", border: `2px solid ${T.copper}30`, borderTopColor: T.copper, animation: "th-spin 0.8s linear infinite" }} />
+            <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, letterSpacing: 1.5, fontWeight: 600 }}>LOADING…</span>
+          </div>
+        ) : error ? (
+          <div style={{ background: `${T.red}18`, border: `1px solid ${T.red}40`, borderRadius: 10, padding: 16 }}>
+            <span style={{ fontFamily: sans, fontSize: 12, color: T.red, fontWeight: 600 }}>{error}</span>
+          </div>
+        ) : !ambassador ? (
+          <div style={{ background: T.darkCard, borderRadius: 14, padding: 20, textAlign: "center", border: `1px solid ${T.charcoal}` }}>
+            <Tag size={32} color={T.tertiary} style={{ opacity: 0.4, marginBottom: 10 }} />
+            <p style={{ fontFamily: serif, fontSize: 13, color: T.warmStone, margin: "0 0 6px", lineHeight: 1.5 }}>You're not set up as an ambassador yet.</p>
+            <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: 0, lineHeight: 1.5 }}>Approval requests are reviewed by Lone Peak Overland admins.</p>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {/* Status header — one row, all codes share the same status */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 4px" }}>
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700 }}>STATUS</span>
+              <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: ambassador.status === "active" ? T.green : T.tertiary, padding: "2px 8px", borderRadius: 3, letterSpacing: 1, fontWeight: 700 }}>{(ambassador.status || "").toUpperCase()}</span>
+            </div>
+            {/* Commission rate reminder — sits at the top so the ambassador
+                sees the headline number before scrolling into codes. */}
+            <div style={{ background: T.darkBg, borderRadius: 10, padding: 12, border: `1px solid ${T.charcoal}`, textAlign: "center" }}>
+              <span style={{ fontFamily: serif, fontSize: 12, color: T.warmStone }}>You earn <strong style={{ color: T.copper }}>{ambassador.commission_rate_pct || 5}%</strong> commission on new camper orders.</span>
+            </div>
+            {/* Codes — one card per ambassador_discount_codes row. Primary first,
+                then any bulk_promo codes admin has pushed. */}
+            {sortedCodes.length === 0 ? (
+              <div style={{ background: T.darkCard, borderRadius: 14, padding: 18, border: `1px solid ${T.charcoal}` }}>
+                <span style={{ fontFamily: serif, fontSize: 13, color: T.tertiary }}>No discount codes yet. If you were just approved, this should populate within a few seconds — pull to refresh.</span>
+              </div>
+            ) : sortedCodes.map((c, idx) => {
+              const accent = roleColor(c.role);
+              return (
+                <div key={c.id} style={{ background: T.darkCard, border: `1px solid ${accent}40`, borderRadius: 14, padding: 18 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                    <span style={{ fontFamily: sans, fontSize: 10, color: accent, letterSpacing: 1.5, fontWeight: 700 }}>{roleLabel(c.role)}{c.label && idx > 0 ? ` — ${c.label}` : ""}</span>
+                  </div>
+                  <div onClick={() => copyCode(c.id, c.code)} style={{ fontFamily: sans, fontSize: 26, color: T.white, fontWeight: 800, letterSpacing: 2, cursor: "pointer", padding: "10px 0", textAlign: "center", background: T.darkBg, borderRadius: 8, marginBottom: 10, border: `1px dashed ${accent}40` }}>
+                    {c.code || "—"}
+                  </div>
+                  <button onClick={() => copyCode(c.id, c.code)} style={{ width: "100%", padding: "10px", borderRadius: 8, background: accent, color: T.darkBg, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>
+                    {copiedCodeId === c.id ? "COPIED!" : "COPY CODE"}
+                  </button>
+                  <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: "10px 0 0", lineHeight: 1.5 }}>
+                    {codeDescription(c)}
+                  </p>
+                </div>
+              );
+            })}
+
+            {/* SHARE LINKS — one row per code, deep-link to storefront with
+                the discount param auto-populated. Customer who clicks gets
+                the code auto-applied at checkout. */}
+            {sortedCodes.length > 0 && (
+              <div style={{ background: T.darkCard, borderRadius: 14, padding: 16, border: `1px solid ${T.charcoal}` }}>
+                <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700, display: "block", marginBottom: 6 }}>SHARE LINKS</span>
+                <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: "0 0 12px", lineHeight: 1.5 }}>
+                  Tap to copy. Anyone who clicks lands on the Lone Peak Overland store with your code auto-applied at checkout.
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {sortedCodes.map(c => {
+                    const accent = roleColor(c.role);
+                    const link = shareLinkFor(c.code);
+                    const linkCopied = copiedLinkId === c.id;
+                    const clicks = c.click_count || 0;
+                    return (
+                      <div key={c.id} style={{ display: "flex", flexDirection: "column", gap: 6, padding: 10, background: T.darkBg, borderRadius: 8, borderLeft: `3px solid ${accent}` }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ fontFamily: sans, fontSize: 8, color: accent, letterSpacing: 1, fontWeight: 700 }}>{roleLabel(c.role)}</span>
+                            <span style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 11, color: T.white, fontWeight: 700 }}>{c.code}</span>
+                          </div>
+                          <div style={{ fontFamily: sans, fontSize: 9, color: clicks > 0 ? T.copper : T.tertiary, letterSpacing: 0.8, fontWeight: 700 }}>
+                            {clicks.toLocaleString()} CLICK{clicks === 1 ? "" : "S"}
+                          </div>
+                        </div>
+                        <div style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 10, color: T.tertiary, wordBreak: "break-all", lineHeight: 1.4 }}>{link}</div>
+                        <button onClick={() => copyLink(c.id, c.code)}
+                                style={{ padding: "8px", borderRadius: 6, background: linkCopied ? T.green : accent, color: T.darkBg, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1 }}>
+                          {linkCopied ? "LINK COPIED!" : "COPY LINK"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Weekly clicks chart — rolled up across all of the ambassador's
+                share codes via ambassador_clicks_by_week. RPC back-fills zero
+                weeks so we always get 12 bars. Hidden entirely when the
+                window's total is 0 so an empty chart never renders at
+                launch. */}
+            {(() => {
+              if (!Array.isArray(weeklyClicks) || weeklyClicks.length === 0) return null;
+              const counts = weeklyClicks.map(w => Number(w.clicks) || 0);
+              const total = counts.reduce((a, b) => a + b, 0);
+              if (total === 0) return null;
+              const firstWeek = weeklyClicks[0]?.week_start;
+              const lastWeek = weeklyClicks[weeklyClicks.length - 1]?.week_start;
+              const fmtWeek = (s) => {
+                if (!s) return "";
+                const d = new Date(typeof s === "string" && s.length === 10 ? s + "T00:00:00" : s);
+                return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+              };
+              return (
+                <div style={{ background: T.darkCard, borderRadius: 14, padding: 16, border: `1px solid ${T.charcoal}` }}>
+                  <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 4 }}>
+                    <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700 }}>WEEKLY CLICKS</span>
+                    <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700 }}>{total.toLocaleString()}</span>
+                  </div>
+                  <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: "0 0 12px", lineHeight: 1.5 }}>
+                    Last 12 weeks across all of your share links.
+                  </p>
+                  <StackedBars height={90} series={[{ data: counts, color: T.copper }]} />
+                  <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
+                    <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>{fmtWeek(firstWeek)}</span>
+                    <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>{fmtWeek(lastWeek)}</span>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Commission summary — tap a card to expand its contributing journeys */}
+            <div style={{ background: T.darkCard, borderRadius: 14, padding: 16, border: `1px solid ${T.charcoal}` }}>
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700, display: "block", marginBottom: 12 }}>COMMISSION SUMMARY</span>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+                {[
+                  { key: "mtd",            label: "MTD",             value: fmtMoney(commissionAgg.mtd),           accent: T.copper, list: commissionAgg.mtdList },
+                  { key: "pendingPayout",  label: "PENDING PAYOUT",  value: fmtMoney(commissionAgg.pendingPayout), accent: T.white,  list: commissionAgg.pendingPayoutList },
+                  { key: "allTime",        label: "ALL TIME",        value: fmtMoney(commissionAgg.allTime),       accent: T.green,  list: commissionAgg.allTimeList },
+                ].map(card => {
+                  const isOpen = expandedCommissionBucket === card.key;
+                  return (
+                    <button key={card.key} onClick={() => setExpandedCommissionBucket(isOpen ? null : card.key)}
+                            style={{ background: T.darkBg, borderRadius: 8, padding: "10px 8px", textAlign: "center", border: `1px solid ${isOpen ? card.accent : T.charcoal}`, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2 }}>
+                      <span style={{ fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 1, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{card.label}</span>
+                      <span style={{ fontFamily: sans, fontSize: 18, color: card.accent, fontWeight: 700, letterSpacing: -0.5 }}>{card.value}</span>
+                      <span style={{ fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 0.8 }}>{(card.list || []).length} SALE{(card.list || []).length === 1 ? "" : "S"}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Expanded list for the active card */}
+              {expandedCommissionBucket && (() => {
+                const meta = {
+                  mtd:           { label: "MONTH-TO-DATE",      list: commissionAgg.mtdList,           accent: T.copper },
+                  pendingPayout: { label: "PENDING PAYOUT",     list: commissionAgg.pendingPayoutList, accent: T.white },
+                  allTime:       { label: "ALL EARNINGS",       list: commissionAgg.allTimeList,       accent: T.green },
+                }[expandedCommissionBucket];
+                if (!meta) return null;
+                // Sort by confirmed_at desc (most recent first).
+                const sorted = (meta.list || []).slice().sort((a, b) => new Date(b.confirmed_at || 0) - new Date(a.confirmed_at || 0));
+                return (
+                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${T.charcoal}` }}>
+                    <div style={{ fontFamily: sans, fontSize: 9, color: meta.accent, letterSpacing: 1.2, fontWeight: 700, marginBottom: 6 }}>{meta.label} · {sorted.length} SALE{sorted.length === 1 ? "" : "S"}</div>
+                    {sorted.length === 0 ? (
+                      <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, padding: "4px 0" }}>No sales in this bucket.</div>
+                    ) : sorted.map((j, i) => {
+                      const orders = ordersByJourneyId[j.id] || [];
+                      // Privacy: customer email/phone never surfaced to the ambassador.
+                      const customerName = orders[0]?.customer_name || "Customer";
+                      const amt = parseFloat(String(j.commission_amount || "0")) || 0;
+                      const stateAccent = j.state === "paid" ? T.green
+                        : j.state === "clawed_back" ? T.red
+                        : T.copper;
+                      return (
+                        <div key={j.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderTop: i > 0 ? `1px solid ${T.charcoal}` : "none" }}>
+                          <span style={{ fontFamily: sans, fontSize: 8, color: stateAccent, letterSpacing: 0.8, fontWeight: 700, minWidth: 64, textTransform: "uppercase" }}>{(j.state || "").replace(/_/g, " ")}</span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontFamily: serif, fontSize: 12, color: T.white, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{customerName}</div>
+                            <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>{j.confirmed_at ? new Date(j.confirmed_at).toLocaleDateString() : "—"}</div>
+                          </div>
+                          <span style={{ fontFamily: serif, fontSize: 13, color: j.state === "clawed_back" ? T.red : T.copper, fontWeight: 700 }}>{j.state === "clawed_back" ? `−${fmtMoney(amt)}` : fmtMoney(amt)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+
+              <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: "12px 0 0", lineHeight: 1.5 }}>
+                <strong>MTD</strong>: commissions earned so far this calendar month. <strong>Pending payout</strong>: earned last month (pays this month). <strong>All time</strong>: lifetime earnings minus clawbacks. Tap any to see contributing sales.
+              </p>
+            </div>
+
+            {/* PAYOUT CALENDAR — current cycle accumulating + upcoming approved + paid history. */}
+            {(() => {
+              // Last business day of (year, monthIdx) — backs up over weekends.
+              const lastBizDay = (year, monthIdx) => {
+                const d = new Date(year, monthIdx + 1, 0);
+                while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() - 1);
+                return d;
+              };
+              const fmtMoneyP = (n) => `$${(Number(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+              const fmtD = (s) => s ? new Date(typeof s === "string" && s.length === 10 ? `${s}T00:00:00` : s).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "—";
+
+              // Current cycle = unlinked confirmed/walk_in commissions confirmed this calendar month.
+              const now = new Date();
+              const currMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+              const currMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+              const currentAccum = (journeys || [])
+                .filter(j => {
+                  if (j.payout_id) return false;
+                  if (!(j.state === "confirmed" || j.state === "walk_in")) return false;
+                  if (!j.confirmed_at) return false;
+                  const d = new Date(j.confirmed_at);
+                  return d >= currMonthStart && d <= currMonthEnd;
+                })
+                .reduce((acc, j) => acc + (parseFloat(String(j.commission_amount || "0")) || 0), 0);
+
+              const upcomingPayDate = lastBizDay(now.getFullYear(), now.getMonth() + 1);
+
+              // Pending admin review = unlinked confirmed/walk_in commissions
+              // in CLOSED past months. Bucket by year-month so the ambassador
+              // sees one row per cycle awaiting admin approval.
+              const pendingReviewByMonth = (() => {
+                const buckets = {}; // "YYYY-MM" → { year, monthIdx, total }
+                (journeys || []).forEach(j => {
+                  if (j.payout_id) return;
+                  if (!(j.state === "confirmed" || j.state === "walk_in")) return;
+                  if (!j.confirmed_at) return;
+                  const d = new Date(j.confirmed_at);
+                  if (d >= currMonthStart) return; // current/future months handled by THIS CYCLE
+                  const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+                  if (!buckets[key]) buckets[key] = { year: d.getFullYear(), monthIdx: d.getMonth(), total: 0 };
+                  buckets[key].total += parseFloat(String(j.commission_amount || "0")) || 0;
+                });
+                return Object.entries(buckets)
+                  .map(([key, b]) => ({ ...b, key, scheduled: lastBizDay(b.year, b.monthIdx + 1) }))
+                  .sort((a, b) => a.key.localeCompare(b.key)); // oldest first — most overdue at top
+              })();
+
+              const approvedPayouts = (payouts || []).filter(p => p.status === "approved");
+              const paidPayouts     = (payouts || []).filter(p => p.status === "paid");
+
+              return (
+                <div style={{ background: T.darkCard, borderRadius: 14, padding: 16, border: `1px solid ${T.charcoal}` }}>
+                  <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700, display: "block", marginBottom: 12 }}>PAYOUT CALENDAR</span>
+
+                  {/* Current cycle accumulating banner */}
+                  <div style={{ background: T.darkBg, borderRadius: 8, padding: 12, border: `1px solid ${T.copper}40`, marginBottom: 10 }}>
+                    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
+                      <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 1.2, fontWeight: 700 }}>THIS CYCLE · {now.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</span>
+                      <span style={{ fontFamily: serif, fontSize: 18, color: T.copper, fontWeight: 700 }}>{fmtMoneyP(currentAccum)}</span>
+                    </div>
+                    <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>
+                      Closes <strong style={{ color: T.white }}>{fmtD(currMonthEnd.toISOString().slice(0, 10))}</strong> · paid <strong style={{ color: T.green }}>{fmtD(upcomingPayDate.toISOString().slice(0, 10))}</strong>
+                    </div>
+                  </div>
+
+                  {/* Pending admin review — closed cycles waiting on admin */}
+                  {pendingReviewByMonth.length > 0 && (
+                    <>
+                      <div style={{ fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 1.2, fontWeight: 700, padding: "8px 0 4px" }}>PENDING ADMIN REVIEW</div>
+                      {pendingReviewByMonth.map(b => {
+                        const monthLabel = new Date(b.year, b.monthIdx, 1).toLocaleDateString(undefined, { month: "long", year: "numeric" });
+                        return (
+                          <div key={b.key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: `1px solid ${T.charcoal}` }}>
+                            <span style={{ fontFamily: sans, fontSize: 8, color: T.copper, letterSpacing: 1, fontWeight: 700, minWidth: 78 }}>IN REVIEW</span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>{monthLabel}</div>
+                              <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>Pays {fmtD(b.scheduled.toISOString().slice(0, 10))} once approved</div>
+                            </div>
+                            <span style={{ fontFamily: serif, fontSize: 14, color: T.copper, fontWeight: 700 }}>{fmtMoneyP(b.total)}</span>
+                          </div>
+                        );
+                      })}
+                    </>
+                  )}
+
+                  {/* Approved + awaiting payment */}
+                  {approvedPayouts.length > 0 && (
+                    <>
+                      <div style={{ fontFamily: sans, fontSize: 9, color: T.green, letterSpacing: 1.2, fontWeight: 700, padding: "8px 0 4px" }}>APPROVED · AWAITING PAYMENT</div>
+                      {approvedPayouts.map(p => (
+                        <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: `1px solid ${T.charcoal}` }}>
+                          <span style={{ fontFamily: sans, fontSize: 8, color: T.green, letterSpacing: 1, fontWeight: 700, minWidth: 78 }}>APPROVED</span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>{new Date(`${p.period_start}T00:00:00`).toLocaleDateString(undefined, { month: "long", year: "numeric" })}</div>
+                            <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>Approved {fmtD(p.approved_at ? new Date(p.approved_at).toISOString().slice(0,10) : null)} · paying {fmtD(p.scheduled_for)}</div>
+                          </div>
+                          <span style={{ fontFamily: serif, fontSize: 14, color: T.green, fontWeight: 700 }}>{fmtMoneyP(p.net_amount)}</span>
+                        </div>
+                      ))}
+                    </>
+                  )}
+
+                  {/* Paid statements — collapsed by default so the page
+                      stays short over time. Tap to expand. */}
+                  {paidPayouts.length > 0 && (
+                    <>
+                      <button onClick={() => setPaidStatementsExpanded(prev => !prev)}
+                              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", padding: "12px 0 4px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
+                        <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.2, fontWeight: 700 }}>PAID STATEMENTS · {paidPayouts.length}</span>
+                        {paidStatementsExpanded
+                          ? <ChevronUp size={14} color={T.tertiary} />
+                          : <ChevronDown size={14} color={T.tertiary} />}
+                      </button>
+                      {paidStatementsExpanded && paidPayouts.map(p => (
+                        <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: `1px solid ${T.charcoal}` }}>
+                          <span style={{ fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 1, fontWeight: 700, minWidth: 78 }}>PAID</span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>{new Date(`${p.period_start}T00:00:00`).toLocaleDateString(undefined, { month: "long", year: "numeric" })}</div>
+                            <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>Paid {fmtD(p.paid_at ? new Date(p.paid_at).toISOString().slice(0,10) : null)}</div>
+                          </div>
+                          <span style={{ fontFamily: serif, fontSize: 14, color: T.white, fontWeight: 700 }}>{fmtMoneyP(p.net_amount)}</span>
+                        </div>
+                      ))}
+                    </>
+                  )}
+
+                  {approvedPayouts.length === 0 && paidPayouts.length === 0 && currentAccum === 0 && pendingReviewByMonth.length === 0 && (
+                    <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: "8px 0 0", lineHeight: 1.5 }}>
+                      No commission yet this cycle. Commissions earned in a calendar month are paid on the last business day of the following month, once approved by admin.
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* 6-month commission chart — bar per month of earned commission */}
+            {(journeys || []).length > 0 && (() => {
+              const total6mo = commissionByMonth.reduce((a, b) => a + b.total, 0);
+              const maxVal = Math.max(1, ...commissionByMonth.map(b => Math.abs(b.total)));
+              return (
+                <div style={{ background: T.darkCard, borderRadius: 14, padding: 16, border: `1px solid ${T.charcoal}` }}>
+                  <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12 }}>
+                    <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700 }}>LAST 6 MONTHS</span>
+                    <span style={{ fontFamily: sans, fontSize: 16, color: T.copper, fontWeight: 700 }}>{fmtMoney(total6mo)}</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 90 }}>
+                    {commissionByMonth.map(b => {
+                      const h = Math.round((Math.abs(b.total) / maxVal) * 90);
+                      const negative = b.total < 0;
+                      return (
+                        <div key={b.key} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, minWidth: 0 }}>
+                          <div style={{ width: "100%", height: h, background: negative ? T.red : T.copper, borderRadius: 3, minHeight: b.total !== 0 ? 2 : 0 }} />
+                          <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.5 }}>{b.label}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* PER-CODE PERFORMANCE — which of your codes is driving sales.
+                Aggregates from ambassador_orders.discount_code_id (set at
+                ingest by the webhook + backfill function). Commission is
+                attributed to the code that initiated each journey. */}
+            {perCodeStats.length > 0 && (
+              <div style={{ background: T.darkCard, borderRadius: 14, padding: 16, border: `1px solid ${T.charcoal}` }}>
+                <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700, display: "block", marginBottom: 12 }}>PER-CODE PERFORMANCE</span>
+                <div style={{ display: "flex", flexDirection: "column" }}>
+                  {perCodeStats.map((s, i) => {
+                    const c = s.code;
+                    const accent = c.role === "primary" ? T.copper : c.role === "legacy" ? T.tertiary : T.green;
+                    const roleLabel = c.role === "primary" ? "PRIMARY" : c.role === "legacy" ? "LEGACY" : "PROMO";
+                    return (
+                      <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderTop: i > 0 ? `1px solid ${T.charcoal}` : "none" }}>
+                        <div style={{ width: 3, alignSelf: "stretch", background: accent, borderRadius: 2 }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                            <span style={{ fontFamily: sans, fontSize: 8, color: accent, letterSpacing: 1, fontWeight: 700 }}>{roleLabel}</span>
+                            <span style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 12, color: T.white, fontWeight: 700 }}>{c.code}</span>
+                            {c.internal_code && <span style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 9, color: T.tertiary }}>+ {c.internal_code}</span>}
+                          </div>
+                          <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 2 }}>
+                            {s.orderCount} order{s.orderCount === 1 ? "" : "s"} · {fmtMoney(s.subtotal)} subtotal
+                          </div>
+                        </div>
+                        <div style={{ textAlign: "right", flexShrink: 0 }}>
+                          <div style={{ fontFamily: serif, fontSize: 14, color: s.commission > 0 ? T.copper : T.tertiary, fontWeight: 700 }}>{fmtMoney(s.commission)}</div>
+                          <div style={{ fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 0.8 }}>COMMISSION</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: "12px 0 0", lineHeight: 1.5 }}>
+                  Commission is attributed to the code that initiated each customer's journey. Subtotal is post-refund.
+                </p>
+              </div>
+            )}
+
+            {/* CUSTOMER JOURNEYS — the key view: which deposits have a
+                confirmation linked and which don't. Each card groups all
+                orders from one customer's journey arc. Filter pills isolate
+                open (deposit_only awaiting confirmation) vs earned/paid. */}
+            {(journeys || []).length > 0 && (
+              <div style={{ background: T.darkCard, borderRadius: 14, padding: 16, border: `1px solid ${T.charcoal}` }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                  <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700 }}>COMMISSION PIPELINE</span>
+                  <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{journeys.length} total</span>
+                </div>
+                {/* Filter pills. Default OPEN — that's the actionable view
+                    (waiting on confirmation, with countdown). */}
+                <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
+                  {(() => {
+                    const counts = {
+                      all: journeys.length,
+                      open: journeys.filter(j => j.state === "deposit_only").length,
+                      earned: journeys.filter(j => j.state === "confirmed" || j.state === "walk_in").length,
+                      paid: journeys.filter(j => j.state === "paid").length,
+                    };
+                    return [
+                      { v: "open",   label: `OPEN (${counts.open})` },
+                      { v: "earned", label: `EARNED (${counts.earned})` },
+                      { v: "paid",   label: `PAID (${counts.paid})` },
+                      { v: "all",    label: `ALL (${counts.all})` },
+                    ].map(p => {
+                      const sel = journeyFilter === p.v;
+                      return (
+                        <button key={p.v} onClick={() => setJourneyFilter(p.v)}
+                                style={{ flex: 1, minWidth: 0, padding: "6px 4px", borderRadius: 6, background: sel ? T.copper : "transparent", border: `1px solid ${sel ? T.copper : T.charcoal}`, color: sel ? T.darkBg : T.tertiary, fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.label}</button>
+                      );
+                    });
+                  })()}
+                </div>
+
+                {(() => {
+                  const filtered = journeys.filter(j => {
+                    if (journeyFilter === "all") return true;
+                    if (journeyFilter === "open") return j.state === "deposit_only";
+                    if (journeyFilter === "earned") return j.state === "confirmed" || j.state === "walk_in";
+                    if (journeyFilter === "paid") return j.state === "paid";
+                    return true;
+                  });
+                  if (filtered.length === 0) {
+                    return <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, padding: "8px 0", textAlign: "center" }}>No sales in this filter.</div>;
+                  }
+                  // Sort: open (soonest-to-expire first) for OPEN filter;
+                  // otherwise most-recent first.
+                  const sorted = filtered.slice().sort((a, b) => {
+                    if (journeyFilter === "open") {
+                      return new Date(a.expires_at || 0) - new Date(b.expires_at || 0);
+                    }
+                    return new Date(b.confirmed_at || b.deposit_started_at || 0) - new Date(a.confirmed_at || a.deposit_started_at || 0);
+                  });
+                  return (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {sorted.map(j => {
+                        const orders = ordersByJourneyId[j.id] || [];
+                        // Customer name pulled from first linked order
+                        // (journeys table doesn't store display name).
+                        // Privacy: never surface customer email/phone to the
+                        // ambassador. Use the order's customer_name (first/last
+                        // from Shopify) and fall back to a neutral placeholder.
+                        const customerName = orders[0]?.customer_name || "Customer";
+                        const state = j.state || "unclassified";
+                        const stateAccent = state === "deposit_only" ? T.copper
+                          : state === "confirmed" || state === "walk_in" ? T.copper
+                          : state === "paid" ? T.green
+                          : state === "expired" ? T.tertiary
+                          : state === "clawed_back" ? T.red
+                          : T.tertiary;
+                        const stateLabel = state === "deposit_only" ? "AWAITING CONFIRMATION"
+                          : state === "confirmed" ? "CONFIRMED · UNPAID"
+                          : state === "walk_in" ? "WALK-IN · UNPAID"
+                          : state === "paid" ? "PAID"
+                          : state === "expired" ? "EXPIRED"
+                          : state === "clawed_back" ? "CLAWED BACK"
+                          : state.toUpperCase();
+                        const commissionAmt = parseFloat(String(j.commission_amount || "0")) || 0;
+                        const isExpanded = expandedJourneyId === j.id;
+                        // Days until expiry, only meaningful for deposit_only
+                        let daysLeft = null;
+                        let daysAccent = T.tertiary;
+                        if (state === "deposit_only" && j.expires_at) {
+                          const ms = new Date(j.expires_at).getTime() - Date.now();
+                          daysLeft = Math.ceil(ms / (24 * 3600 * 1000));
+                          daysAccent = daysLeft <= 14 ? T.red : daysLeft <= 30 ? T.copper : T.tertiary;
+                        }
+                        return (
+                          <div key={j.id} style={{ background: T.darkBg, borderRadius: 8, borderLeft: `3px solid ${stateAccent}`, border: `1px solid ${T.charcoal}`, borderLeftWidth: 3, overflow: "hidden" }}>
+                            <button onClick={() => setExpandedJourneyId(isExpanded ? null : j.id)}
+                                    style={{ display: "block", width: "100%", padding: "10px 12px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                                <span style={{ fontFamily: sans, fontSize: 8, color: stateAccent, letterSpacing: 1, fontWeight: 700 }}>{stateLabel}</span>
+                                {j.is_conflict && <span style={{ fontFamily: sans, fontSize: 8, color: T.red, letterSpacing: 1, fontWeight: 700, padding: "1px 5px", background: `${T.red}18`, borderRadius: 3 }}>CONFLICT</span>}
+                                <span style={{ flex: 1 }} />
+                                {daysLeft != null && (
+                                  <span style={{ fontFamily: sans, fontSize: 10, color: daysAccent, fontWeight: 700 }}>{daysLeft > 0 ? `${daysLeft}d left` : `expired ${Math.abs(daysLeft)}d ago`}</span>
+                                )}
+                              </div>
+                              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+                                <span style={{ fontFamily: serif, fontSize: 13, color: T.white, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: 1, minWidth: 0 }}>{customerName}</span>
+                                <span style={{ fontFamily: sans, fontSize: 13, color: commissionAmt > 0 ? (state === "paid" ? T.green : T.copper) : T.tertiary, fontWeight: 700 }}>{fmtMoney(commissionAmt)}</span>
+                              </div>
+                              <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 2 }}>
+                                {orders.length} order{orders.length === 1 ? "" : "s"} · {fmtMoney(j.commission_eligible_total)} eligible
+                              </div>
+                            </button>
+                            {isExpanded && orders.length > 0 && (
+                              <div style={{ padding: "0 12px 12px", borderTop: `1px solid ${T.charcoal}` }}>
+                                <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600, padding: "8px 0 6px" }}>ORDERS</div>
+                                {orders.map((o, oi) => {
+                                  const cls = o.classification || "unclassified";
+                                  const clsLabel = cls === "deposit" ? "DEPOSIT"
+                                    : cls === "confirmation_part" ? "CONFIRMATION"
+                                    : cls === "walk_in_part" ? "WALK-IN"
+                                    : cls.replace(/_/g, " ").toUpperCase();
+                                  const clsAccent = cls === "deposit" ? T.copper
+                                    : cls === "confirmation_part" ? T.green
+                                    : cls === "walk_in_part" ? T.green
+                                    : T.tertiary;
+                                  const refunded = parseFloat(String(o.refunded_amount || "0")) || 0;
+                                  const refundedFull = refunded > 0 && refunded >= (parseFloat(String(o.subtotal || "0")) || 0);
+                                  return (
+                                    <div key={o.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderTop: oi > 0 ? `1px solid ${T.charcoal}` : "none", position: "relative" }}>
+                                      <span style={{ fontFamily: sans, fontSize: 8, color: clsAccent, letterSpacing: 0.8, fontWeight: 700, minWidth: 78 }}>{clsLabel}</span>
+                                      <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                          <span style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 11, color: T.white }}>{o.shopify_order_number || "—"}</span>
+                                          {o.is_manual && (
+                                            <span style={{ fontFamily: sans, fontSize: 7, color: T.copper, letterSpacing: 0.8, fontWeight: 700, padding: "1px 4px", background: `${T.copper}18`, borderRadius: 3 }}>MANUAL</span>
+                                          )}
+                                          {refunded > 0 && (
+                                            <span style={{ fontFamily: sans, fontSize: 7, color: T.red, letterSpacing: 0.8, fontWeight: 700, padding: "1px 4px", background: `${T.red}18`, borderRadius: 3 }}>
+                                              {refundedFull ? "REFUNDED" : `−${fmtMoney(refunded)}`}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>{o.order_date ? new Date(o.order_date).toLocaleDateString() : ""}</div>
+                                      </div>
+                                      <span style={{ fontFamily: sans, fontSize: 11, color: refundedFull ? T.tertiary : T.white, fontWeight: 600, textDecoration: refundedFull ? "line-through" : "none" }}>{fmtMoney(o.subtotal)}</span>
+                                      {isAdminView && (
+                                        <button onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (adminOrderMenuId === o.id) { setAdminOrderMenu(null); return; }
+                                          const rect = e.currentTarget.getBoundingClientRect();
+                                          setAdminOrderMenu({ id: o.id, order: o, top: rect.bottom + 4, right: (typeof window !== "undefined" ? window.innerWidth : 0) - rect.right });
+                                        }} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex" }}>
+                                          <MoreHorizontal size={14} color={T.tertiary} />
+                                        </button>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+                <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: "12px 0 0", lineHeight: 1.5 }}>
+                  <strong>Open</strong> deposits are waiting on a customer confirmation order. Tap any sale to see linked orders.
+                </p>
+              </div>
+            )}
+
+            {/* Recent orders — chronological feed of last 10. Raw stream
+                including any orphan / excluded orders without journey_id.
+                Shows REFUNDED chip + struck subtotal when refunded > 0. */}
+            {(allOrders || []).length > 0 && (
+              <div style={{ background: T.darkCard, borderRadius: 14, padding: 16, border: `1px solid ${T.charcoal}` }}>
+                <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700, display: "block", marginBottom: 10 }}>RECENT ATTRIBUTED ORDERS</span>
+                <div style={{ display: "flex", flexDirection: "column" }}>
+                  {allOrders.slice(0, 10).map((o, i) => {
+                    const cls = o.classification || "unclassified";
+                    const clsAccent = cls === "deposit" ? T.copper
+                      : cls === "confirmation_part" ? T.green
+                      : cls === "walk_in_part" ? T.green
+                      : T.tertiary;
+                    const refunded = parseFloat(String(o.refunded_amount || "0")) || 0;
+                    const refundedFull = refunded > 0 && refunded >= (parseFloat(String(o.subtotal || "0")) || 0);
+                    return (
+                      <div key={o.id || i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: i > 0 ? `1px solid ${T.charcoal}` : "none" }}>
+                        <span style={{ fontFamily: sans, fontSize: 9, color: clsAccent, letterSpacing: 1, fontWeight: 700, minWidth: 90, textTransform: "uppercase" }}>{cls.replace(/_/g, " ")}</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 11, color: T.white }}>{o.shopify_order_number || "—"}</span>
+                            {refunded > 0 && (
+                              <span style={{ fontFamily: sans, fontSize: 8, color: T.red, letterSpacing: 1, fontWeight: 700, padding: "1px 5px", background: `${T.red}18`, borderRadius: 3 }}>
+                                {refundedFull ? "REFUNDED" : `−${fmtMoney(refunded)}`}
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{o.customer_name || "—"} · {o.order_date ? new Date(o.order_date).toLocaleDateString() : ""}</div>
+                        </div>
+                        <span style={{ fontFamily: sans, fontSize: 12, color: refundedFull ? T.tertiary : T.white, fontWeight: 700, textDecoration: refundedFull ? "line-through" : "none" }}>{fmtMoney(o.subtotal)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* How commissions work — quick reference */}
+            <div style={{ background: T.darkCard, borderRadius: 14, padding: 16, border: `1px solid ${T.charcoal}` }}>
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700, display: "block", marginBottom: 10 }}>HOW IT WORKS</span>
+              <ul style={{ margin: 0, padding: "0 0 0 18px", fontFamily: serif, fontSize: 12, color: T.warmStone, lineHeight: 1.7 }}>
+                <li><strong>Deposit</strong>: $500 order using your code — commission held until the customer's full order is paid.</li>
+                <li><strong>Confirmation</strong>: commission earned when the customer confirms build details and pays the final invoice.</li>
+              </ul>
+              <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: "10px 0 0", lineHeight: 1.5 }}>
+                Commissions paid on the last business day of the month following confirmation. Merch and shipping don't earn commission.
+              </p>
+            </div>
+
+            {/* Payouts setup — Stripe Connect Express onboarding (Phase 2A). */}
+            {(() => {
+              const hasAccount  = !!ambassador.stripe_account_id;
+              const isOnboarded = !!ambassador.stripe_onboarded;
+              const borderColor = isOnboarded ? T.green : hasAccount ? T.copper : T.tertiary;
+              return (
+                <div style={{ background: T.darkCard, borderRadius: 14, padding: 16, border: `1px ${isOnboarded ? "solid" : "dashed"} ${borderColor}40` }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                    <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700 }}>PAYOUT SETUP</span>
+                    {isOnboarded && <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: T.green, padding: "2px 8px", borderRadius: 3, letterSpacing: 1, fontWeight: 700 }}>READY</span>}
+                    {!isOnboarded && hasAccount && <span style={{ fontFamily: sans, fontSize: 9, color: T.darkBg, background: T.copper, padding: "2px 8px", borderRadius: 3, letterSpacing: 1, fontWeight: 700 }}>IN PROGRESS</span>}
+                  </div>
+                  {isOnboarded ? (
+                    <>
+                      <p style={{ fontFamily: serif, fontSize: 12, color: T.warmStone, margin: "0 0 10px", lineHeight: 1.5 }}>
+                        Your bank account is connected via Stripe and ready to receive commissions. Stripe handles W-9 + 1099 tax docs automatically when you cross the federal threshold.
+                      </p>
+                      <button onClick={refreshStripeStatus} disabled={stripeBusy}
+                              style={{ padding: "8px 12px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}40`, cursor: stripeBusy ? "default" : "pointer", color: T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, opacity: stripeBusy ? 0.6 : 1 }}>
+                        {stripeBusy ? "REFRESHING…" : "REFRESH STATUS"}
+                      </button>
+                    </>
+                  ) : hasAccount ? (
+                    <>
+                      <p style={{ fontFamily: serif, fontSize: 12, color: T.warmStone, margin: "0 0 10px", lineHeight: 1.5 }}>
+                        You've started setting up your Stripe payout account but haven't finished. Continue where you left off — you'll fill in W-9 info + bank account details on Stripe's secure pages.
+                      </p>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        <button onClick={startStripeOnboarding} disabled={stripeBusy}
+                                style={{ flex: 1, padding: "10px", borderRadius: 8, background: T.red, border: "none", cursor: stripeBusy ? "default" : "pointer", color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 1, opacity: stripeBusy ? 0.6 : 1 }}>
+                          {stripeBusy ? "OPENING STRIPE…" : "CONTINUE SETUP"}
+                        </button>
+                        <button onClick={refreshStripeStatus} disabled={stripeBusy}
+                                style={{ padding: "10px 12px", borderRadius: 8, background: "none", border: `1px solid ${T.tertiary}40`, cursor: stripeBusy ? "default" : "pointer", color: T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1 }}>
+                          REFRESH
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p style={{ fontFamily: serif, fontSize: 12, color: T.warmStone, margin: "0 0 10px", lineHeight: 1.5 }}>
+                        Set up your payout account through Stripe to receive commission payments. Stripe handles W-9 + 1099 tax docs automatically. Takes a few minutes — you'll need your SSN/EIN and bank account info.
+                      </p>
+                      <button onClick={startStripeOnboarding} disabled={stripeBusy}
+                              style={{ width: "100%", padding: "12px", borderRadius: 8, background: T.red, border: "none", cursor: stripeBusy ? "default" : "pointer", color: T.white, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 1, opacity: stripeBusy ? 0.6 : 1 }}>
+                        {stripeBusy ? "OPENING STRIPE…" : "SET UP PAYOUTS"}
+                      </button>
+                    </>
+                  )}
+                  {stripeMsg && (
+                    <div style={{ fontFamily: sans, fontSize: 11, color: stripeMsg.startsWith("Couldn") ? T.red : T.tertiary, marginTop: 10 }}>{stripeMsg}</div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        )}
+      </div>
+      {/* Admin order 3-dot menu — portaled to document.body so it escapes
+          the journey card's overflow: hidden clipping (was getting cut off
+          and only showing the first item). Position is fixed with coords
+          captured from the trigger button's getBoundingClientRect at open
+          time. Outside-click catcher closes it. */}
+      {adminOrderMenu && (() => {
+        // Order object is stashed in state at open time so we don't need
+        // to look it up through ordersByJourneyId here (which was empty
+        // when iterated over journey rows).
+        const orderInMenu = adminOrderMenu.order;
+        if (!orderInMenu) return null;
+        return createPortal(
+          <>
+            <div onClick={() => setAdminOrderMenu(null)} style={{ position: "fixed", inset: 0, background: "transparent", zIndex: 1099 }} />
+            <div onClick={(e) => e.stopPropagation()} style={{ position: "fixed", top: adminOrderMenu.top, right: Math.max(8, adminOrderMenu.right), background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", zIndex: 1100, minWidth: 200, overflow: "hidden" }}>
+              <button onClick={() => { setAdminOrderEditing(orderInMenu); setAdminOrderMenu(null); }} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "10px 14px", background: "none", border: "none", cursor: "pointer", borderBottom: `1px solid ${T.charcoal}` }}>
+                <Edit2 size={12} color={T.copper} />
+                <span style={{ fontFamily: sans, fontSize: 11, color: T.white }}>Edit commission-eligible</span>
+              </button>
+              <button onClick={() => { setAdminOrderLinking(orderInMenu); setAdminOrderMenu(null); }} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "10px 14px", background: "none", border: "none", cursor: "pointer", borderBottom: `1px solid ${T.charcoal}` }}>
+                <Link2 size={12} color={T.green} />
+                <span style={{ fontFamily: sans, fontSize: 11, color: T.white }}>Link to a journey</span>
+              </button>
+              <button onClick={() => { setAdminOrderReassigning(orderInMenu); setAdminOrderMenu(null); }} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "10px 14px", background: "none", border: "none", cursor: "pointer", borderBottom: `1px solid ${T.charcoal}` }}>
+                <ArrowRight size={12} color={T.copper} />
+                <span style={{ fontFamily: sans, fontSize: 11, color: T.white }}>Reassign to another</span>
+              </button>
+              <button onClick={() => { setAdminOrderRemoving(orderInMenu); setAdminOrderMenu(null); }} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "10px 14px", background: "none", border: "none", cursor: "pointer" }}>
+                <Trash2 size={12} color={T.red} />
+                <span style={{ fontFamily: sans, fontSize: 11, color: T.red }}>Remove from ambassador</span>
+              </button>
+            </div>
+          </>,
+          document.body
+        );
+      })()}
+
+      {/* Admin order-action modals — only fire when isAdminView. Each
+          handler invokes the matching SECURITY DEFINER RPC at root; on
+          success refetchData fires + the modal closes. Soft-delete +
+          journey recompute happen server-side; client just refetches. */}
+      {adminOrderRemoving && (
+        <AdminOrderRemoveModal
+          order={adminOrderRemoving}
+          onClose={() => setAdminOrderRemoving(null)}
+          onSubmit={async ({ orderId, reason }) => {
+            const ok = await onAdminOrderRemove(orderId, reason);
+            if (ok !== false) refetchData();
+            return ok;
+          }}
+        />
+      )}
+      {adminOrderReassigning && (
+        <AdminOrderReassignModal
+          order={adminOrderReassigning}
+          ambassadors={adminAmbassadorList || []}
+          onClose={() => setAdminOrderReassigning(null)}
+          onSubmit={async ({ orderId, newAmbassadorId, reason }) => {
+            const ok = await onAdminOrderReassign(orderId, newAmbassadorId, reason);
+            if (ok !== false) refetchData();
+            return ok;
+          }}
+        />
+      )}
+      {adminOrderEditing && (
+        <AdminOrderEditEligibleModal
+          order={adminOrderEditing}
+          onClose={() => setAdminOrderEditing(null)}
+          onSubmit={async ({ orderId, newEligible, reason }) => {
+            const ok = await onAdminOrderEditEligible(orderId, newEligible, reason);
+            if (ok !== false) refetchData();
+            return ok;
+          }}
+        />
+      )}
+      {adminOrderLinking && (
+        <AdminOrderLinkJourneyModal
+          order={adminOrderLinking}
+          onClose={() => setAdminOrderLinking(null)}
+          onSubmit={async ({ orderId, journeyId, newEligible, reason }) => {
+            const ok = await onAdminLinkOrderToJourney(orderId, journeyId, newEligible, reason);
+            if (ok !== false) refetchData();
+            return ok;
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Gear Drops shared form helpers ─────────────────────────────────────
+// Hoisted to module scope to avoid the inline-component state-wipe trap —
+// re-declaring these inside GearDropEditor's render would remount them on
+// every parent re-render and wipe their useState.
+function GDSection({ title, actionLabel, onAction, children }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 700, letterSpacing: 0.8 }}>{title}</span>
+        {actionLabel && onAction && (
+          <button onClick={onAction} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.green, fontWeight: 700, letterSpacing: 0.6 }}>{actionLabel}</button>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function GDInput({ label, value, onSave, type = "text" }) {
+  const [local, setLocal] = useState(value);
+  useEffect(() => { setLocal(value); }, [value]);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.4 }}>{label}</span>
+      <input type={type} value={local} onChange={(e) => setLocal(e.target.value)} onBlur={() => { if (local !== value) onSave(local); }} style={{ padding: "10px 12px", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8, color: T.white, fontFamily: sans, fontSize: 13, boxSizing: "border-box", width: "100%" }} />
+    </div>
+  );
+}
+
+function GDTextarea({ label, value, onSave, rows = 3 }) {
+  const [local, setLocal] = useState(value);
+  useEffect(() => { setLocal(value); }, [value]);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.4 }}>{label}</span>
+      <textarea value={local} onChange={(e) => setLocal(e.target.value)} onBlur={() => { if (local !== value) onSave(local); }} rows={rows} style={{ padding: "10px 12px", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8, color: T.white, fontFamily: serif, fontSize: 13, boxSizing: "border-box", width: "100%", resize: "vertical" }} />
+    </div>
+  );
+}
+
+function GDToggle({ label, checked, onChange }) {
+  return (
+    <button onClick={() => onChange(!checked)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", padding: "8px 0", background: "none", border: "none", cursor: "pointer" }}>
+      <span style={{ fontFamily: sans, fontSize: 12, color: T.white, textAlign: "left" }}>{label}</span>
+      <span style={{ width: 36, height: 20, borderRadius: 10, background: checked ? T.green : T.charcoal, position: "relative", flexShrink: 0, transition: "background 120ms" }}>
+        <span style={{ position: "absolute", top: 2, left: checked ? 18 : 2, width: 16, height: 16, borderRadius: "50%", background: T.white, transition: "left 120ms" }} />
+      </span>
+    </button>
+  );
+}
+
+// Single-block rich text editor used for ABOUT + PRIZE DESCRIPTION on gear
+// drops. Stripped-down twin of ForumSectionEditor — no subheading, no
+// section number. Saves to parent on blur (debounce-free) so the editor
+// pattern matches the rest of the GD form fields. HTML is sanitized at
+// render time via sanitizeForumHtml.
+function GDRichEditor({ label, value, onSave, placeholder, minHeight = 140 }) {
+  const bodyRef = useRef(null);
+  const [activeFormats, setActiveFormats] = useState({});
+  const [linkInputOpen, setLinkInputOpen] = useState(false);
+  const [linkUrl, setLinkUrl] = useState("");
+  const savedRange = useRef(null);
+  const initialized = useRef(false);
+  const lastSavedRef = useRef(value || "");
+
+  useEffect(() => {
+    if (initialized.current) return;
+    if (bodyRef.current) {
+      bodyRef.current.innerHTML = value || "";
+      initialized.current = true;
+      lastSavedRef.current = value || "";
+    }
+  }, []);
+
+  const updateActiveFormats = () => {
+    try {
+      setActiveFormats({
+        bold: document.queryCommandState("bold"),
+        italic: document.queryCommandState("italic"),
+        underline: document.queryCommandState("underline"),
+        insertUnorderedList: document.queryCommandState("insertUnorderedList"),
+        insertOrderedList: document.queryCommandState("insertOrderedList"),
+      });
+    } catch (e) { /* ignore */ }
+  };
+
+  const cmd = (command, arg) => {
+    document.execCommand(command, false, arg || null);
+    setTimeout(updateActiveFormats, 0);
+  };
+
+  const handleBlur = () => {
+    if (!bodyRef.current || !onSave) return;
+    const html = bodyRef.current.innerHTML;
+    if (html !== lastSavedRef.current) {
+      lastSavedRef.current = html;
+      onSave(html);
+    }
+  };
+
+  const btnStyle = (isActive) => ({
+    width: 30, height: 28, display: "flex", alignItems: "center", justifyContent: "center",
+    background: isActive ? `${T.copper}30` : "none",
+    border: isActive ? `1px solid ${T.copper}` : `1px solid ${T.tertiary}30`,
+    borderRadius: 4, cursor: "pointer",
+    color: isActive ? T.copper : T.white,
+    fontFamily: serif, fontSize: 13,
+  });
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      {label && <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.4 }}>{label}</span>}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 2, padding: "6px 8px", background: T.charcoal, borderRadius: "8px 8px 0 0", border: `1px solid ${T.charcoal}`, borderBottom: "none" }}>
+        <button onMouseDown={(e) => { e.preventDefault(); cmd("bold"); }} style={{ ...btnStyle(activeFormats.bold), fontWeight: 700 }}>B</button>
+        <button onMouseDown={(e) => { e.preventDefault(); cmd("italic"); }} style={{ ...btnStyle(activeFormats.italic), fontStyle: "italic" }}>I</button>
+        <button onMouseDown={(e) => { e.preventDefault(); cmd("underline"); }} style={{ ...btnStyle(activeFormats.underline), textDecoration: "underline" }}>U</button>
+        <div style={{ width: 1, height: 20, background: `${T.tertiary}30`, margin: "4px 4px", alignSelf: "center" }} />
+        <button onMouseDown={(e) => { e.preventDefault(); cmd("insertUnorderedList"); }} style={{ ...btnStyle(activeFormats.insertUnorderedList), fontFamily: sans, fontSize: 11 }} title="Bullet list">•≡</button>
+        <button onMouseDown={(e) => { e.preventDefault(); cmd("insertOrderedList"); }} style={{ ...btnStyle(activeFormats.insertOrderedList), fontFamily: sans, fontSize: 11 }} title="Numbered list">1.</button>
+        <button onMouseDown={(e) => {
+          e.preventDefault();
+          const sel = window.getSelection();
+          if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
+          savedRange.current = sel.getRangeAt(0).cloneRange();
+          setLinkInputOpen(true);
+          setLinkUrl("");
+        }} style={{ ...btnStyle(linkInputOpen), color: T.copper, fontFamily: sans, fontSize: 11 }} title="Insert link">🔗</button>
+      </div>
+      {linkInputOpen && (
+        <div style={{ display: "flex", gap: 6, padding: "8px 10px", background: T.darkBg, border: `1px solid ${T.copper}`, borderBottom: "none" }}>
+          <input autoFocus value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} onKeyDown={(e) => {
+            if (e.key === "Enter" && linkUrl.trim()) {
+              e.preventDefault();
+              const sel = window.getSelection();
+              if (savedRange.current) { sel.removeAllRanges(); sel.addRange(savedRange.current); }
+              document.execCommand("createLink", false, linkUrl.trim().startsWith("http") ? linkUrl.trim() : "https://" + linkUrl.trim());
+              if (bodyRef.current && onSave) { const html = bodyRef.current.innerHTML; lastSavedRef.current = html; onSave(html); }
+              setLinkInputOpen(false); setLinkUrl(""); savedRange.current = null;
+            } else if (e.key === "Escape") { setLinkInputOpen(false); setLinkUrl(""); savedRange.current = null; }
+          }} placeholder="Paste URL and press Enter…" style={{ flex: 1, padding: "6px 10px", borderRadius: 6, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 12, outline: "none" }} />
+          <button onClick={() => { setLinkInputOpen(false); setLinkUrl(""); savedRange.current = null; }} style={{ padding: "6px 8px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}40`, cursor: "pointer" }}>
+            <X size={12} color={T.tertiary} />
+          </button>
+        </div>
+      )}
+      <div
+        ref={bodyRef}
+        contentEditable
+        onKeyUp={updateActiveFormats}
+        onMouseUp={updateActiveFormats}
+        onSelect={updateActiveFormats}
+        onFocus={updateActiveFormats}
+        onBlur={handleBlur}
+        onPaste={(e) => { e.preventDefault(); const text = e.clipboardData.getData("text/html") || e.clipboardData.getData("text/plain"); document.execCommand("insertHTML", false, text); }}
+        data-placeholder={placeholder || ""}
+        style={{ width: "100%", minHeight, padding: "12px 14px", borderRadius: "0 0 8px 8px", background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none", boxSizing: "border-box", lineHeight: 1.6, overflowY: "auto", maxHeight: 360 }}
+      />
+    </div>
+  );
+}
+
+// Multi-image picker for gear drop prize photos. Uploads through the
+// shared moderation pipeline + appends to the existing list. Caller owns
+// the array; this just wraps add/remove.
+function GDMultiImagePicker({ label, value, onSave, currentUserId, max = 8 }) {
+  const photos = Array.isArray(value) ? value : [];
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef(null);
+
+  const handleFiles = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    if (photos.length + files.length > max) { alert(`Max ${max} photos.`); return; }
+    if (!currentUserId) { alert("Sign-in required to upload."); return; }
+    for (const f of files) {
+      if (!f.type || !f.type.startsWith("image/")) { alert("Photos only."); return; }
+      if (f.size > MAX_UPLOAD_BYTES) { alert(`One of the files is too large. Max ${MAX_UPLOAD_LABEL}.`); return; }
+    }
+    setUploading(true);
+    try {
+      const dataUrls = await Promise.all(files.map(f => new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result);
+        r.onerror = rej;
+        r.readAsDataURL(f);
+      })));
+      const uploaded = await uploadPostPhotoList(dataUrls.map(url => ({ url })), currentUserId);
+      const newPhotos = (uploaded || []).filter(p => p && p.url && (p.url.startsWith("http://") || p.url.startsWith("https://")));
+      if (newPhotos.length) await onSave([...photos, ...newPhotos]);
+    } catch (err) {
+      console.error("[GDMultiImagePicker]", err);
+      if (err && err.code === "moderation_blocked") alert("One or more images were blocked by content moderation.");
+      else alert("Upload failed.");
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  const removeAt = async (idx) => {
+    if (typeof confirm === "function" && !confirm("Remove this photo?")) return;
+    await onSave(photos.filter((_, i) => i !== idx));
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.4 }}>{label}</span>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {photos.map((p, i) => {
+          const url = typeof p === "string" ? p : (p && p.url);
+          if (!url) return null;
+          return (
+            <div key={i} style={{ position: "relative", width: 88, height: 88, borderRadius: 8, background: `url(${url}) center/cover`, border: `1px solid ${T.charcoal}` }}>
+              <button onClick={() => removeAt(i)} style={{ position: "absolute", top: 2, right: 2, width: 22, height: 22, borderRadius: 11, background: T.darkBg, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+                <X size={11} color={T.red} />
+              </button>
+            </div>
+          );
+        })}
+        {photos.length < max && (
+          <button onClick={() => fileRef.current && fileRef.current.click()} disabled={uploading} style={{ width: 88, height: 88, borderRadius: 8, background: T.darkCard, border: `1px dashed ${T.charcoal}`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: uploading ? "default" : "pointer", gap: 4 }}>
+            <Plus size={18} color={T.tertiary} />
+            <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.4 }}>{uploading ? "UPLOADING…" : "ADD"}</span>
+          </button>
+        )}
+      </div>
+      <input ref={fileRef} type="file" accept="image/*" multiple onChange={handleFiles} style={{ display: "none" }} />
+    </div>
+  );
+}
+
+// Pan / zoom cropper used by GDImagePicker. Mouse + touch (single-finger
+// pan, two-finger pinch) + scroll wheel. On apply, draws the visible
+// region into a canvas and uploads through the moderation pipeline. The
+// container is locked to the requested aspect ratio so the WYSIWYG
+// matches the public render.
+function GDImageCropper({ src, aspectRatio, onSave, onClose, currentUserId }) {
+  const [scale, setScale] = useState(1);
+  const [tx, setTx] = useState(0);
+  const [ty, setTy] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const containerRef = useRef(null);
+  const imgRef = useRef(null);
+  const dragRef = useRef(null);
+  const touchRef = useRef(null);
+  // Mirror state into refs so the imperative wheel/touch listeners can
+  // read current values without re-binding on every state change.
+  const scaleRef = useRef(scale);
+  const txRef = useRef(tx);
+  const tyRef = useRef(ty);
+  useEffect(() => { scaleRef.current = scale; }, [scale]);
+  useEffect(() => { txRef.current = tx; }, [tx]);
+  useEffect(() => { tyRef.current = ty; }, [ty]);
+
+  // Wheel + touchmove must be NON-passive so preventDefault() works (stop
+  // the page from scrolling while the user pans/zooms inside the cropper).
+  // React's onWheel / onTouchMove props attach passive listeners on
+  // mobile, which throws "Unable to preventDefault inside passive event
+  // listener invocation." We attach via addEventListener with passive:false.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onWheel = (e) => {
+      e.preventDefault();
+      const delta = -e.deltaY * 0.002;
+      // 0.2 min so a wide logo can shrink to fit inside a 1:1 box
+      // (background shows around the shrunk image). 8x max ceiling.
+      const next = scaleRef.current + delta * scaleRef.current;
+      setScale(Math.max(0.2, Math.min(8, next)));
+    };
+    const onTouchStart = (e) => {
+      if (e.touches.length === 1) {
+        touchRef.current = { mode: "pan", x: e.touches[0].clientX, y: e.touches[0].clientY, tx: txRef.current, ty: tyRef.current };
+      } else if (e.touches.length === 2) {
+        const dx = e.touches[1].clientX - e.touches[0].clientX;
+        const dy = e.touches[1].clientY - e.touches[0].clientY;
+        touchRef.current = { mode: "pinch", dist: Math.sqrt(dx * dx + dy * dy), scale: scaleRef.current };
+      }
+    };
+    const onTouchMove = (e) => {
+      if (!touchRef.current) return;
+      e.preventDefault();
+      if (touchRef.current.mode === "pan" && e.touches.length === 1) {
+        setTx(touchRef.current.tx + (e.touches[0].clientX - touchRef.current.x));
+        setTy(touchRef.current.ty + (e.touches[0].clientY - touchRef.current.y));
+      } else if (touchRef.current.mode === "pinch" && e.touches.length === 2) {
+        const dx = e.touches[1].clientX - e.touches[0].clientX;
+        const dy = e.touches[1].clientY - e.touches[0].clientY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const ratio = dist / touchRef.current.dist;
+        setScale(Math.max(0.2, Math.min(8, touchRef.current.scale * ratio)));
+      }
+    };
+    const onTouchEnd = () => { touchRef.current = null; };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    el.addEventListener("touchstart", onTouchStart, { passive: false });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", onTouchEnd, { passive: false });
+    el.addEventListener("touchcancel", onTouchEnd, { passive: false });
+    return () => {
+      el.removeEventListener("wheel", onWheel);
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", onTouchEnd);
+      el.removeEventListener("touchcancel", onTouchEnd);
+    };
+  }, []);
+
+  const handleMouseDown = (e) => {
+    if (saving) return;
+    dragRef.current = { x: e.clientX, y: e.clientY, tx, ty };
+    e.preventDefault();
+  };
+  const handleMouseMove = (e) => {
+    if (!dragRef.current) return;
+    setTx(dragRef.current.tx + (e.clientX - dragRef.current.x));
+    setTy(dragRef.current.ty + (e.clientY - dragRef.current.y));
+  };
+  const handleMouseUp = () => { dragRef.current = null; };
+  const handleReset = () => { setScale(1); setTx(0); setTy(0); };
+
+  const handleApply = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      const container = containerRef.current;
+      const img = imgRef.current;
+      if (!container || !img) return;
+      const rect = container.getBoundingClientRect();
+      const cw = rect.width;
+      const ch = rect.height;
+      const imgW = img.naturalWidth;
+      const imgH = img.naturalHeight;
+      if (!imgW || !imgH) return;
+      const baseScale = Math.max(cw / imgW, ch / imgH);
+      const effectiveScale = baseScale * scale;
+      const srcW = cw / effectiveScale;
+      const srcH = ch / effectiveScale;
+      const srcX = imgW / 2 - srcW / 2 - tx / effectiveScale;
+      const srcY = imgH / 2 - srcH / 2 - ty / effectiveScale;
+      const outW = 1600;
+      const outH = Math.round(outW * (ch / cw));
+      const canvas = document.createElement("canvas");
+      canvas.width = outW;
+      canvas.height = outH;
+      const ctx = canvas.getContext("2d");
+      // Pre-fill so when the image is shrunk below cover (scale < 1) the
+      // letterbox area writes a defined color into the JPEG, matching what
+      // the user sees in the cropper container (which has background:#000).
+      ctx.fillStyle = "#000000";
+      ctx.fillRect(0, 0, outW, outH);
+      ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, outW, outH);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+      const uploaded = await uploadPostPhotoList([{ url: dataUrl }], currentUserId);
+      const newUrl = uploaded && uploaded[0] && uploaded[0].url;
+      if (newUrl && (newUrl.startsWith("http://") || newUrl.startsWith("https://"))) {
+        await onSave(newUrl);
+        onClose();
+      } else {
+        alert("Couldn't save the cropped image.");
+      }
+    } catch (e) {
+      console.error("[GDImageCropper] apply failed", e);
+      if (e && e.code === "moderation_blocked") alert("This image was blocked by content moderation.");
+      else if (e && /tainted|cross-origin/i.test(String(e.message || e))) alert("The image source doesn't allow cropping (CORS). Try re-uploading the original.");
+      else alert("Couldn't apply crop.");
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 300, display: "flex", flexDirection: "column", padding: 18, gap: 14 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <button onClick={onClose} disabled={saving} style={{ background: "none", border: "none", padding: 4, cursor: saving ? "default" : "pointer" }}>
+          <X size={20} color={T.white} />
+        </button>
+        <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.8 }}>RESIZE & POSITION</span>
+      </div>
+      <div
+        ref={containerRef}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        style={{ width: "100%", aspectRatio, maxHeight: "62vh", margin: "0 auto", overflow: "hidden", position: "relative", borderRadius: 8, background: "#000", touchAction: "none", cursor: dragRef.current ? "grabbing" : "grab" }}
+      >
+        <img
+          ref={imgRef}
+          src={src}
+          crossOrigin="anonymous"
+          draggable={false}
+          alt=""
+          style={{
+            position: "absolute",
+            left: "50%",
+            top: "50%",
+            transform: `translate(calc(-50% + ${tx}px), calc(-50% + ${ty}px)) scale(${scale})`,
+            transformOrigin: "center",
+            minWidth: "100%",
+            minHeight: "100%",
+            objectFit: "cover",
+            userSelect: "none",
+            WebkitUserDrag: "none",
+            pointerEvents: "none",
+          }}
+        />
+        {/* Safe-area outline — green border above the image so the host
+            can see exactly what will be captured into the JPEG. Even when
+            the image is shrunk below cover, this outlines the published
+            crop region. */}
+        <div style={{ position: "absolute", inset: 0, border: `2px solid ${T.green}`, borderRadius: 8, pointerEvents: "none", boxShadow: `0 0 0 1px rgba(0,0,0,0.4) inset` }} />
+      </div>
+      <div style={{ textAlign: "center", fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.4 }}>Drag to pan · pinch or scroll to zoom</div>
+      <div style={{ display: "flex", gap: 10 }}>
+        <button onClick={handleReset} disabled={saving} style={{ flex: 1, padding: "12px", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8, color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.8, cursor: saving ? "default" : "pointer" }}>RESET</button>
+        <button onClick={handleApply} disabled={saving} style={{ flex: 2, padding: "12px", background: saving ? T.charcoal : T.green, border: "none", borderRadius: 8, color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.8, cursor: saving ? "default" : "pointer" }}>{saving ? "APPLYING…" : "APPLY"}</button>
+      </div>
+    </div>
+  );
+}
+
+function GDImagePicker({ label, value, onSave, currentUserId, aspectRatio = "1/1", previewWidth = 96 }) {
+  const [uploading, setUploading] = useState(false);
+  const [cropperOpen, setCropperOpen] = useState(false);
+  const fileRef = useRef(null);
+
+  const handleFile = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    if (!file.type || !file.type.startsWith("image/")) { alert("Please pick an image file."); return; }
+    if (file.size > MAX_UPLOAD_BYTES) { alert(`Image is too large. Max ${MAX_UPLOAD_LABEL}.`); return; }
+    if (!currentUserId) { alert("Sign-in required to upload."); return; }
+    setUploading(true);
+    try {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = reject;
+        r.readAsDataURL(file);
+      });
+      const uploaded = await uploadPostPhotoList([{ url: dataUrl }], currentUserId);
+      const out = uploaded && uploaded[0];
+      const newUrl = out && out.url;
+      if (newUrl && (newUrl.startsWith("https://") || newUrl.startsWith("http://"))) {
+        await onSave(newUrl);
+      } else {
+        alert("Upload didn't return a URL. Please try again.");
+      }
+    } catch (err) {
+      console.error("[GDImagePicker] upload failed", err);
+      if (err && err.code === "moderation_blocked") alert("This image was blocked by content moderation.");
+      else alert("Upload failed. Please try again.");
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  const handleClear = async () => {
+    if (!value) return;
+    if (!confirm("Remove this image?")) return;
+    await onSave(null);
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.4 }}>{label}</span>
+      <div style={{ display: "flex", gap: 10, alignItems: "stretch" }}>
+        {value ? (
+          <div style={{ width: previewWidth, aspectRatio, borderRadius: 8, background: `url(${value}) center/cover`, border: `1px solid ${T.charcoal}`, flexShrink: 0 }} />
+        ) : (
+          <div style={{ width: previewWidth, aspectRatio, borderRadius: 8, background: T.darkCard, border: `1px dashed ${T.charcoal}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Image size={Math.min(previewWidth * 0.28, 28)} color={T.tertiary} />
+          </div>
+        )}
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, flex: 1, minWidth: 0 }}>
+          <button onClick={() => fileRef.current && fileRef.current.click()} disabled={uploading} style={{ padding: "10px 12px", background: uploading ? T.charcoal : T.copper, border: "none", borderRadius: 8, color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, cursor: uploading ? "default" : "pointer" }}>
+            {uploading ? "UPLOADING…" : (value ? "REPLACE" : "PICK IMAGE")}
+          </button>
+          {value && !uploading && (
+            <button onClick={() => setCropperOpen(true)} style={{ padding: "8px 12px", background: "none", border: `1px solid ${T.copper}`, borderRadius: 8, color: T.copper, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, cursor: "pointer" }}>
+              RESIZE & POSITION
+            </button>
+          )}
+          {value && !uploading && (
+            <button onClick={handleClear} style={{ padding: "8px 12px", background: "none", border: `1px solid ${T.charcoal}`, borderRadius: 8, color: T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, cursor: "pointer" }}>
+              REMOVE
+            </button>
+          )}
+        </div>
+      </div>
+      <input ref={fileRef} type="file" accept="image/*" onChange={handleFile} style={{ display: "none" }} />
+      {cropperOpen && value && (
+        <GDImageCropper
+          src={value}
+          aspectRatio={aspectRatio}
+          currentUserId={currentUserId}
+          onSave={onSave}
+          onClose={() => setCropperOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function GDPinRow({ idx, pin, isFirst, isLast, onUpdate, onRemove, currentUserId }) {
+  const isEndpoint = isLast && !isFirst;
+  const labelHint = isFirst ? "START · publicly visible" : isEndpoint ? "ENDPOINT" : "WAYPOINT";
+  const accent = isFirst ? T.copper : isEndpoint ? T.red : T.green;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 12, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10, marginBottom: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span style={{ fontFamily: sans, fontSize: 10, color: accent, fontWeight: 700, letterSpacing: 0.6 }}>{idx}. {labelHint}</span>
+        <button onClick={onRemove} style={{ background: "none", border: "none", padding: 4, cursor: "pointer" }}>
+          <Trash2 size={12} color={T.tertiary} />
+        </button>
+      </div>
+      <GDInput label="Label" value={pin.label || ""} onSave={(v) => onUpdate({ label: v })} />
+      <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ flex: 1 }}>
+          <GDInput type="number" label="Latitude" value={pin.lat != null ? String(pin.lat) : ""} onSave={(v) => onUpdate({ lat: v === "" ? null : parseFloat(v) })} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <GDInput type="number" label="Longitude" value={pin.lng != null ? String(pin.lng) : ""} onSave={(v) => onUpdate({ lng: v === "" ? null : parseFloat(v) })} />
+        </div>
+      </div>
+      <GDInput type="number" label={isFirst ? "Proximity radius (m, default 200 for start)" : "Proximity radius (m, default 100)"} value={pin.radius_m != null ? String(pin.radius_m) : ""} onSave={(v) => onUpdate({ radius_m: v === "" ? null : parseInt(v, 10) })} />
+      {!isFirst && (
+        <GDToggle label="Show snap-line from previous pin" checked={pin.showSnapLineFromPrev !== false} onChange={(b) => onUpdate({ showSnapLineFromPrev: b })} />
+      )}
+      {/* Optional hint + photo on every pin (incl. start). Useful for the
+          start pin meeting-place description AND for adding flavor to each
+          waypoint. Only the endpoint gets the radius-reveal display_mode
+          toggle since it controls how the FINAL pin is unmasked. */}
+      <GDTextarea label={isEndpoint ? "Endpoint hint (free-form text)" : "Hint / notes (optional)"} value={pin.hint_text || ""} onSave={(v) => onUpdate({ hint_text: v })} />
+      <GDImagePicker label="Hint photo (optional)" value={pin.hint_photo_url || null} onSave={(v) => onUpdate({ hint_photo_url: v })} currentUserId={currentUserId} />
+      {isEndpoint && (
+        <GDToggle label="Radius-reveal mode (pin appears only after GPS enters radius)" checked={(pin.display_mode || "radius_reveal") === "radius_reveal"} onChange={(b) => onUpdate({ display_mode: b ? "radius_reveal" : "pin" })} />
+      )}
+    </div>
+  );
+}
+
+function gdDateInput(iso) {
+  if (!iso) return "";
+  try {
+    const d = new Date(iso);
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } catch (e) { return ""; }
+}
+
+function gdStatusBtn(color) {
+  return { padding: "10px 14px", borderRadius: 8, background: color, border: "none", color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer" };
+}
+
+// ─── Gear Drop editor (admin) ───────────────────────────────────────────
+// Full-screen edit overlay for a single gear_drops row. Auto-saves text
+// fields on blur, toggles/selects fire immediately. Pins are tracked as
+// separate local state so multi-field pin edits don't race with each
+// other via the route_data jsonb round-trip.
+function GearDropEditor({ dropId, currentUserId, onClose, onLoad, onUpdate, onDelete, onLoadEditors, onGrantEditor, onRevokeEditor, onEnterPinBuilder, onSchedule }) {
+  const [drop, setDrop] = useState(null);
+  const [pins, setPins] = useState([]);
+  const [editors, setEditors] = useState([]);
+  const [editorProfiles, setEditorProfiles] = useState({});
+  const [editorSearch, setEditorSearch] = useState("");
+  const [editorSearchResults, setEditorSearchResults] = useState([]);
+  const [transitioning, setTransitioning] = useState(false);
+
+  // Initial load
+  useEffect(() => {
+    if (!dropId) return;
+    let cancelled = false;
+    (async () => {
+      const row = await onLoad(dropId);
+      if (cancelled || !row) return;
+      setDrop(row);
+      setPins((row.route_data && Array.isArray(row.route_data.pins)) ? row.route_data.pins : []);
+      const eds = await onLoadEditors(dropId);
+      if (cancelled) return;
+      setEditors(eds || []);
+      const uids = (eds || []).map(e => e.user_id);
+      if (uids.length) {
+        const { data: profs } = await supabase.from("profiles").select("id, handle, full_name, avatar_url").in("id", uids);
+        if (!cancelled) {
+          const map = {};
+          (profs || []).forEach(p => { map[p.id] = p; });
+          setEditorProfiles(map);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [dropId]);
+
+  // Patches text/metadata fields. route_data is owned by `pins` state and
+  // patched separately via savePins() so the two never collide.
+  const patch = async (fields) => {
+    const res = await onUpdate(dropId, fields);
+    if (res && res.ok && res.data) {
+      setDrop(prev => prev ? { ...prev, ...res.data, route_data: prev.route_data } : res.data);
+    } else if (res && res.error) {
+      alert("Save failed: " + res.error);
+    }
+  };
+
+  const savePins = async (newPins) => {
+    setPins(newPins);
+    const newRouteData = {
+      pins: newPins,
+      points: (drop && drop.route_data && drop.route_data.points) || [],
+    };
+    const updates = {
+      route_data: newRouteData,
+      start_lat: newPins[0] && newPins[0].lat != null ? newPins[0].lat : null,
+      start_lng: newPins[0] && newPins[0].lng != null ? newPins[0].lng : null,
+    };
+    const res = await onUpdate(dropId, updates);
+    if (res && res.error) alert("Pin save failed: " + res.error);
+  };
+
+  const addPin = () => {
+    const idx = pins.length;
+    const newPin = {
+      lat: null, lng: null,
+      label: idx === 0 ? "Start" : `Waypoint ${idx}`,
+      radius_m: 100,
+      showSnapLineFromPrev: true,
+    };
+    savePins([...pins, newPin]);
+  };
+
+  const removePin = (idx) => {
+    if (!confirm("Remove this pin?")) return;
+    savePins(pins.filter((_, i) => i !== idx));
+  };
+
+  const updatePin = (idx, fields) => {
+    savePins(pins.map((p, i) => i === idx ? { ...p, ...fields } : p));
+  };
+
+  // Status lifecycle. Transitions are guarded by confirmation + light
+  // validation; the real authorization happens server-side via RLS.
+  const transitionStatus = async (newStatus) => {
+    if (transitioning) return;
+    if (newStatus === "scheduled") {
+      if (!drop.title || drop.start_lat == null || drop.start_lng == null || pins.length < 2) {
+        alert("Scheduled drops need a title, a start pin with coords, and at least one waypoint beyond start.");
+        return;
+      }
+      if (!confirm("Schedule this drop? A linked CONVOY post will be auto-spawned in the feed and signups will open.")) return;
+    } else if (newStatus === "live") {
+      if (drop.status !== "scheduled") { alert("Can only go live from SCHEDULED."); return; }
+      if (!confirm("Take this drop live now? Participants can begin the race.")) return;
+    } else if (newStatus === "ended") {
+      if (!confirm("End this drop? Runs will be frozen; further waypoint submissions blocked.")) return;
+    } else if (newStatus === "draft") {
+      if (!confirm("Revert to draft? Existing signups will lose access until rescheduled.")) return;
+    }
+    setTransitioning(true);
+    try {
+      // SCHEDULE uses the server-side RPC so the convoy post + status flip
+      // are atomic. All other transitions are plain status patches.
+      if (newStatus === "scheduled" && onSchedule) {
+        const res = await onSchedule(dropId);
+        if (res && res.error) { alert("Schedule failed: " + res.error); return; }
+        const row = await onLoad(dropId);
+        if (row) setDrop(prev => prev ? { ...prev, ...row, route_data: prev.route_data } : row);
+      } else {
+        await patch({ status: newStatus });
+      }
+    } finally { setTransitioning(false); }
+  };
+
+  // Co-host search — debounce 250ms, hide already-granted users.
+  useEffect(() => {
+    if (!editorSearch || editorSearch.length < 2) { setEditorSearchResults([]); return; }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      try {
+        const { data } = await supabase.from("profiles")
+          .select("id, handle, full_name, avatar_url")
+          .or(`handle.ilike.%${editorSearch}%,full_name.ilike.%${editorSearch}%`)
+          .limit(10);
+        if (!cancelled) {
+          const filtered = (data || []).filter(p => !editors.some(e => e.user_id === p.id));
+          setEditorSearchResults(filtered);
+        }
+      } catch (e) { /* non-fatal */ }
+    }, 250);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [editorSearch, editors]);
+
+  const grantEditor = async (uid) => {
+    const res = await onGrantEditor(dropId, uid);
+    if (res && res.ok) {
+      const found = editorSearchResults.find(r => r.id === uid);
+      setEditors(prev => [...prev, { user_id: uid, granted_by: currentUserId, granted_at: new Date().toISOString() }]);
+      if (found) setEditorProfiles(prev => ({ ...prev, [uid]: found }));
+      setEditorSearch("");
+      setEditorSearchResults([]);
+    } else if (res && res.error) alert("Grant failed: " + res.error);
+  };
+
+  const revokeEditor = async (uid) => {
+    if (!confirm("Revoke co-host access from this user?")) return;
+    const res = await onRevokeEditor(dropId, uid);
+    if (res && res.ok) setEditors(prev => prev.filter(e => e.user_id !== uid));
+    else if (res && res.error) alert("Revoke failed: " + res.error);
+  };
+
+  if (!drop) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100%", padding: 32 }}>
+        <span style={{ fontFamily: serif, fontSize: 13, color: T.tertiary }}>Loading drop…</span>
+      </div>
+    );
+  }
+
+  const statusColor =
+    drop.status === "live" ? T.red :
+    drop.status === "scheduled" ? T.copper :
+    drop.status === "ended" ? T.tertiary :
+    drop.status === "archived" ? T.tertiary :
+    T.charcoal;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", minHeight: "100%", background: T.darkBg }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 16px", borderBottom: `1px solid ${T.charcoal}`, position: "sticky", top: 0, background: T.darkBg, zIndex: 5 }}>
+        <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+          <ChevronLeft size={20} color={T.white} />
+        </button>
+        <Gift size={16} color={T.green} />
+        <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, letterSpacing: 0.8, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{drop.title || "Untitled Drop"}</span>
+        <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: statusColor, padding: "3px 10px", borderRadius: 8, fontWeight: 700, letterSpacing: 0.6 }}>{(drop.status || "").toUpperCase()}</span>
+      </div>
+
+      <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 22 }}>
+        <GDSection title="BASIC INFO">
+          <GDInput label="Title" value={drop.title || ""} onSave={(v) => patch({ title: v })} />
+          <GDInput label="URL slug (used in /drops/<slug> — change with care)" value={drop.slug || ""} onSave={(v) => patch({ slug: v.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "") })} />
+          <GDInput label="Brand partner name" value={drop.brand_partner_name || ""} onSave={(v) => patch({ brand_partner_name: v })} />
+          <GDImagePicker label="Brand logo · square (will show next to the brand name)" value={drop.brand_logo_url || null} onSave={(v) => patch({ brand_logo_url: v })} currentUserId={currentUserId} aspectRatio="1/1" previewWidth={120} />
+          <GDImagePicker label="Hero image · 16:9 (shown at the top of the public page)" value={drop.hero_img || null} onSave={(v) => patch({ hero_img: v })} currentUserId={currentUserId} aspectRatio="16/9" previewWidth={220} />
+          <GDRichEditor label="About this event" value={drop.about || ""} onSave={(v) => patch({ about: v })} placeholder="Tell people what the day looks like, who it's for, what they should bring…" />
+        </GDSection>
+
+        <GDSection title="PRIZE">
+          <GDInput label="Prize title" value={drop.prize_title || ""} onSave={(v) => patch({ prize_title: v })} />
+          <GDRichEditor label="Prize description" value={drop.prize_description || ""} onSave={(v) => patch({ prize_description: v })} placeholder="Describe the prize. Spec list, condition, retail value, brand-supplied story, etc." />
+          <GDInput type="number" label="Prize value (USD)" value={drop.prize_value_cents != null ? (drop.prize_value_cents / 100).toString() : ""} onSave={(v) => patch({ prize_value_cents: v === "" ? null : Math.round(parseFloat(v) * 100) })} />
+          <GDMultiImagePicker label="Prize photos · carousel on the public page" value={drop.prize_photos || []} onSave={(v) => patch({ prize_photos: v })} currentUserId={currentUserId} max={8} />
+        </GDSection>
+
+        <GDSection title="LIFECYCLE">
+          <GDInput type="datetime-local" label="Starts at" value={gdDateInput(drop.starts_at)} onSave={(v) => patch({ starts_at: v ? new Date(v).toISOString() : null })} />
+          <GDInput type="datetime-local" label="Ends at (optional — null = open-ended)" value={gdDateInput(drop.ends_at)} onSave={(v) => patch({ ends_at: v ? new Date(v).toISOString() : null })} />
+          <GDInput type="datetime-local" label="Signup closes (optional)" value={gdDateInput(drop.signup_open_until)} onSave={(v) => patch({ signup_open_until: v ? new Date(v).toISOString() : null })} />
+          <GDInput type="number" label="Late signup window (min after start)" value={drop.late_signup_window_min != null ? String(drop.late_signup_window_min) : "30"} onSave={(v) => patch({ late_signup_window_min: v === "" ? 30 : parseInt(v, 10) })} />
+          <GDInput type="number" label="Arrival popup radius (m) · fires the 'you're here' prompt for joined racers" value={drop.arrival_radius_m != null ? String(drop.arrival_radius_m) : "100"} onSave={(v) => patch({ arrival_radius_m: v === "" ? 100 : Math.max(10, parseInt(v, 10)) })} />
+        </GDSection>
+
+        <GDSection title="WAYPOINTS" actionLabel="+ ADD MANUALLY" onAction={addPin}>
+          <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: "0 0 8px", lineHeight: 1.4 }}>
+            Pin 0 = start point (publicly visible). Last pin = endpoint (radius-reveal by default). Pins in between unlock in order — each requires GPS within radius, a photo, and a note.
+          </p>
+          {onEnterPinBuilder && (
+            <button onClick={() => onEnterPinBuilder(dropId, pins)} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px 14px", background: T.green, border: "none", borderRadius: 10, color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer", marginBottom: 8 }}>
+              <MapPin size={14} color={T.white} />
+              PLAN ROUTE ON MAP
+            </button>
+          )}
+          {pins.length === 0 && <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, textAlign: "center", padding: 16 }}>No pins yet. Tap + ADD to seed the start point, then keep adding waypoints in order.</p>}
+          {pins.map((pin, i) => (
+            <GDPinRow key={i} idx={i} pin={pin} isFirst={i === 0} isLast={i === pins.length - 1} onUpdate={(p) => updatePin(i, p)} onRemove={() => removePin(i)} currentUserId={currentUserId} />
+          ))}
+        </GDSection>
+
+        <GDSection title="AFTERPARTY · REVEALED ON WINNER DECLARED">
+          {onEnterPinBuilder && (
+            <button onClick={() => onEnterPinBuilder(dropId, pins, { mode: "afterparty", afterpartyPos: (drop.afterparty_lat != null && drop.afterparty_lng != null) ? { lat: drop.afterparty_lat, lng: drop.afterparty_lng } : null })} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px 14px", background: T.copper, border: "none", borderRadius: 10, color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer", marginBottom: 8 }}>
+              <MapPin size={14} color={T.white} />
+              {drop.afterparty_lat != null && drop.afterparty_lng != null ? "EDIT AFTERPARTY PIN ON MAP" : "PICK AFTERPARTY PIN ON MAP"}
+            </button>
+          )}
+          {drop.afterparty_lat != null && drop.afterparty_lng != null && (
+            <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, padding: "0 4px 4px" }}>
+              Pin set at {drop.afterparty_lat.toFixed(5)}, {drop.afterparty_lng.toFixed(5)}
+            </div>
+          )}
+          <GDInput label="Label (e.g. Trail's End Brewery)" value={drop.afterparty_label || ""} onSave={(v) => patch({ afterparty_label: v })} />
+          <GDInput label="Address" value={drop.afterparty_address || ""} onSave={(v) => patch({ afterparty_address: v })} />
+          <GDInput type="datetime-local" label="Afterparty starts at" value={gdDateInput(drop.afterparty_starts_at)} onSave={(v) => patch({ afterparty_starts_at: v ? new Date(v).toISOString() : null })} />
+        </GDSection>
+
+        <GDSection title="CO-HOSTS · TEMP EDITOR ACCESS">
+          {editors.length === 0 && <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, textAlign: "center", padding: 8 }}>No co-hosts. Brand reps can be granted scoped editor access here.</p>}
+          {editors.map(e => {
+            const prof = editorProfiles[e.user_id];
+            return (
+              <div key={e.user_id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8, marginBottom: 6 }}>
+                <div style={{ width: 28, height: 28, borderRadius: "50%", background: T.charcoal, overflow: "hidden", flexShrink: 0 }}>
+                  {prof && prof.avatar_url && <img src={prof.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>{(prof && prof.full_name) || "User"}</div>
+                  <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>@{(prof && prof.handle) || "user"}</div>
+                </div>
+                <button onClick={() => revokeEditor(e.user_id)} style={{ background: "none", border: "none", padding: 4, cursor: "pointer" }}>
+                  <X size={14} color={T.tertiary} />
+                </button>
+              </div>
+            );
+          })}
+          <input type="text" value={editorSearch} onChange={(e) => setEditorSearch(e.target.value)} placeholder="Search by handle or name…" style={{ width: "100%", padding: "10px 12px", marginTop: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8, color: T.white, fontFamily: sans, fontSize: 12, boxSizing: "border-box" }} />
+          {editorSearchResults.map(r => (
+            <button key={r.id} onClick={() => grantEditor(r.id)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8, marginTop: 6, width: "100%", cursor: "pointer", textAlign: "left" }}>
+              <div style={{ width: 28, height: 28, borderRadius: "50%", background: T.charcoal, overflow: "hidden", flexShrink: 0 }}>
+                {r.avatar_url && <img src={r.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>{r.full_name || "User"}</div>
+                <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>@{r.handle || "user"}</div>
+              </div>
+              <Plus size={14} color={T.green} />
+            </button>
+          ))}
+        </GDSection>
+
+        <GDSection title={`STATUS · CURRENTLY ${(drop.status || "").toUpperCase()}`}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {drop.status === "draft" && <button disabled={transitioning} onClick={() => transitionStatus("scheduled")} style={gdStatusBtn(T.copper)}>SCHEDULE</button>}
+            {drop.status === "scheduled" && <>
+              <button disabled={transitioning} onClick={() => transitionStatus("live")} style={gdStatusBtn(T.red)}>GO LIVE</button>
+              <button disabled={transitioning} onClick={() => transitionStatus("draft")} style={gdStatusBtn(T.tertiary)}>BACK TO DRAFT</button>
+            </>}
+            {drop.status === "live" && <button disabled={transitioning} onClick={() => transitionStatus("ended")} style={gdStatusBtn(T.tertiary)}>END EVENT</button>}
+            {drop.status === "ended" && <button disabled={transitioning} onClick={() => transitionStatus("archived")} style={gdStatusBtn(T.tertiary)}>ARCHIVE</button>}
+          </div>
+        </GDSection>
+
+        {drop.status === "draft" && onDelete && (
+          <GDSection title="DANGER ZONE">
+            <button onClick={async () => {
+              const res = await onDelete(drop.id);
+              if (res && res.ok) onClose();
+              else if (res && res.error && res.error !== "Cancelled") alert("Delete failed: " + res.error);
+            }} style={{ width: "100%", padding: "12px 14px", background: `${T.red}25`, border: `1px solid ${T.red}`, borderRadius: 10, color: T.red, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer" }}>
+              DELETE DRAFT
+            </button>
+          </GDSection>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Public Gear Drop detail (signed-in beta + admin) ───────────────────
+// Renders the brand + prize + countdown + start point + JOIN button. Joined
+// participants see a YOU'RE IN state with their progress (and a VIEW RUN
+// button once Phase 3 ships). Fetches the full row + a one-off participant
+// count on mount.
+// Scoped rich-text CSS for the gear drop About / Prize description blocks.
+// padding-left:0 + list-style-position:inside keeps bullets and paragraphs
+// at the same left edge (no indent disparity) per host feedback.
+const GD_RB_CSS = `<style>
+.gd-rb{font-family:Source Serif 4,Georgia,serif;font-size:14px;color:#F5F2ED;line-height:1.6}
+.gd-rb p,.gd-rb div{margin:6px 0}
+.gd-rb h1{font-size:22px;font-weight:700;color:#fff;margin:12px 0 6px;font-family:Trebuchet MS,sans-serif;line-height:1.2}
+.gd-rb h2{font-size:18px;font-weight:700;color:#fff;margin:10px 0 4px;font-family:Trebuchet MS,sans-serif;line-height:1.3}
+.gd-rb h3{font-size:15px;font-weight:600;color:#fff;margin:8px 0 4px;font-family:Trebuchet MS,sans-serif;line-height:1.3}
+.gd-rb ul,.gd-rb ol{padding-left:0;margin:8px 0;list-style-position:inside}
+.gd-rb li{margin:4px 0;padding-left:0}
+.gd-rb a{color:#C49A6C;text-decoration:underline}
+.gd-rb b,.gd-rb strong{font-weight:700;color:#fff}
+.gd-rb u{text-decoration:underline}
+.gd-rb img{max-width:100%;border-radius:8px;display:block;margin:8px 0}
+</style>`;
+
+function GearDropDetailScreen({ dropId, currentUserId, isAdmin, onClose, onLoad, onJoin, onLeave, myRun, onOpenRun, onLoadComments, onAddComment, onDeleteComment, onLoadParticipants, onViewUser, onStartDirections }) {
+  const [drop, setDrop] = useState(null);
+  const [participantCount, setParticipantCount] = useState(null);
+  const [joining, setJoining] = useState(false);
+  const [now, setNow] = useState(Date.now());
+  const [locationLabel, setLocationLabel] = useState(null);
+  const [comments, setComments] = useState([]);
+  const [commentDraft, setCommentDraft] = useState("");
+  const [postingComment, setPostingComment] = useState(false);
+  const [showParticipants, setShowParticipants] = useState(false);
+  const [participants, setParticipants] = useState([]);
+  const [participantsLoaded, setParticipantsLoaded] = useState(false);
+  const [lightboxStartIdx, setLightboxStartIdx] = useState(null);
+  // Arrival-at-start GPS gate. Once a participant has joined and they
+  // drive to the start point, watchPosition fires the arrival popup
+  // when they're inside arrival_radius_m. Dismissable so they can
+  // close it and reopen via VIEW YOUR RUN later if they want.
+  const [userLoc, setUserLoc] = useState(null);
+  const [arrivalDismissed, setArrivalDismissed] = useState(false);
+
+  // Heartbeat the clock once a minute for live countdown rerenders.
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60000);
+    return () => clearInterval(t);
+  }, []);
+
+  // GPS watch — only when joined, no submissions yet, drop not over.
+  // Once the user has submitted pin 0 the run screen takes over the GPS
+  // watch, so we drop ours to save battery.
+  useEffect(() => {
+    if (!myRun || !drop) return;
+    if (drop.start_lat == null || drop.start_lng == null) return;
+    const submissionsCount = (myRun.progress && Array.isArray(myRun.progress.waypointsUnlocked))
+      ? myRun.progress.waypointsUnlocked.length : 0;
+    if (submissionsCount > 0) return;
+    if (myRun.finished_at) return;
+    if (drop.status === "ended" || drop.status === "archived") return;
+    if (typeof navigator === "undefined" || !navigator.geolocation) return;
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => setUserLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => { /* silent — arrival popup is best-effort UX */ },
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 30000 }
+    );
+    return () => { try { navigator.geolocation.clearWatch(watchId); } catch (e) {} };
+  }, [myRun, drop]);
+
+  useEffect(() => {
+    if (!dropId) return;
+    let cancelled = false;
+    (async () => {
+      const row = await onLoad(dropId);
+      if (cancelled || !row) return;
+      setDrop(row);
+      try {
+        const { count } = await supabase.from("trip_reports")
+          .select("id", { count: "exact", head: true })
+          .eq("gear_drop_id", dropId)
+          .eq("kind", "gear_drop_run");
+        if (!cancelled) setParticipantCount(count != null ? count : 0);
+      } catch (e) { /* non-fatal */ }
+      if (row.start_lat != null && row.start_lng != null) {
+        try {
+          const info = await mapboxReverseGeocodeRich(row.start_lng, row.start_lat);
+          if (!cancelled && info && info.label) setLocationLabel(info.label);
+        } catch (e) { /* non-fatal */ }
+      }
+      if (onLoadComments) {
+        const list = await onLoadComments(dropId);
+        if (!cancelled) setComments(list || []);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [dropId, onLoad, onLoadComments]);
+
+  const refreshParticipants = async () => {
+    if (!onLoadParticipants) return;
+    const list = await onLoadParticipants(dropId);
+    setParticipants(list || []);
+    setParticipantsLoaded(true);
+  };
+
+  const handlePostComment = async () => {
+    if (postingComment || !commentDraft.trim() || !onAddComment) return;
+    setPostingComment(true);
+    try {
+      const res = await onAddComment(dropId, commentDraft);
+      if (res && res.ok && res.data) {
+        setComments(prev => [...prev, res.data]);
+        setCommentDraft("");
+      } else if (res && res.error) {
+        alert("Comment failed: " + res.error);
+      }
+    } finally { setPostingComment(false); }
+  };
+
+  const handleDeleteComment = async (commentId) => {
+    if (!onDeleteComment) return;
+    const res = await onDeleteComment(commentId);
+    if (res && res.ok) {
+      setComments(prev => prev.filter(c => c.id !== commentId));
+    } else if (res && res.error && res.error !== "Cancelled") {
+      alert("Delete failed: " + res.error);
+    }
+  };
+
+  const handleJoin = async () => {
+    if (joining || !drop) return;
+    setJoining(true);
+    try {
+      const res = await onJoin(dropId);
+      if (res && res.error) alert("Join failed: " + res.error);
+      // Refresh participant count on join.
+      if (res && res.ok) {
+        try {
+          const { count } = await supabase.from("trip_reports")
+            .select("id", { count: "exact", head: true })
+            .eq("gear_drop_id", dropId)
+            .eq("kind", "gear_drop_run");
+          if (count != null) setParticipantCount(count);
+        } catch (e) {}
+      }
+    } finally { setJoining(false); }
+  };
+
+  const handleLeave = async () => {
+    if (joining || !drop || !onLeave) return;
+    setJoining(true);
+    try {
+      const res = await onLeave(dropId);
+      if (res && res.error && res.error !== "Cancelled") alert("Cancel failed: " + res.error);
+      if (res && res.ok) {
+        try {
+          const { count } = await supabase.from("trip_reports")
+            .select("id", { count: "exact", head: true })
+            .eq("gear_drop_id", dropId)
+            .eq("kind", "gear_drop_run");
+          if (count != null) setParticipantCount(count);
+        } catch (e) {}
+      }
+    } finally { setJoining(false); }
+  };
+
+  if (!drop) {
+    return (
+      <div style={{ position: "fixed", inset: 0, background: T.darkBg, zIndex: 200, display: "flex", flexDirection: "column" }}>
+        <div style={{ padding: "14px 16px", borderBottom: `1px solid ${T.charcoal}`, display: "flex", alignItems: "center", gap: 8 }}>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+            <ChevronLeft size={20} color={T.white} />
+          </button>
+          <Gift size={16} color={T.green} />
+          <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.8 }}>GEAR DROP</span>
+        </div>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <span style={{ fontFamily: serif, fontSize: 13, color: T.tertiary }}>Loading drop…</span>
+        </div>
+      </div>
+    );
+  }
+
+  const isJoined = !!myRun;
+  const isLive = drop.status === "live";
+  const isScheduled = drop.status === "scheduled";
+  const isEnded = drop.status === "ended" || drop.status === "archived";
+  const hasWinner = !!drop.winner_run_id;
+
+  // Signup window: explicit signup_open_until wins, else starts_at + late_signup_window_min.
+  let signupCutoff = null;
+  if (drop.signup_open_until) signupCutoff = new Date(drop.signup_open_until).getTime();
+  else if (drop.starts_at) signupCutoff = new Date(drop.starts_at).getTime() + (drop.late_signup_window_min != null ? drop.late_signup_window_min : 30) * 60000;
+  const signupOpen = (isScheduled || isLive) && (!signupCutoff || now < signupCutoff);
+
+  // Countdown formatting.
+  const startsAtMs = drop.starts_at ? new Date(drop.starts_at).getTime() : null;
+  const deltaMs = startsAtMs != null ? startsAtMs - now : null;
+  const countdownLabel = (() => {
+    if (deltaMs == null) return null;
+    if (deltaMs <= 0) return null;
+    const totalMin = Math.floor(deltaMs / 60000);
+    const days = Math.floor(totalMin / (60 * 24));
+    const hours = Math.floor((totalMin - days * 60 * 24) / 60);
+    const mins = totalMin - days * 60 * 24 - hours * 60;
+    if (days > 0) return `${days}d ${hours}h`;
+    if (hours > 0) return `${hours}h ${mins}m`;
+    return `${mins}m`;
+  })();
+
+  const statusColor = isLive ? T.red : isScheduled ? T.copper : T.tertiary;
+  const statusLabel = isLive ? "LIVE NOW" : isScheduled ? "UPCOMING" : isEnded ? (hasWinner ? "ENDED · WINNER DECLARED" : "ENDED") : drop.status;
+
+  // Arrival-at-start gating. Pre-start (no submissions yet); GPS-driven.
+  const submissionsCount = (myRun && myRun.progress && Array.isArray(myRun.progress.waypointsUnlocked)) ? myRun.progress.waypointsUnlocked.length : 0;
+  const hasStarted = submissionsCount > 0;
+  const arrivalRadius = drop.arrival_radius_m != null ? drop.arrival_radius_m : 100;
+  const arrivalDistance = (userLoc && drop.start_lat != null && drop.start_lng != null)
+    ? haversine(userLoc.lat, userLoc.lng, drop.start_lat, drop.start_lng)
+    : null;
+  const arrivedAtStart = arrivalDistance != null && arrivalDistance <= arrivalRadius;
+  const showArrivalPopup = isJoined && !hasStarted && !(myRun && myRun.finished_at) && !isEnded && arrivedAtStart && !arrivalDismissed;
+  const waypointCount = (drop.route_data && drop.route_data.pins && drop.route_data.pins.length) || 0;
+  const startMapUrl = gearDropStaticMapUrl(drop.start_lat, drop.start_lng, { width: 900, height: 320, zoom: 11 });
+  const heroSrc = drop.hero_img || startMapUrl;
+  const prizeValueLabel = drop.prize_value_cents != null ? `$${(drop.prize_value_cents / 100).toFixed(2)}` : null;
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: T.darkBg, zIndex: 200, overflowY: "auto", paddingBottom: 110 }}>
+      <div style={{ position: "sticky", top: 0, padding: "14px 16px", background: T.darkBg, borderBottom: `1px solid ${T.charcoal}`, zIndex: 5, display: "flex", alignItems: "center", gap: 8 }}>
+        <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+          <ChevronLeft size={20} color={T.white} />
+        </button>
+        <Gift size={16} color={T.green} />
+        <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.8, flex: 1 }}>GEAR DROP</span>
+        <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: statusColor, padding: "3px 10px", borderRadius: 8, fontWeight: 700, letterSpacing: 0.6 }}>{statusLabel}</span>
+      </div>
+
+      {heroSrc && (
+        <div style={{ width: "100%", aspectRatio: "16/9", background: `linear-gradient(180deg, transparent 35%, rgba(17,17,17,0.9) 100%), url(${heroSrc}) center/cover`, display: "flex", alignItems: "flex-end", padding: "20px 18px" }}>
+          <div style={{ maxWidth: "100%" }}>
+            <h1 style={{ fontFamily: sans, fontSize: 24, color: T.white, fontWeight: 800, lineHeight: 1.15, margin: 0, textShadow: "0 2px 12px rgba(0,0,0,0.6)" }}>{drop.title}</h1>
+          </div>
+        </div>
+      )}
+
+      <div style={{ padding: 18, display: "flex", flexDirection: "column", gap: 18 }}>
+        {!heroSrc && (
+          <h1 style={{ fontFamily: sans, fontSize: 22, color: T.white, fontWeight: 800, lineHeight: 1.15, margin: 0 }}>{drop.title}</h1>
+        )}
+
+        {/* Brand partner row — moved out of the hero overlay so wide /
+            non-square logos read cleanly and aren't squeezed into a chip. */}
+        {drop.brand_partner_name && (
+          <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 16px", background: T.darkCard, border: `1px solid ${T.copper}`, borderRadius: 12 }}>
+            {drop.brand_logo_url && (
+              <img src={drop.brand_logo_url} alt="" style={{ width: 56, height: 56, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
+            )}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 700, letterSpacing: 1, marginBottom: 4 }}>BRAND PARTNER</div>
+              <div style={{ fontFamily: sans, fontSize: 17, color: T.white, fontWeight: 700, lineHeight: 1.2 }}>{drop.brand_partner_name}</div>
+            </div>
+          </div>
+        )}
+
+        {/* About this event (host-written rich text) */}
+        {drop.about && drop.about.trim().length > 0 && (
+          <div style={{ padding: 16, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <FileText size={14} color={T.green} />
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.green, fontWeight: 700, letterSpacing: 0.8 }}>ABOUT</span>
+            </div>
+            <div style={{ color: T.white, opacity: 0.92 }} dangerouslySetInnerHTML={{ __html: `${GD_RB_CSS}<div class="gd-rb">${sanitizeForumHtml(drop.about)}</div>` }} />
+          </div>
+        )}
+
+        {/* Prize card */}
+        <div style={{ padding: 16, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <Trophy size={14} color={T.copper} />
+            <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 0.8 }}>PRIZE</span>
+            {prizeValueLabel && <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginLeft: "auto" }}>{prizeValueLabel}</span>}
+          </div>
+          <div style={{ fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700, marginBottom: 6 }}>{drop.prize_title || "Prize"}</div>
+          {drop.prize_description && (
+            <div style={{ color: T.white, opacity: 0.85 }} dangerouslySetInnerHTML={{ __html: `${GD_RB_CSS}<div class="gd-rb" style="font-size:13px">${sanitizeForumHtml(drop.prize_description)}</div>` }} />
+          )}
+          {/* Prize photo carousel */}
+          {Array.isArray(drop.prize_photos) && drop.prize_photos.length > 0 && (
+            <div style={{ marginTop: 12, display: "flex", gap: 8, overflowX: "auto", scrollSnapType: "x mandatory", scrollBehavior: "smooth", padding: "2px 0", margin: "12px -4px 0" }}>
+              {drop.prize_photos.map((p, i) => {
+                const url = typeof p === "string" ? p : (p && p.url);
+                if (!url) return null;
+                return (
+                  <button key={i} onClick={() => setLightboxStartIdx(i)} style={{ flex: "0 0 80%", scrollSnapAlign: "center", aspectRatio: "4/3", background: `url(${url}) center/cover`, borderRadius: 12, border: `1px solid ${T.charcoal}`, cursor: "pointer", padding: 0 }} />
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Countdown / status card */}
+        {(countdownLabel || isLive || isEnded) && (
+          <div style={{ padding: 16, background: T.darkCard, border: `1px solid ${isLive ? T.red : T.charcoal}`, borderRadius: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <Clock size={14} color={isLive ? T.red : T.copper} />
+              <span style={{ fontFamily: sans, fontSize: 10, color: isLive ? T.red : T.copper, fontWeight: 700, letterSpacing: 0.8 }}>
+                {isLive ? "LIVE NOW" : isEnded ? "EVENT ENDED" : "STARTS IN"}
+              </span>
+            </div>
+            {isLive ? (
+              <div style={{ fontFamily: sans, fontSize: 13, color: T.white, lineHeight: 1.4 }}>Participants are racing right now. Tap JOIN if signups are still open.</div>
+            ) : isEnded ? (
+              <div style={{ fontFamily: sans, fontSize: 13, color: T.white, lineHeight: 1.4 }}>{hasWinner ? "A winner was declared. Check back for the recap." : "This drop has ended without a declared winner."}</div>
+            ) : (
+              <div style={{ fontFamily: sans, fontSize: 24, color: T.white, fontWeight: 700, letterSpacing: 1 }}>{countdownLabel}</div>
+            )}
+            {drop.starts_at && !isEnded && !isLive && (
+              <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 4 }}>{new Date(drop.starts_at).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</div>
+            )}
+          </div>
+        )}
+
+        {/* Start location card */}
+        <div style={{ padding: 0, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 12, overflow: "hidden" }}>
+          <div style={{ padding: "14px 16px 10px", display: "flex", alignItems: "center", gap: 8 }}>
+            <MapPin size={14} color={T.green} />
+            <span style={{ fontFamily: sans, fontSize: 10, color: T.green, fontWeight: 700, letterSpacing: 0.8 }}>START POINT</span>
+          </div>
+          {startMapUrl ? (
+            <img src={startMapUrl} alt="" style={{ width: "100%", display: "block", maxHeight: 220, objectFit: "cover" }} />
+          ) : (
+            <div style={{ padding: 14, fontFamily: serif, fontSize: 13, color: T.tertiary }}>Start location not set yet.</div>
+          )}
+          {drop.start_lat != null && drop.start_lng != null && (
+            <div style={{ padding: "12px 16px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {locationLabel && <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, marginBottom: 2 }}>{locationLabel}</div>}
+                <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{drop.start_lat.toFixed(5)}, {drop.start_lng.toFixed(5)}</div>
+              </div>
+              <button
+                onClick={() => onStartDirections && onStartDirections(drop.start_lat, drop.start_lng, drop.title || "Gear drop start")}
+                disabled={!onStartDirections}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", background: T.green, color: T.white, border: "none", borderRadius: 8, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.6, cursor: onStartDirections ? "pointer" : "default", opacity: onStartDirections ? 1 : 0.5 }}
+              >
+                <Navigation size={12} color={T.white} />
+                DIRECTIONS
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Stats row */}
+        <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ flex: 1, padding: "12px 14px", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10 }}>
+            <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.6, marginBottom: 4 }}>WAYPOINTS</div>
+            <div style={{ fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 }}>{waypointCount > 1 ? waypointCount - 1 : 0}</div>
+          </div>
+          <button onClick={() => { setShowParticipants(true); if (!participantsLoaded) refreshParticipants(); }} style={{ flex: 1, padding: "12px 14px", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10, textAlign: "left", cursor: "pointer" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.6, marginBottom: 4 }}>JOINED</div>
+              <ChevronRight size={12} color={T.tertiary} />
+            </div>
+            <div style={{ fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 }}>{participantCount != null ? participantCount : "—"}</div>
+          </button>
+        </div>
+
+        {/* How it works hint (collapsed copy for now) */}
+        <div style={{ padding: 14, background: `${T.charcoal}80`, border: `1px solid ${T.charcoal}`, borderRadius: 10 }}>
+          <div style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 0.8, marginBottom: 6 }}>HOW IT WORKS</div>
+          <p style={{ fontFamily: serif, fontSize: 12, color: T.white, opacity: 0.8, lineHeight: 1.5, margin: 0 }}>
+            Show up at the start point. Each waypoint reveals only after you've reached the previous one and submitted a photo + note. First to reach the endpoint wins the prize.
+          </p>
+        </div>
+
+        {/* Comments section — bottom-of-page thread. Auth required to post. */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <MessageCircle size={14} color={T.copper} />
+            <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 0.8 }}>COMMENTS</span>
+            {comments.length > 0 && <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>· {comments.length}</span>}
+          </div>
+          {comments.length === 0 && (
+            <div style={{ padding: 14, fontFamily: serif, fontSize: 12, color: T.tertiary, textAlign: "center", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10 }}>
+              No comments yet. Be the first to say something.
+            </div>
+          )}
+          {comments.map(c => {
+            const isMine = currentUserId && c.user_id === currentUserId;
+            const canDelete = isMine || isAdmin;
+            const author = c.author;
+            return (
+              <div key={c.id} style={{ padding: 12, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                  <button onClick={() => onViewUser && c.user_id && onViewUser(c.user_id)} style={{ display: "flex", alignItems: "center", gap: 8, background: "none", border: "none", padding: 0, cursor: onViewUser ? "pointer" : "default" }}>
+                    <div style={{ width: 26, height: 26, borderRadius: "50%", background: T.charcoal, overflow: "hidden" }}>
+                      {author && author.avatar_url && <img src={author.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", textAlign: "left" }}>
+                      <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>{(author && author.full_name) || "User"}</span>
+                      <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>@{(author && author.handle) || "user"} · {new Date(c.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
+                    </div>
+                  </button>
+                  {canDelete && (
+                    <button onClick={() => handleDeleteComment(c.id)} style={{ marginLeft: "auto", background: "none", border: "none", padding: 4, cursor: "pointer" }}>
+                      <Trash2 size={12} color={T.tertiary} />
+                    </button>
+                  )}
+                </div>
+                <p style={{ fontFamily: serif, fontSize: 13, color: T.white, opacity: 0.92, lineHeight: 1.5, margin: 0, whiteSpace: "pre-wrap" }}>{c.body}</p>
+              </div>
+            );
+          })}
+          {currentUserId && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 12, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10 }}>
+              <textarea
+                value={commentDraft}
+                onChange={(e) => setCommentDraft(e.target.value)}
+                placeholder="Share something with the group…"
+                rows={3}
+                style={{ width: "100%", padding: 10, background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 8, color: T.white, fontFamily: serif, fontSize: 13, boxSizing: "border-box", resize: "vertical" }}
+              />
+              <button onClick={handlePostComment} disabled={postingComment || !commentDraft.trim()} style={{ alignSelf: "flex-end", padding: "8px 16px", background: postingComment || !commentDraft.trim() ? T.charcoal : T.green, border: "none", borderRadius: 8, color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.6, cursor: postingComment || !commentDraft.trim() ? "default" : "pointer" }}>
+                {postingComment ? "POSTING…" : "POST COMMENT"}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Prize photo lightbox — full-screen swipeable carousel */}
+      {lightboxStartIdx != null && Array.isArray(drop.prize_photos) && drop.prize_photos.length > 0 && (
+        <ImageCarousel
+          images={drop.prize_photos.map(p => typeof p === "string" ? p : (p && p.url)).filter(Boolean)}
+          startIndex={lightboxStartIdx}
+          onClose={() => setLightboxStartIdx(null)}
+        />
+      )}
+
+      {/* Participants modal — tappable JOINED stat opens it */}
+      {showParticipants && (
+        <div onClick={() => setShowParticipants(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 220, display: "flex", alignItems: "flex-end" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxHeight: "75vh", background: T.darkBg, borderRadius: "16px 16px 0 0", overflowY: "auto", padding: 18 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+              <Users size={16} color={T.green} />
+              <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.8, flex: 1 }}>JOINED · {participants.length}</span>
+              <button onClick={() => setShowParticipants(false)} style={{ background: "none", border: "none", padding: 4, cursor: "pointer" }}>
+                <X size={18} color={T.white} />
+              </button>
+            </div>
+            {participants.length === 0 ? (
+              <div style={{ padding: 24, textAlign: "center", fontFamily: serif, fontSize: 13, color: T.tertiary }}>{participantsLoaded ? "No one has joined yet." : "Loading…"}</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {participants.map(p => {
+                  const author = p.author;
+                  const progress = (p.progress && p.progress.waypointsUnlocked && p.progress.waypointsUnlocked.length) || 0;
+                  return (
+                    <button key={p.id} onClick={() => { setShowParticipants(false); onViewUser && p.user_id && onViewUser(p.user_id); }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10, cursor: "pointer", textAlign: "left", width: "100%" }}>
+                      <div style={{ width: 36, height: 36, borderRadius: "50%", background: T.charcoal, overflow: "hidden", flexShrink: 0 }}>
+                        {author && author.avatar_url && <img src={author.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600 }}>{(author && author.full_name) || "User"}</div>
+                        <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>@{(author && author.handle) || "user"}</div>
+                      </div>
+                      <div style={{ textAlign: "right", flexShrink: 0 }}>
+                        {p.finished_at ? (
+                          <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700 }}>FINISHED</span>
+                        ) : (
+                          <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{progress} {progress === 1 ? "pin" : "pins"}</span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Sticky bottom action */}
+      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, padding: 14, background: T.darkBg, borderTop: `1px solid ${T.charcoal}`, zIndex: 6 }}>
+        {isJoined ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", gap: 8 }}>
+              <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, padding: "12px 14px", background: `${T.green}25`, border: `1px solid ${T.green}`, borderRadius: 10 }}>
+                <CheckCircle size={14} color={T.green} />
+                <span style={{ fontFamily: sans, fontSize: 11, color: T.green, fontWeight: 700, letterSpacing: 0.6 }}>ATTENDING</span>
+              </div>
+              {isLive && onOpenRun && (
+                <button onClick={() => onOpenRun(myRun && myRun.id)} style={{ flex: 1, padding: "12px 14px", background: T.red, border: "none", borderRadius: 10, color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer" }}>
+                  VIEW YOUR RUN
+                </button>
+              )}
+            </div>
+            {onLeave && (
+              <button onClick={handleLeave} disabled={joining} style={{ width: "100%", padding: "10px 14px", background: "none", border: `1px solid ${T.charcoal}`, borderRadius: 10, color: T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.8, cursor: joining ? "default" : "pointer" }}>
+                {joining ? "CANCELLING…" : "CANCEL ATTENDANCE"}
+              </button>
+            )}
+          </div>
+        ) : signupOpen ? (
+          <button onClick={handleJoin} disabled={joining} style={{ width: "100%", padding: "14px", background: joining ? T.charcoal : T.green, border: "none", borderRadius: 10, color: T.white, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 1, cursor: joining ? "default" : "pointer" }}>
+            {joining ? "JOINING…" : "JOIN GEAR DROP"}
+          </button>
+        ) : (
+          <div style={{ width: "100%", padding: "14px", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10, color: T.tertiary, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 1, textAlign: "center" }}>
+            {isEnded ? "EVENT CLOSED" : "SIGNUPS CLOSED"}
+          </div>
+        )}
+      </div>
+
+      {/* Arrival-at-start popup. Fires once GPS shows the joined user is
+          inside arrival_radius_m of the start point and they haven't
+          started the run yet. START YOUR RUN if live; countdown if not. */}
+      {showArrivalPopup && (
+        <div onClick={() => setArrivalDismissed(true)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.78)", zIndex: 230, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 430, background: T.darkBg, borderRadius: "16px 16px 0 0", padding: "20px 18px 22px", border: `1px solid ${T.green}`, borderBottom: "none" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <Target size={16} color={T.green} />
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.green, fontWeight: 700, letterSpacing: 0.8, flex: 1 }}>YOU'RE AT THE START</span>
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{Math.round(arrivalDistance)}m</span>
+            </div>
+            <div style={{ fontFamily: sans, fontSize: 18, color: T.white, fontWeight: 700, lineHeight: 1.3, marginBottom: 14 }}>
+              {isLive ? "Ready to race?" : countdownLabel ? "Hang tight — race starts soon" : "Waiting for the host to start the event"}
+            </div>
+            {!isLive && countdownLabel && (
+              <div style={{ padding: "14px 16px", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10, marginBottom: 14, textAlign: "center" }}>
+                <div style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 700, letterSpacing: 0.8, marginBottom: 4 }}>STARTS IN</div>
+                <div style={{ fontFamily: sans, fontSize: 30, color: T.white, fontWeight: 800, letterSpacing: -0.5 }}>{countdownLabel}</div>
+                {drop.starts_at && (
+                  <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 6 }}>{new Date(drop.starts_at).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</div>
+                )}
+              </div>
+            )}
+            <p style={{ fontFamily: serif, fontSize: 13, color: T.white, opacity: 0.85, lineHeight: 1.5, margin: "0 0 16px" }}>
+              {isLive
+                ? "Take a photo + a quick note at the meetup to lock in your start, then chase the waypoints."
+                : countdownLabel
+                  ? "Once the host kicks off the race, this will turn into START YOUR RUN."
+                  : "Sit tight — the host hasn't flipped the event live yet."}
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {isLive && onOpenRun && (
+                <button onClick={() => { setArrivalDismissed(true); onOpenRun(myRun && myRun.id); }} style={{ width: "100%", padding: 16, background: T.green, border: "none", borderRadius: 12, color: T.white, fontFamily: sans, fontSize: 14, fontWeight: 800, letterSpacing: 1, cursor: "pointer" }}>
+                  START YOUR RUN
+                </button>
+              )}
+              <button onClick={() => setArrivalDismissed(true)} style={{ width: "100%", padding: 12, background: "none", border: `1px solid ${T.charcoal}`, borderRadius: 10, color: T.tertiary, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer" }}>
+                DISMISS
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Build a 64-vertex GeoJSON polygon approximating a circle of
+// `radiusM` metres around (centerLat, centerLng). Used as the
+// submission-gate radius ring on the live race map. Equirectangular
+// approximation — accurate to within a few centimetres at <1km radius.
+function makeCircleGeoJSON(centerLat, centerLng, radiusM, points = 64) {
+  if (centerLat == null || centerLng == null || !radiusM) return null;
+  const coords = [];
+  const dLat = radiusM / 111111;
+  const dLng = radiusM / (111111 * Math.cos(centerLat * Math.PI / 180));
+  for (let i = 0; i <= points; i++) {
+    const t = (i / points) * Math.PI * 2;
+    coords.push([centerLng + dLng * Math.cos(t), centerLat + dLat * Math.sin(t)]);
+  }
+  return { type: "Feature", geometry: { type: "Polygon", coordinates: [coords] }, properties: {} };
+}
+
+// ─── Gear Drop run screen (live race UX) ────────────────────────────────
+// Full-screen overlay opened by VIEW YOUR RUN on the detail screen.
+// Shows the next waypoint on a live Mapbox map with the user-location
+// puck + a radius-gate ring + a live distance-to-target readout from
+// the device GPS + an ARRIVED button that opens a submit sheet (photo
+// + note). The submit calls the gear_drop_advance_run SECURITY DEFINER
+// RPC which validates proximity server-side and atomically claims winner
+// on the final waypoint. A realtime subscription on trip_reports keeps
+// the leaderboard live so racers can see each other advance in real time.
+function GearDropRunScreen({ runId, currentUserId, onClose, onLoadRun, onLoadDrop, onAdvance, onShowToast, onLoadParticipants, onViewUser }) {
+  const [run, setRun] = useState(null);
+  const [drop, setDrop] = useState(null);
+  const [userLoc, setUserLoc] = useState(null);
+  const [gpsError, setGpsError] = useState(null);
+  const [submitOpen, setSubmitOpen] = useState(false);
+  const [submitPhoto, setSubmitPhoto] = useState(null);
+  const [submitNote, setSubmitNote] = useState("");
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
+  const [winState, setWinState] = useState(null);
+  const photoFileRef = useRef(null);
+  // Live Mapbox map (replaces the static snapshot we shipped in Phase 3).
+  const mapContainerRef = useRef(null);
+  const mapInst = useRef(null);
+  const targetMarkerRef = useRef(null);
+  const [mapReady, setMapReady] = useState(false);
+  // Leaderboard panel — collapsed by default; opens to show every
+  // participant ranked by progress + finish time.
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [leaderboardOpen, setLeaderboardOpen] = useState(false);
+  const [leaderboardLoaded, setLeaderboardLoaded] = useState(false);
+
+  // Initial load — run row + linked drop.
+  useEffect(() => {
+    if (!runId) return;
+    let cancelled = false;
+    (async () => {
+      const r = await onLoadRun(runId);
+      if (cancelled || !r) return;
+      setRun(r);
+      const d = await onLoadDrop(r.gear_drop_id);
+      if (!cancelled && d) setDrop(d);
+    })();
+    return () => { cancelled = true; };
+  }, [runId, onLoadRun, onLoadDrop]);
+
+  // Live user-location puck on the race map. The screen also runs its
+  // own watchPosition for the distance card — both watch the same
+  // sensor so the cost is identical to a single watch.
+  useUserLocationPuck(mapInst, mapReady, null, true);
+
+  // Continuous GPS watch. enableHighAccuracy so the distance gate is
+  // accurate enough for the 100m-default radius. We keep watching across
+  // the whole race so the readout updates as the user drives.
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setGpsError("GPS not available on this device.");
+      return;
+    }
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        setUserLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy });
+        setGpsError(null);
+      },
+      (err) => {
+        console.error("[gps] watch error", err);
+        if (err.code === 1) setGpsError("Location permission denied. Enable it in settings to race.");
+        else if (err.code === 2) setGpsError("GPS signal unavailable. Move to a clearer area.");
+        else setGpsError("GPS timed out — try again.");
+      },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 }
+    );
+    return () => { try { navigator.geolocation.clearWatch(watchId); } catch (e) {} };
+  }, []);
+
+  // Live Mapbox map — mount once the drop row is in state. Initial
+  // center is the next active pin (so the camera lands on the right
+  // target even if the user reopens mid-race). Subsequent re-centers
+  // happen via the camera+marker effect below.
+  useEffect(() => {
+    if (!drop || !mapContainerRef.current || mapInst.current) return;
+    let cancelled = false;
+    (async () => {
+      let mapboxgl;
+      try { mapboxgl = await loadMapbox(); } catch (e) { return; }
+      if (cancelled || !mapContainerRef.current || mapInst.current) return;
+      const pinsLocal = (drop.route_data && Array.isArray(drop.route_data.pins)) ? drop.route_data.pins : [];
+      const unlockedLocal = (run && run.progress && Array.isArray(run.progress.waypointsUnlocked)) ? run.progress.waypointsUnlocked.length : 0;
+      const targetPin = pinsLocal[unlockedLocal] || pinsLocal[0] || null;
+      const center = targetPin
+        ? [targetPin.lng, targetPin.lat]
+        : (drop.start_lng != null ? [drop.start_lng, drop.start_lat] : [-111.0, 39.5]);
+      const map = new mapboxgl.Map({
+        container: mapContainerRef.current,
+        style: MAPBOX_STYLE,
+        center,
+        zoom: targetPin ? 14 : 4,
+        attributionControl: false,
+      });
+      mapInst.current = map;
+      const onLoad = () => { if (!cancelled) setMapReady(true); };
+      if (map.isStyleLoaded()) onLoad(); else map.on("load", onLoad);
+    })();
+    return () => {
+      cancelled = true;
+      if (mapInst.current) { try { mapInst.current.remove(); } catch (e) {} mapInst.current = null; }
+      if (targetMarkerRef.current) { try { targetMarkerRef.current.remove(); } catch (e) {} targetMarkerRef.current = null; }
+      setMapReady(false);
+    };
+  }, [drop && drop.id]);
+
+  const pins = (drop && drop.route_data && Array.isArray(drop.route_data.pins)) ? drop.route_data.pins : [];
+  const totalStops = pins.length;
+  const unlocked = (run && run.progress && Array.isArray(run.progress.waypointsUnlocked)) ? run.progress.waypointsUnlocked : [];
+  const unlockedCount = unlocked.length;
+  // The start (pin 0) is itself a submission. Submissions advance
+  // 0 → 1 → 2 → ... → (count-1). nextIdx is whichever pin the
+  // participant hasn't checked into yet.
+  const nextIdx = unlockedCount;
+  const nextPin = pins[nextIdx] || null;
+  const isStart = nextIdx === 0;
+  const isLast = totalStops > 0 && nextIdx === totalStops - 1;
+  const finished = !!(run && run.finished_at) || nextIdx >= totalStops;
+
+  const distance = useMemo(() => {
+    if (!nextPin || !userLoc) return null;
+    return haversine(userLoc.lat, userLoc.lng, nextPin.lat, nextPin.lng);
+  }, [nextPin, userLoc]);
+  // Default radius: 200m for the start (more lenient — it's a meetup),
+  // 100m for every other stop. Host can override either in the editor.
+  const radius = (nextPin && nextPin.radius_m) || (isStart ? 200 : 100);
+  const inRange = distance != null && distance <= radius;
+
+  // Reposition the target marker + radius ring + camera whenever the
+  // active pin changes (initial mount, after a successful submit, or
+  // when the participant joined mid-race).
+  useEffect(() => {
+    const map = mapInst.current;
+    if (!map || !mapReady || !window.mapboxgl) return;
+    if (!nextPin) {
+      // Run finished — strip marker + ring.
+      if (targetMarkerRef.current) { try { targetMarkerRef.current.remove(); } catch (e) {} targetMarkerRef.current = null; }
+      try { if (map.getLayer("gd-radius-fill")) map.removeLayer("gd-radius-fill"); } catch (e) {}
+      try { if (map.getLayer("gd-radius-stroke")) map.removeLayer("gd-radius-stroke"); } catch (e) {}
+      try { if (map.getSource("gd-radius")) map.removeSource("gd-radius"); } catch (e) {}
+      return;
+    }
+    const markerColor = isStart ? T.green : isLast ? T.red : T.copper;
+    // Recreate marker on every pin change so the color stays in sync
+    // with start → waypoint → endpoint. Cheap — single DOM swap.
+    if (targetMarkerRef.current) {
+      try { targetMarkerRef.current.remove(); } catch (e) {}
+      targetMarkerRef.current = null;
+    }
+    try {
+      targetMarkerRef.current = new window.mapboxgl.Marker({ element: buildCircleMarkerEl(markerColor, 22) })
+        .setLngLat([nextPin.lng, nextPin.lat]).addTo(map);
+    } catch (e) { /* non-fatal */ }
+    // Radius ring — the submission gate. Translucent fill + matching stroke.
+    const circle = makeCircleGeoJSON(nextPin.lat, nextPin.lng, radius);
+    if (circle) {
+      if (!map.getSource("gd-radius")) {
+        try {
+          map.addSource("gd-radius", { type: "geojson", data: circle });
+          map.addLayer({
+            id: "gd-radius-fill",
+            type: "fill",
+            source: "gd-radius",
+            paint: { "fill-color": markerColor, "fill-opacity": 0.12 },
+          });
+          map.addLayer({
+            id: "gd-radius-stroke",
+            type: "line",
+            source: "gd-radius",
+            paint: { "line-color": markerColor, "line-width": 2, "line-opacity": 0.6 },
+          });
+        } catch (e) { /* non-fatal */ }
+      } else {
+        try { map.getSource("gd-radius").setData(circle); } catch (e) {}
+        try { map.setPaintProperty("gd-radius-fill", "fill-color", markerColor); } catch (e) {}
+        try { map.setPaintProperty("gd-radius-stroke", "line-color", markerColor); } catch (e) {}
+      }
+    }
+    // Re-center on the target. Don't fit-bounds with the user puck —
+    // they could be tens of km away early in the race; centering on
+    // the target keeps the camera readable. Puck stays visible because
+    // it sits at GPS regardless of the camera.
+    try { map.flyTo({ center: [nextPin.lng, nextPin.lat], zoom: 14, essential: true }); } catch (e) {}
+  }, [nextPin && nextPin.lat, nextPin && nextPin.lng, radius, isStart, isLast, mapReady]);
+
+  // Leaderboard load + realtime subscription. INSERT (new joiner), UPDATE
+  // (someone advances), DELETE (someone cancels attendance) all schedule
+  // a debounced refetch so a flurry of submits doesn't hammer PostgREST.
+  // We also refresh MY run row on any UPDATE that touches it — covers the
+  // case where progress was changed on another device or by an admin.
+  useEffect(() => {
+    if (!drop || !drop.id || !onLoadParticipants) return;
+    let cancelled = false;
+    let refetchTimer = null;
+    const refetch = async () => {
+      if (cancelled) return;
+      const list = await onLoadParticipants(drop.id);
+      if (cancelled) return;
+      setLeaderboard(list || []);
+      setLeaderboardLoaded(true);
+    };
+    const scheduleRefetch = () => {
+      if (refetchTimer) clearTimeout(refetchTimer);
+      refetchTimer = setTimeout(refetch, 500);
+    };
+    refetch();
+    const ch = supabase.channel(`gd_runs_${drop.id}`)
+      .on("postgres_changes",
+        { event: "*", schema: "public", table: "trip_reports", filter: `gear_drop_id=eq.${drop.id}` },
+        (payload) => {
+          const row = payload && (payload.new || payload.old);
+          if (row && row.id === runId && payload.eventType === "UPDATE") {
+            (async () => {
+              const r = await onLoadRun(runId);
+              if (!cancelled && r) setRun(r);
+            })();
+          }
+          scheduleRefetch();
+        }
+      )
+      .subscribe();
+    return () => {
+      cancelled = true;
+      if (refetchTimer) clearTimeout(refetchTimer);
+      try { supabase.removeChannel(ch); } catch (e) {}
+    };
+  }, [drop && drop.id, runId, onLoadParticipants, onLoadRun]);
+
+  // Sort the leaderboard: finished first by finished_at asc (winner on top),
+  // then in-progress by progress count desc, then last_unlocked_at asc (most
+  // recent advance, but lower = earlier wins ties = first to reach a pin).
+  const sortedLeaderboard = useMemo(() => {
+    const finishedRows = leaderboard.filter(p => p.finished_at).sort((a, b) => new Date(a.finished_at).getTime() - new Date(b.finished_at).getTime());
+    const liveRows = leaderboard.filter(p => !p.finished_at).sort((a, b) => {
+      const aP = (a.progress && Array.isArray(a.progress.waypointsUnlocked)) ? a.progress.waypointsUnlocked.length : 0;
+      const bP = (b.progress && Array.isArray(b.progress.waypointsUnlocked)) ? b.progress.waypointsUnlocked.length : 0;
+      if (aP !== bP) return bP - aP;
+      const aT = a.last_unlocked_at ? new Date(a.last_unlocked_at).getTime() : Infinity;
+      const bT = b.last_unlocked_at ? new Date(b.last_unlocked_at).getTime() : Infinity;
+      return aT - bT;
+    });
+    return [...finishedRows, ...liveRows];
+  }, [leaderboard]);
+
+  const handlePhotoPick = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    if (!file.type || !file.type.startsWith("image/")) { setSubmitError("Please pick an image."); return; }
+    if (file.size > MAX_UPLOAD_BYTES) { setSubmitError(`Image too large. Max ${MAX_UPLOAD_LABEL}.`); return; }
+    setPhotoUploading(true);
+    setSubmitError(null);
+    try {
+      const dataUrl = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result);
+        r.onerror = rej;
+        r.readAsDataURL(file);
+      });
+      const uploaded = await uploadPostPhotoList([{ url: dataUrl }], currentUserId);
+      const newUrl = uploaded && uploaded[0] && uploaded[0].url;
+      if (newUrl && (newUrl.startsWith("http://") || newUrl.startsWith("https://"))) {
+        setSubmitPhoto({ url: newUrl });
+      } else {
+        setSubmitError("Upload didn't return a URL.");
+      }
+    } catch (err) {
+      console.error("[run-screen] photo upload failed", err);
+      if (err && err.code === "moderation_blocked") setSubmitError("That photo was blocked by content moderation.");
+      else setSubmitError("Upload failed. Try again.");
+    } finally {
+      setPhotoUploading(false);
+      if (photoFileRef.current) photoFileRef.current.value = "";
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (submitting) return;
+    if (!submitPhoto || !submitPhoto.url) { setSubmitError("Add a photo first."); return; }
+    if (!submitNote.trim()) { setSubmitError("Add a note."); return; }
+    if (!userLoc) { setSubmitError("Waiting for GPS — try again in a moment."); return; }
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      const res = await onAdvance(runId, submitPhoto.url, submitNote.trim(), userLoc.lat, userLoc.lng);
+      if (res && res.error) {
+        setSubmitError(res.error);
+        return;
+      }
+      // Server explicitly says ok:false with reason (too_far is the main case).
+      if (res && res.ok === false) {
+        if (res.error === "too_far") {
+          setSubmitError(`Too far — ${Math.round(res.distance_m)}m away, need ${Math.round(res.radius_m)}m.`);
+        } else {
+          setSubmitError(res.error || "Submission rejected.");
+        }
+        return;
+      }
+      // Success — refresh run state.
+      const r = await onLoadRun(runId);
+      if (r) setRun(r);
+      setSubmitPhoto(null);
+      setSubmitNote("");
+      setSubmitOpen(false);
+      if (res && res.won) {
+        setWinState({ won: true });
+      } else if (res && res.finished) {
+        setWinState({ won: false, finished: true });
+      } else if (onShowToast) {
+        const remaining = res && res.waypoints_remaining;
+        onShowToast(`Waypoint ${res && res.unlocked_idx} complete${remaining != null ? ` · ${remaining} to go` : ""}.`);
+      }
+    } catch (e) {
+      console.error("[run-screen] submit threw", e);
+      setSubmitError("Network error.");
+    } finally { setSubmitting(false); }
+  };
+
+  if (!run || !drop) {
+    return (
+      <div style={{ position: "fixed", inset: 0, background: T.darkBg, zIndex: 220, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <span style={{ fontFamily: serif, fontSize: 13, color: T.tertiary }}>Loading run…</span>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: T.darkBg, zIndex: 220, overflowY: "auto" }}>
+      <div style={{ position: "sticky", top: 0, padding: "14px 16px", background: T.darkBg, borderBottom: `1px solid ${T.charcoal}`, zIndex: 5, display: "flex", alignItems: "center", gap: 8 }}>
+        <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+          <ChevronLeft size={20} color={T.white} />
+        </button>
+        <Gift size={16} color={T.green} />
+        <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.8, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{drop.title}</span>
+        <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: T.red, padding: "3px 10px", borderRadius: 8, fontWeight: 700, letterSpacing: 0.6 }}>LIVE</span>
+      </div>
+
+      {gpsError && (
+        <div style={{ margin: 16, padding: 12, background: `${T.red}25`, border: `1px solid ${T.red}`, borderRadius: 10, fontFamily: sans, fontSize: 12, color: T.red }}>
+          {gpsError}
+        </div>
+      )}
+
+      {finished && !winState && (
+        <div style={{ margin: 16, padding: 20, background: T.darkCard, border: `1px solid ${T.green}`, borderRadius: 12, textAlign: "center" }}>
+          <CheckCircle size={36} color={T.green} style={{ marginBottom: 8 }} />
+          <h2 style={{ fontFamily: sans, fontSize: 18, color: T.white, fontWeight: 700, margin: "0 0 6px" }}>You finished this run.</h2>
+          <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, margin: 0 }}>{run.finished_at ? `Completed ${new Date(run.finished_at).toLocaleString()}` : "All waypoints submitted."}</p>
+        </div>
+      )}
+
+      {!finished && nextPin && (
+        <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10 }}>
+            <Target size={16} color={isStart ? T.green : isLast ? T.red : T.copper} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.8, fontWeight: 700 }}>
+                {isStart ? `START · STOP 1 OF ${totalStops}` : isLast ? `FINAL · STOP ${totalStops} OF ${totalStops}` : `STOP ${nextIdx + 1} OF ${totalStops}`}
+              </div>
+              <div style={{ fontFamily: sans, fontSize: 15, color: T.white, fontWeight: 700, marginTop: 2 }}>{nextPin.label || (isStart ? "Start" : isLast ? "Endpoint" : `Waypoint ${nextIdx}`)}</div>
+            </div>
+          </div>
+
+          {/* Live Mapbox map — target marker + radius ring + user puck. */}
+          <div ref={mapContainerRef} style={{ width: "100%", height: 280, borderRadius: 12, overflow: "hidden", background: T.darkCard, border: `1px solid ${T.charcoal}` }} />
+
+          {nextPin.hint_text && (
+            <div style={{ padding: 14, background: `${T.charcoal}80`, border: `1px solid ${T.charcoal}`, borderRadius: 10 }}>
+              <div style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 700, letterSpacing: 0.8, marginBottom: 6 }}>HINT</div>
+              <p style={{ fontFamily: serif, fontSize: 13, color: T.white, opacity: 0.92, lineHeight: 1.5, margin: 0, whiteSpace: "pre-wrap" }}>{nextPin.hint_text}</p>
+            </div>
+          )}
+          {nextPin.hint_photo_url && (
+            <img src={nextPin.hint_photo_url} alt="" style={{ width: "100%", borderRadius: 12, display: "block" }} />
+          )}
+
+          <div style={{ padding: 16, background: T.darkCard, border: `1px solid ${inRange ? T.green : T.charcoal}`, borderRadius: 12, textAlign: "center" }}>
+            <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.6, marginBottom: 6 }}>DISTANCE TO WAYPOINT</div>
+            {distance != null ? (
+              <>
+                <div style={{ fontFamily: sans, fontSize: 36, color: inRange ? T.green : T.white, fontWeight: 800, letterSpacing: -0.5 }}>
+                  {distance < 1000 ? `${Math.round(distance)} m` : `${(distance / 1000).toFixed(2)} km`}
+                </div>
+                <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 4 }}>
+                  {inRange ? "IN RANGE · TAP ARRIVED" : `${Math.round(radius)}m gate · keep going`}
+                </div>
+              </>
+            ) : (
+              <div style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, padding: 14 }}>Acquiring GPS…</div>
+            )}
+          </div>
+
+          <button onClick={() => setSubmitOpen(true)} disabled={!inRange || submitting} style={{ width: "100%", padding: 16, background: inRange ? T.green : T.charcoal, border: "none", borderRadius: 12, color: T.white, fontFamily: sans, fontSize: 14, fontWeight: 800, letterSpacing: 1, cursor: inRange ? "pointer" : "default" }}>
+            {inRange ? (isStart ? "START RUN — SUBMIT" : "ARRIVED — SUBMIT") : "MOVE CLOSER"}
+          </button>
+
+          <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, textAlign: "center", marginTop: -4 }}>
+            Progress: {unlockedCount} of {totalStops} stops complete
+          </div>
+
+          {/* Live leaderboard — collapsible. Updates via realtime sub on
+              trip_reports for this drop. */}
+          <div style={{ background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 12, overflow: "hidden" }}>
+            <button
+              onClick={() => setLeaderboardOpen(o => !o)}
+              style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}
+            >
+              <Users size={14} color={T.copper} />
+              <span style={{ flex: 1, fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 0.8 }}>LEADERBOARD</span>
+              <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{sortedLeaderboard.length}</span>
+              <ChevronRight size={14} color={T.tertiary} style={{ transform: leaderboardOpen ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
+            </button>
+            {leaderboardOpen && (
+              <div style={{ borderTop: `1px solid ${T.charcoal}`, padding: "8px 0" }}>
+                {!leaderboardLoaded ? (
+                  <div style={{ padding: 14, fontFamily: serif, fontSize: 12, color: T.tertiary, textAlign: "center" }}>Loading…</div>
+                ) : sortedLeaderboard.length === 0 ? (
+                  <div style={{ padding: 14, fontFamily: serif, fontSize: 12, color: T.tertiary, textAlign: "center" }}>No racers yet.</div>
+                ) : sortedLeaderboard.map((row, idx) => {
+                  const author = row.author;
+                  const progress = (row.progress && Array.isArray(row.progress.waypointsUnlocked)) ? row.progress.waypointsUnlocked.length : 0;
+                  const isMe = row.user_id === currentUserId;
+                  const isWinner = idx === 0 && row.finished_at && drop && drop.winner_run_id === row.id;
+                  return (
+                    <button
+                      key={row.id}
+                      onClick={() => onViewUser && row.user_id && onViewUser(row.user_id)}
+                      style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: isMe ? `${T.copper}18` : "none", border: "none", cursor: onViewUser ? "pointer" : "default", textAlign: "left" }}
+                    >
+                      <div style={{ width: 22, fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 700, textAlign: "center" }}>
+                        {isWinner ? <Trophy size={14} color={T.copper} /> : `#${idx + 1}`}
+                      </div>
+                      <div style={{ width: 30, height: 30, borderRadius: "50%", background: T.charcoal, overflow: "hidden", flexShrink: 0 }}>
+                        {author && author.avatar_url && <img src={author.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {(author && author.full_name) || "Racer"}{isMe && <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, marginLeft: 6, letterSpacing: 0.5 }}>YOU</span>}
+                        </div>
+                        <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>@{(author && author.handle) || "racer"}</div>
+                      </div>
+                      <div style={{ textAlign: "right", flexShrink: 0 }}>
+                        {row.finished_at ? (
+                          <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 700, letterSpacing: 0.6 }}>FINISHED</span>
+                        ) : (
+                          <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, fontWeight: 700 }}>{progress}/{totalStops}</span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Submit sheet — photo + note + SUBMIT */}
+      {submitOpen && (
+        <div onClick={() => !submitting && setSubmitOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 6, display: "flex", alignItems: "flex-end" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxHeight: "85vh", background: T.darkBg, borderRadius: "16px 16px 0 0", overflowY: "auto", padding: 18 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+              <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.8, flex: 1 }}>SUBMIT WAYPOINT</span>
+              <button onClick={() => !submitting && setSubmitOpen(false)} disabled={submitting} style={{ background: "none", border: "none", padding: 4, cursor: submitting ? "default" : "pointer" }}>
+                <X size={18} color={T.white} />
+              </button>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.4 }}>Photo proof · required</span>
+              {submitPhoto ? (
+                <div style={{ position: "relative" }}>
+                  <img src={submitPhoto.url} alt="" style={{ width: "100%", maxHeight: 300, objectFit: "cover", borderRadius: 10, display: "block" }} />
+                  <button onClick={() => setSubmitPhoto(null)} disabled={submitting} style={{ position: "absolute", top: 8, right: 8, width: 28, height: 28, borderRadius: 14, background: T.darkBg, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: submitting ? "default" : "pointer" }}>
+                    <X size={14} color={T.red} />
+                  </button>
+                </div>
+              ) : (
+                <button onClick={() => photoFileRef.current && photoFileRef.current.click()} disabled={photoUploading} style={{ padding: "20px 14px", background: T.darkCard, border: `1px dashed ${T.charcoal}`, borderRadius: 10, color: T.tertiary, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.6, cursor: photoUploading ? "default" : "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+                  <Camera size={24} color={T.copper} />
+                  {photoUploading ? "UPLOADING…" : "TAKE PHOTO"}
+                </button>
+              )}
+              <input ref={photoFileRef} type="file" accept="image/*" capture="environment" onChange={handlePhotoPick} style={{ display: "none" }} />
+
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.4, marginTop: 4 }}>Note · what did you see / find?</span>
+              <textarea
+                value={submitNote}
+                onChange={(e) => setSubmitNote(e.target.value)}
+                placeholder="Short note about this stop — required."
+                rows={3}
+                style={{ width: "100%", padding: 12, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10, color: T.white, fontFamily: serif, fontSize: 14, boxSizing: "border-box", resize: "vertical" }}
+              />
+
+              {submitError && (
+                <div style={{ padding: 10, background: `${T.red}25`, border: `1px solid ${T.red}`, borderRadius: 8, fontFamily: sans, fontSize: 12, color: T.red }}>
+                  {submitError}
+                </div>
+              )}
+
+              <button onClick={handleSubmit} disabled={submitting || !submitPhoto || !submitNote.trim()} style={{ marginTop: 4, padding: 14, background: submitting ? T.charcoal : T.green, border: "none", borderRadius: 10, color: T.white, fontFamily: sans, fontSize: 13, fontWeight: 800, letterSpacing: 0.8, cursor: submitting ? "default" : "pointer" }}>
+                {submitting ? "SUBMITTING…" : "SUBMIT WAYPOINT"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Win overlay */}
+      {winState && winState.won && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 7, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <div style={{ width: "100%", maxWidth: 360, padding: 28, background: T.darkCard, border: `2px solid ${T.copper}`, borderRadius: 18, textAlign: "center", boxShadow: `0 0 40px ${T.copper}40` }}>
+            <Trophy size={56} color={T.copper} style={{ marginBottom: 12 }} />
+            <h1 style={{ fontFamily: sans, fontSize: 26, color: T.white, fontWeight: 800, margin: "0 0 8px", letterSpacing: 0.5 }}>YOU WON!</h1>
+            <p style={{ fontFamily: serif, fontSize: 14, color: T.white, opacity: 0.92, lineHeight: 1.5, margin: "0 0 18px" }}>
+              You're the first to finish <strong>{drop.title}</strong>. The prize is on its way — keep an eye on your DMs from Lone Peak Overland.
+            </p>
+            {drop.prize_title && (
+              <div style={{ padding: 14, background: T.darkBg, border: `1px solid ${T.copper}`, borderRadius: 10, marginBottom: 18 }}>
+                <div style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 700, letterSpacing: 0.8, marginBottom: 4 }}>PRIZE</div>
+                <div style={{ fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 }}>{drop.prize_title}</div>
+              </div>
+            )}
+            <button onClick={() => { setWinState(null); }} style={{ width: "100%", padding: 14, background: T.copper, border: "none", borderRadius: 10, color: T.white, fontFamily: sans, fontSize: 13, fontWeight: 800, letterSpacing: 0.8, cursor: "pointer" }}>
+              CLOSE
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Gear Drops list (admin) ────────────────────────────────────────────
+// Tabbed list of all gear_drops the admin can see, grouped by status.
+// + NEW DROP creates a draft via onCreateGearDrop then opens the editor
+// on the new row. Tapping any row opens the editor for that drop.
+function GearDropsListScreen({ onBack, gearDrops, onCreateGearDrop, onOpenEditor, onDeleteGearDrop }) {
+  const [tab, setTab] = useState("drafts"); // drafts | scheduled | live | ended
+  const [creating, setCreating] = useState(false);
+
+  // Group drops by status, with the four tabs each owning one bucket.
+  // 'archived' rolls up into 'ended' so old drops stay browsable.
+  const bucketed = useMemo(() => {
+    const buckets = { drafts: [], scheduled: [], live: [], ended: [] };
+    (gearDrops || []).forEach(g => {
+      if (g.status === "draft") buckets.drafts.push(g);
+      else if (g.status === "scheduled") buckets.scheduled.push(g);
+      else if (g.status === "live") buckets.live.push(g);
+      else buckets.ended.push(g);
+    });
+    return buckets;
+  }, [gearDrops]);
+
+  const rows = bucketed[tab] || [];
+
+  const handleNew = async () => {
+    if (creating) return;
+    setCreating(true);
+    try {
+      const res = await onCreateGearDrop({ title: "Untitled Drop", prize_title: "Prize" });
+      if (res && res.ok && res.data) {
+        onOpenEditor(res.data.id);
+      } else if (res && res.error) {
+        alert("Create failed: " + res.error);
+      }
+    } finally { setCreating(false); }
+  };
+
+  const TABS = [
+    { k: "drafts", label: "DRAFTS", count: bucketed.drafts.length },
+    { k: "scheduled", label: "SCHEDULED", count: bucketed.scheduled.length },
+    { k: "live", label: "LIVE", count: bucketed.live.length },
+    { k: "ended", label: "ENDED", count: bucketed.ended.length },
+  ];
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 16px", borderBottom: `1px solid ${T.charcoal}` }}>
+        <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+          <ChevronLeft size={20} color={T.white} />
+        </button>
+        <Gift size={16} color={T.green} />
+        <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, letterSpacing: 0.8, flex: 1 }}>GEAR DROPS</span>
+        <button onClick={handleNew} disabled={creating} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 8, background: T.green, border: "none", cursor: creating ? "default" : "pointer", opacity: creating ? 0.6 : 1 }}>
+          <Plus size={14} color={T.white} strokeWidth={2.4} />
+          <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.8 }}>{creating ? "CREATING…" : "NEW DROP"}</span>
+        </button>
+      </div>
+
+      <div style={{ display: "flex", gap: 6, padding: "10px 16px", borderBottom: `1px solid ${T.charcoal}`, overflowX: "auto" }}>
+        {TABS.map(t => {
+          const sel = tab === t.k;
+          return (
+            <button key={t.k} onClick={() => setTab(t.k)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", borderRadius: 14, background: sel ? T.white : "transparent", border: `1px solid ${sel ? T.white : T.charcoal}`, cursor: "pointer", flexShrink: 0 }}>
+              <span style={{ fontFamily: sans, fontSize: 10, color: sel ? T.darkBg : T.tertiary, fontWeight: 700, letterSpacing: 0.6 }}>{t.label}</span>
+              {t.count > 0 && <span style={{ fontFamily: sans, fontSize: 9, color: sel ? T.darkBg : T.tertiary, fontWeight: 700, opacity: 0.7 }}>{t.count}</span>}
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+        {rows.length === 0 ? (
+          <div style={{ padding: 32, textAlign: "center", fontFamily: serif, fontSize: 13, color: T.tertiary, lineHeight: 1.5 }}>
+            {tab === "drafts" ? "No drafts yet. Tap + NEW DROP to start." :
+             tab === "scheduled" ? "No upcoming drops scheduled." :
+             tab === "live" ? "No drops are currently live." :
+             "No ended drops yet."}
+          </div>
+        ) : rows.map(g => <GearDropListRow key={g.id} drop={g} onOpen={() => onOpenEditor(g.id)} onDelete={onDeleteGearDrop} />)}
+      </div>
+    </div>
+  );
+}
+
+function GearDropListRow({ drop, onOpen, onDelete }) {
+  const statusColor =
+    drop.status === "live" ? T.red :
+    drop.status === "scheduled" ? T.copper :
+    drop.status === "ended" ? T.tertiary :
+    drop.status === "archived" ? T.tertiary :
+    T.charcoal;
+  const startedLabel = drop.starts_at ? new Date(drop.starts_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : null;
+  const heroBg = drop.hero_img ? `url(${drop.hero_img}) center/cover` : `linear-gradient(135deg, ${T.charcoal}, ${T.darkCard})`;
+  const canDelete = drop.status === "draft" && typeof onDelete === "function";
+
+  return (
+    <button onClick={onOpen} style={{ display: "flex", gap: 12, padding: 0, borderRadius: 14, background: T.darkCard, border: `1px solid ${T.charcoal}`, cursor: "pointer", textAlign: "left", width: "100%", overflow: "hidden" }}>
+      <div style={{ width: 88, minHeight: 96, background: heroBg, flexShrink: 0 }} />
+      <div style={{ flex: 1, minWidth: 0, padding: "12px 12px 12px 0", display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: statusColor, padding: "2px 8px", borderRadius: 8, fontWeight: 700, letterSpacing: 0.6 }}>{(drop.status || "").toUpperCase()}</span>
+          {drop.brand_partner_name && <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 0.6 }}>{drop.brand_partner_name.toUpperCase()}</span>}
+        </div>
+        <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{drop.title || "Untitled Drop"}</span>
+        <span style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{drop.prize_title || "—"}</span>
+        {startedLabel && <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.4 }}>Starts {startedLabel}</span>}
+      </div>
+      {canDelete && (
+        <button onClick={(e) => { e.stopPropagation(); onDelete(drop.id); }} style={{ alignSelf: "flex-start", margin: 8, background: "none", border: "none", padding: 6, cursor: "pointer" }}>
+          <Trash2 size={14} color={T.tertiary} />
+        </button>
+      )}
+    </button>
+  );
+}
+
+// ─── Admin Hub — landing card grid that picks a sub-section ─────────────
+// Replaces direct entry into the tabbed dashboard. Tapping a card sets
+// `adminSubScreen` at root which mounts AdminDashboardScreen with the
+// matching initialTab + hideTabBar=true. Back from the dashboard lands
+// here, not on the feed.
+function AdminHubScreen({ onBack, onSelect, openReportCount, openBugCount }) {
+  const cards = [
+    { key: "reports",    label: "REPORTS",    desc: "User-submitted content reports awaiting review.",  icon: Flag,           badge: openReportCount, color: T.red },
+    { key: "bugs",       label: "BUG REPORTS", desc: "In-app bug submissions + admin discussion.",      icon: AlertTriangle,  badge: openBugCount,    color: T.red },
+    { key: "moderation", label: "MODERATION", desc: "AI auto-moderation logs and blocked uploads.",     icon: ShieldCheck,    color: T.copper },
+    { key: "discounts",  label: "AMBASSADORS",  desc: "Ambassador commission analytics, discount codes, bulk promo templates.", icon: Tag,           color: T.copper },
+    GEAR_DROPS_ENABLED && { key: "geardrops", label: "GEAR DROPS", desc: "Sponsored events: route + prize + race mechanics.", icon: Gift, color: T.green },
+    { key: "push",       label: "PUSH",       desc: "Broadcast push notifications and view history.",   icon: Bell,           color: T.copper },
+    { key: "analytics",  label: "ANALYTICS",  desc: "Active users, signups, posts, engagement.",        icon: TrendingUp,     color: T.green },
+  ].filter(Boolean);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 16px", borderBottom: `1px solid ${T.charcoal}` }}>
+        <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+          <ChevronLeft size={20} color={T.white} />
+        </button>
+        <Shield size={16} color={T.red} />
+        <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, letterSpacing: 0.8 }}>ADMIN</span>
+      </div>
+      <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+        {cards.map(c => {
+          const Icon = c.icon;
+          const hasBadge = typeof c.badge === "number" && c.badge > 0;
+          return (
+            <button key={c.key} onClick={() => onSelect(c.key)} style={{ display: "flex", alignItems: "center", gap: 14, padding: "16px 16px", borderRadius: 14, background: T.darkCard, border: `1px solid ${T.charcoal}`, cursor: "pointer", textAlign: "left", width: "100%" }}>
+              <div style={{ width: 44, height: 44, borderRadius: 12, background: `${c.color}18`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <Icon size={20} color={c.color} strokeWidth={1.8} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.8 }}>{c.label}</span>
+                  {hasBadge && <span style={{ fontFamily: sans, fontSize: 10, color: T.white, background: T.red, padding: "2px 8px", borderRadius: 10, fontWeight: 700 }}>{c.badge > 99 ? "99+" : c.badge}</span>}
+                </div>
+                <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "4px 0 0", lineHeight: 1.4 }}>{c.desc}</p>
+              </div>
+              <ChevronRight size={16} color={T.tertiary} />
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserName, onBack, onViewUser, onOpenAdminEntity, initialTab, onInitialTabConsumed, hideTabBar, onAdminAddManualOrder }) {
+  // "analytics" is a virtual hub key — it bundles overview/users/content
+  // under one card. Translate to "overview" so the dashboard has a real
+  // tab to render, but remember we're inside the analytics group so we
+  // can show the mini-tab-bar with [OVERVIEW / USERS / CONTENT].
+  const resolveInitial = (k) => (k === "analytics" ? "overview" : (k || "overview"));
+  const [tab, setTab] = useState(resolveInitial(initialTab));
   // When the parent re-sets initialTab while we're already mounted (e.g.
   // admin taps a bug-report bell notification while on /admin), switch to
   // the requested tab and let the parent clear its pending state.
   useEffect(() => {
     if (initialTab) {
-      setTab(initialTab);
+      setTab(resolveInitial(initialTab));
       if (onInitialTabConsumed) onInitialTabConsumed();
     }
   }, [initialTab]);
+  // Analytics group — when hideTabBar=true AND the current tab is one
+  // of the analytics tabs, render a 3-button mini-tab-bar at the top.
+  const ANALYTICS_TABS = ["overview", "users", "content"];
+  const inAnalyticsGroup = hideTabBar && ANALYTICS_TABS.indexOf(tab) !== -1;
   const [dateRange, setDateRange] = useState(30); // 7 / 30 / 90 — Users + Content tabs
   const [overview, setOverview] = useState(null);
   const [signupDaily, setSignupDaily] = useState([]);
@@ -19783,6 +25367,83 @@ function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserNam
   const [expandedBugId, setExpandedBugId] = useState(null);
   const [bugComments, setBugComments] = useState({});         // bugId → [{id, body, author_id, author_handle, author_name, created_at}]
   const [bugCommentDraft, setBugCommentDraft] = useState({}); // bugId → in-flight text
+  // Reports tab state — user-flagged content awaiting admin review.
+  const [contentReports, setContentReports] = useState([]);
+  // Moderation action log — every admin/mod content delete is recorded
+  // by log_moderation_action RPC. Admin-only SELECT via RLS.
+  const [moderationLog, setModerationLog] = useState([]);
+  const [moderationLogLoading, setModerationLogLoading] = useState(false);
+  // For pending_review entries we also fetch the original content row +
+  // owner profile so the admin can see author avatar + media when deciding.
+  const [pendingTargetRows, setPendingTargetRows] = useState({});    // target_id → content row
+  const [pendingTargetOwners, setPendingTargetOwners] = useState({}); // owner_id → profile
+  const [reportStatusFilter, setReportStatusFilter] = useState("pending"); // pending | dismissed | actioned | all
+  const [expandedReportId, setExpandedReportId] = useState(null);
+  // Discounts tab state — ambassador discount templates + bulk apply.
+  const [discountsSubTab, setDiscountsSubTab] = useState("ambassadors"); // "ambassadors" | "analytics" | "templates"
+  // Discount analytics — backed by 4 admin RPC functions.
+  const [discountOverview, setDiscountOverview] = useState(null);
+  const [discountByMonth, setDiscountByMonth] = useState([]);
+  const [topEarners, setTopEarners] = useState([]);
+  const [pendingJourneys, setPendingJourneys] = useState([]);
+  const [topClickers, setTopClickers] = useState([]);
+  const [discountAnalyticsLoading, setDiscountAnalyticsLoading] = useState(false);
+  // Conflict queue (Phase 1B.5) — multi-ambassador attribution conflicts.
+  const [conflictJourneys, setConflictJourneys] = useState([]);
+  const [conflictJourneyOrders, setConflictJourneyOrders] = useState({}); // journey_id → orders[]
+  const [conflictsLoading, setConflictsLoading] = useState(false);
+  const [conflictCount, setConflictCount] = useState(0);
+  const [resolvingConflictId, setResolvingConflictId] = useState(null);
+  const [reattributingId, setReattributingId] = useState(null); // journey_id with open picker
+  // Payouts sub-tab — payout calendar + approval workflow.
+  const [payoutsFilter, setPayoutsFilter] = useState("pending"); // "current" | "pending" | "approved" | "paid"
+  const [pendingPayouts, setPendingPayouts] = useState([]);      // computed from admin_all_pending_payouts (un-linked confirmed/walk_in commission)
+  const [payoutRows, setPayoutRows] = useState([]);              // persisted ambassador_payouts rows (approved+paid+cancelled)
+  const [payoutsLoading, setPayoutsLoading] = useState(false);
+  const [payoutCount, setPayoutCount] = useState(0);             // # of pending-review rows for the sub-tab badge
+  const [busyPayoutKey, setBusyPayoutKey] = useState(null);      // tracks in-flight approve/mark-paid/cancel by row key
+  const [expandedPayoutKey, setExpandedPayoutKey] = useState(null);
+  const [payoutJourneyCache, setPayoutJourneyCache] = useState({}); // cacheKey → journeys[] for expanded rows
+  const [ambassadorSearch, setAmbassadorSearch] = useState("");
+  const [ambassadorTierFilter, setAmbassadorTierFilter] = useState("all"); // "all" | "ambassador" | "installer"
+  const [expandedAmbassadorId, setExpandedAmbassadorId] = useState(null);
+  const [discountTemplates, setDiscountTemplates] = useState([]);
+  const [discountAmbassadors, setDiscountAmbassadors] = useState([]); // for "apply to ambassadors" selection
+  const [ambassadorCodes, setAmbassadorCodes] = useState({});               // { ambassador_id: [codeRow, ...] } — ALL codes, all roles
+  const [ambassadorProfiles, setAmbassadorProfiles] = useState({});         // { profile_id: { handle, full_name } }
+  // Lookup map for client-side tier filtering across all admin sub-tabs.
+  // Built from discountAmbassadors (fetched whenever the discounts tab opens).
+  const tierByAmbassadorId = useMemo(() => {
+    const m = {};
+    (discountAmbassadors || []).forEach(a => { m[a.id] = a.tier || "ambassador"; });
+    return m;
+  }, [discountAmbassadors]);
+  const matchesTierFilter = useCallback((ambassadorId) => {
+    if (ambassadorTierFilter === "all") return true;
+    const tier = tierByAmbassadorId[ambassadorId] || "ambassador";
+    return tier === ambassadorTierFilter;
+  }, [ambassadorTierFilter, tierByAmbassadorId]);
+  const [rebuildingAmbassadorId, setRebuildingAmbassadorId] = useState(null);
+  const [busyCodeId, setBusyCodeId] = useState(null);                       // code row id currently in-flight (delete or edit)
+  const [editingCodeId, setEditingCodeId] = useState(null);                 // code row currently being renamed
+  const [editCodeDraft, setEditCodeDraft] = useState("");
+  const [bulkDeletingTplId, setBulkDeletingTplId] = useState(null);
+  const [bulkDeleteResult, setBulkDeleteResult] = useState(null);            // { tpl_id, success, failed: [...] }
+  const [importingLegacyForAmbId, setImportingLegacyForAmbId] = useState(null); // ambassador.id when the legacy-import form is open under their card
+  const [legacyImportDraft, setLegacyImportDraft] = useState({ code: "", internal_code: "", label: "" });
+  const [legacyImportSaving, setLegacyImportSaving] = useState(false);
+  const [registeringWebhooks, setRegisteringWebhooks] = useState(false);
+  const [webhookRegisterResult, setWebhookRegisterResult] = useState(null);
+  const [backfillingAmbId, setBackfillingAmbId] = useState(null);
+  // MANUAL ADD ORDER modal target — set by the "+ MANUAL ORDER" button on
+  // an ambassador's expanded row. { ambassador: {id, base_code, handle, full_name} }.
+  const [manualAddTarget, setManualAddTarget] = useState(null);
+  const [backfillResults, setBackfillResults] = useState({}); // { ambassadorId: { summary, error? } }
+  const [showTemplateForm, setShowTemplateForm] = useState(false);
+  const [templateDraft, setTemplateDraft] = useState({ label: "", code_suffix: "", kind: "percentage", value: 20, min_purchase_amount: "", starts_at: "", ends_at: "" });
+  const [templateSaving, setTemplateSaving] = useState(false);
+  const [bulkApplyingTplId, setBulkApplyingTplId] = useState(null);
+  const [bulkApplyResult, setBulkApplyResult] = useState(null); // {tpl_id, success: N, failed: [...]}
   const pushImageFileRef = useRef(null);
 
   const fetchOverview = useCallback(async () => {
@@ -19904,6 +25565,731 @@ function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserNam
     }
   };
 
+  // ─── Content reports ───
+  const fetchContentReports = useCallback(async () => {
+    try {
+      let q = supabase.from("content_reports").select("*").order("created_at", { ascending: false }).limit(200);
+      if (reportStatusFilter !== "all") q = q.eq("status", reportStatusFilter);
+      const { data, error } = await q;
+      if (error) console.error("[admin] content_reports fetch error:", error);
+      setContentReports(data || []);
+    } catch (e) { console.error("[admin] content_reports", e); }
+  }, [reportStatusFilter]);
+
+  const fetchModerationLog = useCallback(async () => {
+    setModerationLogLoading(true);
+    try {
+      const { data, error } = await supabase.from("moderation_log")
+        .select("*").order("created_at", { ascending: false }).limit(100);
+      if (error) console.error("[admin] moderation_log fetch error:", error);
+      const log = data || [];
+      setModerationLog(log);
+      // Resolve content + author profile for each pending_review entry so
+      // the queue card can render the actual post/thread body, photos +
+      // owner avatar instead of just the moderator's snippet.
+      const pending = log.filter(r => r.status === "pending_review");
+      if (pending.length > 0) {
+        const postIds   = pending.filter(r => r.target_type === "post").map(r => r.target_id);
+        const threadIds = pending.filter(r => r.target_type === "forum_thread").map(r => r.target_id);
+        const replyIds  = pending.filter(r => r.target_type === "forum_reply").map(r => r.target_id);
+        const ownerIds  = Array.from(new Set(pending.map(r => r.target_owner_id).filter(Boolean)));
+        const [postsRes, threadsRes, repliesRes, ownersRes] = await Promise.all([
+          postIds.length   ? supabase.from("posts").select("id, type, title, body, data, user_id").in("id", postIds)                            : Promise.resolve({ data: [] }),
+          threadIds.length ? supabase.from("forum_threads").select("id, title, body, sections, photos, user_id").in("id", threadIds)            : Promise.resolve({ data: [] }),
+          replyIds.length  ? supabase.from("forum_replies").select("id, body, photos, user_id").in("id", replyIds)                              : Promise.resolve({ data: [] }),
+          ownerIds.length  ? supabase.from("profiles").select("id, handle, full_name, avatar_url").in("id", ownerIds)                           : Promise.resolve({ data: [] }),
+        ]);
+        const rowsMap = {};
+        (postsRes.data   || []).forEach(p => { rowsMap[p.id] = { _kind: "post", ...p }; });
+        (threadsRes.data || []).forEach(t => { rowsMap[t.id] = { _kind: "forum_thread", ...t }; });
+        (repliesRes.data || []).forEach(r => { rowsMap[r.id] = { _kind: "forum_reply", ...r }; });
+        setPendingTargetRows(rowsMap);
+        const ownersMap = {};
+        (ownersRes.data || []).forEach(o => { ownersMap[o.id] = o; });
+        setPendingTargetOwners(ownersMap);
+      } else {
+        setPendingTargetRows({});
+        setPendingTargetOwners({});
+      }
+    } catch (e) { console.error("[admin] moderation_log", e); }
+    setModerationLogLoading(false);
+  }, []);
+
+  const setReportStatus = async (reportId, status, actionTaken) => {
+    const report = contentReports.find(r => r.id === reportId);
+    const patch = { status, updated_at: new Date().toISOString() };
+    if (status === "actioned" || status === "dismissed") {
+      patch.reviewed_at = new Date().toISOString();
+      patch.reviewed_by = currentUserId;
+      if (typeof actionTaken === "string" && actionTaken.length > 0) patch.action_taken = actionTaken;
+    } else {
+      patch.reviewed_at = null;
+      patch.reviewed_by = null;
+    }
+    setContentReports(prev => prev.map(r => r.id === reportId ? { ...r, ...patch } : r));
+    const { error } = await supabase.from("content_reports").update(patch).eq("id", reportId);
+    if (error) { console.error("[admin] report status update", error); fetchContentReports(); }
+    // Note: we deliberately do NOT push-notify the reporter on resolution
+    // — content reports are anonymous by design (the reporter shouldn't
+    // get told "your report was dismissed" as that invites retaliation
+    // appeal loops). Bug reports differ because the reporter opted in.
+    return !error;
+  };
+
+  // ─── Discount templates (bulk ambassador promos) ───
+  const fetchDiscountTemplates = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("ambassador_discount_templates")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error) console.error("[admin] discount templates fetch", error);
+      setDiscountTemplates(data || []);
+    } catch (e) { console.error("[admin] discount templates", e); }
+  }, []);
+
+  const fetchActiveAmbassadors = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("ambassadors")
+        .select("id, profile_id, base_code, status, tier, commission_rate_pct, stripe_account_id, stripe_onboarded")
+        .eq("status", "active")
+        .order("created_at", { ascending: false });
+      if (error) console.error("[admin] ambassadors fetch", error);
+      const rows = data || [];
+      setDiscountAmbassadors(rows);
+      // Also fetch ALL codes per ambassador (not just primary — admin needs
+      // to manage bulk_promo codes here too) + profile info for display.
+      if (rows.length > 0) {
+        const ambIds = rows.map(r => r.id);
+        const profileIds = rows.map(r => r.profile_id).filter(Boolean);
+        // Active list only — soft-deleted rows stay in the DB for Phase 1B
+        // commission attribution but don't show in admin's active-codes UI.
+        const [codesRes, profsRes] = await Promise.all([
+          supabase.from("ambassador_discount_codes")
+            .select("*").in("ambassador_id", ambIds)
+            .neq("status", "deleted")
+            .order("role", { ascending: true })
+            .order("created_at", { ascending: true }),
+          supabase.from("profiles")
+            .select("id, handle, full_name").in("id", profileIds),
+        ]);
+        // Group codes by ambassador_id for easy per-row rendering.
+        const codesMap = {};
+        (codesRes.data || []).forEach(c => {
+          if (!codesMap[c.ambassador_id]) codesMap[c.ambassador_id] = [];
+          codesMap[c.ambassador_id].push(c);
+        });
+        setAmbassadorCodes(codesMap);
+        const profsMap = {};
+        (profsRes.data || []).forEach(p => { profsMap[p.id] = p; });
+        setAmbassadorProfiles(profsMap);
+      } else {
+        setAmbassadorCodes({});
+        setAmbassadorProfiles({});
+      }
+    } catch (e) { console.error("[admin] ambassadors", e); }
+  }, []);
+
+  // Discount analytics — 4 admin RPCs run in parallel. Powers the
+  // ANALYTICS sub-tab (overview cards + monthly bar chart + top earners
+  // leaderboard + pending-journey watchlist).
+  const fetchDiscountAnalytics = useCallback(async () => {
+    setDiscountAnalyticsLoading(true);
+    try {
+      const [ovRes, monthRes, topRes, pendRes, clicksRes] = await Promise.all([
+        supabase.rpc("admin_ambassador_overview_stats"),
+        supabase.rpc("admin_commission_vs_payouts_by_month", { p_months: 6 }),
+        supabase.rpc("admin_top_earner_ambassadors", { p_limit: 10 }),
+        supabase.rpc("admin_pending_journey_list", { p_limit: 50 }),
+        supabase.rpc("admin_top_click_ambassadors", { p_limit: 10 }),
+      ]);
+      if (ovRes.error) console.error("[admin] discount overview", ovRes.error);
+      if (monthRes.error) console.error("[admin] discount by month", monthRes.error);
+      if (topRes.error) console.error("[admin] top earners", topRes.error);
+      if (pendRes.error) console.error("[admin] pending journeys", pendRes.error);
+      if (clicksRes.error) console.error("[admin] top clicks", clicksRes.error);
+      setDiscountOverview(Array.isArray(ovRes.data) ? ovRes.data[0] : ovRes.data);
+      setDiscountByMonth(monthRes.data || []);
+      setTopEarners(topRes.data || []);
+      setPendingJourneys(pendRes.data || []);
+      setTopClickers(clicksRes.data || []);
+    } catch (e) { console.error("[admin] discount analytics", e); }
+    setDiscountAnalyticsLoading(false);
+  }, []);
+
+  // Conflicts queue — flagged journeys awaiting admin resolution.
+  // Lazy-fetches the linked orders per journey for context (to show the
+  // codes used + classifications so admin can pick the right winner).
+  const fetchConflicts = useCallback(async () => {
+    setConflictsLoading(true);
+    try {
+      const { data: journeys, error: e1 } = await supabase
+        .from("ambassador_journeys")
+        .select("*")
+        .eq("is_conflict", true)
+        .order("deposit_started_at", { ascending: false });
+      if (e1) console.error("[admin] conflict journeys fetch", e1);
+      const rows = journeys || [];
+      setConflictJourneys(rows);
+      // Pull orders for context. raw_webhook is heavy (~50KB/order) so
+      // skip it — we just need order #, classification, customer name.
+      if (rows.length > 0) {
+        const jIds = rows.map(j => j.id);
+        const { data: orders } = await supabase
+          .from("ambassador_orders")
+          .select("id, journey_id, shopify_order_number, subtotal, classification, order_date, customer_name, ambassador_id")
+          .in("journey_id", jIds)
+          .order("order_date", { ascending: true });
+        const grouped = {};
+        (orders || []).forEach(o => {
+          if (!grouped[o.journey_id]) grouped[o.journey_id] = [];
+          grouped[o.journey_id].push(o);
+        });
+        setConflictJourneyOrders(grouped);
+      } else {
+        setConflictJourneyOrders({});
+      }
+    } catch (e) { console.error("[admin] conflicts", e); }
+    setConflictsLoading(false);
+  }, []);
+
+  // Resolve: re-attribute journey + all linked orders to chosen ambassador.
+  // Atomic via SECURITY DEFINER RPC.
+  const resolveConflict = async (journeyId, newAmbassadorId) => {
+    if (!journeyId || !newAmbassadorId) return;
+    setResolvingConflictId(journeyId);
+    try {
+      const { error } = await supabase.rpc("resolve_conflict_attribution", {
+        p_journey_id: journeyId,
+        p_new_ambassador_id: newAmbassadorId,
+      });
+      if (error) { alert(`Resolution failed: ${error.message || error}`); }
+      else { setReattributingId(null); await fetchConflicts(); }
+    } catch (e) { alert(`Resolution threw: ${(e && e.message) || String(e)}`); }
+    setResolvingConflictId(null);
+  };
+
+  // ─── Payout helpers ────────────────────────────────────────────────
+  // Last business day of a given month (year, monthIdx zero-based) —
+  // backs up from end-of-month over weekends. Used to compute scheduled_for.
+  const lastBusinessDayOf = (year, monthIdx) => {
+    const d = new Date(year, monthIdx + 1, 0); // last day of that month
+    while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() - 1);
+    return d;
+  };
+  // Given a period_end date string (yyyy-mm-dd) → ISO date of the last
+  // business day of the FOLLOWING month (the payment date).
+  const scheduledForFromPeriodEnd = (periodEndStr) => {
+    if (!periodEndStr) return null;
+    const d = new Date(`${periodEndStr}T00:00:00`);
+    if (isNaN(d.getTime())) return null;
+    // Last day of period IS in month M; payment is month M+1.
+    const sched = lastBusinessDayOf(d.getFullYear(), d.getMonth() + 1);
+    const yyyy = sched.getFullYear();
+    const mm = String(sched.getMonth() + 1).padStart(2, "0");
+    const dd = String(sched.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  };
+  // Is a period_end date in a closed month (i.e. period_end < today's
+  // month start)? Used to split CURRENT vs PENDING REVIEW.
+  const isClosedCycle = (periodEndStr) => {
+    if (!periodEndStr) return false;
+    const d = new Date(`${periodEndStr}T00:00:00`);
+    if (isNaN(d.getTime())) return false;
+    const now = new Date();
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    return d < currentMonthStart;
+  };
+
+  // Fetch all payout data (pending computation + persisted rows).
+  const fetchPayouts = useCallback(async () => {
+    setPayoutsLoading(true);
+    try {
+      const [pendingRes, rowsRes] = await Promise.all([
+        supabase.rpc("admin_all_pending_payouts"),
+        // Latest 200 should cover everything for now; bump if it grows past that.
+        supabase.from("ambassador_payouts")
+          .select("*, ambassadors!inner(id, base_code, profile_id, profiles!inner(handle, full_name))")
+          .order("period_end", { ascending: false })
+          .order("created_at", { ascending: false })
+          .limit(200),
+      ]);
+      if (pendingRes.error) console.error("[admin] all pending payouts", pendingRes.error);
+      if (rowsRes.error) console.error("[admin] payout rows", rowsRes.error);
+      setPendingPayouts(pendingRes.data || []);
+      setPayoutRows(rowsRes.data || []);
+      // Sub-tab badge count = number of CLOSED-cycle pending rows.
+      const closedCount = (pendingRes.data || []).filter(p => isClosedCycle(p.period_end)).length;
+      setPayoutCount(closedCount);
+    } catch (e) { console.error("[admin] payouts", e); }
+    setPayoutsLoading(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Approve a single (ambassador, period) pending row.
+  const approvePayout = async (row) => {
+    const scheduled = scheduledForFromPeriodEnd(row.period_end);
+    if (!confirm(`Approve $${Number(row.gross).toFixed(2)} payout to ${row.full_name || row.handle} for ${row.period_start}? Scheduled payment ${scheduled}.`)) return;
+    const key = `${row.ambassador_id}_${row.period_start}`;
+    setBusyPayoutKey(key);
+    try {
+      const { error } = await supabase.rpc("admin_approve_payout", {
+        p_ambassador_id: row.ambassador_id,
+        p_period_start: row.period_start,
+        p_period_end: row.period_end,
+        p_scheduled_for: scheduled,
+        p_notes: null,
+      });
+      if (error) alert(`Approve failed: ${error.message || error}`);
+      else await fetchPayouts();
+    } catch (e) { alert(`Approve threw: ${(e && e.message) || String(e)}`); }
+    setBusyPayoutKey(null);
+  };
+
+  // Triggers a real Stripe transfer (Phase 2B). Replaces the legacy
+  // admin_mark_payout_paid RPC call. The edge function:
+  //   1. Validates ambassador.stripe_onboarded — refuses with helpful
+  //      error if they haven't completed Connect setup
+  //   2. POSTs to Stripe /v1/transfers (idempotent via payout id)
+  //   3. Updates payout.status='paid' + payout.stripe_transfer_id
+  //   4. Flips linked journeys to state='paid'
+  const markPayoutPaid = async (row) => {
+    const ambName = row.ambassadors?.profiles?.full_name || row.ambassadors?.profiles?.handle || "ambassador";
+    if (!confirm(`Send $${Number(row.net_amount).toFixed(2)} to ${ambName} via Stripe? This transfers funds from LPO's Stripe balance to their connected account. Idempotent — safe to retry.`)) return;
+    setBusyPayoutKey(row.id);
+    try {
+      const { data, error } = await supabase.functions.invoke("stripe-transfer-payout", {
+        body: { payout_id: row.id },
+      });
+      if (error || !data?.ok) {
+        const detail = data?.detail?.message || data?.detail || data?.error || (error && error.message) || "transfer failed";
+        alert(`Stripe transfer failed: ${typeof detail === "string" ? detail : JSON.stringify(detail)}`);
+      } else if (data?.warning) {
+        alert(`Transfer sent (${data.transfer_id}) but DB sync warning: ${data.warning}`);
+        await fetchPayouts();
+      } else {
+        await fetchPayouts();
+      }
+    } catch (e) { alert(`Transfer threw: ${(e && e.message) || String(e)}`); }
+    setBusyPayoutKey(null);
+  };
+
+  const cancelPayout = async (row) => {
+    if (!confirm(`Cancel this approved payout? Journeys will be un-linked and re-appear in PENDING REVIEW.`)) return;
+    setBusyPayoutKey(row.id);
+    try {
+      const { error } = await supabase.rpc("admin_cancel_payout", { p_payout_id: row.id });
+      if (error) alert(`Cancel failed: ${error.message || error}`);
+      else await fetchPayouts();
+    } catch (e) { alert(`Cancel threw: ${(e && e.message) || String(e)}`); }
+    setBusyPayoutKey(null);
+  };
+
+  // Record-only paid: flips payout.status='paid' WITHOUT triggering a
+  // Stripe transfer. For cases where the ambassador was paid outside
+  // Stripe (check, ACH outside Connect, Venmo, in-person cash, etc.).
+  // Uses the legacy admin_mark_payout_paid RPC that pre-dated the Stripe
+  // transfer flow. Asks for an optional note that gets stored on the
+  // payout row so the audit trail explains why this skipped Stripe.
+  const markPayoutPaidOffPlatform = async (row) => {
+    const ambName = row.ambassadors?.profiles?.full_name || row.ambassadors?.profiles?.handle || "ambassador";
+    const note = prompt(`MARK AS PAID without sending via Stripe.\n\nUse only if you've already paid ${ambName} $${Number(row.net_amount).toFixed(2)} through some other channel (check, manual bank transfer, etc.). This will NOT trigger a Stripe transfer.\n\nNotes (e.g. "Paid by check #1234 on 5/15") — optional but recommended:`);
+    if (note === null) return; // user cancelled the prompt
+    setBusyPayoutKey(row.id);
+    try {
+      const { error } = await supabase.rpc("admin_mark_payout_paid", {
+        p_payout_id: row.id,
+        p_notes: (note && note.trim()) ? note.trim() : null,
+      });
+      if (error) alert(`Mark paid failed: ${error.message || error}`);
+      else await fetchPayouts();
+    } catch (e) { alert(`Mark paid threw: ${(e && e.message) || String(e)}`); }
+    setBusyPayoutKey(null);
+  };
+
+  // Lazy-load journeys for an expanded pending row (so admin can see
+  // exactly which orders/journeys are contributing).
+  const loadPayoutJourneys = useCallback(async (cacheKey, ambassadorId, periodStart, periodEnd, payoutId) => {
+    if (payoutJourneyCache[cacheKey]) return;
+    try {
+      let q = supabase.from("ambassador_journeys")
+        .select("id, state, customer_email, commission_amount, commission_eligible_total, confirmed_at, deposit_started_at")
+        .eq("ambassador_id", ambassadorId)
+        .order("confirmed_at", { ascending: true });
+      if (payoutId) {
+        q = q.eq("payout_id", payoutId);
+      } else {
+        q = q.is("payout_id", null)
+             .in("state", ["confirmed", "walk_in"])
+             .gte("confirmed_at", periodStart)
+             .lte("confirmed_at", `${periodEnd}T23:59:59.999Z`);
+      }
+      const { data, error } = await q;
+      if (error) console.error("[admin] payout journeys load", error);
+      setPayoutJourneyCache(prev => ({ ...prev, [cacheKey]: data || [] }));
+    } catch (e) { console.error("[admin] payout journeys", e); }
+  }, [payoutJourneyCache]);
+
+  // Dismiss: keep current attribution, just clear the flag. Use when
+  // admin confirms first-matched ambassador is correct.
+  const dismissConflict = async (journeyId) => {
+    if (!journeyId) return;
+    if (!confirm("Dismiss this conflict flag? The current attribution stays; the journey will no longer appear in the queue.")) return;
+    setResolvingConflictId(journeyId);
+    try {
+      const { error } = await supabase.rpc("dismiss_conflict_flag", { p_journey_id: journeyId });
+      if (error) { alert(`Dismiss failed: ${error.message || error}`); }
+      else { await fetchConflicts(); }
+    } catch (e) { alert(`Dismiss threw: ${(e && e.message) || String(e)}`); }
+    setResolvingConflictId(null);
+  };
+
+  // Rebuild a specific ambassador's primary discount code. Wipes the
+  // existing Shopify codes (public + internal) + DB row, then creates
+  // a fresh pair via the edge function's replace_existing path.
+  // Create the primary code for an ambassador that's currently missing one.
+  // Used when adminUpdateUserRole's initial Shopify call failed (e.g. 502,
+  // capability error) and left an orphan ambassador row without a code.
+  // shopify-create-discount-code is now idempotent — if codes already exist
+  // in Shopify (partial failure scenario), they're reused instead of
+  // recreated, so attribution for any order placed in the failure window
+  // stays intact. No replace_existing flag → if a DB row already exists
+  // for this ambassador+primary, the function returns its current state.
+  const retryAmbassadorPrimary = async (ambassador) => {
+    if (!ambassador || !ambassador.id) return;
+    if (!ambassador.base_code) { alert("This ambassador has no base_code — can't create a primary without one. Wipe + re-promote instead."); return; }
+    setRebuildingAmbassadorId(ambassador.id);
+    try {
+      const { data: res, error: err } = await supabase.functions.invoke("shopify-create-discount-code", {
+        body: {
+          ambassador_id: ambassador.id,
+          base_code: ambassador.base_code,
+          role: "primary",
+        },
+      });
+      if (err || !res || res.ok === false) {
+        const msg = (err && err.message) || (res && res.error) || "Create primary code failed";
+        alert(`Couldn't create primary code: ${msg}`);
+      } else {
+        await fetchActiveAmbassadors();
+      }
+    } catch (e) {
+      alert(`Create primary code threw: ${(e && e.message) || String(e)}`);
+    }
+    setRebuildingAmbassadorId(null);
+  };
+
+  const rebuildAmbassadorPrimary = async (ambassador) => {
+    if (!ambassador || !ambassador.id) return;
+    if (!ambassador.base_code) { alert("This ambassador has no base_code — can't rebuild without one. Wipe + re-promote instead."); return; }
+    if (!confirm(`Rebuild PRIMARY code for ${ambassador.base_code}? This deletes the existing Shopify codes + DB row, then creates a fresh pair (${ambassador.base_code}500 + ${ambassador.base_code}500C).`)) return;
+    setRebuildingAmbassadorId(ambassador.id);
+    try {
+      const { data: res, error: err } = await supabase.functions.invoke("shopify-create-discount-code", {
+        body: {
+          ambassador_id: ambassador.id,
+          base_code: ambassador.base_code,
+          role: "primary",
+          replace_existing: true,
+        },
+      });
+      if (err || !res || res.ok === false) {
+        const msg = (err && err.message) || (res && res.error) || "rebuild failed";
+        alert(`Rebuild failed: ${msg}`);
+      } else {
+        // Refresh so the new code shows up.
+        await fetchActiveAmbassadors();
+      }
+    } catch (e) {
+      alert(`Rebuild threw: ${(e && e.message) || String(e)}`);
+    }
+    setRebuildingAmbassadorId(null);
+  };
+
+  // Backfill historical Shopify orders for this ambassador. Pulls every
+  // paid order in the last 12 months that used any of this ambassador's
+  // codes + runs the same classification engine as the live webhook.
+  // Idempotent — orders already ingested are skipped. Useful for both
+  // testing and migrating real legacy attribution into Trailhead.
+  const backfillAmbassadorOrders = async (ambassador) => {
+    if (!ambassador || !ambassador.id) return;
+    if (!confirm(`Backfill historical Shopify orders for this ambassador?\n\nPulls every paid order in the last 12 months that used any of their codes (active or soft-deleted). Idempotent — already-ingested orders are skipped. Can take 10-30s for ambassadors with lots of historical orders.`)) return;
+    setBackfillingAmbId(ambassador.id);
+    setBackfillResults(prev => ({ ...prev, [ambassador.id]: null }));
+    try {
+      const { data: res, error: err } = await supabase.functions.invoke("shopify-backfill-orders", {
+        body: { ambassador_id: ambassador.id },
+      });
+      if (err || !res || res.ok === false) {
+        const msg = (err && err.message) || (res && res.error) || "backfill failed";
+        setBackfillResults(prev => ({ ...prev, [ambassador.id]: { error: msg, detail: res?.detail } }));
+      } else {
+        setBackfillResults(prev => ({ ...prev, [ambassador.id]: { summary: res.summary } }));
+        await fetchActiveAmbassadors();
+      }
+    } catch (e) {
+      setBackfillResults(prev => ({ ...prev, [ambassador.id]: { error: (e && e.message) || String(e) } }));
+    }
+    setBackfillingAmbId(null);
+  };
+
+  // One-shot: register the Shopify webhooks (orders/paid + orders/refunded)
+  // pointing at our shopify-webhook edge function. Idempotent — skips
+  // topics already pointing at our URL.
+  const registerShopifyWebhooks = async () => {
+    if (registeringWebhooks) return;
+    if (!confirm("Register orders/paid + orders/refunded Shopify webhooks pointing at our edge function? Safe to run multiple times — already-registered topics are skipped.")) return;
+    setRegisteringWebhooks(true);
+    setWebhookRegisterResult(null);
+    try {
+      const { data: res, error: err } = await supabase.functions.invoke("shopify-register-webhooks", { body: {} });
+      if (err || !res || res.ok === false) {
+        const msg = (err && err.message) || (res && res.error) || "register failed";
+        setWebhookRegisterResult({ ok: false, error: msg, detail: res?.detail });
+      } else {
+        setWebhookRegisterResult({ ok: true, webhook_url: res.webhook_url, results: res.results });
+      }
+    } catch (e) {
+      setWebhookRegisterResult({ ok: false, error: (e && e.message) || String(e) });
+    }
+    setRegisteringWebhooks(false);
+  };
+
+  // Import an EXISTING Shopify discount code (pre-Trailhead) and link it
+  // to this ambassador for commission attribution. Inserted as role='legacy'
+  // + visibility='hidden' so the ambassador's dashboard never shows it.
+  const importLegacyCode = async (ambassador) => {
+    if (!ambassador || !ambassador.id) return;
+    const code = legacyImportDraft.code.trim();
+    const internalCode = legacyImportDraft.internal_code.trim();
+    if (!code && !internalCode) { alert("Enter at least the public (deposit) code or the internal (staff-applied discount) code."); return; }
+    setLegacyImportSaving(true);
+    try {
+      const { data: res, error: err } = await supabase.functions.invoke("shopify-create-discount-code", {
+        body: {
+          action: "import_legacy",
+          ambassador_id: ambassador.id,
+          code: code || null,
+          internal_code: internalCode || null,
+          label: legacyImportDraft.label.trim() || null,
+        },
+      });
+      if (err || !res || res.ok === false) {
+        const msg = (err && err.message) || (res && res.error) || "import failed";
+        alert(`Import failed: ${msg}`);
+      } else {
+        setImportingLegacyForAmbId(null);
+        setLegacyImportDraft({ code: "", internal_code: "", label: "" });
+        await fetchActiveAmbassadors();
+      }
+    } catch (e) {
+      alert(`Import threw: ${(e && e.message) || String(e)}`);
+    }
+    setLegacyImportSaving(false);
+  };
+
+  // Unlink a LEGACY code from this ambassador — soft-deletes the DB row
+  // only, leaves the Shopify code alone. Used when reassigning a legacy
+  // code to a different ambassador (or simply detaching).
+  const unlinkLegacyCode = async (code) => {
+    if (!code || !code.id) return;
+    if (!confirm(`Unlink code "${code.code}" from this ambassador?\n\nThe code STAYS ACTIVE on Shopify (customers can keep using it). Trailhead just stops attributing future orders that use this code to this ambassador. Soft-deletes the DB row so historical attribution is preserved.`)) return;
+    setBusyCodeId(code.id);
+    try {
+      const { error } = await supabase
+        .from("ambassador_discount_codes")
+        .update({ status: "deleted", updated_at: new Date().toISOString() })
+        .eq("id", code.id);
+      if (error) alert(`Unlink failed: ${error.message || error.code}`);
+      else await fetchActiveAmbassadors();
+    } catch (e) { alert(`Unlink threw: ${(e && e.message) || String(e)}`); }
+    setBusyCodeId(null);
+  };
+
+  // Delete a single code (kills Shopify public + internal + DB row).
+  // Graceful on Shopify 404 (admin may have deleted manually first).
+  const deleteAmbassadorCode = async (code) => {
+    if (!code || !code.id) return;
+    if (!confirm(`Delete code "${code.code}" (and its internal "${code.internal_code || code.code + 'C'}")? This removes both from Shopify AND from the DB. The ambassador will lose this code.`)) return;
+    setBusyCodeId(code.id);
+    try {
+      const { data: res, error: err } = await supabase.functions.invoke("shopify-create-discount-code", {
+        body: { action: "delete", code_id: code.id },
+      });
+      if (err || !res || res.ok === false) {
+        const msg = (err && err.message) || (res && res.error) || "delete failed";
+        alert(`Delete failed: ${msg}`);
+      } else {
+        await fetchActiveAmbassadors();
+      }
+    } catch (e) {
+      alert(`Delete threw: ${(e && e.message) || String(e)}`);
+    }
+    setBusyCodeId(null);
+  };
+
+  // Rename a code: deletes existing Shopify codes + creates new ones with
+  // the custom name. Uses replace_existing path. Internal code auto-becomes
+  // <new> + "C".
+  const renameAmbassadorCode = async (code, ambassador, newPublicCode) => {
+    if (!code || !ambassador) return;
+    const trimmed = (newPublicCode || "").trim();
+    if (trimmed.length < 3) { alert("Code must be at least 3 characters."); return; }
+    setBusyCodeId(code.id);
+    try {
+      const body = {
+        ambassador_id: ambassador.id,
+        base_code: ambassador.base_code || "",
+        role: code.role,
+        replace_existing: true,
+        custom_public_code: trimmed,
+      };
+      if (code.role === "bulk_promo" && code.template_id) body.template_id = code.template_id;
+      const { data: res, error: err } = await supabase.functions.invoke("shopify-create-discount-code", { body });
+      if (err || !res || res.ok === false) {
+        const msg = (err && err.message) || (res && res.error) || "rename failed";
+        alert(`Rename failed: ${msg}`);
+      } else {
+        setEditingCodeId(null);
+        setEditCodeDraft("");
+        await fetchActiveAmbassadors();
+      }
+    } catch (e) {
+      alert(`Rename threw: ${(e && e.message) || String(e)}`);
+    }
+    setBusyCodeId(null);
+  };
+
+  // Bulk-delete all codes generated from a template. Loops through every
+  // ambassador_discount_codes row with that template_id and calls delete.
+  const bulkDeleteTemplateCodes = async (tpl) => {
+    if (!tpl || !tpl.id) return;
+    // Find all LIVE codes from this template across all ambassadors.
+    // (Already soft-deleted rows are left as-is for historical lookup.)
+    const { data: codes } = await supabase
+      .from("ambassador_discount_codes")
+      .select("id, code, ambassador_id")
+      .eq("template_id", tpl.id)
+      .neq("status", "deleted");
+    const n = (codes || []).length;
+    if (n === 0) { alert(`No codes from "${tpl.label}" to delete.`); return; }
+    if (!confirm(`Delete ALL ${n} codes generated from "${tpl.label}"? This removes both the public + internal Shopify codes AND the DB rows for every ambassador who has this template's variant.`)) return;
+    setBulkDeletingTplId(tpl.id);
+    setBulkDeleteResult({ tpl_id: tpl.id, success: 0, failed: [] });
+    let success = 0;
+    const failed = [];
+    for (const c of codes) {
+      try {
+        const { data: res, error: err } = await supabase.functions.invoke("shopify-create-discount-code", {
+          body: { action: "delete", code_id: c.id },
+        });
+        if (err || !res || res.ok === false) {
+          failed.push({ code: c.code, error: (err && err.message) || (res && res.error) || "unknown" });
+        } else {
+          success++;
+        }
+      } catch (e) {
+        failed.push({ code: c.code, error: (e && e.message) || String(e) });
+      }
+      setBulkDeleteResult({ tpl_id: tpl.id, success, failed: failed.slice() });
+    }
+    setBulkDeletingTplId(null);
+    setBulkDeleteResult({ tpl_id: tpl.id, success, failed });
+    await fetchActiveAmbassadors();
+  };
+
+  const createTemplate = async () => {
+    if (templateSaving) return;
+    const draft = templateDraft;
+    if (!draft.label.trim() || !draft.code_suffix.trim()) {
+      alert("Label and code suffix are required.");
+      return;
+    }
+    if (draft.kind !== "free_shipping" && (draft.value == null || draft.value === "" || Number(draft.value) <= 0)) {
+      alert("Value is required for fixed_amount and percentage discounts.");
+      return;
+    }
+    // Date validation — both optional, but if both set, end must be after start.
+    const startsIso = draft.starts_at ? new Date(draft.starts_at).toISOString() : null;
+    const endsIso = draft.ends_at ? new Date(draft.ends_at).toISOString() : null;
+    if (startsIso && endsIso && new Date(endsIso) <= new Date(startsIso)) {
+      alert("End date must be after start date.");
+      return;
+    }
+    setTemplateSaving(true);
+    try {
+      const row = {
+        label: draft.label.trim(),
+        code_suffix: draft.code_suffix.trim().toUpperCase().replace(/[^A-Z0-9]/g, ""),
+        kind: draft.kind,
+        value: draft.kind === "free_shipping" ? null : Number(draft.value),
+        min_purchase_amount: draft.min_purchase_amount === "" ? null : Number(draft.min_purchase_amount),
+        applies_to: "all",
+        starts_at: startsIso,
+        ends_at: endsIso,
+        created_by: currentUserId,
+      };
+      const { error } = await supabase.from("ambassador_discount_templates").insert(row);
+      if (error) { alert("Couldn't create template: " + (error.message || error.code)); }
+      else {
+        setShowTemplateForm(false);
+        setTemplateDraft({ label: "", code_suffix: "", kind: "percentage", value: 20, min_purchase_amount: "", starts_at: "", ends_at: "" });
+        fetchDiscountTemplates();
+      }
+    } catch (e) { alert("Couldn't create template: " + ((e && e.message) || String(e))); }
+    setTemplateSaving(false);
+  };
+
+  const archiveTemplate = async (tplId) => {
+    if (!confirm("Archive this template? Existing codes already created from it will remain — but you won't be able to bulk-apply it again.")) return;
+    const { error } = await supabase
+      .from("ambassador_discount_templates")
+      .update({ status: "archived", updated_at: new Date().toISOString() })
+      .eq("id", tplId);
+    if (error) alert("Archive failed: " + (error.message || error.code));
+    else fetchDiscountTemplates();
+  };
+
+  // Apply a template to all active ambassadors. Skips those who already
+  // have a code from this template. Invokes the edge function once per
+  // ambassador (serially to keep Shopify rate limits happy — 40 req/sec
+  // but better-safe-than-sorry for variable webhook timing).
+  const bulkApplyTemplate = async (tpl) => {
+    if (!confirm(`Apply "${tpl.label}" to all ${discountAmbassadors.length} active ambassadors? Skips any who already have a code from this template.`)) return;
+    setBulkApplyingTplId(tpl.id);
+    setBulkApplyResult({ tpl_id: tpl.id, success: 0, skipped: 0, failed: [] });
+    // Find ambassadors who already have a code from this template — skip those.
+    const { data: existing } = await supabase
+      .from("ambassador_discount_codes")
+      .select("ambassador_id")
+      .eq("template_id", tpl.id);
+    const alreadyHave = new Set((existing || []).map(r => r.ambassador_id));
+    let success = 0;
+    let skipped = 0;
+    const failed = [];
+    for (const a of discountAmbassadors) {
+      if (alreadyHave.has(a.id)) { skipped++; continue; }
+      if (!a.base_code) { failed.push({ ambassador_id: a.id, error: "missing base_code" }); continue; }
+      try {
+        const { data: res, error: err } = await supabase.functions.invoke("shopify-create-discount-code", {
+          body: { ambassador_id: a.id, base_code: a.base_code, role: "bulk_promo", template_id: tpl.id },
+        });
+        if (err || !res || res.ok === false) {
+          failed.push({ ambassador_id: a.id, error: (err && err.message) || (res && res.error) || "unknown" });
+        } else {
+          success++;
+        }
+      } catch (e) {
+        failed.push({ ambassador_id: a.id, error: (e && e.message) || String(e) });
+      }
+      // Update in-flight UI counter so admin sees progress.
+      setBulkApplyResult({ tpl_id: tpl.id, success, skipped, failed: failed.slice() });
+    }
+    setBulkApplyingTplId(null);
+    setBulkApplyResult({ tpl_id: tpl.id, success, skipped, failed });
+  };
+
   // Comment thread on a bug report. Loaded lazily on first expand. Mutations
   // go through bug_report_comments (admin-only RLS). Each comment carries an
   // author snapshot so deleted admins still show attribution.
@@ -19981,6 +26367,97 @@ function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserNam
   useEffect(() => { if (tab === "content") fetchContentData(); }, [tab, fetchContentData]);
   useEffect(() => { if (tab === "push") fetchPushData(); }, [tab, fetchPushData]);
   useEffect(() => { if (tab === "bugs") fetchBugs(); }, [tab, fetchBugs]);
+  useEffect(() => { if (tab === "reports") fetchContentReports(); }, [tab, fetchContentReports]);
+  useEffect(() => { if (tab === "moderation") fetchModerationLog(); }, [tab, fetchModerationLog]);
+  // Live updates on the moderation log surface — refetch when any new
+  // action lands so admin sees mod activity in near-realtime.
+  useEffect(() => {
+    if (tab !== "moderation") return;
+    const ch = supabase.channel(`admin_modlog_${currentUserId || "x"}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "moderation_log" }, () => fetchModerationLog())
+      .subscribe();
+    return () => { try { supabase.removeChannel(ch); } catch (_) {} };
+  }, [tab, currentUserId, fetchModerationLog]);
+  useEffect(() => { if (tab === "discounts") { fetchDiscountTemplates(); fetchActiveAmbassadors(); } }, [tab, fetchDiscountTemplates, fetchActiveAmbassadors]);
+  useEffect(() => { if (tab === "discounts" && discountsSubTab === "analytics") fetchDiscountAnalytics(); }, [tab, discountsSubTab, fetchDiscountAnalytics]);
+  useEffect(() => { if (tab === "discounts" && discountsSubTab === "conflicts") fetchConflicts(); }, [tab, discountsSubTab, fetchConflicts]);
+  useEffect(() => { if (tab === "discounts" && discountsSubTab === "payouts") fetchPayouts(); }, [tab, discountsSubTab, fetchPayouts]);
+  // Live updates on the AMBASSADORS list (any discounts sub-tab) — refetches
+  // discountAmbassadors when an admin elsewhere changes a tier/status, so
+  // the list + global tier filter + per-card badges all reflect immediately.
+  useEffect(() => {
+    if (tab !== "discounts") return;
+    let debounceTimer = null;
+    const scheduleRefetch = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => { fetchActiveAmbassadors(); }, 500);
+    };
+    const ch = supabase.channel(`admin_ambs_${currentUserId || "x"}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "ambassadors" }, scheduleRefetch)
+      .on("postgres_changes", { event: "*", schema: "public", table: "ambassador_discount_codes" }, scheduleRefetch)
+      .subscribe();
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      try { supabase.removeChannel(ch); } catch (_) {}
+    };
+  }, [tab, currentUserId, fetchActiveAmbassadors]);
+  // Live updates on the admin PAYOUTS sub-tab — refetch (debounced) on
+  // any change to payouts or journeys so other admin sessions or webhook
+  // ingest reflect without a manual refresh.
+  useEffect(() => {
+    if (tab !== "discounts" || discountsSubTab !== "payouts") return;
+    let debounceTimer = null;
+    const scheduleRefetch = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => { fetchPayouts(); }, 500);
+    };
+    const ch = supabase.channel(`admin_payouts_${currentUserId || "x"}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "ambassador_payouts" },  scheduleRefetch)
+      .on("postgres_changes", { event: "*", schema: "public", table: "ambassador_journeys" }, scheduleRefetch)
+      .subscribe();
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      try { supabase.removeChannel(ch); } catch (_) {}
+    };
+  }, [tab, discountsSubTab, currentUserId, fetchPayouts]);
+  // Also fetch pending payouts count on tab open so the PAYOUTS sub-tab
+  // badge shows even when admin hasn't opened the sub-tab yet.
+  useEffect(() => {
+    if (tab !== "discounts") return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase.rpc("admin_all_pending_payouts");
+      if (cancelled) return;
+      const closedCount = (data || []).filter(p => isClosedCycle(p.period_end)).length;
+      setPayoutCount(closedCount);
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, pendingPayouts.length, payoutRows.length]);
+  // Conflict count for the sub-tab badge — cheap head-only count, refetches
+  // whenever the conflicts list changes (resolution clears flag → recount).
+  useEffect(() => {
+    if (tab !== "discounts") return;
+    let cancelled = false;
+    (async () => {
+      const { count } = await supabase
+        .from("ambassador_journeys")
+        .select("id", { count: "exact", head: true })
+        .eq("is_conflict", true);
+      if (!cancelled) setConflictCount(count || 0);
+    })();
+    return () => { cancelled = true; };
+  }, [tab, conflictJourneys.length]);
+
+  // Realtime: new content reports show up in the queue without refresh.
+  useEffect(() => {
+    if (tab !== "reports") return;
+    const ch = supabase.channel(`admin_reports_${currentUserId || "x"}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "content_reports" }, () => fetchContentReports())
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "content_reports" }, () => fetchContentReports())
+      .subscribe();
+    return () => { try { supabase.removeChannel(ch); } catch (_) {} };
+  }, [tab, currentUserId, fetchContentReports]);
 
   // Realtime: new bug reports appear in the list without a refresh; new
   // comments appear in the open thread (multi-admin discussion).
@@ -20082,13 +26559,20 @@ function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserNam
     setPushSending(false);
   };
 
+  // Order matches the hub card grid + AdminHubScreen so back-and-forth feels
+  // consistent. "analytics" is a virtual key that maps to the overview tab
+  // (since the hub bundles overview/users/content under one card).
   const tabs = [
+    { key: "reports", label: "REPORTS", icon: Flag },
+    { key: "bugs", label: "BUGS", icon: AlertTriangle },
+    { key: "moderation", label: "MODERATION", icon: ShieldCheck },
+    { key: "push", label: "PUSH", icon: Bell },
+    { key: "discounts", label: "AMBASSADORS", icon: Tag },
     { key: "overview", label: "OVERVIEW", icon: TrendingUp },
     { key: "users", label: "USERS", icon: Users },
     { key: "content", label: "CONTENT", icon: BookOpen },
-    { key: "push", label: "PUSH", icon: Bell },
-    { key: "bugs", label: "BUGS", icon: AlertTriangle },
   ];
+  const activeTabLabel = (tabs.find(t => t.key === tab) || tabs[0]).label;
 
   const sectionTitle = (text) => (
     <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600, marginBottom: 10 }}>{text}</div>
@@ -20123,22 +26607,47 @@ function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserNam
         <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, marginRight: 10 }}>
           <ChevronLeft size={22} color={T.white} />
         </button>
-        <div style={{ fontFamily: sans, fontSize: 14, fontWeight: 700, color: T.white, letterSpacing: 1.5 }}>ADMIN DASHBOARD</div>
+        <div style={{ fontFamily: sans, fontSize: 14, fontWeight: 700, color: T.white, letterSpacing: 1.5 }}>{inAnalyticsGroup ? "ANALYTICS" : (hideTabBar ? activeTabLabel : "ADMIN DASHBOARD")}</div>
         <Shield size={14} color={T.copper} style={{ marginLeft: 8 }} />
       </div>
-      <div style={{ display: "flex", borderBottom: `1px solid ${T.charcoal}` }}>
-        {tabs.map(t => {
-          const Icon = t.icon;
-          const active = tab === t.key;
-          return (
-            <button key={t.key} onClick={() => setTab(t.key)}
-                    style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px 4px", background: "none", border: "none", borderBottom: `2px solid ${active ? T.copper : "transparent"}`, cursor: "pointer", fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 1.1, color: active ? T.copper : T.tertiary }}>
-              <Icon size={12} />
-              {t.label}
-            </button>
-          );
-        })}
-      </div>
+      {!hideTabBar && (
+        <div style={{ display: "flex", borderBottom: `1px solid ${T.charcoal}`, overflowX: "auto" }}>
+          {tabs.map(t => {
+            const Icon = t.icon;
+            const active = tab === t.key;
+            return (
+              <button key={t.key} onClick={() => setTab(t.key)}
+                      style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px 4px", background: "none", border: "none", borderBottom: `2px solid ${active ? T.copper : "transparent"}`, cursor: "pointer", fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 1.1, color: active ? T.copper : T.tertiary, whiteSpace: "nowrap", minWidth: 60 }}>
+                <Icon size={12} />
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {/* Analytics group mini-tab-bar — only shows when hub entry was
+          "ANALYTICS" (bundles overview/users/content into one card).
+          Lets the admin flip between the three without leaving the
+          group back to the hub. */}
+      {inAnalyticsGroup && (
+        <div style={{ display: "flex", borderBottom: `1px solid ${T.charcoal}` }}>
+          {[
+            { k: "overview", label: "OVERVIEW", icon: TrendingUp },
+            { k: "users",    label: "USERS",    icon: Users },
+            { k: "content",  label: "CONTENT",  icon: BookOpen },
+          ].map(t => {
+            const Icon = t.icon;
+            const active = tab === t.k;
+            return (
+              <button key={t.k} onClick={() => setTab(t.k)}
+                      style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px 4px", background: "none", border: "none", borderBottom: `2px solid ${active ? T.copper : "transparent"}`, cursor: "pointer", fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1.1, color: active ? T.copper : T.tertiary }}>
+                <Icon size={12} />
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
       <div style={{ flex: 1, overflowY: "auto", padding: 14 }}>
         {tab === "overview" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -20600,10 +27109,1376 @@ function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserNam
             })}
           </div>
         )}
+
+        {tab === "reports" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div style={{ display: "flex", gap: 6 }}>
+              {[
+                { v: "pending",   label: "PENDING" },
+                { v: "actioned",  label: "ACTIONED" },
+                { v: "dismissed", label: "DISMISSED" },
+                { v: "all",       label: "ALL" },
+              ].map(s => {
+                const sel = reportStatusFilter === s.v;
+                return (
+                  <button key={s.v} onClick={() => setReportStatusFilter(s.v)}
+                          style={{ flex: 1, padding: "8px 4px", borderRadius: 6, background: sel ? T.copper : "transparent", border: `1px solid ${sel ? T.copper : T.charcoal}`, color: sel ? T.darkBg : T.tertiary, fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer" }}>{s.label}</button>
+                );
+              })}
+            </div>
+            {contentReports.length === 0 ? (
+              <div style={{ background: T.darkCard, borderRadius: 10, padding: 24, textAlign: "center", border: `1px solid ${T.charcoal}` }}>
+                <Flag size={28} color={T.tertiary} style={{ opacity: 0.4, marginBottom: 8 }} />
+                <div style={{ fontFamily: sans, fontSize: 12, color: T.tertiary }}>No {reportStatusFilter !== "all" ? reportStatusFilter + " " : ""}reports.</div>
+              </div>
+            ) : contentReports.map(r => {
+              const isPending = r.status === "pending";
+              const isExpanded = expandedReportId === r.id;
+              const reasonObj = CONTENT_REPORT_REASONS.find(x => x.code === r.reason_code);
+              const reasonLabel = reasonObj ? reasonObj.label : r.reason_code;
+              const targetTypeLabel = r.target_type === "post" ? "POST" : r.target_type === "forum_thread" ? "THREAD" : "REPLY";
+              const statusColor = isPending ? T.red : r.status === "actioned" ? T.green : T.tertiary;
+              return (
+                <div key={r.id} style={{ background: T.darkCard, borderRadius: 10, border: `1px solid ${isPending ? `${T.red}40` : T.charcoal}`, overflow: "hidden" }}>
+                  <button onClick={() => setExpandedReportId(isExpanded ? null : r.id)}
+                          style={{ width: "100%", padding: 12, background: "none", border: "none", cursor: "pointer", textAlign: "left", display: "flex", alignItems: "flex-start", gap: 10 }}>
+                    <div style={{ width: 32, height: 32, borderRadius: 8, background: `${statusColor}18`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <Flag size={14} color={statusColor} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, flexWrap: "wrap" }}>
+                        <span style={{ fontFamily: sans, fontSize: 9, color: statusColor, letterSpacing: 1, fontWeight: 700 }}>{r.status.toUpperCase()}</span>
+                        <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 0.8, fontWeight: 700, background: `${T.copper}18`, padding: "1px 6px", borderRadius: 3 }}>{targetTypeLabel}</span>
+                        <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>{reasonLabel}</span>
+                      </div>
+                      <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginBottom: 4 }}>
+                        Reported by {r.reporter_handle ? "@" + r.reporter_handle : "anonymous"} · {new Date(r.created_at).toLocaleString()}
+                      </div>
+                      {r.target_snapshot && (
+                        <div style={{ fontFamily: serif, fontSize: 12, color: T.warmStone, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: isExpanded ? 99 : 2, WebkitBoxOrient: "vertical" }}>
+                          {r.target_snapshot}
+                        </div>
+                      )}
+                    </div>
+                    {isExpanded ? <ChevronUp size={14} color={T.tertiary} /> : <ChevronDown size={14} color={T.tertiary} />}
+                  </button>
+                  {isExpanded && (
+                    <div style={{ padding: "0 12px 14px 12px", borderTop: `1px solid ${T.charcoal}` }}>
+                      {r.reason_details && (
+                        <>
+                          <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600, marginTop: 12, marginBottom: 6 }}>REPORTER NOTES</div>
+                          <div style={{ fontFamily: serif, fontSize: 12, color: T.white, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{r.reason_details}</div>
+                        </>
+                      )}
+                      {r.target_owner_handle && (
+                        <>
+                          <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600, marginTop: 12, marginBottom: 6 }}>POSTED BY</div>
+                          <button onClick={() => onViewUser && onViewUser(r.target_owner_handle)} style={{ fontFamily: sans, fontSize: 12, color: T.copper, background: "none", border: "none", cursor: "pointer", padding: 0 }}>@{r.target_owner_handle}</button>
+                        </>
+                      )}
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 14 }}>
+                        {r.target_url && (
+                          <button onClick={() => {
+                            // Dispatch to the right screen — reuse the same
+                            // onOpenAdminEntity path that the recent-activity
+                            // feed uses. Construct an entity shape from the
+                            // report.
+                            const kind = r.target_type === "post" ? "post" : "thread";
+                            onOpenAdminEntity && onOpenAdminEntity({ kind, entity_id: r.target_id, url: r.target_url, title: r.target_snapshot || "" });
+                          }}
+                          style={{ padding: "8px 14px", borderRadius: 6, background: T.copper, border: "none", cursor: "pointer", color: T.darkBg, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, display: "inline-flex", alignItems: "center", gap: 5 }}>
+                            <ExternalLink size={11} /> VIEW CONTENT
+                          </button>
+                        )}
+                        {isPending && (
+                          <>
+                            <button onClick={() => setReportStatus(r.id, "actioned", "removed_or_warned")}
+                                    style={{ padding: "8px 14px", borderRadius: 6, background: T.green, border: "none", cursor: "pointer", color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1 }}>MARK ACTIONED</button>
+                            <button onClick={() => setReportStatus(r.id, "dismissed", "no_violation")}
+                                    style={{ padding: "8px 14px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}40`, cursor: "pointer", color: T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1 }}>DISMISS</button>
+                          </>
+                        )}
+                        {!isPending && (
+                          <>
+                            <button onClick={() => setReportStatus(r.id, "pending", null)}
+                                    style={{ padding: "8px 14px", borderRadius: 6, background: "none", border: `1px solid ${T.copper}40`, cursor: "pointer", color: T.copper, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1 }}>REOPEN</button>
+                            {r.reviewed_at && (
+                              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, alignSelf: "center" }}>
+                                {r.status === "actioned" ? "Actioned " : "Dismissed "}{new Date(r.reviewed_at).toLocaleString()}
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {tab === "moderation" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div style={{ background: T.darkCard, borderRadius: 10, padding: 16, border: `1px solid ${T.charcoal}` }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                <ShieldCheck size={16} color={T.green} />
+                <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 1 }}>AI IMAGE MODERATION</span>
+                <span style={{ fontFamily: sans, fontSize: 9, color: T.green, background: `${T.green}18`, padding: "2px 6px", borderRadius: 3, letterSpacing: 0.5, fontWeight: 700 }}>ENABLED</span>
+              </div>
+              <p style={{ fontFamily: serif, fontSize: 12, color: T.warmStone, margin: "0 0 12px", lineHeight: 1.5 }}>
+                Every uploaded image (posts, builds, trip reports, camping spots) is scanned by Claude Haiku 4.5 vision in the same round trip that generates accessibility alt text. Images flagged as explicit / adult content are deleted from storage and the upload is rejected before the URL ever reaches the database.
+              </p>
+              <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: "0 0 4px", lineHeight: 1.5 }}>
+                Conservative threshold — swimwear, shirtless camping shots, and non-sexual partial nudity are NOT flagged. False positives are surfaced as upload errors so users can re-try with a different image.
+              </p>
+            </div>
+            {/* Pending review queue — moderator soft-hides awaiting admin */}
+            {(() => {
+              const pending = (moderationLog || []).filter(r => r.status === "pending_review");
+              if (pending.length === 0) return null;
+              const handleConfirm = async (logId) => {
+                if (!confirm("Confirm this delete? The content will be permanently removed.")) return;
+                const { error } = await supabase.rpc("admin_confirm_moderation", { p_log_id: logId });
+                if (error) alert("Confirm failed: " + (error.message || error));
+                else fetchModerationLog();
+              };
+              const handleRevert = async (logId) => {
+                if (!confirm("Allow this content? It will be unhidden and made visible again.")) return;
+                const { error } = await supabase.rpc("admin_revert_moderation", { p_log_id: logId });
+                if (error) alert("Allow failed: " + (error.message || error));
+                else fetchModerationLog();
+              };
+              return (
+                <div style={{ background: T.darkCard, borderRadius: 10, padding: 16, border: `1px solid ${T.copper}40` }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                    <Shield size={14} color={T.copper} />
+                    <div style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.2, fontWeight: 700 }}>PENDING REVIEW · {pending.length}</div>
+                  </div>
+                  <p style={{ fontFamily: serif, fontSize: 12, color: T.warmStone, margin: "0 0 12px", lineHeight: 1.5 }}>
+                    A moderator hid this content. Review the reason + content snippet, then <strong style={{ color: T.red }}>Delete</strong> to remove permanently or <strong style={{ color: T.green }}>Allow</strong> to unhide.
+                  </p>
+                  {pending.map((row, i) => {
+                    const actionLabel = (row.action || "").replace(/_/g, " ").toUpperCase();
+                    const owner = pendingTargetOwners[row.target_owner_id] || {};
+                    const targetRow = pendingTargetRows[row.target_id] || null;
+                    // Pull photos out wherever they live per content type.
+                    let photos = [];
+                    let displayTitle = "";
+                    let displayBody = "";
+                    if (targetRow) {
+                      if (targetRow._kind === "post") {
+                        displayTitle = targetRow.title || "";
+                        displayBody  = targetRow.body || "";
+                        const dataPhotos = targetRow.data && (targetRow.data.photoUrls || targetRow.data.photos);
+                        if (Array.isArray(dataPhotos)) photos = dataPhotos;
+                        else if (Array.isArray(targetRow.photos)) photos = targetRow.photos;
+                      } else if (targetRow._kind === "forum_thread") {
+                        displayTitle = targetRow.title || "";
+                        displayBody  = targetRow.body || "";
+                        if (Array.isArray(targetRow.photos)) photos = targetRow.photos;
+                      } else if (targetRow._kind === "forum_reply") {
+                        displayBody = targetRow.body || "";
+                        if (Array.isArray(targetRow.photos)) photos = targetRow.photos;
+                      }
+                    }
+                    // Normalize photos to a uniform shape — either bare URL
+                    // strings or { url, alt } objects depending on age.
+                    const photoUrls = photos
+                      .map(p => (typeof p === "string" ? p : (p && p.url)))
+                      .filter(Boolean);
+                    const ownerHandle = owner.handle || row.target_owner_handle || null;
+                    const ownerName = owner.full_name || ownerHandle || "Unknown user";
+                    return (
+                      <div key={row.id} style={{ padding: "12px 0", borderTop: i > 0 ? `1px solid ${T.charcoal}` : "none" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                          <span style={{ fontFamily: sans, fontSize: 8, color: T.copper, letterSpacing: 1, fontWeight: 700, padding: "2px 6px", background: `${T.copper}18`, borderRadius: 3 }}>{actionLabel}</span>
+                          <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>by mod @{row.actor_handle || "—"} · {new Date(row.created_at).toLocaleString()}</span>
+                        </div>
+
+                        {/* Author row — avatar + handle + name */}
+                        <button onClick={() => onViewUser && ownerHandle && onViewUser(ownerHandle)}
+                                style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", background: "none", border: "none", cursor: ownerHandle ? "pointer" : "default", textAlign: "left", marginBottom: 8 }}>
+                          {owner.avatar_url
+                            ? <img src={owner.avatar_url} alt="" style={{ width: 30, height: 30, borderRadius: "50%", objectFit: "cover" }} />
+                            : <div style={{ width: 30, height: 30, borderRadius: "50%", background: T.charcoal, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700 }}>{(ownerName || "U").charAt(0).toUpperCase()}</div>}
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>{ownerName}</div>
+                            {ownerHandle && <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>@{ownerHandle}</div>}
+                          </div>
+                        </button>
+
+                        {/* Moderator's reason */}
+                        <div style={{ background: T.darkBg, borderLeft: `2px solid ${T.copper}`, borderRadius: 4, padding: "8px 10px", marginBottom: 8 }}>
+                          <div style={{ fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 1, fontWeight: 700, marginBottom: 4 }}>MODERATOR'S REASON</div>
+                          <div style={{ fontFamily: serif, fontSize: 12, color: T.white, lineHeight: 1.4 }}>{row.reason || "—"}</div>
+                        </div>
+
+                        {/* The hidden content itself — text + photos */}
+                        <div style={{ background: T.darkBg, borderRadius: 4, padding: "10px", marginBottom: 8 }}>
+                          <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 700, marginBottom: 6 }}>HIDDEN CONTENT</div>
+                          {!targetRow && (
+                            <div style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, fontStyle: "italic" }}>Content couldn't be loaded — it may have been deleted by the owner since hiding.</div>
+                          )}
+                          {displayTitle && (
+                            <div style={{ fontFamily: serif, fontSize: 13, color: T.white, fontWeight: 600, marginBottom: 4, lineHeight: 1.3 }}>{displayTitle}</div>
+                          )}
+                          {displayBody && (
+                            <div style={{ fontFamily: serif, fontSize: 12, color: T.warmStone, lineHeight: 1.5, whiteSpace: "pre-wrap", display: "-webkit-box", WebkitLineClamp: 6, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{displayBody}</div>
+                          )}
+                          {photoUrls.length > 0 && (
+                            <div style={{ display: "grid", gridTemplateColumns: photoUrls.length === 1 ? "1fr" : "1fr 1fr", gap: 6, marginTop: 8 }}>
+                              {photoUrls.slice(0, 4).map((u, pi) => (
+                                <a key={pi} href={u} target="_blank" rel="noopener noreferrer">
+                                  <img src={u} alt="" style={{ width: "100%", aspectRatio: photoUrls.length === 1 ? "16/9" : "1/1", objectFit: "cover", borderRadius: 6, display: "block" }} />
+                                </a>
+                              ))}
+                              {photoUrls.length > 4 && (
+                                <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, gridColumn: "1 / -1", textAlign: "center" }}>+ {photoUrls.length - 4} more</div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <button onClick={() => handleRevert(row.id)}
+                                  style={{ flex: 1, padding: "8px", borderRadius: 6, background: "none", border: `1px solid ${T.green}40`, color: T.green, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>
+                            ALLOW
+                          </button>
+                          <button onClick={() => handleConfirm(row.id)}
+                                  style={{ flex: 1, padding: "8px", borderRadius: 6, background: T.red, border: "none", color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>
+                            DELETE
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+
+            {/* Moderation action log — every content delete by admin/mod */}
+            <div style={{ background: T.darkCard, borderRadius: 10, padding: 16, border: `1px solid ${T.charcoal}` }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600 }}>MODERATION ACTION LOG · {moderationLog.length}</div>
+                {moderationLogLoading && <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>Loading…</span>}
+              </div>
+              {moderationLog.length === 0 ? (
+                <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: 0, lineHeight: 1.5 }}>
+                  No moderation actions recorded yet. Every content delete by an admin or moderator on someone else's content will land here.
+                </p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column" }}>
+                  {moderationLog.map((row, i) => {
+                    const actionLabel = (row.action || "").replace(/_/g, " ").toUpperCase();
+                    const actionColor = row.actor_role === "admin" ? T.red : T.copper;
+                    // Outcome status surfaces what admin did (or hasn't done).
+                    const status = row.status || "confirmed";
+                    const statusMeta = status === "reverted"
+                      ? { label: "ALLOWED",  color: T.green }
+                      : status === "pending_review"
+                        ? { label: "PENDING REVIEW", color: T.copper }
+                        : { label: "DELETED",  color: T.red };
+                    // Verb in the description reflects current state.
+                    const verb = status === "reverted"
+                      ? "hid (then allowed)"
+                      : status === "pending_review"
+                        ? "hid (awaiting review)"
+                        : (row.action || "").startsWith("delete_") ? "removed" : "removed (admin confirmed)";
+                    return (
+                      <div key={row.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 0", borderTop: i > 0 ? `1px solid ${T.charcoal}` : "none" }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0, minWidth: 110, alignItems: "stretch" }}>
+                          <span style={{ fontFamily: sans, fontSize: 8, color: actionColor, letterSpacing: 1, fontWeight: 700, padding: "2px 6px", background: `${actionColor}18`, borderRadius: 3, textAlign: "center" }}>{actionLabel}</span>
+                          <span style={{ fontFamily: sans, fontSize: 8, color: statusMeta.color, letterSpacing: 1, fontWeight: 700, padding: "2px 6px", background: `${statusMeta.color}18`, borderRadius: 3, textAlign: "center" }}>{statusMeta.label}</span>
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontFamily: sans, fontSize: 11, color: T.white }}>
+                            <strong style={{ color: actionColor }}>{row.actor_role === "admin" ? "Admin" : "Mod"} @{row.actor_handle || "—"}</strong> {verb} content by <strong>@{row.target_owner_handle || "—"}</strong>
+                          </div>
+                          {row.target_snapshot && (
+                            <div style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, fontStyle: "italic", marginTop: 2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>"{row.target_snapshot}"</div>
+                          )}
+                          <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, marginTop: 4 }}>
+                            {new Date(row.created_at).toLocaleString()}
+                            {row.reviewed_at && (
+                              <> · <span style={{ color: statusMeta.color }}>{statusMeta.label.toLowerCase()} {new Date(row.reviewed_at).toLocaleString()}</span></>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <div style={{ background: T.darkCard, borderRadius: 10, padding: 16, border: `1px solid ${T.charcoal}` }}>
+              <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600, marginBottom: 8 }}>OTHER MODERATION CHANNELS</div>
+              <p style={{ fontFamily: serif, fontSize: 12, color: T.warmStone, margin: "0 0 6px", lineHeight: 1.5 }}>
+                <strong style={{ color: T.white }}>Text moderation</strong> — not enabled. User reports cover this surface.
+              </p>
+              <p style={{ fontFamily: serif, fontSize: 12, color: T.warmStone, margin: "0 0 6px", lineHeight: 1.5 }}>
+                <strong style={{ color: T.white }}>Video moderation</strong> — not enabled. Videos bypass the per-image AI scan.
+              </p>
+              <p style={{ fontFamily: serif, fontSize: 12, color: T.warmStone, margin: 0, lineHeight: 1.5 }}>
+                <strong style={{ color: T.white }}>DM attachments</strong> — not yet moderated. Recipient can report via the user-report flow once added to DMs.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {tab === "discounts" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {/* Global tier filter — applies to every sub-tab below.
+                Native select keeps the dropdown lightweight + accessible. */}
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.2, fontWeight: 700 }}>VIEW</span>
+              <select value={ambassadorTierFilter} onChange={e => setAmbassadorTierFilter(e.target.value)}
+                      style={{ flex: 1, padding: "8px 10px", borderRadius: 6, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 12, fontWeight: 600, letterSpacing: 0.5, cursor: "pointer", appearance: "auto" }}>
+                <option value="all">All ambassadors + installers</option>
+                <option value="ambassador">Ambassadors only (5%)</option>
+                <option value="installer">Installers only (15%)</option>
+              </select>
+            </div>
+            {/* Sub-tab bar — AMBASSADORS / TEMPLATES split. AMBASSADORS
+                is default since it's the primary day-to-day management
+                surface; TEMPLATES is for bulk pushes. */}
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {[
+                { v: "ambassadors", label: `AMBASSADORS (${discountAmbassadors.length})` },
+                { v: "analytics",   label: "ANALYTICS" },
+                { v: "payouts",     label: payoutCount > 0 ? `PAYOUTS (${payoutCount})` : "PAYOUTS", warn: payoutCount > 0 },
+                { v: "conflicts",   label: conflictCount > 0 ? `CONFLICTS (${conflictCount})` : "CONFLICTS", danger: conflictCount > 0 },
+                { v: "templates",   label: `TEMPLATES (${discountTemplates.length})` },
+              ].map(t => {
+                const sel = discountsSubTab === t.v;
+                // Variant colors — danger=red (CONFLICTS), warn=copper
+                // (PAYOUTS), default=copper-selected. All highlight when
+                // they have actionable counts > 0.
+                const accent = t.danger ? T.red : t.warn ? T.copper : T.copper;
+                const highlighted = !!(t.danger || t.warn);
+                const bg = sel ? accent : "transparent";
+                const border = sel ? accent : (highlighted ? accent : T.charcoal);
+                const fg = sel ? T.white : (highlighted ? accent : T.tertiary);
+                return (
+                  <button key={t.v} onClick={() => setDiscountsSubTab(t.v)}
+                          style={{ flex: 1, padding: "10px 6px", borderRadius: 6, background: bg, border: `1px solid ${border}`, color: fg, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>{t.label}</button>
+                );
+              })}
+            </div>
+
+            {discountsSubTab === "ambassadors" && (
+              <>
+                {/* Search bar — case-insensitive match on handle OR full_name. */}
+                <div style={{ position: "relative" }}>
+                  <Search size={14} color={T.tertiary} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
+                  <input value={ambassadorSearch} onChange={e => setAmbassadorSearch(e.target.value)} placeholder="Search by name or handle…"
+                         style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px 10px 34px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none" }} />
+                  {ambassadorSearch && (
+                    <button onClick={() => setAmbassadorSearch("")} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex" }}>
+                      <X size={14} color={T.tertiary} />
+                    </button>
+                  )}
+                </div>
+
+                {(() => {
+                  const q = ambassadorSearch.trim().toLowerCase();
+                  const tierFiltered = discountAmbassadors.filter(a => {
+                    if (ambassadorTierFilter === "all") return true;
+                    if (ambassadorTierFilter === "installer") return a.tier === "installer";
+                    // "ambassador" filter includes legacy rows where tier is null/missing
+                    return (a.tier || "ambassador") === "ambassador";
+                  });
+                  const filtered = !q ? tierFiltered : tierFiltered.filter(a => {
+                    const prof = ambassadorProfiles[a.profile_id] || {};
+                    return (prof.handle && prof.handle.toLowerCase().includes(q))
+                      || (prof.full_name && prof.full_name.toLowerCase().includes(q))
+                      || (a.base_code && a.base_code.toLowerCase().includes(q));
+                  });
+                  if (discountAmbassadors.length === 0) {
+                    return (
+                      <div style={{ background: T.darkCard, borderRadius: 10, padding: 24, textAlign: "center", border: `1px solid ${T.charcoal}` }}>
+                        <Tag size={28} color={T.tertiary} style={{ opacity: 0.4, marginBottom: 8 }} />
+                        <div style={{ fontFamily: sans, fontSize: 12, color: T.tertiary }}>No active ambassadors yet.</div>
+                      </div>
+                    );
+                  }
+                  if (filtered.length === 0) {
+                    return (
+                      <div style={{ background: T.darkCard, borderRadius: 10, padding: 24, textAlign: "center", border: `1px solid ${T.charcoal}` }}>
+                        <Search size={28} color={T.tertiary} style={{ opacity: 0.4, marginBottom: 8 }} />
+                        <div style={{ fontFamily: sans, fontSize: 12, color: T.tertiary }}>No ambassadors match "{ambassadorSearch}"</div>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600, padding: "0 4px" }}>{filtered.length} of {discountAmbassadors.length}</div>
+                      {filtered.map((a) => {
+                    const codes = ambassadorCodes[a.id] || [];
+                    const hasPrimaryCode = codes.some(c => c.role === "primary" && c.status !== "deleted");
+                    const prof = ambassadorProfiles[a.profile_id] || {};
+                    const displayName = prof.full_name || prof.handle || "—";
+                    const isRebuilding = rebuildingAmbassadorId === a.id;
+                    const isExpanded = expandedAmbassadorId === a.id;
+                    const initial = (displayName || "—").charAt(0).toUpperCase();
+                    return (
+                      <div key={a.id} style={{ background: T.darkBg, borderRadius: 8, border: `1px solid ${T.charcoal}`, overflow: "hidden" }}>
+                        {/* Collapsible header. Tap left chunk (avatar + name) →
+                            navigate to user profile. Tap right chunk (count +
+                            chevron) → toggle expand. */}
+                        <div style={{ display: "flex", alignItems: "stretch" }}>
+                          {(() => {
+                            // Stripe Connect onboarding status indicator —
+                            //   green = fully onboarded (stripe_onboarded=true)
+                            //   yellow = account created but onboarding not finished
+                            //   red = no Stripe account at all (haven't started)
+                            // Rendered as a colored pip overlaying the bottom-right
+                            // of the avatar with a hover tooltip.
+                            const stripeStatus = a.stripe_onboarded
+                              ? { color: T.green, label: "Payments set up" }
+                              : a.stripe_account_id
+                                ? { color: "#D4A437", label: "Payments onboarding in progress" }
+                                : { color: T.red, label: "Payments not set up" };
+                            return (
+                          <button onClick={() => onViewUser && onViewUser(prof.handle || a.profile_id)}
+                                  style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "none", border: "none", cursor: "pointer", textAlign: "left", minWidth: 0 }}>
+                            <div style={{ position: "relative", flexShrink: 0 }}>
+                              <div style={{ width: 30, height: 30, borderRadius: "50%", background: a.tier === "installer" ? T.green : T.copper, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700 }}>{initial}</div>
+                              <span title={stripeStatus.label} aria-label={stripeStatus.label}
+                                    style={{ position: "absolute", right: -2, bottom: -2, width: 12, height: 12, borderRadius: "50%", background: stripeStatus.color, border: `2px solid ${T.darkBg}` }} />
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{displayName}</span>
+                                <span style={{ fontFamily: sans, fontSize: 7, color: a.tier === "installer" ? T.green : T.copper, letterSpacing: 1, fontWeight: 700, padding: "1px 5px", border: `1px solid ${a.tier === "installer" ? T.green : T.copper}40`, borderRadius: 3, flexShrink: 0 }}>{a.tier === "installer" ? `INSTALLER · ${a.commission_rate_pct || 15}%` : `AMBASSADOR · ${a.commission_rate_pct || 5}%`}</span>
+                              </div>
+                              <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                {prof.handle && <span>@{prof.handle}</span>}
+                                <span style={{ fontFamily: "ui-monospace, Menlo, monospace", color: T.copper }}>{a.base_code || "no base_code"}</span>
+                                {!hasPrimaryCode && (
+                                  <span style={{ fontFamily: sans, fontSize: 8, color: T.red, letterSpacing: 1, fontWeight: 700, padding: "1px 5px", border: `1px solid ${T.red}60`, borderRadius: 3, flexShrink: 0 }}>NEEDS PRIMARY CODE</span>
+                                )}
+                              </div>
+                            </div>
+                          </button>
+                            );
+                          })()}
+                          <button onClick={() => setExpandedAmbassadorId(isExpanded ? null : a.id)}
+                                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 12px", background: "none", border: "none", cursor: "pointer", flexShrink: 0, borderLeft: `1px solid ${T.charcoal}` }}>
+                            <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, fontWeight: 600 }}>{codes.length} code{codes.length === 1 ? "" : "s"}</span>
+                            {isExpanded ? <ChevronUp size={14} color={T.tertiary} /> : <ChevronDown size={14} color={T.tertiary} />}
+                          </button>
+                        </div>
+
+                        {isExpanded && (
+                        <div style={{ padding: "0 12px 12px", borderTop: `1px solid ${T.charcoal}` }}>
+                        <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, padding: "10px 0", flexWrap: "wrap" }}>
+                          <button onClick={() => { setImportingLegacyForAmbId(importingLegacyForAmbId === a.id ? null : a.id); setLegacyImportDraft({ code: "", internal_code: "", label: "" }); }}
+                                  style={{ padding: "6px 10px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}40`, cursor: "pointer", color: T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, flexShrink: 0 }}>
+                            {importingLegacyForAmbId === a.id ? "CANCEL IMPORT" : "+ LEGACY CODE"}
+                          </button>
+                          <button onClick={() => backfillAmbassadorOrders(a)} disabled={backfillingAmbId === a.id}
+                                  style={{ padding: "6px 10px", borderRadius: 6, background: "none", border: `1px solid ${T.green}40`, cursor: backfillingAmbId === a.id ? "default" : "pointer", color: T.green, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, opacity: backfillingAmbId === a.id ? 0.6 : 1, flexShrink: 0 }}>
+                            {backfillingAmbId === a.id ? "BACKFILLING…" : "BACKFILL ORDERS"}
+                          </button>
+                          <button onClick={() => setManualAddTarget({ ambassador: { id: a.id, base_code: a.base_code, handle: prof.handle, full_name: prof.full_name } })}
+                                  style={{ padding: "6px 10px", borderRadius: 6, background: "none", border: `1px solid ${T.green}40`, cursor: "pointer", color: T.green, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, flexShrink: 0 }}>
+                            + MANUAL ORDER
+                          </button>
+                          {hasPrimaryCode ? (
+                            <button onClick={() => rebuildAmbassadorPrimary(a)} disabled={isRebuilding}
+                                    style={{ padding: "6px 10px", borderRadius: 6, background: "none", border: `1px solid ${T.copper}40`, cursor: isRebuilding ? "default" : "pointer", color: T.copper, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, opacity: isRebuilding ? 0.6 : 1, flexShrink: 0 }}>
+                              {isRebuilding ? "REBUILDING…" : "REBUILD PRIMARY"}
+                            </button>
+                          ) : (
+                            // Recovery path for the orphan-row trap — the ambassador
+                            // exists but never got a primary code (Shopify failed during
+                            // adminUpdateUserRole). shopify-create-discount-code is now
+                            // idempotent: if Shopify already has codes from a partial
+                            // earlier attempt, they're reused so attribution is preserved.
+                            <button onClick={() => retryAmbassadorPrimary(a)} disabled={isRebuilding}
+                                    style={{ padding: "6px 10px", borderRadius: 6, background: T.red, border: `1px solid ${T.red}`, cursor: isRebuilding ? "default" : "pointer", color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, opacity: isRebuilding ? 0.6 : 1, flexShrink: 0 }}>
+                              {isRebuilding ? "CREATING…" : "+ CREATE PRIMARY CODE"}
+                            </button>
+                          )}
+                        </div>
+                        {backfillResults[a.id] && (
+                          <div style={{ marginBottom: 10, padding: 10, background: T.darkBg, borderRadius: 6, border: `1px solid ${backfillResults[a.id].error ? T.red : T.green}40`, fontFamily: sans, fontSize: 11, color: T.warmStone, lineHeight: 1.5 }}>
+                            {backfillResults[a.id].error ? (
+                              <div style={{ color: T.red }}>Backfill failed: {backfillResults[a.id].error}</div>
+                            ) : (
+                              <>
+                                <div><strong style={{ color: T.green }}>{backfillResults[a.id].summary.ingested}</strong> ingested · <strong style={{ color: T.tertiary }}>{backfillResults[a.id].summary.duplicates}</strong> already had · <strong style={{ color: T.copper }}>{backfillResults[a.id].summary.journeys_created}</strong> journeys created · <strong style={{ color: T.green }}>{backfillResults[a.id].summary.journeys_confirmed}</strong> confirmed</div>
+                                <div style={{ fontSize: 9, color: T.tertiary, marginTop: 2 }}>{backfillResults[a.id].summary.found} matching orders found in Shopify · {backfillResults[a.id].summary.errors.length} errors</div>
+                                {backfillResults[a.id].summary.errors.length > 0 && (
+                                  <details style={{ marginTop: 6 }}>
+                                    <summary style={{ fontSize: 10, color: T.red, cursor: "pointer" }}>Show errors</summary>
+                                    <ul style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 9, color: T.tertiary, margin: "6px 0 0", padding: "0 0 0 16px" }}>
+                                      {backfillResults[a.id].summary.errors.slice(0, 10).map((er, i) => <li key={i}>{er.order}: {er.error}</li>)}
+                                    </ul>
+                                  </details>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        )}
+
+                        {importingLegacyForAmbId === a.id && (
+                          <div style={{ background: T.charcoal, borderRadius: 6, padding: 12, marginBottom: 10, border: `1px solid ${T.tertiary}40` }}>
+                            <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.2, fontWeight: 700, marginBottom: 8 }}>IMPORT LEGACY CODES</div>
+                            <p style={{ fontFamily: serif, fontSize: 11, color: T.warmStone, margin: "0 0 10px", lineHeight: 1.5 }}>
+                              Links Collabs-era codes to this ambassador for commission attribution. Enter the deposit (Collabs/public) code AND/OR the internal (staff-applied discount) code — at least one required. Both must already exist as discount codes in your Shopify store. Hidden from the ambassador's own dashboard.
+                            </p>
+                            <label style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 4 }}>DEPOSIT / PUBLIC CODE (from Collabs)</label>
+                            <input value={legacyImportDraft.code} onChange={e => setLegacyImportDraft({ ...legacyImportDraft, code: e.target.value.replace(/[^A-Za-z0-9\-_]/g, "") })} placeholder="e.g. KyleLPO-old" maxLength={50}
+                                   style={{ width: "100%", boxSizing: "border-box", padding: 9, borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: "ui-monospace, Menlo, monospace", fontSize: 12, fontWeight: 700, letterSpacing: 1, marginBottom: 8, outline: "none" }} />
+                            <label style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 4 }}>INTERNAL / STAFF-APPLIED CODE (the real $ discount)</label>
+                            <input value={legacyImportDraft.internal_code} onChange={e => setLegacyImportDraft({ ...legacyImportDraft, internal_code: e.target.value.replace(/[^A-Za-z0-9\-_]/g, "") })} placeholder="e.g. KyleLPO-old-disc" maxLength={50}
+                                   style={{ width: "100%", boxSizing: "border-box", padding: 9, borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: "ui-monospace, Menlo, monospace", fontSize: 12, fontWeight: 700, letterSpacing: 1, marginBottom: 8, outline: "none" }} />
+                            <label style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 4 }}>LABEL (admin-visible, optional)</label>
+                            <input value={legacyImportDraft.label} onChange={e => setLegacyImportDraft({ ...legacyImportDraft, label: e.target.value })} placeholder="e.g. Pre-launch Collabs codes"
+                                   style={{ width: "100%", boxSizing: "border-box", padding: 9, borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 12, marginBottom: 10, outline: "none" }} />
+                            <div style={{ display: "flex", gap: 6 }}>
+                              <button onClick={() => importLegacyCode(a)} disabled={legacyImportSaving || (!legacyImportDraft.code.trim() && !legacyImportDraft.internal_code.trim())}
+                                      style={{ flex: 1, padding: "8px", borderRadius: 6, background: T.green, border: "none", cursor: legacyImportSaving ? "default" : "pointer", color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, opacity: (legacyImportSaving || (!legacyImportDraft.code.trim() && !legacyImportDraft.internal_code.trim())) ? 0.5 : 1 }}>{legacyImportSaving ? "LOOKING UP…" : "IMPORT"}</button>
+                              <button onClick={() => { setImportingLegacyForAmbId(null); setLegacyImportDraft({ code: "", internal_code: "", label: "" }); }} disabled={legacyImportSaving}
+                                      style={{ padding: "8px 12px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}40`, cursor: "pointer", color: T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1 }}>CANCEL</button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Codes list */}
+                        {codes.length === 0 ? (
+                          <div style={{ fontFamily: sans, fontSize: 11, color: T.red, padding: "4px 0" }}>No codes — REBUILD PRIMARY to provision.</div>
+                        ) : (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            {codes.map(c => {
+                              const isEditing = editingCodeId === c.id;
+                              const isBusy = busyCodeId === c.id;
+                              const accent = c.role === "primary" ? T.copper : c.role === "legacy" ? T.tertiary : T.green;
+                              const roleLabel = c.role === "primary" ? "PRIMARY" : c.role === "legacy" ? "LEGACY · HIDDEN" : "PROMO";
+                              return (
+                                <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: T.charcoal, borderRadius: 6, borderLeft: `3px solid ${accent}` }}>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    {isEditing ? (
+                                      <input value={editCodeDraft} onChange={e => setEditCodeDraft(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))} placeholder={c.code} autoFocus maxLength={30}
+                                             style={{ width: "100%", boxSizing: "border-box", padding: "5px 8px", borderRadius: 4, background: T.darkBg, border: `1px solid ${T.copper}`, color: T.white, fontFamily: "ui-monospace, Menlo, monospace", fontSize: 12, fontWeight: 700, letterSpacing: 1, outline: "none" }} />
+                                    ) : (
+                                      <>
+                                        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                                          <span style={{ fontFamily: sans, fontSize: 8, color: accent, letterSpacing: 1, fontWeight: 700 }}>{roleLabel}</span>
+                                          <span style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 12, color: T.white, fontWeight: 700 }}>{c.code}</span>
+                                          {c.internal_code && <span style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 10, color: T.tertiary }}>+ {c.internal_code}</span>}
+                                        </div>
+                                        {c.label && <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, marginTop: 2 }}>{c.label}</div>}
+                                      </>
+                                    )}
+                                  </div>
+                                  {isEditing ? (
+                                    <>
+                                      <button onClick={() => renameAmbassadorCode(c, a, editCodeDraft)} disabled={isBusy || editCodeDraft.length < 3}
+                                              style={{ padding: "5px 9px", borderRadius: 5, background: T.green, border: "none", cursor: (isBusy || editCodeDraft.length < 3) ? "default" : "pointer", color: T.white, fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 1, opacity: (isBusy || editCodeDraft.length < 3) ? 0.5 : 1, flexShrink: 0 }}>
+                                        {isBusy ? "SAVING…" : "SAVE"}
+                                      </button>
+                                      <button onClick={() => { setEditingCodeId(null); setEditCodeDraft(""); }} disabled={isBusy}
+                                              style={{ padding: "5px 9px", borderRadius: 5, background: "none", border: `1px solid ${T.tertiary}40`, cursor: "pointer", color: T.tertiary, fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 1, flexShrink: 0 }}>
+                                        CANCEL
+                                      </button>
+                                    </>
+                                  ) : c.role === "legacy" ? (
+                                    // Legacy codes get UNLINK only — EDIT (rename) doesn't apply
+                                    // since Shopify codes are immutable, and DELETE would kill
+                                    // the live Shopify code that customers may still be using.
+                                    <button onClick={() => unlinkLegacyCode(c)} disabled={isBusy}
+                                            style={{ padding: "5px 9px", borderRadius: 5, background: "none", border: `1px solid ${T.tertiary}40`, cursor: isBusy ? "default" : "pointer", color: T.tertiary, fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 1, opacity: isBusy ? 0.6 : 1, flexShrink: 0 }}>
+                                      {isBusy ? "…" : "UNLINK"}
+                                    </button>
+                                  ) : (
+                                    <>
+                                      <button onClick={() => { setEditingCodeId(c.id); setEditCodeDraft(c.code); }} disabled={isBusy}
+                                              style={{ padding: "5px 9px", borderRadius: 5, background: "none", border: `1px solid ${T.copper}40`, cursor: "pointer", color: T.copper, fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 1, flexShrink: 0 }}>
+                                        EDIT
+                                      </button>
+                                      <button onClick={() => deleteAmbassadorCode(c)} disabled={isBusy}
+                                              style={{ padding: "5px 9px", borderRadius: 5, background: "none", border: `1px solid ${T.red}40`, cursor: isBusy ? "default" : "pointer", color: T.red, fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 1, opacity: isBusy ? 0.6 : 1, flexShrink: 0 }}>
+                                        {isBusy ? "…" : "DELETE"}
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                        </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                    </div>
+                  );
+                })()}
+                <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: "4px 4px 0", lineHeight: 1.5 }}>
+                  Click an ambassador name to open their profile. Tap the chevron to expand and manage their codes. <strong>EDIT</strong> renames (preserves attribution). <strong>DELETE</strong> soft-deletes (preserves attribution). <strong>REBUILD PRIMARY</strong> regenerates with current defaults.
+                </p>
+              </>
+            )}
+
+            {discountsSubTab === "analytics" && (() => {
+              const fmtMoney = (n) => `$${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+              const monthLabel = (m) => {
+                if (!m) return "";
+                const d = new Date(typeof m === "string" && m.length === 10 ? m + "T00:00:00" : m);
+                if (isNaN(d.getTime())) return String(m);
+                return d.toLocaleDateString(undefined, { month: "short", year: "2-digit" });
+              };
+              // Apply the global tier filter. Headline stat cards + monthly
+              // chart stay global (they're aggregates without tier info);
+              // the leaderboards + watchlist filter client-side.
+              const filteredTopEarners    = (topEarners    || []).filter(a => matchesTierFilter(a.ambassador_id));
+              const filteredTopClickers   = (topClickers   || []).filter(a => matchesTierFilter(a.ambassador_id));
+              const filteredPendingJourneys = (pendingJourneys || []).filter(j => matchesTierFilter(j.ambassador_id));
+              return (
+                <>
+                  {discountAnalyticsLoading && !discountOverview && (
+                    <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, padding: 4 }}>Loading analytics…</div>
+                  )}
+
+                  {/* Headline stat cards — 2-col grid. Money cards use copper/green */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                    <AdminStatCard label="Pending Commission" value={discountOverview ? fmtMoney(discountOverview.total_pending_commission) : "—"} accent={T.copper} />
+                    <AdminStatCard label="Lifetime Paid" value={discountOverview ? fmtMoney(discountOverview.total_paid_commission) : "—"} accent={T.green} />
+                    <AdminStatCard label="Active Ambassadors" value={discountOverview ? discountOverview.active_ambassadors_count : null} />
+                    <AdminStatCard label="Pending Journeys" value={discountOverview ? discountOverview.pending_journeys_count : null} />
+                    <AdminStatCard label="Confirmed (unpaid)" value={discountOverview ? discountOverview.confirmed_journeys_count : null} accent={T.copper} />
+                    <AdminStatCard label="Paid Journeys" value={discountOverview ? discountOverview.paid_journeys_count : null} accent={T.green} />
+                    {discountOverview && discountOverview.expired_journeys_count > 0 && (
+                      <AdminStatCard label="Expired" value={discountOverview.expired_journeys_count} accent={T.tertiary} />
+                    )}
+                    {discountOverview && discountOverview.conflict_count > 0 && (
+                      <AdminStatCard label="Conflicts" value={discountOverview.conflict_count} accent={T.red} />
+                    )}
+                  </div>
+
+                  {/* 6-month bar chart: earned (copper) stacked over paid (green) per month. Tap to expand. */}
+                  <div onClick={() => setChartModalKey("commission-vs-payouts")}
+                       style={{ background: T.darkCard, borderRadius: 10, padding: 14, border: `1px solid ${T.charcoal}`, cursor: "pointer" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                      <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600 }}>EARNED VS PAID — LAST 6 MONTHS</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <div style={{ fontFamily: serif, fontSize: 13, color: T.copper, fontWeight: 600 }}>
+                          {fmtMoney((discountByMonth || []).reduce((a, r) => a + Number(r.earned || 0), 0))} earned
+                        </div>
+                        <Maximize2 size={11} color={T.tertiary} />
+                      </div>
+                    </div>
+                    {(discountByMonth || []).length === 0 || (discountByMonth || []).every(r => Number(r.earned || 0) + Number(r.paid || 0) === 0) ? (
+                      <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, padding: "20px 0", textAlign: "center" }}>No commission activity yet.</div>
+                    ) : (
+                      <>
+                        <StackedBars height={100} series={[
+                          { label: "earned", color: T.copper, data: (discountByMonth || []).map(r => Number(r.earned || 0)) },
+                          { label: "paid",   color: T.green,  data: (discountByMonth || []).map(r => Number(r.paid   || 0)) },
+                        ]} />
+                        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
+                          {(discountByMonth || []).map(r => (
+                            <div key={r.month} style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.5, textAlign: "center", flex: 1 }}>{monthLabel(r.month)}</div>
+                          ))}
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "center", gap: 14, marginTop: 8 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                            <span style={{ width: 8, height: 8, background: T.copper, borderRadius: 2 }} />
+                            <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1 }}>EARNED</span>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                            <span style={{ width: 8, height: 8, background: T.green, borderRadius: 2 }} />
+                            <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1 }}>PAID</span>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Top earners leaderboard — click to open profile */}
+                  <div style={{ background: T.darkCard, borderRadius: 10, padding: 14, border: `1px solid ${T.charcoal}` }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+                      <Award size={12} color={T.copper} />
+                      <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600 }}>TOP EARNERS</div>
+                    </div>
+                    {filteredTopEarners.length === 0 ? (
+                      <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, padding: "4px 0" }}>No earning ambassadors yet.</div>
+                    ) : filteredTopEarners.map((a, i) => (
+                      <button key={a.ambassador_id} onClick={() => onViewUser && onViewUser(a.handle || a.profile_id)}
+                              style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", width: "100%", background: "none", border: "none", cursor: "pointer", borderBottom: i < filteredTopEarners.length - 1 ? `1px solid ${T.charcoal}` : "none", textAlign: "left" }}>
+                        <div style={{ fontFamily: serif, fontSize: 14, color: i < 3 ? T.copper : T.tertiary, width: 18, fontWeight: 600 }}>{i + 1}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.full_name || a.handle || "—"}</div>
+                          <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>@{a.handle || "user"} · {a.journey_count} journey{a.journey_count === 1 ? "" : "s"}</div>
+                        </div>
+                        <div style={{ textAlign: "right", flexShrink: 0 }}>
+                          <div style={{ fontFamily: serif, fontSize: 13, color: T.copper, fontWeight: 600 }}>{fmtMoney(a.total_commission)}</div>
+                          <div style={{ fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 0.8 }}>
+                            <span style={{ color: T.green }}>{fmtMoney(a.paid_commission)}</span> paid · <span style={{ color: T.copper }}>{fmtMoney(a.pending_commission)}</span> pending
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Top share-link clickers leaderboard */}
+                  <div style={{ background: T.darkCard, borderRadius: 10, padding: 14, border: `1px solid ${T.charcoal}` }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+                      <Link2 size={12} color={T.copper} />
+                      <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600 }}>TOP SHARE-LINK CLICKS</div>
+                    </div>
+                    {filteredTopClickers.length === 0 ? (
+                      <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, padding: "4px 0" }}>No share-link clicks yet.</div>
+                    ) : filteredTopClickers.map((a, i) => (
+                      <button key={a.ambassador_id} onClick={() => onViewUser && onViewUser(a.handle || a.profile_id)}
+                              style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", width: "100%", background: "none", border: "none", cursor: "pointer", borderBottom: i < filteredTopClickers.length - 1 ? `1px solid ${T.charcoal}` : "none", textAlign: "left" }}>
+                        <div style={{ fontFamily: serif, fontSize: 14, color: i < 3 ? T.copper : T.tertiary, width: 18, fontWeight: 600 }}>{i + 1}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.full_name || a.handle || "—"}</div>
+                          <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>
+                            @{a.handle || "user"}{a.last_clicked_at ? ` · last click ${new Date(a.last_clicked_at).toLocaleDateString()}` : ""}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: "right", flexShrink: 0 }}>
+                          <div style={{ fontFamily: serif, fontSize: 14, color: T.copper, fontWeight: 700 }}>{Number(a.total_clicks || 0).toLocaleString()}</div>
+                          <div style={{ fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 0.8 }}>CLICK{a.total_clicks === 1 ? "" : "S"}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Pending journey watchlist — sorted soonest-to-expire first */}
+                  <div style={{ background: T.darkCard, borderRadius: 10, padding: 14, border: `1px solid ${T.charcoal}` }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+                      <Clock size={12} color={T.copper} />
+                      <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600 }}>PENDING JOURNEYS · {filteredPendingJourneys.length}</div>
+                    </div>
+                    {filteredPendingJourneys.length === 0 ? (
+                      <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, padding: "4px 0" }}>No open deposit journeys.</div>
+                    ) : filteredPendingJourneys.map((j, i) => {
+                      const days = Number(j.days_until_expiry);
+                      const danger = days <= 14;
+                      const warn = !danger && days <= 30;
+                      const dotColor = danger ? T.red : warn ? T.copper : T.tertiary;
+                      return (
+                        <button key={j.journey_id} onClick={() => onViewUser && onViewUser(j.handle || j.ambassador_id)}
+                                style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", width: "100%", background: "none", border: "none", cursor: "pointer", borderBottom: i < filteredPendingJourneys.length - 1 ? `1px solid ${T.charcoal}` : "none", textAlign: "left" }}>
+                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: dotColor, flexShrink: 0 }} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                              {j.customer_name || j.customer_email || "—"}
+                            </div>
+                            <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                              @{j.handle || "user"} · deposit {fmtMoney(j.commission_eligible_total)}
+                            </div>
+                          </div>
+                          <div style={{ textAlign: "right", flexShrink: 0 }}>
+                            <div style={{ fontFamily: serif, fontSize: 12, color: dotColor, fontWeight: 600 }}>{days}d</div>
+                            <div style={{ fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 0.8 }}>TO EXPIRY</div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: "4px 4px 0", lineHeight: 1.5 }}>
+                    <strong>Pending journeys</strong> are deposits awaiting a confirmation order. The 180-day clock starts when the deposit is paid. Red dot = under 2 weeks left; copper = under 1 month. Tap any row to open the ambassador's profile.
+                  </p>
+                </>
+              );
+            })()}
+
+            {discountsSubTab === "payouts" && (() => {
+              const fmtMoney = (n) => `$${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+              const fmtDate = (d) => d ? new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "—";
+              const periodLabel = (s, e) => {
+                if (!s || !e) return "—";
+                const ds = new Date(`${s}T00:00:00`);
+                return ds.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+              };
+              // Bucket pending rows: current (in-progress month) vs closed
+              // (past months awaiting review). Also apply the global tier
+              // filter so admin can scope the entire PAYOUTS view to either
+              // ambassadors or installers.
+              const tierFilteredPending = pendingPayouts.filter(p => matchesTierFilter(p.ambassador_id));
+              const tierFilteredRows    = payoutRows.filter(r => matchesTierFilter(r.ambassador_id));
+              const pendingCurrent = tierFilteredPending.filter(p => !isClosedCycle(p.period_end));
+              const pendingClosed  = tierFilteredPending.filter(p =>  isClosedCycle(p.period_end));
+              const approved = tierFilteredRows.filter(r => r.status === "approved");
+              const failed   = tierFilteredRows.filter(r => r.status === "failed");
+              const paid     = tierFilteredRows.filter(r => r.status === "paid");
+              const cancelled = tierFilteredRows.filter(r => r.status === "cancelled");
+              // APPROVED filter view shows both 'approved' (ready to pay)
+              // and 'failed' (transfer attempt failed — needs retry/cancel).
+              const approvedOrFailed = [...failed, ...approved];
+
+              // Top-of-tab cycle header — what's currently open + next pay date.
+              const now = new Date();
+              const currentMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+              const currentEndStr = `${currentMonthEnd.getFullYear()}-${String(currentMonthEnd.getMonth() + 1).padStart(2,"0")}-${String(currentMonthEnd.getDate()).padStart(2,"0")}`;
+              const nextPaymentDate = scheduledForFromPeriodEnd(currentEndStr);
+
+              return (
+                <>
+                  <div style={{ background: T.darkCard, borderRadius: 10, padding: 14, border: `1px solid ${T.charcoal}` }}>
+                    <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700, marginBottom: 6 }}>CURRENT CYCLE</div>
+                    <div style={{ fontFamily: serif, fontSize: 16, color: T.white, fontWeight: 600, marginBottom: 2 }}>{now.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</div>
+                    <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>
+                      Closes <strong style={{ color: T.copper }}>{fmtDate(currentEndStr)}</strong> · scheduled payment <strong style={{ color: T.green }}>{fmtDate(nextPaymentDate)}</strong>
+                    </div>
+                  </div>
+
+                  {/* Filter pills */}
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {[
+                      { v: "pending",  label: `PENDING REVIEW (${pendingClosed.length})` },
+                      { v: "current",  label: `CURRENT MONTH (${pendingCurrent.length})` },
+                      { v: "approved", label: failed.length > 0 ? `APPROVED (${approved.length}) · ${failed.length} FAILED` : `APPROVED (${approved.length})` },
+                      { v: "paid",     label: `PAID (${paid.length})` },
+                    ].map(p => {
+                      const sel = payoutsFilter === p.v;
+                      return (
+                        <button key={p.v} onClick={() => setPayoutsFilter(p.v)}
+                                style={{ flex: 1, minWidth: 0, padding: "8px 6px", borderRadius: 6, background: sel ? T.copper : "transparent", border: `1px solid ${sel ? T.copper : T.charcoal}`, color: sel ? T.darkBg : T.tertiary, fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.label}</button>
+                      );
+                    })}
+                  </div>
+
+                  {payoutsLoading && payoutRows.length === 0 && pendingPayouts.length === 0 && (
+                    <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, padding: 4 }}>Loading payouts…</div>
+                  )}
+
+                  {/* PENDING REVIEW — closed cycles awaiting admin approval */}
+                  {payoutsFilter === "pending" && (
+                    pendingClosed.length === 0 ? (
+                      <div style={{ background: T.darkCard, borderRadius: 10, padding: 24, textAlign: "center", border: `1px solid ${T.charcoal}` }}>
+                        <CheckCircle size={28} color={T.green} style={{ opacity: 0.6, marginBottom: 8 }} />
+                        <div style={{ fontFamily: sans, fontSize: 12, color: T.tertiary }}>No payouts awaiting review.</div>
+                      </div>
+                    ) : pendingClosed.map(row => {
+                      const key = `pending_${row.ambassador_id}_${row.period_start}`;
+                      const isExpanded = expandedPayoutKey === key;
+                      const isBusy = busyPayoutKey === `${row.ambassador_id}_${row.period_start}`;
+                      const cachedJourneys = payoutJourneyCache[key] || null;
+                      return (
+                        <div key={key} style={{ background: T.darkCard, borderRadius: 10, padding: 14, border: `1px solid ${T.copper}40` }}>
+                          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
+                            <button onClick={() => onViewUser && onViewUser(row.handle || row.ambassador_id)}
+                                    style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", minWidth: 0, flex: 1 }}>
+                              <div style={{ fontFamily: serif, fontSize: 14, color: T.white, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{row.full_name || "—"}</div>
+                              <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>@{row.handle || "user"} · {row.base_code || ""}</div>
+                            </button>
+                            <div style={{ textAlign: "right", flexShrink: 0 }}>
+                              <div style={{ fontFamily: serif, fontSize: 16, color: T.copper, fontWeight: 700 }}>{fmtMoney(row.gross)}</div>
+                              <div style={{ fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 0.8 }}>{row.journey_count} JOURNEY{row.journey_count === 1 ? "" : "S"}</div>
+                            </div>
+                          </div>
+                          <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, marginBottom: 10 }}>
+                            <strong style={{ color: T.white }}>{periodLabel(row.period_start, row.period_end)}</strong> · scheduled <strong style={{ color: T.green }}>{fmtDate(scheduledForFromPeriodEnd(row.period_end))}</strong>
+                          </div>
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                            <button onClick={() => { setExpandedPayoutKey(isExpanded ? null : key); if (!isExpanded) loadPayoutJourneys(key, row.ambassador_id, row.period_start, row.period_end, null); }}
+                                    style={{ flex: 1, padding: "8px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}40`, cursor: "pointer", color: T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1 }}>
+                              {isExpanded ? "HIDE JOURNEYS" : "SEE JOURNEYS"}
+                            </button>
+                            <button onClick={() => approvePayout(row)} disabled={isBusy}
+                                    style={{ flex: 1, padding: "8px", borderRadius: 6, background: T.copper, border: "none", cursor: isBusy ? "default" : "pointer", color: T.darkBg, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, opacity: isBusy ? 0.6 : 1 }}>
+                              {isBusy ? "APPROVING…" : "APPROVE"}
+                            </button>
+                          </div>
+                          {isExpanded && (
+                            <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${T.charcoal}` }}>
+                              {cachedJourneys === null ? (
+                                <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>Loading…</div>
+                              ) : cachedJourneys.length === 0 ? (
+                                <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>No journeys to show.</div>
+                              ) : cachedJourneys.map((j, ji) => (
+                                <div key={j.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderTop: ji > 0 ? `1px solid ${T.charcoal}` : "none" }}>
+                                  <span style={{ fontFamily: sans, fontSize: 8, color: j.state === "walk_in" ? T.green : T.copper, letterSpacing: 1, fontWeight: 700, minWidth: 78, textTransform: "uppercase" }}>{j.state.replace(/_/g, " ")}</span>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontFamily: sans, fontSize: 11, color: T.white }}>{j.customer_email || "—"}</div>
+                                    <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>{j.confirmed_at ? new Date(j.confirmed_at).toLocaleDateString() : ""}</div>
+                                  </div>
+                                  <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700 }}>{fmtMoney(j.commission_amount)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+
+                  {/* CURRENT MONTH — in-progress accumulation, can't approve yet */}
+                  {payoutsFilter === "current" && (
+                    pendingCurrent.length === 0 ? (
+                      <div style={{ background: T.darkCard, borderRadius: 10, padding: 24, textAlign: "center", border: `1px solid ${T.charcoal}` }}>
+                        <DollarSign size={28} color={T.tertiary} style={{ opacity: 0.4, marginBottom: 8 }} />
+                        <div style={{ fontFamily: sans, fontSize: 12, color: T.tertiary }}>No commissions accumulating this month yet.</div>
+                      </div>
+                    ) : pendingCurrent.map(row => (
+                      <div key={`current_${row.ambassador_id}`} style={{ background: T.darkCard, borderRadius: 10, padding: 14, border: `1px solid ${T.charcoal}` }}>
+                        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+                          <button onClick={() => onViewUser && onViewUser(row.handle || row.ambassador_id)}
+                                  style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", minWidth: 0, flex: 1 }}>
+                            <div style={{ fontFamily: serif, fontSize: 14, color: T.white, fontWeight: 600 }}>{row.full_name || "—"}</div>
+                            <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>@{row.handle || "user"} · {row.journey_count} journey{row.journey_count === 1 ? "" : "s"}</div>
+                          </button>
+                          <div style={{ textAlign: "right", flexShrink: 0 }}>
+                            <div style={{ fontFamily: serif, fontSize: 14, color: T.white, fontWeight: 700 }}>{fmtMoney(row.gross)}</div>
+                            <div style={{ fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 0.8 }}>ACCUMULATING</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+
+                  {/* APPROVED — awaiting payment (includes 'failed' state) */}
+                  {payoutsFilter === "approved" && (
+                    approvedOrFailed.length === 0 ? (
+                      <div style={{ background: T.darkCard, borderRadius: 10, padding: 24, textAlign: "center", border: `1px solid ${T.charcoal}` }}>
+                        <div style={{ fontFamily: sans, fontSize: 12, color: T.tertiary }}>No approved payouts awaiting payment.</div>
+                      </div>
+                    ) : approvedOrFailed.map(row => {
+                      const prof = row.ambassadors?.profiles || {};
+                      const isBusy = busyPayoutKey === row.id;
+                      const isFailed = row.status === "failed";
+                      const accentColor = isFailed ? T.red : T.green;
+                      const statusLabel = isFailed ? "FAILED" : "APPROVED";
+                      return (
+                        <div key={row.id} style={{ background: T.darkCard, borderRadius: 10, padding: 14, border: `1px solid ${accentColor}40` }}>
+                          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
+                            <button onClick={() => onViewUser && onViewUser(prof.handle || row.ambassador_id)}
+                                    style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", minWidth: 0, flex: 1 }}>
+                              <div style={{ fontFamily: serif, fontSize: 14, color: T.white, fontWeight: 600 }}>{prof.full_name || prof.handle || "—"}</div>
+                              <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>@{prof.handle || "user"} · {row.ambassadors?.base_code || ""}</div>
+                            </button>
+                            <div style={{ textAlign: "right", flexShrink: 0 }}>
+                              <div style={{ fontFamily: serif, fontSize: 16, color: accentColor, fontWeight: 700 }}>{fmtMoney(row.net_amount)}</div>
+                              <div style={{ fontFamily: sans, fontSize: 8, color: accentColor, letterSpacing: 0.8 }}>{statusLabel}</div>
+                            </div>
+                          </div>
+                          <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, marginBottom: row.transfer_failure_message ? 6 : 10 }}>
+                            <strong style={{ color: T.white }}>{periodLabel(row.period_start, row.period_end)}</strong> · scheduled <strong style={{ color: T.green }}>{fmtDate(row.scheduled_for)}</strong>
+                          </div>
+                          {row.transfer_failure_message && (
+                            <div style={{ background: `${T.red}12`, border: `1px solid ${T.red}40`, borderRadius: 6, padding: 8, marginBottom: 10, fontFamily: sans, fontSize: 10, color: T.red, lineHeight: 1.5 }}>
+                              <strong>Last transfer attempt failed:</strong> {row.transfer_failure_message}
+                            </div>
+                          )}
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                            <button onClick={() => cancelPayout(row)} disabled={isBusy}
+                                    style={{ padding: "8px 12px", borderRadius: 6, background: "none", border: `1px solid ${T.red}40`, cursor: isBusy ? "default" : "pointer", color: T.red, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, opacity: isBusy ? 0.6 : 1 }}>
+                              CANCEL
+                            </button>
+                            {/* Record-only path — for payouts that already
+                                got paid outside Stripe (check, ACH, etc.).
+                                Distinct color so admin can't confuse this
+                                with the actual Stripe transfer button. */}
+                            <button onClick={() => markPayoutPaidOffPlatform(row)} disabled={isBusy}
+                                    style={{ padding: "8px 12px", borderRadius: 6, background: "none", border: `1px solid ${T.copper}40`, cursor: isBusy ? "default" : "pointer", color: T.copper, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, opacity: isBusy ? 0.6 : 1 }}>
+                              MARK PAID (OFF-PLATFORM)
+                            </button>
+                            {!isFailed && (
+                              <button onClick={() => markPayoutPaid(row)} disabled={isBusy}
+                                      style={{ flex: 1, padding: "8px", borderRadius: 6, background: T.green, border: "none", cursor: isBusy ? "default" : "pointer", color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, opacity: isBusy ? 0.6 : 1 }}>
+                                {isBusy ? "TRANSFERRING…" : "SEND VIA STRIPE"}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+
+                  {/* PAID — history */}
+                  {payoutsFilter === "paid" && (
+                    paid.length === 0 ? (
+                      <div style={{ background: T.darkCard, borderRadius: 10, padding: 24, textAlign: "center", border: `1px solid ${T.charcoal}` }}>
+                        <div style={{ fontFamily: sans, fontSize: 12, color: T.tertiary }}>No payments completed yet.</div>
+                      </div>
+                    ) : paid.map(row => {
+                      const prof = row.ambassadors?.profiles || {};
+                      return (
+                        <div key={row.id} style={{ background: T.darkCard, borderRadius: 10, padding: 14, border: `1px solid ${T.charcoal}` }}>
+                          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+                            <button onClick={() => onViewUser && onViewUser(prof.handle || row.ambassador_id)}
+                                    style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", minWidth: 0, flex: 1 }}>
+                              <div style={{ fontFamily: serif, fontSize: 14, color: T.white, fontWeight: 600 }}>{prof.full_name || prof.handle || "—"}</div>
+                              <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>@{prof.handle || "user"} · {periodLabel(row.period_start, row.period_end)} · paid {fmtDate(row.paid_at ? new Date(row.paid_at).toISOString().slice(0,10) : null)}</div>
+                            </button>
+                            <div style={{ textAlign: "right", flexShrink: 0 }}>
+                              <div style={{ fontFamily: serif, fontSize: 14, color: T.green, fontWeight: 700 }}>{fmtMoney(row.net_amount)}</div>
+                              <div style={{ fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 0.8 }}>PAID</div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+
+                  <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: "4px 4px 0", lineHeight: 1.5 }}>
+                    Sales made in a calendar month pay out on the last business day of the next month. Approve closes the cycle for that ambassador + locks linked journeys. Mark Paid flips journeys to paid state. Cancel reverts journeys to PENDING REVIEW.
+                  </p>
+                </>
+              );
+            })()}
+
+            {discountsSubTab === "conflicts" && (() => {
+              const fmtMoney = (n) => `$${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+              // Apply the global tier filter.
+              const filteredConflicts = conflictJourneys.filter(j => matchesTierFilter(j.ambassador_id));
+              if (conflictsLoading && filteredConflicts.length === 0) {
+                return <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, padding: 4 }}>Loading conflicts…</div>;
+              }
+              if (filteredConflicts.length === 0) {
+                return (
+                  <div style={{ background: T.darkCard, borderRadius: 10, padding: 24, textAlign: "center", border: `1px solid ${T.charcoal}` }}>
+                    <ShieldCheck size={28} color={T.green} style={{ opacity: 0.6, marginBottom: 8 }} />
+                    <div style={{ fontFamily: sans, fontSize: 12, color: T.tertiary, lineHeight: 1.5 }}>No flagged attribution conflicts.</div>
+                    <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: "8px 16px 0", lineHeight: 1.5 }}>
+                      The webhook flags a journey when one customer's order uses multiple ambassadors' codes. Resolved conflicts no longer appear here.
+                    </p>
+                  </div>
+                );
+              }
+              return (
+                <>
+                  <div style={{ background: `${T.red}12`, border: `1px solid ${T.red}40`, borderRadius: 10, padding: 12, marginBottom: 4 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                      <AlertTriangle size={14} color={T.red} />
+                      <span style={{ fontFamily: sans, fontSize: 11, color: T.red, fontWeight: 700, letterSpacing: 1 }}>{filteredConflicts.length} ATTRIBUTION CONFLICT{filteredConflicts.length === 1 ? "" : "S"}</span>
+                    </div>
+                    <p style={{ fontFamily: serif, fontSize: 11, color: T.warmStone, margin: 0, lineHeight: 1.5 }}>
+                      A customer's order(s) matched discount codes from multiple ambassadors. Pick the winner — that ambassador gets full attribution for the whole journey. Or dismiss to keep the current attribution.
+                    </p>
+                  </div>
+                  {filteredConflicts.map(j => {
+                    const orders = conflictJourneyOrders[j.id] || [];
+                    const customerName = orders[0]?.customer_name || j.customer_email || "Customer";
+                    const isResolving = resolvingConflictId === j.id;
+                    const isReattributing = reattributingId === j.id;
+                    const currentProf = ambassadorProfiles[
+                      discountAmbassadors.find(a => a.id === j.ambassador_id)?.profile_id
+                    ] || {};
+                    const currentAmb = discountAmbassadors.find(a => a.id === j.ambassador_id);
+                    return (
+                      <div key={j.id} style={{ background: T.darkCard, borderRadius: 10, padding: 14, border: `1px solid ${T.red}40` }}>
+                        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            <div style={{ fontFamily: sans, fontSize: 8, color: T.red, letterSpacing: 1, fontWeight: 700, marginBottom: 2 }}>CONFLICT · {(j.state || "—").toUpperCase().replace(/_/g, " ")}</div>
+                            <div style={{ fontFamily: serif, fontSize: 14, color: T.white, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{customerName}</div>
+                            {j.customer_email && <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{j.customer_email}</div>}
+                          </div>
+                          <div style={{ textAlign: "right", flexShrink: 0 }}>
+                            <div style={{ fontFamily: serif, fontSize: 14, color: T.copper, fontWeight: 700 }}>{fmtMoney(j.commission_amount)}</div>
+                            <div style={{ fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 0.8 }}>COMMISSION AT STAKE</div>
+                          </div>
+                        </div>
+
+                        {/* Current attribution row */}
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: T.darkBg, borderRadius: 6, marginBottom: 8 }}>
+                          <span style={{ fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 1, fontWeight: 700, minWidth: 60 }}>CURRENT</span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>{currentProf.full_name || currentProf.handle || "—"}</div>
+                            <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>
+                              {currentProf.handle ? `@${currentProf.handle}` : ""}
+                              {currentAmb?.base_code ? ` · ${currentAmb.base_code}` : ""}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Linked orders strip */}
+                        {orders.length > 0 && (
+                          <div style={{ marginBottom: 10 }}>
+                            <div style={{ fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 1.2, fontWeight: 700, marginBottom: 6 }}>{orders.length} ORDER{orders.length === 1 ? "" : "S"} IN JOURNEY</div>
+                            {orders.map(o => {
+                              const cls = o.classification || "unclassified";
+                              const clsAccent = cls === "deposit" ? T.copper : cls === "confirmation_part" ? T.green : cls === "walk_in_part" ? T.green : T.tertiary;
+                              return (
+                                <div key={o.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", borderTop: `1px solid ${T.charcoal}` }}>
+                                  <span style={{ fontFamily: sans, fontSize: 8, color: clsAccent, letterSpacing: 1, fontWeight: 700, minWidth: 78, textTransform: "uppercase" }}>{cls.replace(/_/g, " ")}</span>
+                                  <span style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 11, color: T.white, flex: 1 }}>{o.shopify_order_number || "—"}</span>
+                                  <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{o.order_date ? new Date(o.order_date).toLocaleDateString() : ""}</span>
+                                  <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, minWidth: 64, textAlign: "right" }}>{fmtMoney(o.subtotal)}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {/* Action row */}
+                        {!isReattributing ? (
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                            <button onClick={() => setReattributingId(j.id)} disabled={isResolving}
+                                    style={{ flex: 1, padding: "8px", borderRadius: 6, background: T.copper, border: "none", cursor: isResolving ? "default" : "pointer", color: T.darkBg, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, opacity: isResolving ? 0.6 : 1 }}>
+                              RE-ATTRIBUTE
+                            </button>
+                            <button onClick={() => dismissConflict(j.id)} disabled={isResolving}
+                                    style={{ flex: 1, padding: "8px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}40`, cursor: isResolving ? "default" : "pointer", color: T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, opacity: isResolving ? 0.6 : 1 }}>
+                              {isResolving ? "WORKING…" : "DISMISS"}
+                            </button>
+                          </div>
+                        ) : (
+                          <div style={{ background: T.darkBg, borderRadius: 6, padding: 10, border: `1px solid ${T.copper}40` }}>
+                            <div style={{ fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 1, fontWeight: 700, marginBottom: 8 }}>PICK WINNER</div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 220, overflowY: "auto", marginBottom: 8 }}>
+                              {discountAmbassadors.map(a => {
+                                const p = ambassadorProfiles[a.profile_id] || {};
+                                const isCurrent = a.id === j.ambassador_id;
+                                return (
+                                  <button key={a.id} onClick={() => resolveConflict(j.id, a.id)} disabled={isResolving}
+                                          style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: isCurrent ? `${T.copper}18` : T.charcoal, border: `1px solid ${isCurrent ? T.copper : "transparent"}`, borderRadius: 4, cursor: isResolving ? "default" : "pointer", textAlign: "left", width: "100%", opacity: isResolving ? 0.6 : 1 }}>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <div style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>{p.full_name || p.handle || "—"} {isCurrent && <span style={{ color: T.copper, fontSize: 9 }}>(current)</span>}</div>
+                                      <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>
+                                        {p.handle ? `@${p.handle}` : ""}
+                                        {a.base_code ? ` · ${a.base_code}` : ""}
+                                      </div>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            <button onClick={() => setReattributingId(null)} disabled={isResolving}
+                                    style={{ width: "100%", padding: "6px", borderRadius: 4, background: "none", border: `1px solid ${T.tertiary}40`, cursor: "pointer", color: T.tertiary, fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 1 }}>
+                              CANCEL
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </>
+              );
+            })()}
+
+            {discountsSubTab === "templates" && (
+              <>
+                {/* Webhook setup — one-shot for Phase 1B commission ingestion */}
+                <div style={{ background: T.darkCard, borderRadius: 10, padding: 14, border: `1px solid ${T.charcoal}` }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <Radio size={14} color={T.green} />
+                      <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.2, fontWeight: 700 }}>SHOPIFY WEBHOOKS</span>
+                    </div>
+                    <button onClick={registerShopifyWebhooks} disabled={registeringWebhooks}
+                            style={{ padding: "6px 10px", borderRadius: 6, background: T.green, border: "none", cursor: registeringWebhooks ? "default" : "pointer", color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, opacity: registeringWebhooks ? 0.6 : 1 }}>
+                      {registeringWebhooks ? "REGISTERING…" : "REGISTER WEBHOOKS"}
+                    </button>
+                  </div>
+                  <p style={{ fontFamily: serif, fontSize: 11, color: T.warmStone, margin: "0 0 6px", lineHeight: 1.5 }}>
+                    Registers <code style={{ background: T.darkBg, padding: "1px 4px", borderRadius: 3, fontFamily: "ui-monospace, Menlo, monospace", fontSize: 10 }}>orders/paid</code> + <code style={{ background: T.darkBg, padding: "1px 4px", borderRadius: 3, fontFamily: "ui-monospace, Menlo, monospace", fontSize: 10 }}>orders/refunded</code> Shopify webhooks pointing at our ingestion edge function. Idempotent — already-registered topics are skipped. Run after enabling Phase 1B or whenever you change the webhook URL.
+                  </p>
+                  {webhookRegisterResult && (
+                    <div style={{ marginTop: 8, padding: 10, background: T.darkBg, borderRadius: 6, border: `1px solid ${webhookRegisterResult.ok ? T.green : T.red}40`, fontFamily: sans, fontSize: 11, color: T.warmStone, lineHeight: 1.5 }}>
+                      {webhookRegisterResult.ok ? (
+                        <>
+                          <div style={{ marginBottom: 6 }}>Webhook URL: <code style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 9, color: T.tertiary, wordBreak: "break-all" }}>{webhookRegisterResult.webhook_url}</code></div>
+                          {(webhookRegisterResult.results || []).map((r, i) => (
+                            <div key={i} style={{ fontSize: 10, color: r.status === "registered" ? T.green : r.status === "already_registered" ? T.tertiary : T.red }}>
+                              {r.topic}: {r.status === "registered" ? "✓ registered" : r.status === "already_registered" ? "already registered" : `failed (${JSON.stringify(r.error).slice(0, 80)})`}
+                            </div>
+                          ))}
+                        </>
+                      ) : (
+                        <div style={{ color: T.red }}>Failed: {webhookRegisterResult.error}</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Header card — explains the template model */}
+                <div style={{ background: T.darkCard, borderRadius: 10, padding: 16, border: `1px solid ${T.charcoal}` }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                    <Tag size={16} color={T.copper} />
+                    <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 1 }}>BULK DISCOUNT TEMPLATES</span>
+                  </div>
+                  <p style={{ fontFamily: serif, fontSize: 12, color: T.warmStone, margin: "0 0 8px", lineHeight: 1.5 }}>
+                    Templates let you push a new discount type (e.g. "Holiday 20% off") to every active ambassador in one click. Each ambassador gets their own coded variant (KYLELPO-HOLIDAY, JANEDOE-HOLIDAY, etc.) — preserving attribution on orders. Each variant spawns two Shopify codes (public $0 + internal "C" with the real discount, staff-applied).
+                  </p>
+                  <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: 0, lineHeight: 1.5 }}>
+                    <strong>{discountAmbassadors.length}</strong> active ambassador{discountAmbassadors.length === 1 ? "" : "s"} eligible.
+                  </p>
+                </div>
+
+            {/* New template button */}
+            {!showTemplateForm && (
+              <button onClick={() => setShowTemplateForm(true)} style={{ padding: 12, borderRadius: 8, background: T.copper, border: "none", cursor: "pointer", color: T.darkBg, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                <Plus size={13} /> NEW TEMPLATE
+              </button>
+            )}
+
+            {/* New template form */}
+            {showTemplateForm && (
+              <div style={{ background: T.darkCard, borderRadius: 10, padding: 14, border: `1px solid ${T.copper}40` }}>
+                <div style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.2, fontWeight: 700, marginBottom: 12 }}>NEW DISCOUNT TEMPLATE</div>
+
+                <label style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 4 }}>LABEL (admin-visible name)</label>
+                <input value={templateDraft.label} onChange={e => setTemplateDraft({ ...templateDraft, label: e.target.value })} placeholder="e.g. Holiday 20% off" style={{ width: "100%", boxSizing: "border-box", padding: 9, borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 12, marginBottom: 10, outline: "none" }} />
+
+                <label style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 4 }}>CODE SUFFIX (becomes KYLELPO-X, JANEDOE-X)</label>
+                <input value={templateDraft.code_suffix} onChange={e => setTemplateDraft({ ...templateDraft, code_suffix: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") })} placeholder="e.g. HOLIDAY" maxLength={12} style={{ width: "100%", boxSizing: "border-box", padding: 9, borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: "ui-monospace, Menlo, monospace", fontSize: 12, marginBottom: 10, outline: "none", letterSpacing: 1 }} />
+
+                <label style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 4 }}>DISCOUNT TYPE</label>
+                <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+                  {[
+                    { v: "percentage", label: "% OFF" },
+                    { v: "fixed_amount", label: "$ OFF" },
+                    { v: "free_shipping", label: "FREE SHIP" },
+                  ].map(o => {
+                    const sel = templateDraft.kind === o.v;
+                    return (
+                      <button key={o.v} onClick={() => setTemplateDraft({ ...templateDraft, kind: o.v })}
+                              style={{ flex: 1, padding: "8px 4px", borderRadius: 6, background: sel ? T.copper : "transparent", border: `1px solid ${sel ? T.copper : T.charcoal}`, color: sel ? T.darkBg : T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer" }}>{o.label}</button>
+                    );
+                  })}
+                </div>
+
+                {templateDraft.kind !== "free_shipping" && (
+                  <>
+                    <label style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 4 }}>VALUE {templateDraft.kind === "percentage" ? "(percent, e.g. 20)" : "(dollars, e.g. 100)"}</label>
+                    <input type="number" value={templateDraft.value} onChange={e => setTemplateDraft({ ...templateDraft, value: e.target.value })} style={{ width: "100%", boxSizing: "border-box", padding: 9, borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 12, marginBottom: 10, outline: "none" }} />
+                  </>
+                )}
+
+                <label style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 4 }}>MIN PURCHASE (optional, dollars)</label>
+                <input type="number" value={templateDraft.min_purchase_amount} onChange={e => setTemplateDraft({ ...templateDraft, min_purchase_amount: e.target.value })} placeholder="empty = no minimum" style={{ width: "100%", boxSizing: "border-box", padding: 9, borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 12, marginBottom: 10, outline: "none" }} />
+
+                {/* Active date range — both optional. Shopify's price_rule uses
+                    starts_at (defaults to now) + ends_at (null = forever).
+                    Codes outside the active window simply won't apply at
+                    checkout. */}
+                <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 4 }}>STARTS (optional)</label>
+                    <input type="datetime-local" value={templateDraft.starts_at} onChange={e => setTemplateDraft({ ...templateDraft, starts_at: e.target.value })} style={{ width: "100%", boxSizing: "border-box", padding: 9, borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 12, outline: "none" }} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 4 }}>ENDS (optional)</label>
+                    <input type="datetime-local" value={templateDraft.ends_at} onChange={e => setTemplateDraft({ ...templateDraft, ends_at: e.target.value })} style={{ width: "100%", boxSizing: "border-box", padding: 9, borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 12, outline: "none" }} />
+                  </div>
+                </div>
+                <p style={{ fontFamily: serif, fontSize: 10, color: T.tertiary, margin: "0 0 12px", lineHeight: 1.4 }}>Leave both empty to make the discount active immediately and indefinitely.</p>
+
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={createTemplate} disabled={templateSaving} style={{ flex: 1, padding: "10px", borderRadius: 6, background: T.green, border: "none", cursor: templateSaving ? "default" : "pointer", color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 1, opacity: templateSaving ? 0.6 : 1 }}>{templateSaving ? "SAVING…" : "SAVE TEMPLATE"}</button>
+                  <button onClick={() => { setShowTemplateForm(false); setTemplateDraft({ label: "", code_suffix: "", kind: "percentage", value: 20, min_purchase_amount: "", starts_at: "", ends_at: "" }); }} style={{ padding: "10px 16px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}40`, cursor: "pointer", color: T.tertiary, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>CANCEL</button>
+                </div>
+              </div>
+            )}
+
+            {/* Templates list */}
+            {discountTemplates.length === 0 ? (
+              <div style={{ background: T.darkCard, borderRadius: 10, padding: 24, textAlign: "center", border: `1px solid ${T.charcoal}` }}>
+                <Tag size={28} color={T.tertiary} style={{ opacity: 0.4, marginBottom: 8 }} />
+                <div style={{ fontFamily: sans, fontSize: 12, color: T.tertiary }}>No templates yet — create one above to bulk-push a discount to all ambassadors.</div>
+              </div>
+            ) : discountTemplates.map(tpl => {
+              const isArchived = tpl.status === "archived";
+              const isApplying = bulkApplyingTplId === tpl.id;
+              const result = bulkApplyResult && bulkApplyResult.tpl_id === tpl.id ? bulkApplyResult : null;
+              const valLabel = tpl.kind === "percentage" ? `${tpl.value}% off`
+                : tpl.kind === "fixed_amount" ? `$${Number(tpl.value).toLocaleString()} off`
+                : "Free shipping";
+              const minLabel = tpl.min_purchase_amount ? ` on orders $${Number(tpl.min_purchase_amount).toLocaleString()}+` : "";
+              // Active date range: derive a human-readable status from
+              // starts_at / ends_at + the current time. Tells admin at a
+              // glance whether codes are live, scheduled, or expired.
+              const now = new Date();
+              const startsDate = tpl.starts_at ? new Date(tpl.starts_at) : null;
+              const endsDate = tpl.ends_at ? new Date(tpl.ends_at) : null;
+              const dateState = !startsDate && !endsDate ? "always"
+                : (startsDate && startsDate > now) ? "scheduled"
+                : (endsDate && endsDate < now) ? "expired"
+                : "active";
+              const dateStateColor = dateState === "active" ? T.green
+                : dateState === "scheduled" ? T.copper
+                : dateState === "expired" ? T.red
+                : T.tertiary;
+              const dateRangeText = !startsDate && !endsDate ? "Active indefinitely"
+                : startsDate && endsDate ? `${startsDate.toLocaleDateString()} → ${endsDate.toLocaleDateString()}`
+                : startsDate ? `From ${startsDate.toLocaleDateString()}`
+                : endsDate ? `Until ${endsDate.toLocaleDateString()}` : "";
+              return (
+                <div key={tpl.id} style={{ background: T.darkCard, borderRadius: 10, padding: 14, border: `1px solid ${isArchived ? T.tertiary + "40" : T.charcoal}`, opacity: isArchived ? 0.6 : 1 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6, gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700 }}>{tpl.label}</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      {!isArchived && dateState !== "always" && (
+                        <span style={{ fontFamily: sans, fontSize: 9, color: dateStateColor, background: `${dateStateColor}25`, padding: "2px 6px", borderRadius: 3, letterSpacing: 1, fontWeight: 700 }}>{dateState.toUpperCase()}</span>
+                      )}
+                      {isArchived && <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, background: `${T.tertiary}25`, padding: "2px 6px", borderRadius: 3, letterSpacing: 1, fontWeight: 700 }}>ARCHIVED</span>}
+                    </div>
+                  </div>
+                  <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginBottom: 4 }}>
+                    <span style={{ fontFamily: "ui-monospace, Menlo, monospace", color: T.copper, fontWeight: 700 }}>*-{tpl.code_suffix}</span>{" "}— {valLabel}{minLabel}
+                  </div>
+                  <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, marginBottom: 4 }}>{dateRangeText}</div>
+                  <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, marginBottom: 12 }}>Created {new Date(tpl.created_at).toLocaleDateString()}</div>
+                  {!isArchived && (
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <button onClick={() => bulkApplyTemplate(tpl)} disabled={isApplying || bulkDeletingTplId === tpl.id || discountAmbassadors.length === 0} style={{ padding: "8px 12px", borderRadius: 6, background: T.copper, border: "none", cursor: isApplying ? "default" : "pointer", color: T.darkBg, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, opacity: isApplying ? 0.6 : 1 }}>{isApplying ? "APPLYING…" : `APPLY TO ALL (${discountAmbassadors.length})`}</button>
+                      <button onClick={() => bulkDeleteTemplateCodes(tpl)} disabled={isApplying || bulkDeletingTplId === tpl.id} style={{ padding: "8px 12px", borderRadius: 6, background: "none", border: `1px solid ${T.red}40`, cursor: bulkDeletingTplId === tpl.id ? "default" : "pointer", color: T.red, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, opacity: bulkDeletingTplId === tpl.id ? 0.6 : 1 }}>{bulkDeletingTplId === tpl.id ? "DELETING…" : "DELETE ALL CODES"}</button>
+                      <button onClick={() => archiveTemplate(tpl.id)} disabled={isApplying || bulkDeletingTplId === tpl.id} style={{ padding: "8px 12px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}40`, cursor: "pointer", color: T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1 }}>ARCHIVE</button>
+                    </div>
+                  )}
+                  {result && (
+                    <div style={{ marginTop: 10, padding: 10, background: T.darkBg, borderRadius: 6, border: `1px solid ${T.charcoal}`, fontFamily: sans, fontSize: 11, color: T.warmStone, lineHeight: 1.5 }}>
+                      <div><strong style={{ color: T.green }}>{result.success}</strong> created · <strong style={{ color: T.tertiary }}>{result.skipped}</strong> skipped (already had) · <strong style={{ color: result.failed.length > 0 ? T.red : T.tertiary }}>{result.failed.length}</strong> failed</div>
+                      {result.failed.length > 0 && (
+                        <details style={{ marginTop: 6 }}>
+                          <summary style={{ fontSize: 10, color: T.red, cursor: "pointer" }}>Show failures</summary>
+                          <ul style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 9, color: T.tertiary, margin: "6px 0 0", padding: "0 0 0 16px" }}>
+                            {result.failed.map((f, i) => <li key={i}>{f.ambassador_id.slice(0, 8)}: {f.error}</li>)}
+                          </ul>
+                        </details>
+                      )}
+                    </div>
+                  )}
+                  {bulkDeleteResult && bulkDeleteResult.tpl_id === tpl.id && (
+                    <div style={{ marginTop: 10, padding: 10, background: T.darkBg, borderRadius: 6, border: `1px solid ${T.red}40`, fontFamily: sans, fontSize: 11, color: T.warmStone, lineHeight: 1.5 }}>
+                      <div><strong style={{ color: T.red }}>{bulkDeleteResult.success}</strong> deleted · <strong style={{ color: bulkDeleteResult.failed.length > 0 ? T.red : T.tertiary }}>{bulkDeleteResult.failed.length}</strong> failed</div>
+                      {bulkDeleteResult.failed.length > 0 && (
+                        <details style={{ marginTop: 6 }}>
+                          <summary style={{ fontSize: 10, color: T.red, cursor: "pointer" }}>Show failures</summary>
+                          <ul style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 9, color: T.tertiary, margin: "6px 0 0", padding: "0 0 0 16px" }}>
+                            {bulkDeleteResult.failed.map((f, i) => <li key={i}>{f.code}: {f.error}</li>)}
+                          </ul>
+                        </details>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+              </>
+            )}
+          </div>
+        )}
       </div>
       <ChartDetailModal chartKey={chartModalKey} dateRange={dateRange} setDateRange={setDateRange}
                          signupDaily={signupDaily} dauDaily={dauDaily} postsByType={postsByType}
+                         commissionByMonth={discountByMonth}
                          onClose={() => setChartModalKey(null)} />
+      {manualAddTarget && (
+        <AdminManualAddOrderModal
+          ambassador={manualAddTarget.ambassador}
+          onClose={() => setManualAddTarget(null)}
+          onSubmit={async (payload) => {
+            const ok = await onAdminAddManualOrder(payload);
+            if (ok !== false) {
+              // Refresh the ambassadors list so any journey count update reflects.
+              fetchActiveAmbassadors();
+            }
+            return ok;
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -21364,8 +29239,8 @@ function OnboardingScreen({ session, onComplete, onSetProfilePic, onAddBuild }) 
                 <span style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, lineHeight: 1.4, display: "block" }}>Browse, post, comment, build your rig.</span>
               </button>
               <button type="button" onClick={() => setSignupRole("ambassador")} style={{ flex: 1, padding: "14px 12px", borderRadius: 8, background: signupRole === "ambassador" ? `${T.copper}25` : T.darkCard, border: signupRole === "ambassador" ? `1px solid ${T.copper}` : `1px solid ${T.charcoal}`, cursor: "pointer", textAlign: "left" }}>
-                <span style={{ fontFamily: sans, fontSize: 12, color: signupRole === "ambassador" ? T.copper : T.white, fontWeight: 700, letterSpacing: 0.5, display: "block", marginBottom: 4 }}>REQUEST AMBASSADOR</span>
-                <span style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, lineHeight: 1.4, display: "block" }}>Account starts as a user. Admin reviews + approves Ambassador requests.</span>
+                <span style={{ fontFamily: sans, fontSize: 12, color: signupRole === "ambassador" ? T.copper : T.white, fontWeight: 700, letterSpacing: 0.5, display: "block", marginBottom: 4 }}>AMBASSADOR / INSTALLER</span>
+                <span style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, lineHeight: 1.4, display: "block" }}>Account starts as a user. Admin reviews + approves as Ambassador (5%) or Installer (15%).</span>
               </button>
             </div>
           </div>
@@ -21516,19 +29391,18 @@ function fmtBytes(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
-function PhotoUploader({ photos, onChange, maxPhotos = 10, compact = false, onUploadError }) {
+function PhotoUploader({ photos, onChange, maxPhotos = 10, compact = false, onUploadError, videoMaxDurationSec = VIDEO_MAX_SEC.feed, acceptVideo = true }) {
   const fileRef = useRef(null);
   const [sizeError, setSizeError] = useState("");
 
-  const handleFiles = (e) => {
+  const handleFiles = async (e) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
     if (fileRef.current) fileRef.current.value = "";
-    // Pre-upload size check — Supabase free tier hard-caps at 50 MB; we
-    // reject above MAX_UPLOAD_BYTES to avoid silent upload failures and
-    // tell the user immediately instead of after they hit submit.
+    // Pre-upload size check — reject above MAX_UPLOAD_BYTES to avoid
+    // silent upload failures.
     const tooBig = files.filter(f => f.size > MAX_UPLOAD_BYTES);
-    const allowed = files.filter(f => f.size <= MAX_UPLOAD_BYTES).slice(0, maxPhotos - photos.length);
+    const sizeOK = files.filter(f => f.size <= MAX_UPLOAD_BYTES);
     if (tooBig.length > 0) {
       const list = tooBig.map(f => f.name).slice(0, 3).join(", ");
       const msg = `${list}${tooBig.length > 3 ? ` +${tooBig.length - 3} more` : ""} too large (max ${MAX_UPLOAD_LABEL}). Please trim or compress first.`;
@@ -21536,6 +29410,37 @@ function PhotoUploader({ photos, onChange, maxPhotos = 10, compact = false, onUp
       setTimeout(() => setSizeError(""), 6000);
       if (onUploadError) onUploadError(msg);
     }
+    // Reject videos when this slot is image-only (e.g. build hero).
+    // Reported via the same error toast as the byte cap.
+    let typeOK = sizeOK;
+    if (!acceptVideo) {
+      const videos = sizeOK.filter(f => f.type && f.type.startsWith("video/"));
+      typeOK = sizeOK.filter(f => !(f.type && f.type.startsWith("video/")));
+      if (videos.length > 0) {
+        const msg = videos.length === 1
+          ? `${videos[0].name} is a video. This slot only accepts photos.`
+          : `${videos.length} videos rejected — this slot only accepts photos.`;
+        setSizeError(msg);
+        setTimeout(() => setSizeError(""), 6000);
+        if (onUploadError) onUploadError(msg);
+      }
+    }
+    // Per-video duration check — `videoMaxDurationSec` defaults to the
+    // feed cap (60s); trip/builds/etc. can pass a higher number.
+    const tooLong = [];
+    const durationChecked = await Promise.all(typeOK.map(async f => {
+      const err = await validateVideoDuration(f, videoMaxDurationSec);
+      if (err) { tooLong.push(err); return null; }
+      return f;
+    }));
+    const durationOK = durationChecked.filter(Boolean);
+    if (tooLong.length > 0) {
+      const msg = tooLong[0] + (tooLong.length > 1 ? ` (+${tooLong.length - 1} more)` : "");
+      setSizeError(msg);
+      setTimeout(() => setSizeError(""), 6000);
+      if (onUploadError) onUploadError(msg);
+    }
+    const allowed = durationOK.slice(0, maxPhotos - photos.length);
     if (allowed.length === 0) return;
     let loaded = 0;
     const results = [];
@@ -21573,7 +29478,7 @@ function PhotoUploader({ photos, onChange, maxPhotos = 10, compact = false, onUp
   if (compact) {
     return (
       <>
-        <input ref={fileRef} type="file" accept="image/*,video/*" multiple onChange={handleFiles} style={{ display: "none" }} />
+        <input ref={fileRef} type="file" accept={acceptVideo ? "image/*,video/*" : "image/*"} multiple onChange={handleFiles} style={{ display: "none" }} />
         <button onClick={() => fileRef.current && fileRef.current.click()} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" }}>
           <Image size={20} color={T.tertiary} />
         </button>
@@ -21586,7 +29491,7 @@ function PhotoUploader({ photos, onChange, maxPhotos = 10, compact = false, onUp
 
   return (
     <div>
-      <input ref={fileRef} type="file" accept="image/*,video/*" multiple onChange={handleFiles} style={{ display: "none" }} />
+      <input ref={fileRef} type="file" accept={acceptVideo ? "image/*,video/*" : "image/*"} multiple onChange={handleFiles} style={{ display: "none" }} />
       {sizeError && (
         <div style={{ marginBottom: 10, padding: "10px 12px", background: `${T.red}18`, border: `1px solid ${T.red}40`, borderRadius: 8, display: "flex", alignItems: "center", gap: 8 }}>
           <AlertTriangle size={14} color={T.red} />
@@ -23096,7 +31001,7 @@ function DMScreen({ onClose, onViewUser, initialConvId, initialMessage, initialS
   // failed sends don't waste bandwidth). Files exceeding MAX_UPLOAD_BYTES
   // are rejected up-front with a toast so the user isn't surprised by a
   // silent storage failure mid-send.
-  const handleChatFiles = (e) => {
+  const handleChatFiles = async (e) => {
     const files = Array.from(e.target.files || []);
     if (chatFileRef.current) chatFileRef.current.value = "";
     const tooBig = files.filter(f => f.size > MAX_UPLOAD_BYTES);
@@ -23104,21 +31009,29 @@ function DMScreen({ onClose, onViewUser, initialConvId, initialMessage, initialS
       const names = tooBig.map(f => f.name).slice(0, 3).join(", ");
       onUploadError(`${names}${tooBig.length > 3 ? ` +${tooBig.length - 3} more` : ""} too large (max ${MAX_UPLOAD_LABEL}). Please trim or compress.`);
     }
-    files.filter(f => f.size <= MAX_UPLOAD_BYTES).forEach(file => {
+    const sizeOK = files.filter(f => f.size <= MAX_UPLOAD_BYTES);
+    // DM video duration cap — keep clips short for inbox tone.
+    for (const file of sizeOK) {
       const isVideo = file.type.startsWith("video/");
       const isImage = file.type.startsWith("image/");
-      if (!isVideo && !isImage) return;
+      if (!isVideo && !isImage) continue;
       if (isVideo) {
+        const durErr = await validateVideoDuration(file, VIDEO_MAX_SEC.dm);
+        if (durErr) { if (onUploadError) onUploadError(durErr); continue; }
         const blobUrl = URL.createObjectURL(file);
         setChatPhotos(prev => [...prev, { id: Date.now() + Math.random(), url: blobUrl, name: file.name, type: "video" }]);
       } else {
         const reader = new FileReader();
-        reader.onload = (ev) => {
-          setChatPhotos(prev => [...prev, { id: Date.now() + Math.random(), url: ev.target.result, name: file.name }]);
-        };
-        reader.readAsDataURL(file);
+        await new Promise((resolve) => {
+          reader.onload = (ev) => {
+            setChatPhotos(prev => [...prev, { id: Date.now() + Math.random(), url: ev.target.result, name: file.name }]);
+            resolve();
+          };
+          reader.onerror = () => resolve();
+          reader.readAsDataURL(file);
+        });
       }
-    });
+    }
   };
 
   // ─── Mobile keyboard handling ─────────────────────────────────────────
@@ -24288,6 +32201,13 @@ const __INITIAL_SHARED_LINK = (function() {
       // visible in the address bar (SEO + share-link copy).
       return { kind: "trip", slug: decodeURIComponent(tripMatch[1]) };
     }
+    // /drops/<slug> — public gear drop detail. Slug stays in the address
+    // bar so social shares + SEO render properly. Resolution effect at
+    // root walks the slug → gear_drops row → setViewingGearDropId.
+    const dropMatch = path.match(/^\/drops\/(.+?)\/?$/);
+    if (dropMatch) {
+      return { kind: "gear-drop", slug: decodeURIComponent(dropMatch[1]) };
+    }
     const planMatch = path.match(/^\/plans\/(.+?)\/?$/);
     if (planMatch) {
       // Don't rewrite — the detail handler does its own pushState once
@@ -24337,8 +32257,37 @@ const __INITIAL_SHARED_LINK = (function() {
     if (path === "/admin" || path === "/admin/") {
       return { kind: "admin" };
     }
+    // /dm/<convId> — cold-start from a push-notification tap (or share
+    // link). The DM overlay opens once auth resolves and the convo is
+    // located. URL gets cleaned to / once the overlay handles it.
+    const dmMatch = path.match(/^\/dm\/([\w-]+)$/);
+    if (dmMatch) {
+      try { window.history.replaceState(null, "", "/"); } catch (e) {}
+      return { kind: "dm", convId: decodeURIComponent(dmMatch[1]) };
+    }
   } catch (e) { /* ignore */ }
   return null;
+})();
+
+// Detect a return from Stripe Connect onboarding. `?stripe_return=1` is
+// hit when the ambassador finishes onboarding; `?stripe_refresh=1` when
+// the AccountLink session expired and Stripe needs a fresh one. Either
+// way, we want the SPA root to refresh the ambassador's Stripe status
+// (in case the webhook hasn't fired yet) and clean the URL.
+const __INITIAL_STRIPE_RETURN = (function() {
+  try {
+    if (typeof window === "undefined" || !window.location) return null;
+    const params = new URLSearchParams(window.location.search || "");
+    const kind = params.has("stripe_return") ? "return" : params.has("stripe_refresh") ? "refresh" : null;
+    if (!kind) return null;
+    try {
+      params.delete("stripe_return");
+      params.delete("stripe_refresh");
+      const qs = params.toString();
+      window.history.replaceState(null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}`);
+    } catch (_) {}
+    return { kind };
+  } catch (e) { return null; }
 })();
 
 // ─── Supabase data shape helpers ──────────────────────────────────────────
@@ -24430,6 +32379,13 @@ function dbRowToLocalBuild(row, profile) {
 }
 
 function clientDataToDbBuild(data, userId) {
+  // hero_img is image-only — videos would 4xx through the Supabase image
+  // transform endpoint and render as a broken hero. Skip videos when
+  // picking the hero candidate so legacy builds with a video at index 0
+  // still produce a usable hero (or null if nothing image-like exists).
+  const firstImage = Array.isArray(data && data.mainPhotos)
+    ? data.mainPhotos.find(p => p && p.url && p.type !== "video")
+    : null;
   return {
     user_id: userId,
     name: (data.buildName || `${data.year || ""} ${data.make || ""} ${data.model || ""}`.trim()) || null,
@@ -24437,7 +32393,7 @@ function clientDataToDbBuild(data, userId) {
     make: data.make || null,
     model: data.model || null,
     trim: data.trim || null,
-    hero_img: (data.mainPhotos && data.mainPhotos[0] && data.mainPhotos[0].url) || null,
+    hero_img: (firstImage && firstImage.url) || null,
     build_data: data,
   };
 }
@@ -24447,7 +32403,7 @@ function clientDataToDbBuild(data, userId) {
 // derived client-side from the type field.
 function dbNotifToBell(row) {
   if (!row) return null;
-  const iconMap = { like: { icon: Heart, iconColor: T.red }, comment: { icon: MessageCircle, iconColor: T.copper }, mention: { icon: AtSign, iconColor: T.copper }, reply: { icon: MessageCircle, iconColor: T.copper }, follow: { icon: UserPlus, iconColor: T.green }, rsvp: { icon: Users, iconColor: T.green }, role: { icon: Shield, iconColor: T.copper }, bug_fix: { icon: CheckCircle, iconColor: T.green }, bug_report: { icon: AlertTriangle, iconColor: T.red } };
+  const iconMap = { like: { icon: Heart, iconColor: T.red }, comment: { icon: MessageCircle, iconColor: T.copper }, mention: { icon: AtSign, iconColor: T.copper }, reply: { icon: MessageCircle, iconColor: T.copper }, follow: { icon: UserPlus, iconColor: T.green }, rsvp: { icon: Users, iconColor: T.green }, role: { icon: Shield, iconColor: T.copper }, bug_fix: { icon: CheckCircle, iconColor: T.green }, bug_report: { icon: AlertTriangle, iconColor: T.red }, content_report: { icon: Flag, iconColor: T.red } };
   const ic = iconMap[row.type] || { icon: Bell, iconColor: T.tertiary };
   return {
     id: row.id,
@@ -24662,11 +32618,14 @@ async function uploadDmAttachmentList(list, uid) {
 
 // Calls the `generate-alt-text` Supabase Edge Function for every image
 // entry in `list` that has a public storage URL and doesn't already
-// carry an `alt`. Mutates the entries in place to attach `alt`. Runs
-// every photo in parallel so a 5-photo upload waits ~1 round trip
+// carry an `alt`. Mutates the entries in place to attach `alt` AND a
+// `_moderation` flag (consumed + stripped by uploadPostPhotoList).
+// Runs every photo in parallel so a 5-photo upload waits ~1 round trip
 // instead of 5. Video entries + entries that didn't upload are skipped.
-// Failures are non-fatal — the entry just keeps no alt, the upload
-// still persists.
+// Alt-text failures are non-fatal — the entry just keeps no alt, the
+// upload still persists. Moderation failures default to {adult:false}
+// (fail-open) so the model misbehaving on JSON format doesn't reject
+// legitimate uploads.
 async function attachAltTextToPhotos(list) {
   if (!Array.isArray(list) || list.length === 0) return list;
   const targets = [];
@@ -24686,9 +32645,14 @@ async function attachAltTextToPhotos(list) {
       const { data, error } = await supabase.functions.invoke("generate-alt-text", { body: { url } });
       if (error) { console.error("[alt-text] invoke error", error); return; }
       const alt = data && typeof data.alt === "string" ? data.alt.trim() : "";
-      if (!alt) return;
+      const moderation = (data && data.moderation && typeof data.moderation === "object")
+        ? { adult: data.moderation.adult === true, reason: typeof data.moderation.reason === "string" ? data.moderation.reason : "" }
+        : null;
       const entry = list[i];
-      list[i] = typeof entry === "string" ? { url: entry, alt } : { ...entry, alt };
+      const base = typeof entry === "string" ? { url: entry } : { ...entry };
+      if (alt) base.alt = alt;
+      if (moderation) base._moderation = moderation;
+      list[i] = base;
     } catch (e) {
       console.error("[alt-text] generation failed", e);
     }
@@ -24743,9 +32707,43 @@ async function uploadPostPhotoList(list, uid) {
   }
   // Generate accessibility + SEO alt text via the Edge Function. Runs
   // every image in parallel; videos and already-tagged entries are
-  // skipped. Mutates `out` in place to upgrade string entries to
-  // {url, alt} objects.
+  // skipped. Also returns a moderation flag per image — adult images
+  // are deleted from storage AND we throw so the caller surfaces an
+  // error toast instead of silently persisting the URL. Fail-open if
+  // the function call itself fails (model misbehaves on JSON format).
   await attachAltTextToPhotos(out);
+  const blocked = [];
+  for (let i = 0; i < out.length; i++) {
+    const e = out[i];
+    if (!e || typeof e !== "object") continue;
+    const mod = e._moderation;
+    if (mod && mod.adult === true) {
+      blocked.push({ url: e.url, reason: mod.reason || "adult content" });
+    }
+    if (mod) delete e._moderation;
+  }
+  if (blocked.length > 0) {
+    // Best-effort delete from storage so the unguessable URL doesn't
+    // linger publicly. Bucket paths look like `{uid}/{ts}-{i}.{ext}`
+    // — extract path by stripping the public URL prefix.
+    const PREFIX = "https://babbgaziiyjfaqjsaxgd.supabase.co/storage/v1/object/public/post-photos/";
+    const paths = blocked.map(b => (typeof b.url === "string" && b.url.startsWith(PREFIX)) ? b.url.slice(PREFIX.length) : null).filter(Boolean);
+    if (paths.length > 0) {
+      try { await supabase.storage.from("post-photos").remove(paths); }
+      catch (e) { console.error("[post-photos] failed to delete blocked uploads", e); }
+    }
+    // Global event so the root can show a toast even when the immediate
+    // call site doesn't catch the error (some flows fire-and-forget).
+    if (typeof window !== "undefined") {
+      try { window.dispatchEvent(new CustomEvent("trailhead:moderation_blocked", { detail: { count: blocked.length, reason: blocked[0] && blocked[0].reason } })); } catch (_) {}
+    }
+    const err = new Error(blocked.length === 1
+      ? "Image was blocked: explicit / adult content is not allowed."
+      : `${blocked.length} images were blocked: explicit / adult content is not allowed.`);
+    err.code = "moderation_blocked";
+    err.blocked = blocked;
+    throw err;
+  }
   return out;
 }
 
@@ -24872,6 +32870,42 @@ export default function Trailhead() {
   const currentRole = (currentProfile && currentProfile.role) || "user";
   const isAdmin = currentRole === "admin";
   const isAmbassador = currentRole === "ambassador" || isAdmin;
+  // Moderator = additive delete privilege admin can grant to any non-admin
+  // user (regular, ambassador, installer). Admins always inherit it.
+  const isModerator = isAdmin || !!(currentProfile && currentProfile.is_moderator);
+  // Beta tester = additive feature-flag access admin can grant to any user.
+  // Currently gates Gear Drops UI pre-launch (see GEAR_DROPS_ENABLED).
+  // Admins always inherit it so the team sees in-flight features without
+  // an explicit grant.
+  const isBetaTester = isAdmin || !!(currentProfile && currentProfile.is_beta_tester);
+
+  // ─── Stripe return handler ────────────────────────────────────────
+  // Fires once after the ambassador returns from Stripe-hosted onboarding
+  // (URL had ?stripe_return=1 or ?stripe_refresh=1 — already parsed +
+  // cleared at module load). Calls stripe-connect-status to sync the
+  // ambassador's `stripe_onboarded` flag in case the webhook hasn't
+  // delivered yet, then logs a console marker. The AmbassadorDashboardScreen
+  // refetches its own ambassador row whenever opened, so the user will
+  // see the green READY state on their next view.
+  const stripeReturnHandledRef = useRef(false);
+  useEffect(() => {
+    if (stripeReturnHandledRef.current) return;
+    if (!__INITIAL_STRIPE_RETURN) return;
+    if (!isAmbassador) return;
+    stripeReturnHandledRef.current = true;
+    (async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke("stripe-connect-status", {});
+        if (error || !data?.ok) {
+          console.warn("[stripe-return] status refresh failed", error || data);
+        } else {
+          console.log("[stripe-return] status refresh", data);
+        }
+      } catch (e) {
+        console.warn("[stripe-return] status refresh threw", e);
+      }
+    })();
+  }, [isAmbassador]);
   // Public-data hydrate for guests (no session). Loads only what RLS lets
   // anon read — posts, builds, public trip reports + plans, camping spots.
   // This is what makes shared links + read-only browsing work for users
@@ -24894,7 +32928,7 @@ export default function Trailhead() {
     try {
       const { data: row, error } = await supabase
         .from("trip_reports")
-        .select("id,user_id,name,slug,description,hero_img,start_lat,start_lng,end_lat,end_lng,route_geom,kind,visibility,status,distance_mi,elev_gain_ft,max_elev_ft,duration_min,region,state_code,terrains,tags,difficulty,planned_start,planned_end,party_size,view_count,created_at,updated_at")
+        .select("id,user_id,name,slug,description,hero_img,start_lat,start_lng,end_lat,end_lng,route_geom,kind,visibility,status,distance_mi,elev_gain_ft,max_elev_ft,duration_min,region,state_code,build_id,terrains,tags,difficulty,planned_start,planned_end,party_size,view_count,created_at,updated_at")
         .eq("slug", slug)
         .maybeSingle();
       if (error || !row) return false;
@@ -24942,12 +32976,43 @@ export default function Trailhead() {
   const loadForumThreadBySlugFast = async (threadSlug) => {
     if (!threadSlug || typeof threadSlug !== "string") return false;
     try {
-      const { data: row, error } = await supabase
+      // Exact match first.
+      let { data: row, error } = await supabase
         .from("forum_threads")
         .select("*")
         .eq("slug", threadSlug)
+        .is("hidden_at", null)
         .maybeSingle();
-      if (error || !row) return false;
+      if (error) row = null;
+      // Fallback: share URLs in email campaigns can outlive the live slug
+      // when the thread got renamed or a slug-collision suffix landed on
+      // the row after the link was captured. Try LIKE matching on the
+      // original base slug — covers `slug-2`, `slug-3`, and minor edits.
+      // PostgREST's `ilike` operator needs `%` wildcards. We prefer the
+      // shortest matching slug to bias toward the closest neighbor.
+      if (!row && threadSlug.length >= 8) {
+        const { data: candidates, error: likeErr } = await supabase
+          .from("forum_threads")
+          .select("*")
+          .ilike("slug", `${threadSlug}%`)
+          .is("hidden_at", null)
+          .order("created_at", { ascending: false })
+          .limit(5);
+        if (!likeErr && Array.isArray(candidates) && candidates.length > 0) {
+          row = candidates.sort((a, b) => (a.slug || "").length - (b.slug || "").length)[0];
+          if (row) {
+            // Rewrite the URL so the address bar reflects the actual live
+            // slug — keeps share + browser-history honest going forward.
+            try {
+              const subSlug = row.subcategory_slug || "";
+              if (typeof window !== "undefined" && window.history && subSlug) {
+                window.history.replaceState(null, "", `/forum/${subSlug}/${row.slug}`);
+              }
+            } catch (_) {}
+          }
+        }
+      }
+      if (!row) return false;
       let prof = null;
       if (row.user_id) {
         try {
@@ -24959,6 +33024,22 @@ export default function Trailhead() {
       if (local) {
         setForumThreads(prev => prev.some(t => t.id === local.id) ? prev : [local, ...prev]);
         if (prof) setForumAuthors(prev => ({ ...prev, [prof.id]: prof }));
+        // Patch pendingForumNav to use the row's authoritative slugs so
+        // the downstream resolution effect can find this row even if the
+        // URL slugs are stale or mismatched. Real-world case: a Klaviyo
+        // share URL was assembled with the wrong sub segment (or the sub
+        // was renamed since), leaving forumSubBySlug[urlSubSlug] empty —
+        // the resolution effect would otherwise wait forever for a sub
+        // that doesn't exist under that name.
+        setPendingForumNav(prev => prev ? { ...prev, threadSlug: row.slug, subSlug: row.subcategory_slug || prev.subSlug } : prev);
+        // Also rewrite the address bar to the canonical /forum/<sub>/<slug>
+        // so subsequent navigation / share-link copy uses the live slugs.
+        try {
+          if (typeof window !== "undefined" && window.history && row.subcategory_slug && row.slug) {
+            const target = `/forum/${row.subcategory_slug}/${row.slug}`;
+            if (window.location.pathname !== target) window.history.replaceState(null, "", target);
+          }
+        } catch (_) {}
       }
       // Also kick the replies fetch so they're ready when the user lands
       // on the thread.
@@ -24972,7 +33053,7 @@ export default function Trailhead() {
     if (!postId || typeof postId !== "string") return false;
     try {
       const { data: row, error } = await supabase
-        .from("posts").select("*").eq("id", postId).maybeSingle();
+        .from("posts").select("*").eq("id", postId).is("hidden_at", null).maybeSingle();
       if (error || !row) return false;
       let prof = null;
       if (row.user_id) {
@@ -25005,6 +33086,7 @@ export default function Trailhead() {
       const { data: postRows, error: postErr } = await supabase
         .from("posts")
         .select("*")
+        .is("hidden_at", null)
         .order("created_at", { ascending: false })
         .limit(100);
       if (postErr) console.warn("[guest-hydrate] posts fetch error", postErr);
@@ -25053,7 +33135,7 @@ export default function Trailhead() {
     try {
       const { data: tripRows } = await supabase
         .from("trip_reports")
-        .select("id,user_id,name,slug,description,hero_img,start_lat,start_lng,end_lat,end_lng,route_geom,kind,visibility,status,distance_mi,elev_gain_ft,max_elev_ft,duration_min,region,state_code,terrains,tags,difficulty,planned_start,planned_end,party_size,view_count,created_at,updated_at")
+        .select("id,user_id,name,slug,description,hero_img,start_lat,start_lng,end_lat,end_lng,route_geom,kind,visibility,status,distance_mi,elev_gain_ft,max_elev_ft,duration_min,region,state_code,build_id,terrains,tags,difficulty,planned_start,planned_end,party_size,view_count,created_at,updated_at")
         .eq("status", "published")
         .order("created_at", { ascending: false })
         .limit(100);
@@ -25112,7 +33194,7 @@ export default function Trailhead() {
     try {
       const [profRes, postsRes] = await Promise.all([
         supabase.from("profiles").select("*").eq("id", uid).maybeSingle(),
-        supabase.from("posts").select("*").order("created_at", { ascending: false }).limit(30),
+        supabase.from("posts").select("*").is("hidden_at", null).order("created_at", { ascending: false }).limit(30),
       ]);
       if (profRes.error) console.error("[hydrate] profiles fetch error", profRes.error);
       profileRow = profRes.data || null;
@@ -25248,7 +33330,7 @@ export default function Trailhead() {
 
     // Trip reports + per-trip like counts.
     supabase.from("trip_reports")
-      .select("id, user_id, slug, name, description, status, kind, visibility, planned_start, planned_end, party_size, checklist, promoted_to_trip_id, start_lat, start_lng, start_label, end_lat, end_lng, route_geom, hero_img, distance_mi, duration_min, elev_gain_ft, max_elev_ft, difficulty, region, state_code, terrains, tags, view_count, like_count, comment_count, published_at, created_at, updated_at")
+      .select("id, user_id, slug, name, description, status, kind, visibility, planned_start, planned_end, party_size, checklist, promoted_to_trip_id, start_lat, start_lng, start_label, end_lat, end_lng, route_geom, hero_img, distance_mi, duration_min, elev_gain_ft, max_elev_ft, difficulty, region, state_code, build_id, terrains, tags, view_count, like_count, comment_count, published_at, created_at, updated_at")
       .order("created_at", { ascending: false }).limit(500)
       .then(({ data: trRows, error: trErr }) => {
         if (trErr) { console.error("[hydrate] trip_reports fetch error", trErr); return; }
@@ -25838,9 +33920,26 @@ export default function Trailhead() {
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "forum_threads" }, (payload) => {
         const row = payload.new;
         if (!row || !row.id) return;
-        const prof = forumAuthors[row.user_id] || (row.user_id === uid ? currentProfile : null);
-        const local = dbRowToForumThread(row, prof);
-        if (local) setForumThreads(prev => prev.map(t => t.id === local.id ? { ...t, ...local } : t));
+        // Read forumAuthors / currentProfile via setForumThreads' updater
+        // arg + an existing-row fallback. The handler closure captured
+        // these at subscription time, which is typically BEFORE profile
+        // hydrate completes — so the captured `currentProfile` is null
+        // and `forumAuthors` is {}, both for the rest of the session.
+        // Without the existing-row fallback, dbRowToForumThread translates
+        // that null prof to `user: "User"` / avatar null, and the
+        // {...t, ...local} merge wipes the correct identity that
+        // updateForumThread just patched optimistically. Preserve what
+        // the existing thread row already carries — that survived the
+        // hydrate path which does its own profiles `.in()` fetch.
+        setForumThreads(prev => prev.map(t => {
+          if (t.id !== row.id) return t;
+          const closureProf = forumAuthors[row.user_id] || (row.user_id === uid ? currentProfile : null);
+          const profIsUseful = !!(closureProf && closureProf.full_name);
+          const fallback = { id: t.userId, full_name: t.user, handle: t.handle, avatar_url: t.avatarUrl };
+          const prof = profIsUseful ? closureProf : fallback;
+          const local = dbRowToForumThread(row, prof);
+          return local ? { ...t, ...local } : t;
+        }));
       })
       .on("postgres_changes", { event: "DELETE", schema: "public", table: "forum_threads" }, (payload) => {
         const row = payload.old;
@@ -26257,14 +34356,20 @@ export default function Trailhead() {
               .then(({ error: unhideErr }) => { if (unhideErr) console.error("[dm] unhide error", unhideErr); });
             return prev;
           }
-          return prev.map(c => c.id === row.conversation_id ? {
-            ...c,
-            messages: c.messagesLoaded ? [...(c.messages || []), msg] : c.messages,
-            unread: isActive ? c.unread : (c.unread || 0) + 1,
+          // Patch the touched convo AND lift it to the top of the inbox
+          // (standard messaging-app behavior). Using `prev.map` here would
+          // patch in place, leaving the row in its old position.
+          const idx = prev.findIndex(c => c.id === row.conversation_id);
+          if (idx === -1) return prev;
+          const patched = {
+            ...prev[idx],
+            messages: prev[idx].messagesLoaded ? [...(prev[idx].messages || []), msg] : prev[idx].messages,
+            unread: isActive ? prev[idx].unread : (prev[idx].unread || 0) + 1,
             lastMessage: previewText,
             lastTime: "Just now",
             updatedAt: row.created_at,
-          } : c);
+          };
+          return [patched, ...prev.slice(0, idx), ...prev.slice(idx + 1)];
         });
         // If the convo is currently open, also persist read marker.
         if (isActive) markDmConvRead(row.conversation_id);
@@ -26337,7 +34442,7 @@ export default function Trailhead() {
   // to in-component state for any FeedScreen instance that isn't passed a
   // controller (e.g. profile-screen activity tabs).
   const [feedFilter, setFeedFilter] = useState("ALL");
-  const FEED_PILL_FILTERS = ["ALL", "BUILDS", "CONVOYS", "TRIP REPORTS", "PHOTOS", "FORUM"];
+  const FEED_PILL_FILTERS = ["ALL", "BUILDS", "CONVOYS", "TRIP REPORTS", ...(GEAR_DROPS_ENABLED && (isAdmin || isBetaTester) ? ["GEAR DROPS"] : []), "PHOTOS", "FORUM"];
 
   // Desktop layout — Twitter-style centered column (the existing 430px app
   // shell) flanked by a left nav sidebar + right info sidebar. Activates
@@ -26423,10 +34528,260 @@ export default function Trailhead() {
   // admin route stays inert for them). Ref-consumes so navigating away
   // doesn't get pulled back in by the same initial link.
   const adminLinkConsumedRef = useRef(false);
-  // pendingAdminTab — set when the bell click for a 'bug_report' notif
-  // routes the admin to /admin → BUGS tab. AdminDashboardScreen reads it
-  // as initialTab and clears via onInitialTabConsumed.
-  const [pendingAdminTab, setPendingAdminTab] = useState(null);
+  // adminSubScreen — which admin section is currently mounted. null →
+  // AdminHubScreen (the card grid landing). Set to a section key
+  // ("reports" | "bugs" | "moderation" | "push" | "overview" | "users"
+  // | "content") to mount AdminDashboardScreen with the matching
+  // initialTab + hideTabBar=true. Bell notification routing
+  // (`bug_report` / `content_report`) flows through here, bypassing
+  // the hub for direct deep-link UX.
+  const [adminSubScreen, setAdminSubScreen] = useState(null);
+  // Gear drop editor target — id of the gear_drops row currently being
+  // edited. When non-null, the GearDropEditor overlay (Phase 1.3) mounts
+  // over GearDropsListScreen. Cleared on close.
+  const [editingGearDropId, setEditingGearDropId] = useState(null);
+  // Public detail target — set when a beta tester (or admin) taps a drop
+  // card from the feed. Opens GearDropDetailScreen as a full-screen overlay.
+  const [viewingGearDropId, setViewingGearDropId] = useState(null);
+  // Pending slug from /drops/<slug> cold-boot or popstate. Resolved to a
+  // dropId by the effect below; cleared when viewingGearDropId is set.
+  const [pendingGearDropSlug, setPendingGearDropSlug] = useState(
+    (initialSharedLink && initialSharedLink.kind === "gear-drop") ? initialSharedLink.slug : null
+  );
+  // The current user's gear-drop runs, keyed by gear_drop_id. Populated
+  // from trip_reports where kind='gear_drop_run'. Lets the detail screen
+  // show "you're in" + the run screen route correctly.
+  const [myGearDropRuns, setMyGearDropRuns] = useState({});
+  // Current run-screen target. Set when a joined user taps VIEW YOUR RUN
+  // on a live gear drop. Cleared by GearDropRunScreen.onClose.
+  const [runScreenRunId, setRunScreenRunId] = useState(null);
+  // Master gear drops list — declared up here (not next to its helpers
+  // further down) so the slug-resolver + pushState useEffects can read
+  // from it without a TDZ. The helpers (loadGearDrops, createGearDrop,
+  // updateGearDrop, etc.) live further down and only re-use this state.
+  const [gearDrops, setGearDrops] = useState([]);
+  // Active content-report bottom sheet target. Shape:
+  //   { targetType, targetId, targetOwnerId, targetOwnerHandle,
+  //     targetSnapshot, targetUrl }
+  const [reportTarget, setReportTarget] = useState(null);
+  // Follow-list overlay target — set when a user taps the FOLLOWERS or
+  // FOLLOWING count on any profile. Shape: { userId, kind }.
+  const [followListTarget, setFollowListTarget] = useState(null);
+  const openFollowList = (userId, kind) => {
+    if (!userId || (kind !== "followers" && kind !== "following")) return;
+    setFollowListTarget({ userId, kind });
+  };
+  // Admin troubleshooting — when set, the AmbassadorDashboardScreen renders
+  // the target's data instead of the admin's own. Stripe onboarding action
+  // is gated off so the admin can't accidentally take over the ambassador's
+  // Stripe Connect flow. Shape: { profileId, handle, name }.
+  const [ambassadorViewAs, setAmbassadorViewAs] = useState(null);
+  const adminViewAsAmbassador = async (profileId) => {
+    if (!isAdmin || !profileId) return;
+    // Look up handle + name so the banner can render with identity context.
+    let handle = null, name = null;
+    try {
+      const { data } = await supabase.from("profiles").select("handle, full_name").eq("id", profileId).maybeSingle();
+      handle = (data && data.handle) || null;
+      name = (data && data.full_name) || null;
+    } catch (e) { /* non-fatal — banner falls back to just "ADMIN VIEW" */ }
+    setAmbassadorViewAs({ profileId, handle, name });
+    setProfileStack([]);
+    setScreen("ambassador");
+  };
+  // Admin order-attribution actions. All four call SECURITY DEFINER RPCs
+  // that gate on is_admin server-side, recompute the affected journey(s),
+  // and log to admin_order_corrections. Return true on success / false on
+  // error so the modals can decide whether to close.
+  const adminOrderRemove = async (orderId, reason) => {
+    if (!isAdmin) return false;
+    try {
+      const { error } = await supabase.rpc("admin_remove_order", { p_order_id: orderId, p_reason: reason });
+      if (error) { console.error("[admin_remove_order]", error); showErrorToast(`Remove failed: ${error.message || "unknown"}`); return false; }
+      return true;
+    } catch (e) { console.error("[admin_remove_order] threw", e); return false; }
+  };
+  const adminOrderReassign = async (orderId, newAmbassadorId, reason) => {
+    if (!isAdmin) return false;
+    try {
+      const { error } = await supabase.rpc("admin_reassign_order", { p_order_id: orderId, p_new_ambassador_id: newAmbassadorId, p_reason: reason });
+      if (error) { console.error("[admin_reassign_order]", error); showErrorToast(`Reassign failed: ${error.message || "unknown"}`); return false; }
+      return true;
+    } catch (e) { console.error("[admin_reassign_order] threw", e); return false; }
+  };
+  const adminOrderEditEligible = async (orderId, newEligible, reason) => {
+    if (!isAdmin) return false;
+    try {
+      const { error } = await supabase.rpc("admin_edit_order_eligible", { p_order_id: orderId, p_new_eligible: newEligible, p_reason: reason });
+      if (error) { console.error("[admin_edit_order_eligible]", error); showErrorToast(`Edit failed: ${error.message || "unknown"}`); return false; }
+      return true;
+    } catch (e) { console.error("[admin_edit_order_eligible] threw", e); return false; }
+  };
+  // LINK TO JOURNEY — attach an already-attributed order to a specific
+  // existing journey (typically the customer's deposit_only journey) while
+  // optionally overriding the commission_eligible_subtotal. Solves the
+  // partial-refund-confirmation case: a confirmation order is marked
+  // partially_refunded so handleOrderPaid either missed it (backfill skips
+  // partially_refunded) or attached it to the wrong/no journey. After
+  // linking, the RPC recomputes the journey + promotes deposit_only →
+  // confirmed if cumulative eligible passes the confirmation threshold.
+  const adminLinkOrderToJourney = async (orderId, journeyId, newEligible, reason) => {
+    if (!isAdmin) return false;
+    try {
+      const { error } = await supabase.rpc("admin_link_order_to_journey", {
+        p_order_id: orderId,
+        p_journey_id: journeyId,
+        p_new_eligible: newEligible,
+        p_reason: reason,
+      });
+      if (error) { console.error("[admin_link_order_to_journey]", error); showErrorToast(`Link failed: ${error.message || "unknown"}`); return false; }
+      return true;
+    } catch (e) { console.error("[admin_link_order_to_journey] threw", e); return false; }
+  };
+  const adminAddManualOrder = async (payload) => {
+    if (!isAdmin) return false;
+    try {
+      const { error } = await supabase.rpc("admin_add_manual_order", {
+        p_ambassador_id:        payload.ambassadorId,
+        p_shopify_order_id:     payload.shopifyOrderId || null,
+        p_shopify_order_number: payload.shopifyOrderNumber || null,
+        p_subtotal:             payload.subtotal,
+        p_eligible:             payload.eligible,
+        p_classification:       payload.classification,
+        p_order_date:           payload.orderDate || null,
+        p_customer_email:       payload.customerEmail || null,
+        p_customer_name:        payload.customerName || null,
+        p_journey_id:           null,
+        p_reason:               payload.reason,
+      });
+      if (error) { console.error("[admin_add_manual_order]", error); showErrorToast(`Add failed: ${error.message || "unknown"}`); return false; }
+      return true;
+    } catch (e) { console.error("[admin_add_manual_order] threw", e); return false; }
+  };
+  // Full ambassador list for the REASSIGN picker. Hydrated on first admin
+  // open via a lightweight fetch; refreshed when needed by the dashboard.
+  const [adminAmbassadorList, setAdminAmbassadorList] = useState([]);
+  useEffect(() => {
+    if (!isAdmin) { setAdminAmbassadorList([]); return; }
+    (async () => {
+      try {
+        const { data: ambs } = await supabase.from("ambassadors").select("id, profile_id, base_code, tier, status").eq("status", "active");
+        if (!Array.isArray(ambs)) return;
+        const profileIds = ambs.map(a => a.profile_id).filter(Boolean);
+        let profs = [];
+        if (profileIds.length > 0) {
+          const { data } = await supabase.from("profiles").select("id, handle, full_name").in("id", profileIds);
+          profs = data || [];
+        }
+        const profMap = {};
+        profs.forEach(p => { profMap[p.id] = p; });
+        setAdminAmbassadorList(ambs.map(a => ({
+          ...a,
+          handle: profMap[a.profile_id]?.handle || null,
+          full_name: profMap[a.profile_id]?.full_name || null,
+        })));
+      } catch (e) { console.warn("[admin] ambassador list fetch failed", e); }
+    })();
+  }, [isAdmin]);
+  // Moderator hide-for-review target — set when a moderator clicks Delete
+  // on someone else's content. Modal collects a reason + calls the RPC.
+  const [moderatorHideTarget, setModeratorHideTarget] = useState(null);
+  const openModeratorHide = useCallback((target) => {
+    if (!target || !target.targetType || !target.targetId) return;
+    setModeratorHideTarget(target);
+  }, []);
+  const submitModeratorHide = useCallback(async (payload) => {
+    try {
+      const { error } = await supabase.rpc("moderator_hide_content", {
+        p_action: payload.action || `hide_${payload.targetType}`,
+        p_target_type: payload.targetType,
+        p_target_id: payload.targetId,
+        p_target_owner_id: payload.targetOwnerId || null,
+        p_target_snapshot: payload.targetSnapshot || null,
+        p_target_url: payload.targetUrl || null,
+        p_reason: payload.reason,
+      });
+      if (error) { showErrorToast(error.message || "Couldn't hide content."); return false; }
+      // Optimistically remove from the relevant local state so the
+      // moderator sees it disappear right away (everyone else's view
+      // updates on next fetch / realtime).
+      if (payload.targetType === "post") {
+        setFeedItems(prev => prev.filter(p => p.id !== payload.targetId));
+      } else if (payload.targetType === "forum_thread") {
+        setForumThreads(prev => prev.filter(t => t.id !== payload.targetId));
+      } else if (payload.targetType === "forum_reply") {
+        setForumReplies(prev => {
+          const next = {};
+          Object.entries(prev || {}).forEach(([tid, list]) => {
+            next[tid] = (list || []).filter(r => r.id !== payload.targetId);
+          });
+          return next;
+        });
+      }
+      return true;
+    } catch (e) {
+      console.error("[mod-hide] failed", e);
+      showErrorToast("Network error — couldn't hide content.");
+      return false;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [reportToast, setReportToast] = useState(false);
+  // Lightweight badge for the admin hub — count of pending reports +
+  // bugs. Refreshed lazily so the hub stays light.
+  const [pendingReportCount, setPendingReportCount] = useState(0);
+  const [openBugCount, setOpenBugCount] = useState(0);
+  const refreshAdminBadges = useCallback(async () => {
+    if (!isAdmin) return;
+    try {
+      const [rep, bug] = await Promise.all([
+        supabase.from("content_reports").select("id", { count: "exact", head: true }).eq("status", "pending"),
+        supabase.from("bug_reports").select("id", { count: "exact", head: true }).eq("status", "open"),
+      ]);
+      setPendingReportCount(typeof rep.count === "number" ? rep.count : 0);
+      setOpenBugCount(typeof bug.count === "number" ? bug.count : 0);
+    } catch (e) { /* no-op */ }
+  }, [isAdmin]);
+  useEffect(() => { refreshAdminBadges(); }, [refreshAdminBadges]);
+
+  // openContentReport — staged target → opens the bottom-sheet form.
+  // Callers pass a shape with at least { targetType, targetId }; the form
+  // surfaces snapshot/owner/url fields if provided.
+  const openContentReport = useCallback((target) => {
+    if (!target || !target.targetType || !target.targetId) return;
+    setReportTarget(target);
+  }, []);
+
+  // Insert a content_reports row. Returns true on success. RLS requires
+  // reporter_id = auth.uid(). The DB trigger fans the row out to every
+  // admin via the notifications table (bell + push). Caller is expected
+  // to close the form on success.
+  const submitContentReport = useCallback(async (payload) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) { showErrorToast("Sign in to submit a report."); return false; }
+    if (!payload || !payload.targetType || !payload.targetId || !payload.reasonCode) return false;
+    const row = {
+      reporter_id: uid,
+      reporter_handle: (currentProfile && currentProfile.handle) || null,
+      reporter_name: (currentProfile && currentProfile.full_name) || null,
+      target_type: payload.targetType,
+      target_id: payload.targetId,
+      target_owner_id: payload.targetOwnerId || null,
+      target_owner_handle: payload.targetOwnerHandle || null,
+      target_snapshot: payload.targetSnapshot ? String(payload.targetSnapshot).slice(0, 400) : null,
+      target_url: payload.targetUrl || null,
+      reason_code: payload.reasonCode,
+      reason_details: payload.reasonDetails ? String(payload.reasonDetails).slice(0, 600) : null,
+    };
+    const { error } = await supabase.from("content_reports").insert(row);
+    if (error) {
+      console.error("[content_report] insert failed", error);
+      showErrorToast("Couldn't submit report — try again.");
+      return false;
+    }
+    setReportToast(true);
+    return true;
+  }, [supabaseSession, currentProfile]);
   useEffect(() => {
     if (adminLinkConsumedRef.current) return;
     if (!initialSharedLink || initialSharedLink.kind !== "admin") return;
@@ -26545,6 +34900,18 @@ export default function Trailhead() {
   // Save-prompt modal state — when set, the planning banner Save tap surfaces
   // a small {name, description} form before we hit createTripDraft.
   const [planSavePromptOpen, setPlanSavePromptOpen] = useState(false);
+  // ─── Gear drop pin builder (parallel to planBuilder, but commits to
+  // gear_drops.route_data instead of trip_reports). When active, ExploreMap
+  // swaps its top banner + tap-to-add handler over to this picker. Entered
+  // from the GearDropEditor's PLAN ROUTE button; SAVE writes back and
+  // returns to the editor.
+  const [gearDropPinBuilderActive, setGearDropPinBuilderActive] = useState(false);
+  const [gearDropPinBuilderDropId, setGearDropPinBuilderDropId] = useState(null);
+  const [gearDropPinBuilderPins, setGearDropPinBuilderPins] = useState([]); // [{id, lat, lng, label, radius_m, showSnapLineFromPrev, ...}]
+  const [gearDropPinBuilderSaving, setGearDropPinBuilderSaving] = useState(false);
+  // mode = 'pins' → ordered route waypoints written to route_data.pins
+  // mode = 'afterparty' → single point written to gear_drops.afterparty_lat/lng
+  const [gearDropPinBuilderMode, setGearDropPinBuilderMode] = useState("pins");
   // Share-compose modal target. When set, the user is composing a share
   // (caption + preview card) before it actually posts. The modal takes
   // a generic shape (preview chrome + onSubmit). The convenience wrapper
@@ -26567,6 +34934,130 @@ export default function Trailhead() {
   // the caption as the prefill message + the sharedPost attached.
   const [recipientPickerSession, setRecipientPickerSession] = useState(null);
   const newPlanPointId = () => "pp_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+  const newGearDropPinId = () => "gdp_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+
+  // Gear drop pin builder helpers — parallel to planBuilder. Pins are
+  // ordered tap-order (first = start, last = endpoint). Per-pin metadata
+  // (label, radius, hint, etc.) is still edited in the form view; this
+  // builder only owns coordinate placement and ordering.
+  const enterGearDropPinBuilder = (dropId, existingPins, opts = {}) => {
+    if (!dropId) return;
+    const mode = opts.mode === "afterparty" ? "afterparty" : "pins";
+    setGearDropPinBuilderMode(mode);
+    setGearDropPinBuilderDropId(dropId);
+    if (mode === "afterparty") {
+      const seed = opts.afterpartyPos;
+      setGearDropPinBuilderPins(
+        seed && seed.lat != null
+          ? [{ id: newGearDropPinId(), lat: seed.lat, lng: seed.lng, label: "Afterparty" }]
+          : []
+      );
+    } else {
+      setGearDropPinBuilderPins((existingPins || []).map(p => ({ id: newGearDropPinId(), ...p })));
+    }
+    setGearDropPinBuilderActive(true);
+    setScreen("routes");
+  };
+
+  const exitGearDropPinBuilder = ({ returnToEditor = true } = {}) => {
+    setGearDropPinBuilderActive(false);
+    setGearDropPinBuilderDropId(null);
+    setGearDropPinBuilderPins([]);
+    setGearDropPinBuilderMode("pins");
+    if (returnToEditor) setScreen("admin");
+  };
+
+  const addGearDropPin = (pos) => {
+    if (!pos || pos.lat == null || pos.lng == null) return null;
+    const id = newGearDropPinId();
+    // Afterparty mode is a single-point picker — every tap REPLACES the pin
+    // instead of appending. Lets admin fine-tune by retapping.
+    if (gearDropPinBuilderMode === "afterparty") {
+      setGearDropPinBuilderPins([{ id, lat: pos.lat, lng: pos.lng, label: "Afterparty" }]);
+      return id;
+    }
+    setGearDropPinBuilderPins(prev => {
+      const idx = prev.length;
+      const next = {
+        id,
+        lat: pos.lat,
+        lng: pos.lng,
+        label: idx === 0 ? "Start" : `Waypoint ${idx}`,
+        // Start gets a more generous 200m default (it's the meetup); the
+        // race waypoints stay tighter at 100m so they require precision.
+        radius_m: idx === 0 ? 200 : 100,
+        showSnapLineFromPrev: true,
+      };
+      return [...prev, next];
+    });
+    return id;
+  };
+
+  const removeGearDropPin = (id) => {
+    setGearDropPinBuilderPins(prev => prev.filter(p => p.id !== id));
+  };
+
+  const moveGearDropPin = (id, direction) => {
+    setGearDropPinBuilderPins(prev => {
+      const idx = prev.findIndex(p => p.id === id);
+      if (idx < 0) return prev;
+      const target = direction === "up" ? idx - 1 : idx + 1;
+      if (target < 0 || target >= prev.length) return prev;
+      const next = [...prev];
+      [next[idx], next[target]] = [next[target], next[idx]];
+      return next;
+    });
+  };
+
+  // Commit pins to gear_drops.route_data and return to the editor. Strip
+  // the local-only `id` field; on next builder entry we regenerate ids
+  // from the persisted pins.
+  const commitGearDropPinBuilder = async () => {
+    const dropId = gearDropPinBuilderDropId;
+    if (!dropId) return { error: "No drop" };
+    setGearDropPinBuilderSaving(true);
+    try {
+      if (gearDropPinBuilderMode === "afterparty") {
+        const pin = gearDropPinBuilderPins[0];
+        let updates;
+        if (pin) {
+          updates = { afterparty_lat: pin.lat, afterparty_lng: pin.lng };
+          // Reverse-geocode and surface the address back into the form so
+          // it's obvious the pin saved. Only auto-fill when the address
+          // field is currently empty so we never overwrite a host's edit.
+          const existing = gearDrops.find(g => g.id === dropId);
+          const addrEmpty = !existing || !existing.afterparty_address || !existing.afterparty_address.trim();
+          if (addrEmpty) {
+            try {
+              const placeName = await mapboxReverseGeocode(pin.lng, pin.lat);
+              if (placeName) updates.afterparty_address = placeName;
+            } catch (e) { /* non-fatal */ }
+          }
+        } else {
+          updates = { afterparty_lat: null, afterparty_lng: null };
+        }
+        const res = await updateGearDrop(dropId, updates);
+        if (res && res.ok) { exitGearDropPinBuilder({ returnToEditor: true }); return { ok: true }; }
+        if (res && res.error) alert("Save failed: " + res.error);
+        return res || { error: "unknown" };
+      }
+      const cleanPins = gearDropPinBuilderPins.map(({ id, ...rest }) => rest);
+      const existing = gearDrops.find(g => g.id === dropId);
+      const points = (existing && existing.route_data && existing.route_data.points) || [];
+      const updates = {
+        route_data: { pins: cleanPins, points },
+        start_lat: cleanPins[0] && cleanPins[0].lat != null ? cleanPins[0].lat : null,
+        start_lng: cleanPins[0] && cleanPins[0].lng != null ? cleanPins[0].lng : null,
+      };
+      const res = await updateGearDrop(dropId, updates);
+      if (res && res.ok) {
+        exitGearDropPinBuilder({ returnToEditor: true });
+        return { ok: true };
+      }
+      if (res && res.error) alert("Save failed: " + res.error);
+      return res || { error: "unknown" };
+    } finally { setGearDropPinBuilderSaving(false); }
+  };
   // enter(seed, opts?): seed an empty builder with one point. opts.position
   // controls anchor intent — 'end' tags this point as the destination so
   // future inserts go before it.
@@ -27059,6 +35550,30 @@ export default function Trailhead() {
     setAppErrorToast(msg || "Something went wrong.");
     setTimeout(() => setAppErrorToast(""), 5000);
   };
+  // Global toast for photo upload rejections (AI moderation, size, duration).
+  // Helpers fire CustomEvents so flows that don't explicitly catch still
+  // surface the rejection to the user. If `detail.reason` is provided, use
+  // it verbatim; otherwise fall back to the moderation-specific default.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onUploadRejected = (ev) => {
+      const detail = (ev && ev.detail) || {};
+      if (typeof detail.reason === "string" && detail.reason.length > 0) {
+        showErrorToast(detail.reason);
+        return;
+      }
+      const n = detail.count || 1;
+      showErrorToast(n === 1
+        ? "Photo blocked: explicit / adult content is not allowed."
+        : `${n} photos blocked: explicit / adult content is not allowed.`);
+    };
+    window.addEventListener("trailhead:moderation_blocked", onUploadRejected);
+    window.addEventListener("trailhead:upload_rejected", onUploadRejected);
+    return () => {
+      window.removeEventListener("trailhead:moderation_blocked", onUploadRejected);
+      window.removeEventListener("trailhead:upload_rejected", onUploadRejected);
+    };
+  }, []);
   const [feedItems, setFeedItems] = useState([]);
   // Ref mirror so mutating helpers (updatePost, onRsvpConvoy, etc.) can read
   // the latest feed state without closing over a stale snapshot.
@@ -27076,6 +35591,7 @@ export default function Trailhead() {
     try {
       const { data: olderRows, error: olderErr } = await supabase
         .from("posts").select("*")
+        .is("hidden_at", null)
         .lt("created_at", feedCursor)
         .order("created_at", { ascending: false })
         .limit(30);
@@ -27275,7 +35791,27 @@ export default function Trailhead() {
       fetchTripReportsInBbox(bbox),
       fetchTripPlansInBbox(bbox),
     ]);
-    setViewportCampingSpots(spots);
+    // The bbox query intentionally omits the `photos` column (kept light
+    // because the dataset is large and most spots aren't being inspected).
+    // Plain replacement would wipe any photos+elevation that were already
+    // lazy-loaded into a popup, so we merge by id and keep the heavy
+    // fields from the prior slice when the fresh row doesn't carry them.
+    setViewportCampingSpots(prev => {
+      const prevById = {};
+      for (const s of prev || []) { if (s && s.id) prevById[s.id] = s; }
+      return spots.map(s => {
+        const old = prevById[s.id];
+        if (!old) return s;
+        const merged = { ...s };
+        if ((s.photos == null || !Array.isArray(s.photos) || s.photos.length === 0) && Array.isArray(old.photos) && old.photos.length > 0) {
+          merged.photos = old.photos;
+        }
+        if (s.elevation_ft == null && typeof old.elevation_ft === "number") {
+          merged.elevation_ft = old.elevation_ft;
+        }
+        return merged;
+      });
+    });
     setViewportTripReports(trips);
     setViewportTripPlans(plans);
   }, []);
@@ -27326,19 +35862,6 @@ export default function Trailhead() {
     const planRows = (tripReports || []).filter(t => t.kind === "plan");
     return mergeTripSlices(planRows, viewportTripPlans);
   }, [tripReports, viewportTripPlans]);
-  // Forum threads grouped by subcategory display name — ForumScreen +
-  // GlobalSearch read from this map (vs the flat forumThreads array which
-  // is the source of truth from DB).
-  const forumThreadsBySub = useMemo(() => {
-    const out = {};
-    (forumThreads || []).forEach(t => {
-      const k = t.subName || "";
-      if (!k) return;
-      if (!out[k]) out[k] = [];
-      out[k].push(t);
-    });
-    return out;
-  }, [forumThreads]);
   // Threaded view counts derived from the live thread rows — fed into the
   // feed FORUM card + GlobalSearch result rows so their "X views" text
   // matches the source of truth without prop drilling the whole array.
@@ -27402,6 +35925,25 @@ export default function Trailhead() {
     Object.keys(FORUM_SUB_BY_SLUG).forEach(k => { delete FORUM_SUB_BY_SLUG[k]; });
     Object.keys(forumSubBySlug).forEach(k => { FORUM_SUB_BY_SLUG[k] = forumSubBySlug[k]; });
   }, [forumCatBySlug, forumSubBySlug]);
+  // Forum threads grouped by subcategory display name — ForumScreen +
+  // GlobalSearch read from this map (vs the flat forumThreads array which
+  // is the source of truth from DB). Must be declared AFTER forumSubBySlug
+  // (TDZ); the re-resolve from live state is the only thing that makes
+  // cold-boot deep links work — dbRowToForumThread snapshots the module
+  // map at row-translate time, which can be empty on first hydrate, so
+  // t.subName ends up "" on every row. Re-deriving via subcategory_slug →
+  // forumSubBySlug fills that in the moment the slug map populates.
+  const forumThreadsBySub = useMemo(() => {
+    const out = {};
+    (forumThreads || []).forEach(t => {
+      const subInfo = t.subcategorySlug ? forumSubBySlug[t.subcategorySlug] : null;
+      const k = (subInfo && subInfo.name) || t.subName || "";
+      if (!k) return;
+      if (!out[k]) out[k] = [];
+      out[k].push(t);
+    });
+    return out;
+  }, [forumThreads, forumSubBySlug]);
   // Trip detail navigation effects — placed AFTER allTripReports so the
   // dep arrays don't TDZ-crash on the first render.
   //
@@ -27417,19 +35959,128 @@ export default function Trailhead() {
     setDetailTripId(trip.id);
     setPendingTripNav(null);
   }, [pendingTripNav, allTripReports, allTripPlans]);
+
+  // /drops/<slug> resolver. First check the cached list (admin/beta have
+  // it populated already); if missing, fetch by slug directly. RLS gates
+  // out drafts for non-admins so an invalid/draft slug just no-ops.
+  useEffect(() => {
+    if (!pendingGearDropSlug) return;
+    const cached = (gearDrops || []).find(g => g.slug === pendingGearDropSlug);
+    if (cached) {
+      setViewingGearDropId(cached.id);
+      setPendingGearDropSlug(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from("gear_drops")
+          .select("id, slug")
+          .eq("slug", pendingGearDropSlug)
+          .maybeSingle();
+        if (cancelled || !data || !data.id) return;
+        setViewingGearDropId(data.id);
+        setPendingGearDropSlug(null);
+      } catch (e) { /* non-fatal */ }
+    })();
+    return () => { cancelled = true; };
+  }, [pendingGearDropSlug, gearDrops]);
+
+  // PushState — keep the address bar in sync with the open detail. Lets
+  // share-link copy + social previews + browser refresh all work. Tries
+  // the cached list first; falls back to a fetch when the user opened a
+  // drop they don't have cached.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (viewingGearDropId) {
+      const cached = (gearDrops || []).find(g => g.id === viewingGearDropId);
+      const setUrl = (slug) => {
+        const target = `/drops/${slug}`;
+        if (window.location.pathname !== target) {
+          try { window.history.pushState({}, "", target); } catch (e) {}
+        }
+      };
+      if (cached && cached.slug) { setUrl(cached.slug); return; }
+      // No cached slug — fetch it.
+      let cancelled = false;
+      (async () => {
+        try {
+          const { data } = await supabase.from("gear_drops").select("slug").eq("id", viewingGearDropId).maybeSingle();
+          if (!cancelled && data && data.slug) setUrl(data.slug);
+        } catch (e) { /* non-fatal */ }
+      })();
+      return () => { cancelled = true; };
+    } else if (window.location.pathname.startsWith("/drops/")) {
+      try { window.history.pushState({}, "", "/"); } catch (e) {}
+    }
+  }, [viewingGearDropId, gearDrops]);
+
+  // Popstate — back/forward navigation. Either re-resolves to a different
+  // /drops/<slug> or closes the open detail when the URL no longer matches.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onPop = () => {
+      const path = window.location.pathname;
+      const m = path.match(/^\/drops\/(.+?)\/?$/);
+      if (m) {
+        setPendingGearDropSlug(decodeURIComponent(m[1]));
+      } else {
+        setViewingGearDropId(null);
+      }
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
   // Forum slug resolution — when forumThreads + the pending slug match,
   // hand off to ForumScreen's existing pendingThread flow (it already knows
-  // how to navigate categories → subcategories → thread). We translate the
-  // sub-slug → display name via the FORUM_SUB_BY_SLUG lookup map.
+  // how to navigate categories → subcategories → thread). Read from the
+  // live `forumSubBySlug` (NOT the module FORUM_SUB_BY_SLUG mirror, which
+  // is populated by a useEffect that fires later — on cold boot it can be
+  // empty when this effect first runs, and clearing pendingForumNav at
+  // that point dumps the user on the categories home for the rest of the
+  // session). Only clear pendingForumNav when we've actually resolved.
   useEffect(() => {
     if (!pendingForumNav) return;
-    const subInfo = FORUM_SUB_BY_SLUG[pendingForumNav.subSlug];
-    if (!subInfo) { setPendingForumNav(null); return; } // stale URL
+    const subInfo = forumSubBySlug[pendingForumNav.subSlug];
+    if (!subInfo) return; // subs haven't hydrated yet — re-run when they do
     const thread = (forumThreads || []).find(t => t.slug === pendingForumNav.threadSlug);
     if (!thread) return; // wait for hydrate / fast-load to land
     setPendingThread({ threadId: thread.id, catName: subInfo.catName, subName: subInfo.name });
     setPendingForumNav(null);
-  }, [pendingForumNav, forumThreads]);
+  }, [pendingForumNav, forumThreads, forumSubBySlug]);
+
+  // Forum deep-link FALLBACK — runs ~3.5 s after a pending forum nav lands
+  // and ALWAYS fires (no cleanup-on-deps). If the thread is still missing
+  // by then but the subcategory exists, drop the user on the subcategory
+  // landing instead of forum home. Common cause: stale Klaviyo email URLs
+  // whose slug got renamed/suffixed server-side after the campaign was
+  // sent. We use refs to read latest state at fire time so the timer
+  // doesn't keep resetting whenever forumThreads / forumSubBySlug update
+  // (which can happen frequently via realtime → never-firing timer).
+  const pendingForumNavRef = useRef(pendingForumNav);
+  const forumThreadsRef = useRef(forumThreads);
+  const forumSubBySlugRef = useRef(forumSubBySlug);
+  useEffect(() => { pendingForumNavRef.current = pendingForumNav; }, [pendingForumNav]);
+  useEffect(() => { forumThreadsRef.current = forumThreads; }, [forumThreads]);
+  useEffect(() => { forumSubBySlugRef.current = forumSubBySlug; }, [forumSubBySlug]);
+  useEffect(() => {
+    if (!pendingForumNav) return;
+    const targetSubSlug = pendingForumNav.subSlug;
+    const targetThreadSlug = pendingForumNav.threadSlug;
+    const timer = setTimeout(() => {
+      // Bail if a fresh deep link superseded this one in the meantime.
+      const live = pendingForumNavRef.current;
+      if (!live || live.subSlug !== targetSubSlug || live.threadSlug !== targetThreadSlug) return;
+      const subInfo = forumSubBySlugRef.current[targetSubSlug];
+      const thread = (forumThreadsRef.current || []).find(t => t.slug === targetThreadSlug);
+      if (thread) return;  // resolution effect handled it
+      if (!subInfo) return;  // subcategory itself doesn't exist — nothing better to do
+      setPendingForumSubNav(targetSubSlug);
+      setPendingForumNav(null);
+    }, 3500);
+    return () => clearTimeout(timer);
+  }, [pendingForumNav]);
   // 2) Keep the URL bar in sync with the open trip — pushState `/trips/<slug>`
   //    when opening, pop back to `/` when closing. Skips the very first
   //    mount if the URL is already correct so we don't insert a duplicate
@@ -27512,11 +36163,22 @@ export default function Trailhead() {
   useEffect(() => {
     if (!pendingSpotNav) return;
     const existing = (viewportCampingSpots || []).concat(userCampingSpots || []).find(s => s.id === pendingSpotNav);
-    if (existing) return; // already loaded; ExploreMap will resolve
+    // Even when the spot is already in a slice, the bbox-fetched copy
+    // omits photos (intentional perf trick). Pull the full row so the
+    // deep-link card has its photos available immediately instead of
+    // waiting on the lazy-photo effect (and risk being clobbered by
+    // a viewport-pan refresh).
+    if (existing && Array.isArray(existing.photos)) return;
     let cancelled = false;
     supabase.from("camping_spots").select("*").eq("id", pendingSpotNav).maybeSingle().then(({ data, error }) => {
       if (cancelled || error || !data) return;
-      setViewportCampingSpots(prev => prev.some(s => s.id === data.id) ? prev : [data, ...prev]);
+      setViewportCampingSpots(prev => {
+        const idx = prev.findIndex(s => s.id === data.id);
+        if (idx === -1) return [data, ...prev];
+        const next = [...prev];
+        next[idx] = { ...next[idx], ...data };
+        return next;
+      });
     });
     return () => { cancelled = true; };
   }, [pendingSpotNav]);
@@ -27535,7 +36197,7 @@ export default function Trailhead() {
     if (existing) return;
     let cancelled = false;
     supabase.from("trip_reports")
-      .select("id, user_id, slug, name, description, status, kind, visibility, planned_start, planned_end, party_size, start_lat, start_lng, start_label, end_lat, end_lng, route_geom, hero_img, distance_mi, duration_min, elev_gain_ft, max_elev_ft, difficulty, region, state_code, terrains, tags, view_count, like_count, comment_count, published_at, created_at, updated_at")
+      .select("id, user_id, slug, name, description, status, kind, visibility, planned_start, planned_end, party_size, start_lat, start_lng, start_label, end_lat, end_lng, route_geom, hero_img, distance_mi, duration_min, elev_gain_ft, max_elev_ft, difficulty, region, state_code, build_id, terrains, tags, view_count, like_count, comment_count, published_at, created_at, updated_at")
       .eq("slug", pendingPlanNav)
       .eq("kind", "plan")
       .maybeSingle()
@@ -27670,6 +36332,21 @@ export default function Trailhead() {
   // public URL to public.profiles.avatar_url, and updates local state.
   // For optimistic UI we setProfilePic to a data URL immediately, then
   // replace with the public URL once the upload lands.
+  // Cropper interception — when a user picks a NEW file via the profile UI,
+  // we route through ProfilePicCropperModal so they can frame the result
+  // before upload. Direct Blob/string callers (e.g. internal flows that
+  // already produced a finalized image) skip the cropper. SignupScreen +
+  // OnboardingScreen + ProfileScreen all feed File objects through here.
+  const [cropperFile, setCropperFile] = useState(null);
+  const requestProfilePicCrop = (fileOrBlobOrString) => {
+    // String / blob-without-name (already-cropped) → straight through.
+    if (!fileOrBlobOrString || typeof fileOrBlobOrString === "string") { handleSetProfilePic(fileOrBlobOrString); return; }
+    // Files (user just picked from the OS file picker) → open the cropper.
+    if (fileOrBlobOrString instanceof File) { setCropperFile(fileOrBlobOrString); return; }
+    // Other blobs → pass through.
+    handleSetProfilePic(fileOrBlobOrString);
+  };
+
   const handleSetProfilePic = async (input) => {
     if (!input) { setProfilePic(null); return; }
     // Legacy: someone passed a string (data URL or regular URL). Just set it.
@@ -27760,17 +36437,24 @@ export default function Trailhead() {
   // Admin role management. Server-side RLS still enforces: only admins
   // can update someone else's role (profiles_role_guard trigger). These
   // helpers are no-op for non-admins (early return).
-  const adminUpdateUserRole = async (targetUid, newRole) => {
+  const adminUpdateUserRole = async (targetUid, newRole, opts = {}) => {
     if (!isAdmin || !targetUid) return { error: "Not authorized" };
     if (!["user", "ambassador", "admin"].includes(newRole)) return { error: "Invalid role" };
     const adminUid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
     if (adminUid === targetUid && newRole !== "admin") return { error: "Use a different account to demote yourself." };
+    // Tier only meaningful when role=ambassador. "installer" earns 15%
+    // commission, "ambassador" (default) earns 5%. Both use role=ambassador
+    // for permission gating; tier is purely a commission-rate distinction.
+    const tier = opts.tier === "installer" ? "installer" : "ambassador";
+    const commissionRate = tier === "installer" ? 15.0 : 5.0;
     // Read previous state so the notification can say "approved your
     // request" vs "promoted you" vs "demoted you" appropriately.
+    // Also pull handle + full_name so the Shopify discount-code create
+    // step has something to derive the code from.
     let prev = null;
     try {
       const { data } = await supabase
-        .from("profiles").select("role, requested_role").eq("id", targetUid).maybeSingle();
+        .from("profiles").select("role, requested_role, handle, full_name").eq("id", targetUid).maybeSingle();
       prev = data;
     } catch (e) { /* non-fatal */ }
     try {
@@ -27782,15 +36466,119 @@ export default function Trailhead() {
       if (error) return { error: error.message || "Update failed" };
       if (!rows || rows.length === 0) return { error: "Update blocked — admin override policy missing on profiles?" };
       setPendingAmbassadorRequests(prev => (prev || []).filter(p => p.id !== targetUid));
+      // When DEMOTING from ambassador → not-ambassador: flip the
+      // ambassadors row to 'revoked' so future re-promotion correctly
+      // hits the reactivate branch (or admin can wipe + start fresh
+      // via SQL). Keeps the row + Shopify codes intact so historical
+      // order attribution stays consistent.
+      if (newRole !== "ambassador" && prev && prev.role === "ambassador") {
+        try {
+          // Verify the update actually landed — Supabase's update().eq()
+          // returns {error: null, data: []} when RLS silently filters all
+          // rows. Mirror the profiles-update pattern: select id back +
+          // surface an error so the admin sees the failure.
+          const { data: revokedRows, error: revokeErr } = await supabase.from("ambassadors")
+            .update({ status: "revoked", revoked_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+            .eq("profile_id", targetUid)
+            .select("id");
+          if (revokeErr) return { error: `Profile updated but ambassadors revoke failed: ${revokeErr.message}` };
+          if (!revokedRows || revokedRows.length === 0) return { error: "Profile updated but ambassadors revoke was blocked — check admin RLS policy on ambassadors UPDATE." };
+        } catch (e) { console.error("[ambassador] revoke on demote failed", e); }
+      }
+      // When promoting to ambassador, auto-provision the primary Shopify
+      // discount (which spawns two Shopify codes via the edge function:
+      // public free-shipping + internal $500 off). Skipped if an
+      // ambassadors row already exists (re-promotion just reactivates
+      // the existing row; the existing Shopify codes are still valid).
+      if (newRole === "ambassador") {
+        try {
+          const { data: existing } = await supabase
+            .from("ambassadors").select("id, status").eq("profile_id", targetUid).maybeSingle();
+          if (existing) {
+            // Re-activate if previously revoked. Also re-apply tier + rate
+            // so a re-promotion through a different tier button switches
+            // the commission rate. Don't re-create Shopify codes — the
+            // existing rows in ambassador_discount_codes are still valid.
+            // Select id back so a silent RLS no-op surfaces as an error
+            // instead of leaving the DB out of sync with the UI.
+            const { data: updRows, error: updErr } = await supabase.from("ambassadors")
+              .update({
+                status: "active",
+                tier,
+                commission_rate_pct: commissionRate,
+                revoked_at: null,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", existing.id)
+              .select("id");
+            if (updErr) return { error: `Profile updated but ambassadors tier change failed: ${updErr.message}` };
+            if (!updRows || updRows.length === 0) return { error: "Profile updated but ambassadors tier change was blocked — check admin RLS policy on ambassadors UPDATE." };
+          } else {
+            // Derive the base_code (the prefix all this ambassador's codes
+            // share). Commission attribution in Phase 1B prefix-matches
+            // discount codes on orders against this string.
+            const baseCodeRaw = (prev && prev.handle) || (prev && prev.full_name) || ("AMB" + Math.floor(Math.random() * 100000));
+            const baseCode = String(baseCodeRaw).toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 14) || ("AMB" + Math.floor(Math.random() * 100000));
+            // Step 1: insert the ambassadors row WITH base_code so the
+            // edge function (and later the commission engine) can find it.
+            const { data: ambRow, error: ambErr } = await supabase.from("ambassadors").insert({
+              profile_id: targetUid,
+              status: "active",
+              tier,
+              commission_rate_pct: commissionRate,
+              base_code: baseCode,
+            }).select("id").single();
+            if (ambErr || !ambRow) {
+              console.error("[ambassador] insert failed", ambErr);
+              showErrorToast(`Ambassador approved but DB insert failed: ${(ambErr && ambErr.message) || "unknown error"}`);
+            } else {
+              // Step 2: create the primary discount via the edge function.
+              // The edge function provisions BOTH the public (KYLELPO500, $0
+              // effective) and internal (KYLELPO500C, $500 off staff-applied)
+              // Shopify codes in one call and inserts a single row in
+              // ambassador_discount_codes that holds both code IDs.
+              const { data: res, error: err } = await supabase.functions.invoke("shopify-create-discount-code", {
+                body: { ambassador_id: ambRow.id, base_code: baseCode, role: "primary" },
+              });
+              if (err || !res || res.ok === false) {
+                const msg = (err && err.message) || (res && res.error) || "Shopify primary code create failed";
+                console.error("[ambassador] primary code create failed", msg, res);
+                showErrorToast(`Ambassador approved but primary code creation failed: ${msg}`);
+              } else {
+                // Mirror the public code onto the legacy ambassadors.shopify_*
+                // columns for backward compat with anything still reading
+                // from them. Non-fatal.
+                try {
+                  const c = res.code_row;
+                  if (c) {
+                    await supabase.from("ambassadors")
+                      .update({
+                        shopify_discount_code: c.code,
+                        shopify_price_rule_id: c.shopify_price_rule_id,
+                        shopify_discount_id: c.shopify_discount_id,
+                        shopify_discount_pct: c.value,
+                      })
+                      .eq("id", ambRow.id);
+                  }
+                } catch (e) { /* non-fatal back-compat sync */ }
+              }
+            }
+          }
+        } catch (e) {
+          console.error("[ambassador] provision threw", e);
+          showErrorToast(`Ambassador approved but provisioning failed: ${(e && e.message) || String(e)}`);
+        }
+      }
       // Notify the target user (skip self-actions).
       if (adminUid && adminUid !== targetUid) {
         const myName = (currentProfile && currentProfile.full_name) || "Admin";
         const prevRole = (prev && prev.role) || "user";
         const wasRequest = prev && prev.requested_role === newRole;
+        const tierLabel = tier === "installer" ? "Installer" : "Ambassador";
         let text;
-        if (newRole === "ambassador" && wasRequest) text = "approved your Ambassador request";
+        if (newRole === "ambassador" && wasRequest) text = `approved your ${tierLabel} request`;
         else if (newRole === "admin") text = "promoted you to Admin";
-        else if (newRole === "ambassador") text = "promoted you to Ambassador";
+        else if (newRole === "ambassador") text = `promoted you to ${tierLabel}`;
         else if (newRole === "user" && prevRole === "admin") text = "removed your Admin role";
         else if (newRole === "user" && prevRole === "ambassador") text = "removed your Ambassador role";
         else text = "changed your role to " + newRole.charAt(0).toUpperCase() + newRole.slice(1);
@@ -27808,6 +36596,47 @@ export default function Trailhead() {
       return { error: "Network error" };
     }
   };
+
+  // Admin-only: flip a non-admin user's `is_moderator` flag. Server-side
+  // gate is the profiles_moderator_guard trigger; client-side gate is the
+  // isAdmin early-return. Same row-count check pattern as adminUpdateUserRole
+  // so a silent RLS no-op surfaces as an alert instead of a stale UI.
+  const adminToggleUserModerator = async (targetUid, makeModerator) => {
+    if (!isAdmin || !targetUid) return { error: "Not authorized" };
+    try {
+      const { data: rows, error } = await supabase.from("profiles").update({
+        is_moderator: !!makeModerator,
+        updated_at: new Date().toISOString(),
+      }).eq("id", targetUid).select("id");
+      if (error) return { error: error.message || "Update failed" };
+      if (!rows || rows.length === 0) return { error: "Update blocked — admin override policy missing on profiles?" };
+      return { ok: true };
+    } catch (e) {
+      console.error("[adminToggleUserModerator] failed", e);
+      return { error: "Network error" };
+    }
+  };
+
+  // Admin-only: flip a user's `is_beta_tester` flag. Server-side gate is the
+  // profiles_beta_tester_guard trigger (only admins can change the column);
+  // client-side gate is the isAdmin early-return. Same row-count check pattern
+  // so a silent RLS no-op surfaces as an alert.
+  const adminToggleUserBetaTester = async (targetUid, makeBetaTester) => {
+    if (!isAdmin || !targetUid) return { error: "Not authorized" };
+    try {
+      const { data: rows, error } = await supabase.from("profiles").update({
+        is_beta_tester: !!makeBetaTester,
+        updated_at: new Date().toISOString(),
+      }).eq("id", targetUid).select("id");
+      if (error) return { error: error.message || "Update failed" };
+      if (!rows || rows.length === 0) return { error: "Update blocked — admin override policy missing on profiles?" };
+      return { ok: true };
+    } catch (e) {
+      console.error("[adminToggleUserBetaTester] failed", e);
+      return { error: "Network error" };
+    }
+  };
+
   const adminDeclineAmbassadorRequest = async (targetUid) => {
     if (!isAdmin || !targetUid) return { error: "Not authorized" };
     const adminUid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
@@ -27853,6 +36682,399 @@ export default function Trailhead() {
     })();
     return () => { cancelled = true; };
   }, [isAdmin]);
+
+  // ─── Gear Drops (admin) ──────────────────────────────────────────────
+  // Master-row list cached on root so list screen + editor can read from
+  // the same source. `route_data` jsonb is deliberately omitted from the
+  // list query — fetched on demand via loadGearDropById when the editor
+  // opens. Mirrors the slim-fetch + lazy-hydrate pattern used for builds.
+  // (state declared up-thread next to viewingGearDropId so the slug
+  //  resolver useEffects can read it without a TDZ.)
+
+  const loadGearDrops = useCallback(async () => {
+    if (!GEAR_DROPS_ENABLED) return;
+    if (!isAdmin && !isBetaTester) return;
+    try {
+      const { data, error } = await supabase
+        .from("gear_drops")
+        .select("id, title, brand_partner_name, brand_logo_url, hero_img, prize_title, prize_value_cents, status, starts_at, ends_at, signup_open_until, late_signup_window_min, start_lat, start_lng, afterparty_lat, afterparty_lng, afterparty_label, convoy_post_id, host_admin_id, winner_run_id, winner_announced_at, created_at, updated_at")
+        .order("created_at", { ascending: false });
+      if (error) { console.error("[loadGearDrops]", error); return; }
+      setGearDrops(data || []);
+    } catch (e) { console.error("[loadGearDrops] threw", e); }
+  }, [isAdmin, isBetaTester]);
+
+  useEffect(() => {
+    if (!GEAR_DROPS_ENABLED) { setGearDrops([]); return; }
+    if (!isAdmin && !isBetaTester) { setGearDrops([]); return; }
+    loadGearDrops();
+  }, [isAdmin, isBetaTester, loadGearDrops]);
+
+  // Fetches a single gear drop row with full route_data jsonb. Used by the
+  // editor + the public detail screen + the run screen.
+  const loadGearDropById = useCallback(async (id) => {
+    if (!id) return null;
+    try {
+      const { data, error } = await supabase
+        .from("gear_drops").select("*").eq("id", id).maybeSingle();
+      if (error) { console.error("[loadGearDropById]", error); return null; }
+      return data;
+    } catch (e) { console.error("[loadGearDropById] threw", e); return null; }
+  }, []);
+
+  const slugifyGearDropTitle = (title) => {
+    const cleaned = (title || "gear-drop")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80);
+    return cleaned || "gear-drop";
+  };
+
+  const createGearDrop = async (payload = {}) => {
+    if (!isAdmin) return { error: "Not authorized" };
+    const adminUid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    const base = slugifyGearDropTitle(payload.title);
+    const buildRow = (slug) => ({
+      slug,
+      title: payload.title || "Untitled Drop",
+      brand_partner_name: payload.brand_partner_name || null,
+      brand_logo_url: payload.brand_logo_url || null,
+      hero_img: payload.hero_img || null,
+      prize_title: payload.prize_title || "Prize",
+      prize_description: payload.prize_description || null,
+      prize_value_cents: payload.prize_value_cents || null,
+      route_data: payload.route_data || { pins: [], points: [] },
+      start_lat: payload.start_lat || null,
+      start_lng: payload.start_lng || null,
+      status: "draft",
+      starts_at: payload.starts_at || null,
+      ends_at: payload.ends_at || null,
+      signup_open_until: payload.signup_open_until || null,
+      late_signup_window_min: payload.late_signup_window_min != null ? payload.late_signup_window_min : 30,
+      afterparty_lat: payload.afterparty_lat || null,
+      afterparty_lng: payload.afterparty_lng || null,
+      afterparty_label: payload.afterparty_label || null,
+      afterparty_address: payload.afterparty_address || null,
+      afterparty_starts_at: payload.afterparty_starts_at || null,
+      host_admin_id: adminUid,
+    });
+    // Up to 5 retries with incremented suffix on UNIQUE slug collision
+    // before falling back to a random tail. Mirrors trip_reports slug retry.
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const slug = attempt === 0
+        ? base
+        : attempt < 5 ? `${base}-${attempt + 1}` : `${base}-${Math.random().toString(36).slice(2, 8)}`;
+      try {
+        const { data, error } = await supabase.from("gear_drops").insert(buildRow(slug)).select("*").single();
+        if (!error && data) {
+          setGearDrops(prev => [data, ...prev]);
+          return { ok: true, data };
+        }
+        // 23505 = unique_violation. Retry with the next slug variant.
+        if (error && (error.code === "23505" || /duplicate key/i.test(error.message || ""))) continue;
+        if (error) return { error: error.message || "Create failed" };
+      } catch (e) {
+        console.error("[createGearDrop] failed", e);
+        return { error: "Network error" };
+      }
+    }
+    return { error: "Couldn't find a free slug — try a different title." };
+  };
+
+  // RLS allows admin OR a granted co-host (gear_drop_editors row).
+  // A zero-row update means RLS blocked it — surface that as an error
+  // instead of letting the UI assume success.
+  const updateGearDrop = async (id, patch = {}) => {
+    if (!id) return { error: "Missing id" };
+    try {
+      const { data, error } = await supabase.from("gear_drops")
+        .update({ ...patch, updated_at: new Date().toISOString() })
+        .eq("id", id).select("*").maybeSingle();
+      if (error) return { error: error.message || "Update failed" };
+      if (!data) return { error: "Update blocked (RLS) — admin or co-host only" };
+      setGearDrops(prev => prev.map(g => g.id === id ? { ...g, ...data } : g));
+      return { ok: true, data };
+    } catch (e) {
+      console.error("[updateGearDrop] failed", e);
+      return { error: "Network error" };
+    }
+  };
+
+  const deleteGearDrop = async (id) => {
+    if (!isAdmin || !id) return { error: "Not authorized" };
+    if (typeof confirm === "function" && !confirm("Delete this gear drop? This cannot be undone.")) {
+      return { error: "Cancelled" };
+    }
+    try {
+      const { error } = await supabase.from("gear_drops").delete().eq("id", id);
+      if (error) return { error: error.message || "Delete failed" };
+      setGearDrops(prev => prev.filter(g => g.id !== id));
+      return { ok: true };
+    } catch (e) {
+      console.error("[deleteGearDrop] failed", e);
+      return { error: "Network error" };
+    }
+  };
+
+  // Per-drop co-host grants — temp editor access scoped to a single drop
+  // (your "admin + toggle to assign temporary editing privileges" pattern).
+  const grantGearDropEditor = async (dropId, userId) => {
+    if (!isAdmin || !dropId || !userId) return { error: "Not authorized" };
+    const adminUid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    try {
+      const { error } = await supabase.from("gear_drop_editors").insert({
+        gear_drop_id: dropId,
+        user_id: userId,
+        granted_by: adminUid,
+      });
+      if (error) return { error: error.message || "Grant failed" };
+      return { ok: true };
+    } catch (e) {
+      console.error("[grantGearDropEditor] failed", e);
+      return { error: "Network error" };
+    }
+  };
+
+  const revokeGearDropEditor = async (dropId, userId) => {
+    if (!isAdmin || !dropId || !userId) return { error: "Not authorized" };
+    try {
+      const { error } = await supabase.from("gear_drop_editors")
+        .delete().eq("gear_drop_id", dropId).eq("user_id", userId);
+      if (error) return { error: error.message || "Revoke failed" };
+      return { ok: true };
+    } catch (e) {
+      console.error("[revokeGearDropEditor] failed", e);
+      return { error: "Network error" };
+    }
+  };
+
+  // Loads the current user's gear-drop runs (one row per drop the user
+  // has joined). Cheap query — typical user has 0-3 runs. Refreshed on
+  // join and on initial sign-in.
+  const loadMyGearDropRuns = useCallback(async () => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!GEAR_DROPS_ENABLED || !uid) { setMyGearDropRuns({}); return; }
+    try {
+      const { data, error } = await supabase
+        .from("trip_reports")
+        .select("id, gear_drop_id, progress, last_unlocked_at, finished_at")
+        .eq("user_id", uid)
+        .eq("kind", "gear_drop_run");
+      if (error) { console.error("[loadMyGearDropRuns]", error); return; }
+      const map = {};
+      (data || []).forEach(r => { if (r.gear_drop_id) map[r.gear_drop_id] = r; });
+      setMyGearDropRuns(map);
+    } catch (e) { console.error("[loadMyGearDropRuns] threw", e); }
+  }, [supabaseSession]);
+
+  useEffect(() => {
+    if (!GEAR_DROPS_ENABLED) { setMyGearDropRuns({}); return; }
+    loadMyGearDropRuns();
+  }, [loadMyGearDropRuns]);
+
+  // Atomically transitions a draft to scheduled AND auto-spawns the linked
+  // convoy post. Reuses the existing convoy post if one is already attached
+  // (revert-then-reschedule preserves RSVPs / comments). RPC runs as
+  // SECURITY DEFINER so a co-host can schedule a drop owned by host_admin_id
+  // without tripping posts RLS.
+  const scheduleGearDrop = async (dropId) => {
+    if (!dropId) return { error: "Missing id" };
+    try {
+      const { data, error } = await supabase.rpc("schedule_gear_drop", { p_drop_id: dropId });
+      if (error) return { error: error.message || "Schedule failed" };
+      await loadGearDrops();
+      return { ok: true, convoy_post_id: data };
+    } catch (e) {
+      console.error("[scheduleGearDrop] failed", e);
+      return { error: "Network error" };
+    }
+  };
+
+  // Fetches a single gear-drop run (trip_reports row) by id. Used by the
+  // run screen on mount + after each waypoint submit to refresh progress.
+  const loadGearDropRunById = useCallback(async (runId) => {
+    if (!runId) return null;
+    try {
+      const { data, error } = await supabase
+        .from("trip_reports")
+        .select("id, user_id, gear_drop_id, progress, last_unlocked_at, finished_at, route_data, status, kind")
+        .eq("id", runId)
+        .maybeSingle();
+      if (error) { console.error("[loadGearDropRunById]", error); return null; }
+      return data;
+    } catch (e) { console.error("[loadGearDropRunById] threw", e); return null; }
+  }, []);
+
+  // Wraps the gear_drop_advance_run SECURITY DEFINER RPC. Returns the
+  // jsonb shape { ok, error?, unlocked_idx?, is_last?, finished?, won?,
+  // distance_m?, radius_m?, next_waypoint?, waypoints_remaining? }.
+  const advanceGearDropRun = async (runId, photoUrl, note, lat, lng) => {
+    if (!runId || !photoUrl || !note || lat == null || lng == null) return { error: "Missing parameters" };
+    try {
+      const { data, error } = await supabase.rpc("gear_drop_advance_run", {
+        p_run_id: runId,
+        p_photo_url: photoUrl,
+        p_note: note,
+        p_lat: lat,
+        p_lng: lng,
+      });
+      if (error) {
+        // Log every field so a 400 with a generic UI message can still be
+        // traced via the console (Supabase's PostgrestError has code +
+        // details + hint that name the exact column / constraint).
+        console.error("[advanceGearDropRun] rpc error", {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint,
+        });
+        const msg = error.message || error.details || error.hint || "Submit failed";
+        const code = error.code ? ` [${error.code}]` : "";
+        return { error: msg + code };
+      }
+      await loadMyGearDropRuns();
+      return data || { error: "Empty response" };
+    } catch (e) {
+      console.error("[advanceGearDropRun] threw", e);
+      return { error: "Network error" };
+    }
+  };
+
+  // Cancels the current user's attendance — deletes their trip_reports
+  // run row. trip_reports owner-DELETE RLS lets the row owner clean up
+  // without an RPC. Any race progress (waypoints unlocked) is wiped; the
+  // confirm message warns about this.
+  const leaveGearDrop = async (dropId) => {
+    if (!dropId) return { error: "Missing drop id" };
+    const run = myGearDropRuns[dropId];
+    if (!run) return { error: "Not attending" };
+    const hasProgress = run.progress && Array.isArray(run.progress.waypointsUnlocked) && run.progress.waypointsUnlocked.length > 0;
+    const prompt = hasProgress
+      ? "Cancel your attendance? Any waypoint progress you've made will be lost permanently."
+      : "Cancel your attendance? You can rejoin later if signups are still open.";
+    if (typeof confirm === "function" && !confirm(prompt)) return { error: "Cancelled" };
+    try {
+      const { error } = await supabase.from("trip_reports").delete().eq("id", run.id);
+      if (error) return { error: error.message || "Cancel failed" };
+      await loadMyGearDropRuns();
+      return { ok: true };
+    } catch (e) {
+      console.error("[leaveGearDrop] failed", e);
+      return { error: "Network error" };
+    }
+  };
+
+  // Wraps the join_gear_drop SECURITY DEFINER RPC. Returns { ok, run_id }
+  // or { error }. On success, refreshes myGearDropRuns so the detail
+  // screen and any future run-list views see the join immediately.
+  const joinGearDrop = async (dropId) => {
+    if (!dropId) return { error: "Missing drop id" };
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) return { error: "Sign-in required" };
+    try {
+      const { data, error } = await supabase.rpc("join_gear_drop", { p_drop_id: dropId });
+      if (error) return { error: error.message || "Join failed" };
+      await loadMyGearDropRuns();
+      return { ok: true, run_id: data };
+    } catch (e) {
+      console.error("[joinGearDrop] failed", e);
+      return { error: "Network error" };
+    }
+  };
+
+  // ─── Gear drop comments (public detail thread) ───────────────────────
+  const loadGearDropComments = async (dropId) => {
+    if (!dropId) return [];
+    try {
+      const { data, error } = await supabase
+        .from("gear_drop_comments")
+        .select("id, gear_drop_id, user_id, body, photos, created_at")
+        .eq("gear_drop_id", dropId)
+        .order("created_at", { ascending: true });
+      if (error) { console.error("[loadGearDropComments]", error); return []; }
+      // Hydrate author profiles in a single follow-up so the comment list
+      // renders with handles + avatars without N+1.
+      const userIds = Array.from(new Set((data || []).map(c => c.user_id).filter(Boolean)));
+      let authorMap = {};
+      if (userIds.length) {
+        const { data: profs } = await supabase
+          .from("profiles")
+          .select("id, full_name, handle, avatar_url")
+          .in("id", userIds);
+        (profs || []).forEach(p => { authorMap[p.id] = p; });
+      }
+      return (data || []).map(c => ({ ...c, author: authorMap[c.user_id] || null }));
+    } catch (e) { console.error("[loadGearDropComments] threw", e); return []; }
+  };
+
+  const addGearDropComment = async (dropId, body) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) return { error: "Sign-in required" };
+    if (!dropId) return { error: "Missing drop id" };
+    const trimmed = (body || "").trim();
+    if (!trimmed) return { error: "Empty comment" };
+    try {
+      const { data, error } = await supabase
+        .from("gear_drop_comments")
+        .insert({ gear_drop_id: dropId, user_id: uid, body: trimmed })
+        .select("id, gear_drop_id, user_id, body, photos, created_at")
+        .single();
+      if (error) return { error: error.message || "Comment failed" };
+      const author = currentProfile ? { id: currentProfile.id, full_name: currentProfile.full_name, handle: currentProfile.handle, avatar_url: currentProfile.avatar_url } : null;
+      return { ok: true, data: { ...data, author } };
+    } catch (e) { console.error("[addGearDropComment] failed", e); return { error: "Network error" }; }
+  };
+
+  const deleteGearDropComment = async (commentId) => {
+    if (!commentId) return { error: "Missing id" };
+    if (typeof confirm === "function" && !confirm("Delete this comment?")) return { error: "Cancelled" };
+    try {
+      const { error } = await supabase.from("gear_drop_comments").delete().eq("id", commentId);
+      if (error) return { error: error.message || "Delete failed" };
+      return { ok: true };
+    } catch (e) { console.error("[deleteGearDropComment] failed", e); return { error: "Network error" }; }
+  };
+
+  // Fetches the joined participants for a drop. Used by the JOINED stat
+  // tap-to-list overlay. RLS already gates the trip_reports rows (only
+  // live/ended drops expose them publicly, owners always see their own).
+  const loadGearDropParticipants = async (dropId) => {
+    if (!dropId) return [];
+    try {
+      const { data, error } = await supabase
+        .from("trip_reports")
+        .select("id, user_id, finished_at, last_unlocked_at, progress")
+        .eq("gear_drop_id", dropId)
+        .eq("kind", "gear_drop_run");
+      if (error) { console.error("[loadGearDropParticipants]", error); return []; }
+      const userIds = Array.from(new Set((data || []).map(r => r.user_id).filter(Boolean)));
+      let authorMap = {};
+      if (userIds.length) {
+        const { data: profs } = await supabase
+          .from("profiles")
+          .select("id, full_name, handle, avatar_url")
+          .in("id", userIds);
+        (profs || []).forEach(p => { authorMap[p.id] = p; });
+      }
+      return (data || []).map(r => ({ ...r, author: authorMap[r.user_id] || null }));
+    } catch (e) { console.error("[loadGearDropParticipants] threw", e); return []; }
+  };
+
+  const loadGearDropEditors = async (dropId) => {
+    if (!dropId) return [];
+    try {
+      const { data, error } = await supabase
+        .from("gear_drop_editors")
+        .select("user_id, granted_by, granted_at")
+        .eq("gear_drop_id", dropId);
+      if (error) { console.error("[loadGearDropEditors]", error); return []; }
+      return data || [];
+    } catch (e) {
+      console.error("[loadGearDropEditors] threw", e);
+      return [];
+    }
+  };
 
   // Notification toggle preferences. Persisted to localStorage so all
   // toggles (including push) survive page refreshes. The `push` toggle
@@ -28276,6 +37498,60 @@ export default function Trailhead() {
     } catch (e) { console.error("[dm] loadDmMessages failed", e); }
   };
 
+  // Force-refresh a conversation's messages from the server. Used when the
+  // app is resumed from background or when a push-notification tap deep-
+  // links into a convo — realtime websockets can miss messages while the
+  // tab/PWA is suspended (especially on iOS), so a "live" subscription
+  // is not enough on its own. Preserves any in-flight optimistic tmp_ rows
+  // so a pending send isn't wiped by the refresh.
+  const refreshDmMessages = async (convId) => {
+    if (!convId) return;
+    try {
+      const { data: rows, error } = await supabase
+        .from("dm_messages").select("*")
+        .eq("conversation_id", convId)
+        .order("created_at", { ascending: true });
+      if (error) { console.error("[dm] refreshDmMessages error", error); return; }
+      const fresh = (rows || []).map(dmRowToLocalMessage);
+      setDmConvos(prev => prev.map(c => {
+        if (c.id !== convId) return c;
+        const pending = (c.messages || []).filter(m => typeof m.id === "string" && m.id.startsWith("tmp_"));
+        const last = fresh[fresh.length - 1];
+        const previewText = last
+          ? (last.text || (last.sharedPost && ("Shared: " + (last.sharedPost.title || ""))) || (Array.isArray(last.photos) && last.photos.length > 0 ? "📷 Photo" : ""))
+          : c.lastMessage;
+        return {
+          ...c,
+          messages: [...fresh, ...pending],
+          messagesLoaded: true,
+          lastMessage: last ? previewText : c.lastMessage,
+          updatedAt: last ? last.time : c.updatedAt,
+        };
+      }));
+      const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+      const msgIds = (rows || []).map(r => r.id).filter(id => typeof id === "string");
+      if (uid && msgIds.length > 0) {
+        supabase.from("dm_message_likes").select("message_id, user_id, emoji").in("message_id", msgIds)
+          .then(({ data: lkRows, error: lkErr }) => {
+            if (lkErr) { console.error("[dm_message_likes] fetch error", lkErr); return; }
+            if (!Array.isArray(lkRows)) return;
+            setDmMessageReactions(prev => {
+              const next = { ...prev };
+              msgIds.forEach(id => { delete next[id]; });
+              lkRows.forEach(r => {
+                const list = (next[r.message_id] || []).filter(x => x.userId !== r.user_id);
+                next[r.message_id] = [...list, { userId: r.user_id, emoji: r.emoji || "❤️" }];
+              });
+              return next;
+            });
+          });
+      }
+      // If this convo is currently open, mark it read so the unread badge
+      // clears on the same trip — the user is actively viewing it.
+      if (activeDmConvIdRef.current === convId) markDmConvRead(convId);
+    } catch (e) { console.error("[dm] refreshDmMessages failed", e); }
+  };
+
   // Send a message into a conversation. Optimistic — appends to local list
   // with any data:/blob: photo URLs visible right away, then uploads photos
   // to the dm-attachments bucket, then inserts into DB and replaces the
@@ -28298,9 +37574,21 @@ export default function Trailhead() {
     const previewText = trimmed
       || (payload && payload.sharedPost && ("Shared: " + (payload.sharedPost.title || "")))
       || (localPhotos && localPhotos.length > 0 ? "📷 Photo" : "");
-    setDmConvos(prev => prev.map(c => c.id === convId ? {
-      ...c, messages: [...(c.messages || []), tempRow], lastMessage: previewText, lastTime: "Just now", updatedAt: new Date().toISOString(),
-    } : c));
+    // Optimistic local append + lift to the top of the inbox so the convo
+    // I just messaged sorts above older threads (matches what realtime does
+    // for inbound messages).
+    setDmConvos(prev => {
+      const idx = prev.findIndex(c => c.id === convId);
+      if (idx === -1) return prev;
+      const patched = {
+        ...prev[idx],
+        messages: [...(prev[idx].messages || []), tempRow],
+        lastMessage: previewText,
+        lastTime: "Just now",
+        updatedAt: new Date().toISOString(),
+      };
+      return [patched, ...prev.slice(0, idx), ...prev.slice(idx + 1)];
+    });
     try {
       // Upload any local photos (data:/blob:) to storage, replace with public
       // URLs in the persisted payload. Strings or objects-with-.url both
@@ -28440,6 +37728,57 @@ export default function Trailhead() {
     } catch (e) { console.error("[push] unsubscribe failed", e); return false; }
   };
 
+  // refreshDmMessages closes over supabaseSession (for uid resolution), so
+  // any handler attached via a `[]`-deps useEffect would capture the
+  // first-render copy where session is null — making the refetch a no-op
+  // every time it fires. Mirror the latest function into a ref each render
+  // so listeners always call the current version.
+  const refreshDmMessagesRef = useRef(refreshDmMessages);
+  useEffect(() => { refreshDmMessagesRef.current = refreshDmMessages; });
+
+  // Refresh the active DM conversation whenever the page becomes visible
+  // again. Supabase realtime websockets are routinely killed when a PWA
+  // is backgrounded (especially on iOS); even after the socket reconnects
+  // it won't replay messages that arrived while it was disconnected. The
+  // visibility-resume refetch is the safety net so users don't have to
+  // hard-refresh to see new DMs after returning to the app.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const onVis = () => {
+      if (document.hidden) return;
+      const active = activeDmConvIdRef.current;
+      if (active) refreshDmMessagesRef.current(active);
+    };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("focus", onVis);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("focus", onVis);
+    };
+  }, []);
+
+  // Cold-start /dm/<convId> deep-link: when a push-notification tap launches
+  // the PWA fresh, the initial-link parser surfaces the convId, but the
+  // overlay needs auth + the convo loaded before opening. This effect waits
+  // for the session to resolve, then opens DM into that convo and triggers
+  // a forced refetch (the cold-load alone catches the message; the refetch
+  // covers the case where the PWA had stale cached convos).
+  const dmDeepLinkConsumedRef = useRef(false);
+  useEffect(() => {
+    if (dmDeepLinkConsumedRef.current) return;
+    if (!initialSharedLink || initialSharedLink.kind !== "dm") return;
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) return;  // wait for auth
+    dmDeepLinkConsumedRef.current = true;
+    const convId = initialSharedLink.convId;
+    setDmInitialConvId(convId);
+    setDmInitialMessage("");
+    setDmSharedPost(null);
+    setDmKey(k => k + 1);
+    setShowDM(true);
+    refreshDmMessagesRef.current(convId);
+  }, [supabaseSession && supabaseSession.user && supabaseSession.user.id]);
+
   // SW → app messages (from sw.js: { type: 'navigate', url }). Lets a tapped
   // notification deep-link into the app even if the tab was already open.
   useEffect(() => {
@@ -28465,6 +37804,20 @@ export default function Trailhead() {
         setDmSharedPost(null);
         setDmKey(k => k + 1);
         setShowDM(true);
+        // Always refetch on a push-notification tap. Realtime websockets
+        // commonly miss messages while the PWA was backgrounded — without
+        // this, the very message that triggered the push wouldn't render
+        // until a manual refresh. Call via ref so we always use the latest
+        // closure (this listener uses []-deps).
+        refreshDmMessagesRef.current(dm[1]);
+        return;
+      }
+      // /drops/<slug> — open the gear drop detail. Slug resolver at root
+      // walks slug → id → setViewingGearDropId, which mounts the overlay.
+      const drop = url.match(/^\/drops\/([\w-]+)$/);
+      if (drop) {
+        setProfileStack([]); setShowRecovery(false); setShowCompose(false);
+        setPendingGearDropSlug(decodeURIComponent(drop[1]));
         return;
       }
       // Generic fallback — drop them on the feed.
@@ -28837,6 +38190,37 @@ export default function Trailhead() {
     }
   };
 
+  // Fetch the actual list of profiles either following the target or
+  // followed by the target. Two-step: first pull the follows rows (just
+  // the relevant id column), then `.in()` lookup on profiles. Avoids
+  // relying on PostgREST FK aliasing which is fragile if the FK names
+  // change. Returns an array of {id, full_name, handle, avatar_url}.
+  // Used by the FollowListOverlay opened from any profile's stats row.
+  const fetchFollowList = async (targetUserId, kind) => {
+    if (!targetUserId || (kind !== "followers" && kind !== "following")) return [];
+    try {
+      const idCol = kind === "followers" ? "follower_id" : "following_id";
+      const filterCol = kind === "followers" ? "following_id" : "follower_id";
+      const { data: rows, error } = await supabase
+        .from("follows")
+        .select(idCol)
+        .eq(filterCol, targetUserId);
+      if (error) { console.error("[follows] list fetch error", error); return []; }
+      const ids = Array.from(new Set((rows || []).map(r => r[idCol]).filter(Boolean)));
+      if (ids.length === 0) return [];
+      const { data: profs, error: pe } = await supabase
+        .from("profiles")
+        .select("id, full_name, handle, avatar_url")
+        .in("id", ids);
+      if (pe) { console.error("[follows] profiles fetch error", pe); return []; }
+      // Sort alphabetically by full_name so the list is stable across
+      // reopens. (follows table has no display_order; created_at is
+      // available but ordering by recent-follow isn't a strong product
+      // signal here.)
+      return (profs || []).slice().sort((a, b) => (a.full_name || "").localeCompare(b.full_name || ""));
+    } catch (e) { console.error("[follows] list fetch failed", e); return []; }
+  };
+
   // Fetch follower/following counts for any user. Used by OtherProfileScreen
   // to render real numbers in the stats row. Returns { followers, following }
   // or null on error. Two head-only count queries (no rows transferred).
@@ -29094,7 +38478,13 @@ export default function Trailhead() {
     }
   };
 
+  // `buildSaving` is true between SAVE BUILD tap and the new row appearing
+  // in `userBuilds`. BuildsScreen uses it to render a spinner on the
+  // MINE tab instead of the misleading "no builds match your search"
+  // empty state during the upload + insert window.
+  const [buildSaving, setBuildSaving] = useState(false);
   const addBuild = async (data) => {
+    setBuildSaving(true);
     const displayName = data.buildName || `${data.year} ${data.make} ${data.model}`;
     // Persist to Supabase (public.builds) when signed in. Falls back to
     // local-only state when not — this keeps the guest/demo paths working.
@@ -29190,6 +38580,7 @@ export default function Trailhead() {
       addPost(feedPost);
     }
     awardPoints(POINTS.buildAdded, "Build Added");
+    setBuildSaving(false);
   };
 
   const updateBuild = async (buildId, data) => {
@@ -29355,19 +38746,66 @@ export default function Trailhead() {
   };
 
   const deletePost = async (id) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    // Resolve target owner + snapshot BEFORE the optimistic state wipe so
+    // we can log the moderation action with accurate context.
+    const itemBeforeWipe = (feedItemsRef.current || feedItems || []).find(p => p.id === id);
+    const targetOwnerId = itemBeforeWipe && itemBeforeWipe.userId;
+    const targetSnapshot = itemBeforeWipe ? (itemBeforeWipe.title || itemBeforeWipe.body || "").slice(0, 280) : null;
+    const isOwn = !!(uid && targetOwnerId && targetOwnerId === uid);
+
     setFeedItems(prev => prev.filter(p => p.id !== id));
-    // Clean up local state for the deleted post.
     setLikedPostIds(prev => { const next = { ...prev }; delete next[id]; return next; });
     setPostComments(prev => { const next = { ...prev }; delete next[id]; return next; });
-    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
     if (!uid) return;
     if (typeof id !== "string" || id.length < 20) return;
     try {
       // post_likes, post_comments, post_comment_likes, and notifications
       // referencing this post are cascade-deleted by Postgres foreign keys.
-      const { error } = await supabase.from("posts").delete().eq("id", id).eq("user_id", uid);
+      // Owners delete via their RLS policy (auth.uid() = user_id). Admins +
+      // moderators delete via their override policies; we drop the
+      // user_id filter so they aren't accidentally restricted to own posts.
+      let q = supabase.from("posts").delete().eq("id", id);
+      if (isOwn) q = q.eq("user_id", uid);
+      const { error } = await q;
       if (error) console.error("[posts] delete error", error);
+      // Log to moderation_log when a mod/admin removed someone else's post.
+      if (!error && !isOwn && (isAdmin || isModerator) && targetOwnerId) {
+        try {
+          await supabase.rpc("log_moderation_action", {
+            p_action: "delete_post",
+            p_target_type: "post",
+            p_target_id: id,
+            p_target_owner_id: targetOwnerId,
+            p_target_snapshot: targetSnapshot,
+            p_target_url: `/post/${id}`,
+            p_reason: null,
+          });
+        } catch (logErr) { console.warn("[mod-log] post delete log failed", logErr); }
+      }
     } catch (e) { console.error("[posts] deletePost failed", e); }
+  };
+
+  // Routing wrapper — when a moderator (not admin, not owner) clicks
+  // Delete, open the hide-for-review modal instead of hard-deleting. Owner
+  // + admin paths fall through to the existing hard delete.
+  const deletePostRouted = (id) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    const item = (feedItemsRef.current || feedItems || []).find(p => p.id === id);
+    const targetOwnerId = item && item.userId;
+    const isOwn = !!(uid && targetOwnerId && targetOwnerId === uid);
+    if (!isOwn && isModerator && !isAdmin) {
+      openModeratorHide({
+        action: "hide_post",
+        targetType: "post",
+        targetId: id,
+        targetOwnerId,
+        targetSnapshot: item ? (item.title || item.body || "").slice(0, 240) : null,
+        targetUrl: `/post/${id}`,
+      });
+      return;
+    }
+    return deletePost(id);
   };
 
   // ─── Feed likes / comments / comment-likes CRUD ────────────────────────
@@ -29844,13 +39282,73 @@ export default function Trailhead() {
       const cat = data.forumCat || data.cat || "";
       const sub = data.forumSub || data.sub || "";
       const subtitle = [cat, sub].filter(Boolean).join(" · ");
+      // forum_threads.photos jsonb entries are {url, alt} objects (post
+      // 2026-05). Normalize to a URL string so the FORUM card hero +
+      // share-compose preview both render.
+      const heroImg = data.image
+        ? (typeof data.image === "string" ? data.image : data.image.url || null)
+        : null;
+      const meName = (currentProfile && currentProfile.full_name) || "You";
+      const meHandle = (currentProfile && currentProfile.handle) || "";
+      const meAvatar = profilePic || (currentProfile && currentProfile.avatar_url) || null;
+      const isMarketplaceShare = data.categorySlug === "marketplace";
+      const priceLabel = (() => {
+        if (!isMarketplaceShare) return "";
+        const det = data.listingDetails || {};
+        if (det.priceFree) return "FREE";
+        if (data.listingPrice != null) return `$${Number(data.listingPrice).toLocaleString()}${det.priceOBO ? " OBO" : ""}`;
+        return "";
+      })();
       setShareComposeTarget({
         action, accent: T.copper, IconComponent: BookOpen,
-        cardLabel: "FORUM POST", cardCta: "OPEN THREAD",
-        cardTitle: data.title, cardBody: subtitle || `by ${author}`, cardImage: data.image || null,
+        cardLabel: isMarketplaceShare ? "MARKETPLACE LISTING" : "FORUM POST",
+        cardCta: isMarketplaceShare ? "VIEW LISTING" : "OPEN THREAD",
+        cardTitle: data.title,
+        cardBody: priceLabel ? `${priceLabel} · ${subtitle || `by ${author}`}` : (subtitle || `by ${author}`),
+        cardImage: heroImg,
         onSubmit: action === "feed"
-          ? (caption) => { addPost({ id: "shared_forum_" + Date.now(), type: "POST", user: (currentProfile && currentProfile.full_name) || "You", handle: (currentProfile && currentProfile.handle) || "", initial: ((currentProfile && currentProfile.full_name) || "Y").charAt(0).toUpperCase(), avatarUrl: profilePic || (currentProfile && currentProfile.avatar_url) || null, time: Date.now(), title: data.title, body: subtitle, subtitle: "Shared a forum post", caption: (caption || "").trim() || null, image: data.image || null, photoUrls: data.image ? [data.image] : undefined, likes: 0, comments: 0, threadId: data.threadId, forumCat: cat, forumSub: sub }); awardPoints(POINTS.feedPost, "Forum Shared"); showErrorToast("Forum post shared to your feed"); }
-          : sendDm({ id: data.threadId || data.id, type: "FORUM", title: data.title, user: author, initial: (author[0] || "U").toUpperCase(), threadId: data.threadId, forumCat: cat, forumSub: sub, image: data.image || null }),
+          // Match the auto-share-at-creation shape so the card renders
+          // identically: type: "FORUM" routes to the FORUM-card branch
+          // (with VIEW THREAD link + hero + cat/sub header). Caption goes
+          // on item.caption — FORUM card renders it above the thread
+          // snippet so the sharer's commentary reads first.
+          ? (caption) => {
+              addPost({
+                id: "shared_forum_" + Date.now(),
+                type: "FORUM",
+                user: meName,
+                handle: meHandle,
+                initial: meName.charAt(0).toUpperCase(),
+                avatarUrl: meAvatar,
+                time: Date.now(),
+                title: data.title,
+                body: null,
+                caption: (caption || "").trim() || null,
+                image: heroImg,
+                photoUrls: heroImg ? [heroImg] : undefined,
+                likes: 0,
+                comments: 0,
+                replies: 0,
+                views: "0",
+                threadId: data.threadId || data.id,
+                forumCat: cat,
+                forumSub: sub,
+                // Marketplace context — drives the price chip + custom
+                // header on the FORUM feed card. Pass through whether or
+                // not it's marketplace; FORUM card branches on categorySlug.
+                categorySlug: data.categorySlug || null,
+                listingPrice: data.listingPrice != null ? data.listingPrice : null,
+                listingCurrency: data.listingCurrency || null,
+                listingStatus: data.listingStatus || null,
+                listingDetails: data.listingDetails || null,
+                sharedFromOwnerHandle: data.sharedFromOwnerHandle || null,
+                sharedFromOwnerName: data.sharedFromOwnerName || null,
+                sharedFromOwnerUserId: data.sharedFromOwnerUserId || null,
+              });
+              awardPoints(POINTS.feedPost, "Forum Shared");
+              showErrorToast("Forum post shared to your feed");
+            }
+          : sendDm({ id: data.threadId || data.id, type: "FORUM", title: data.title, user: author, initial: (author[0] || "U").toUpperCase(), threadId: data.threadId || data.id, forumCat: cat, forumSub: sub, image: heroImg }),
       });
       return;
     }
@@ -29952,11 +39450,21 @@ export default function Trailhead() {
     setTripReports(prev => [optimistic, ...prev]);
 
     // Try inserting with progressively-suffixed slugs to ride past
-    // collisions (Postgres returns 23505 on UNIQUE violation).
+    // collisions (Postgres returns 23505 on UNIQUE violation). Placeholder
+    // names like "Untitled trip report" stay forever on draft rows because
+    // updateTripDraft doesn't rewrite slugs on rename — so we need a
+    // generous retry budget AND a random fallback so the 11th placeholder
+    // draft doesn't hard-fail.
     let inserted = null;
     let lastErr = null;
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const slug = attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`;
+    const attemptSlugs = [];
+    attemptSlugs.push(baseSlug);
+    for (let i = 2; i <= 10; i++) attemptSlugs.push(`${baseSlug}-${i}`);
+    // Guaranteed-unique escape hatch — if all of the above happen to be
+    // taken, append a base36 timestamp+random tail. Microscopic collision
+    // probability vs. user-facing hard-fail.
+    attemptSlugs.push(`${baseSlug}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`);
+    for (const slug of attemptSlugs) {
       const { data, error } = await supabase
         .from("trip_reports")
         .insert({
@@ -30124,7 +39632,13 @@ export default function Trailhead() {
   const deleteTripDraft = async (id) => {
     const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
     if (!uid || !id) return;
+    // Wipe from BOTH slices — the trip-reports feed card list is built off
+    // `allTripReports`, which merges tripReports (own) + viewportTripReports
+    // (community bbox). Removing only the own slice leaves a phantom card
+    // until the next viewport pan refresh.
     setTripReports(prev => prev.filter(t => t.id !== id));
+    setViewportTripReports(prev => prev.filter(t => t.id !== id));
+    setViewportTripPlans(prev => prev.filter(t => t.id !== id));
     try {
       await supabase.from("trip_reports").delete().eq("id", id).eq("user_id", uid);
     } catch (e) { console.error("[trip_reports] delete failed", e); }
@@ -30758,6 +40272,7 @@ export default function Trailhead() {
       const { data: rows, error } = await supabase
         .from("forum_threads")
         .select("*")
+        .is("hidden_at", null)
         .order("created_at", { ascending: false })
         .limit(500);
       if (error) throw error;
@@ -30793,6 +40308,7 @@ export default function Trailhead() {
         .from("forum_replies")
         .select("*")
         .eq("thread_id", threadId)
+        .is("hidden_at", null)
         .order("created_at", { ascending: true });
       if (error) throw error;
       if (!Array.isArray(rows)) return;
@@ -30899,14 +40415,19 @@ export default function Trailhead() {
     if (updates.listingDetails && typeof updates.listingDetails === "object") patch.listing_details = updates.listingDetails;
     patch.updated_at = new Date().toISOString();
     try {
+      // Don't filter by user_id — RLS handles auth (owner OR admin via
+      // the admin-override policy). Filtering client-side would lock
+      // admins out of editing other users' threads, leaving an optimistic
+      // local patch that silently reverts on reload. maybeSingle so a
+      // non-owner non-admin attempt is a silent no-op instead of throwing.
       const { data, error } = await supabase
         .from("forum_threads")
         .update(patch)
         .eq("id", threadId)
-        .eq("user_id", uid)
         .select()
-        .single();
+        .maybeSingle();
       if (error) throw error;
+      if (!data) return null; // RLS blocked the update — no row returned
       const prof = forumAuthors[data.user_id] || (data.user_id === uid ? currentProfile : null);
       const local = dbRowToForumThread(data, prof);
       setForumThreads(prev => prev.map(t => t.id === local.id ? { ...t, ...local } : t));
@@ -30917,23 +40438,63 @@ export default function Trailhead() {
     }
   };
 
-  // Owner-only delete. Cascades to replies + likes via FKs.
+  // Delete forum thread. Cascades to replies + likes via FKs. Admin +
+  // moderators can also delete via their RLS override policies.
   const deleteForumThread = async (threadId) => {
     const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
     if (!uid || !threadId) return;
-    // Optimistic remove.
+    // Snapshot ownership + content before the optimistic wipe for logging.
+    const thread = (forumThreads || []).find(t => t.id === threadId);
+    const targetOwnerId = thread && thread.user_id;
+    const targetSnapshot = thread ? (thread.title || "").slice(0, 280) : null;
+    const isOwn = !!(uid && targetOwnerId && targetOwnerId === uid);
     const prevList = forumThreads;
     const prevReplies = forumReplies;
     setForumThreads(prev => prev.filter(t => t.id !== threadId));
     setForumReplies(prev => { const next = { ...prev }; delete next[threadId]; return next; });
     try {
-      const { error } = await supabase.from("forum_threads").delete().eq("id", threadId).eq("user_id", uid);
+      let q = supabase.from("forum_threads").delete().eq("id", threadId);
+      if (isOwn) q = q.eq("user_id", uid);
+      const { error } = await q;
       if (error) throw error;
+      // Log moderation when a mod/admin removed someone else's thread.
+      if (!isOwn && (isAdmin || isModerator) && targetOwnerId) {
+        try {
+          await supabase.rpc("log_moderation_action", {
+            p_action: "delete_forum_thread",
+            p_target_type: "forum_thread",
+            p_target_id: threadId,
+            p_target_owner_id: targetOwnerId,
+            p_target_snapshot: targetSnapshot,
+            p_target_url: thread?.slug ? `/forum/${thread.subcategory_slug || ""}/${thread.slug}` : null,
+            p_reason: null,
+          });
+        } catch (logErr) { console.warn("[mod-log] thread delete log failed", logErr); }
+      }
     } catch (e) {
       console.error("[forum_threads] deleteForumThread failed", e);
       setForumThreads(prevList);
       setForumReplies(prevReplies);
     }
+  };
+
+  const deleteForumThreadRouted = (threadId) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    const thread = (forumThreads || []).find(t => t.id === threadId);
+    const targetOwnerId = thread && thread.user_id;
+    const isOwn = !!(uid && targetOwnerId && targetOwnerId === uid);
+    if (!isOwn && isModerator && !isAdmin) {
+      openModeratorHide({
+        action: "hide_forum_thread",
+        targetType: "forum_thread",
+        targetId: threadId,
+        targetOwnerId,
+        targetSnapshot: thread ? (thread.title || "").slice(0, 240) : null,
+        targetUrl: thread?.slug ? `/forum/${thread.subcategory_slug || ""}/${thread.slug}` : null,
+      });
+      return;
+    }
+    return deleteForumThread(threadId);
   };
 
   // Add a reply to a thread. Optional parentId = top-level reply this is
@@ -31005,15 +40566,53 @@ export default function Trailhead() {
   const deleteForumReply = async (threadId, replyId) => {
     const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
     if (!uid || !replyId) return;
+    const reply = (forumReplies[threadId] || []).find(r => r.id === replyId);
+    const targetOwnerId = reply && reply.user_id;
+    const targetSnapshot = reply ? (reply.body || "").slice(0, 280) : null;
+    const isOwn = !!(uid && targetOwnerId && targetOwnerId === uid);
     const prevList = forumReplies[threadId] || [];
     setForumReplies(prev => ({ ...prev, [threadId]: (prev[threadId] || []).filter(r => r.id !== replyId) }));
     try {
-      const { error } = await supabase.from("forum_replies").delete().eq("id", replyId).eq("user_id", uid);
+      let q = supabase.from("forum_replies").delete().eq("id", replyId);
+      if (isOwn) q = q.eq("user_id", uid);
+      const { error } = await q;
       if (error) throw error;
+      if (!isOwn && (isAdmin || isModerator) && targetOwnerId) {
+        try {
+          await supabase.rpc("log_moderation_action", {
+            p_action: "delete_forum_reply",
+            p_target_type: "forum_reply",
+            p_target_id: replyId,
+            p_target_owner_id: targetOwnerId,
+            p_target_snapshot: targetSnapshot,
+            p_target_url: null,
+            p_reason: null,
+          });
+        } catch (logErr) { console.warn("[mod-log] reply delete log failed", logErr); }
+      }
     } catch (e) {
       console.error("[forum_replies] deleteForumReply failed", e);
       setForumReplies(prev => ({ ...prev, [threadId]: prevList }));
     }
+  };
+
+  const deleteForumReplyRouted = (threadId, replyId) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    const reply = (forumReplies[threadId] || []).find(r => r.id === replyId);
+    const targetOwnerId = reply && reply.user_id;
+    const isOwn = !!(uid && targetOwnerId && targetOwnerId === uid);
+    if (!isOwn && isModerator && !isAdmin) {
+      openModeratorHide({
+        action: "hide_forum_reply",
+        targetType: "forum_reply",
+        targetId: replyId,
+        targetOwnerId,
+        targetSnapshot: reply ? (reply.body || "").slice(0, 240) : null,
+        targetUrl: null,
+      });
+      return;
+    }
+    return deleteForumReply(threadId, replyId);
   };
 
   // Hydrate forum likes — runs alongside hydrateForumThreads. RLS allows
@@ -31217,8 +40816,16 @@ export default function Trailhead() {
   };
 
   const openForumThread = (threadId, catName, subName) => {
-    setPendingThread({ threadId, catName, subName });
     setScreen("forum");
+    if (!threadId) return;
+    setPendingThread({ threadId, catName, subName });
+    // Kick a supabase fetch when the thread isn't loaded yet. Without
+    // this, the ForumScreen deep-link effect would sit on pendingThread
+    // forever waiting for threadsBySub to hydrate. openForumThreadById
+    // (a) tries local state first, (b) falls back to a slug fetch which
+    // hydrates forumThreads → threadsBySub. Safe to fire even when the
+    // thread IS already local; the local-first branch returns fast.
+    try { openForumThreadById(threadId); } catch (e) { /* non-fatal */ }
   };
 
   // Resolve a thread by id alone — used by the bell notification deep-link
@@ -31324,7 +40931,7 @@ export default function Trailhead() {
     return <SignupScreen
       onSignup={() => setAuthState("onboarding")}
       onGoToLogin={() => setAuthState("login")}
-      onSetProfilePic={handleSetProfilePic}
+      onSetProfilePic={requestProfilePicCrop}
       onAddBuild={addBuild}
       onAwaitVerification={(email) => {
         setPendingVerifyEmail(email);
@@ -31344,7 +40951,7 @@ export default function Trailhead() {
   if (authState === "onboarding") {
     return <OnboardingScreen
       session={supabaseSession}
-      onSetProfilePic={handleSetProfilePic}
+      onSetProfilePic={requestProfilePicCrop}
       onAddBuild={addBuild}
       onComplete={() => setAuthState("install-pwa")}
     />;
@@ -31404,6 +41011,11 @@ export default function Trailhead() {
       isGuest={isGuest}
       onGuestTap={() => setShowGuestPrompt(true)}
       isAdmin={isAdmin}
+      isModerator={isModerator}
+      isBetaTester={isBetaTester}
+      gearDrops={gearDrops}
+      myGearDropRuns={myGearDropRuns}
+      onOpenGearDrop={(id) => setViewingGearDropId(id)}
       pendingPostNav={pendingPostNav}
       onConsumePendingPostNav={() => setPendingPostNav(null)}
       onSharedPostMissing={() => { setSharedLinkToast("That post couldn't be loaded. It may have been removed or require sign-in."); setTimeout(() => setSharedLinkToast(""), 4500); }}
@@ -31440,7 +41052,7 @@ export default function Trailhead() {
       convoyRsvps={convoyRsvps}
       onRsvpConvoy={requireAuth((postId, status) => setConvoyRsvp(postId, status))}
       onSearchUsers={searchUsers}
-      onDeletePost={requireAuth((id) => deletePost(id))}
+      onDeletePost={requireAuth((id) => deletePostRouted(id))}
       onEditPost={requireAuth((id, newText) => updatePost(id, { title: newText }))}
       onAddNotification={requireAuth(addNotification)}
       forumUserReplies={forumReplies}
@@ -31460,6 +41072,7 @@ export default function Trailhead() {
       onLoadTripRouteData={loadTripRouteData}
       tripPlans={allTripPlans}
       onOpenConvoy={(id) => setDetailConvoyId(id)}
+      onReportContent={requireAuth(openContentReport)}
     />
   );
 
@@ -31504,6 +41117,32 @@ export default function Trailhead() {
                     <button key={f} onClick={() => { setFeedFilter(f); }} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 12px", borderRadius: 18, background: sel ? T.red : "transparent", border: "none", cursor: "pointer", color: sel ? T.white : T.tertiary, fontFamily: sans, fontSize: 12, fontWeight: sel ? 700 : 500, letterSpacing: 0.5, textAlign: "left" }}>
                       <span style={{ display: "inline-block", width: 4, height: 4, borderRadius: "50%", background: sel ? T.white : T.tertiary, opacity: sel ? 1 : 0.4 }} />
                       {f}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {/* Admin sub-items nest under the Admin nav row when active —
+                same adminSubScreen state the hub picks. */}
+            {it.key === "admin" && active && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 2, marginLeft: 36, marginRight: 4, marginBottom: 8 }}>
+                {[
+                  { k: null,         label: "HUB" },
+                  { k: "reports",    label: "REPORTS",    badge: pendingReportCount },
+                  { k: "bugs",       label: "BUGS",       badge: openBugCount },
+                  { k: "moderation", label: "MODERATION" },
+                  { k: "discounts",  label: "AMBASSADORS" },
+                  { k: "push",       label: "PUSH" },
+                  { k: "analytics",  label: "ANALYTICS" },
+                ].map(item => {
+                  const sel = adminSubScreen === item.k;
+                  const hasBadge = typeof item.badge === "number" && item.badge > 0;
+                  return (
+                    <button key={String(item.k)} onClick={() => setAdminSubScreen(item.k)}
+                            style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 12px", borderRadius: 18, background: sel ? T.red : "transparent", border: "none", cursor: "pointer", color: sel ? T.white : T.tertiary, fontFamily: sans, fontSize: 12, fontWeight: sel ? 700 : 500, letterSpacing: 0.5, textAlign: "left" }}>
+                      <span style={{ display: "inline-block", width: 4, height: 4, borderRadius: "50%", background: sel ? T.white : T.tertiary, opacity: sel ? 1 : 0.4 }} />
+                      <span style={{ flex: 1 }}>{item.label}</span>
+                      {hasBadge && <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: T.red, padding: "1px 6px", borderRadius: 8, fontWeight: 700 }}>{item.badge > 99 ? "99+" : item.badge}</span>}
                     </button>
                   );
                 })}
@@ -31672,6 +41311,7 @@ export default function Trailhead() {
         onBack={goBack}
         showBack={isOverlay}
         title={showCompose ? "New Post" : showRecovery ? "Recovery" : isProfile ? (isOtherProfile ? "" : "Profile") : undefined}
+        onHome={() => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); setShowDM(false); setShowGlobalSearch(false); setScreen("feed"); if (typeof window !== "undefined" && window.location.pathname !== "/") window.history.pushState({}, "", "/"); }}
         onViewUser={openUserProfile}
         onGoToPost={(postId) => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("feed"); setPendingPostNav(postId); }}
         onGoToBuild={(buildId, name) => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("builds"); setPendingBuildNav({ rawId: buildId, name: name || "" }); }}
@@ -31680,7 +41320,14 @@ export default function Trailhead() {
         onGoToAdminBugs={() => {
           if (!isAdmin) return;
           setProfileStack([]); setShowRecovery(false); setShowCompose(false);
-          setPendingAdminTab("bugs");
+          setAdminSubScreen("bugs");
+          setScreen("admin");
+          if (typeof window !== "undefined" && window.location.pathname !== "/admin") window.history.pushState({}, "", "/admin");
+        }}
+        onGoToAdminReports={() => {
+          if (!isAdmin) return;
+          setProfileStack([]); setShowRecovery(false); setShowCompose(false);
+          setAdminSubScreen("reports");
           setScreen("admin");
           if (typeof window !== "undefined" && window.location.pathname !== "/admin") window.history.pushState({}, "", "/admin");
         }}
@@ -31713,9 +41360,9 @@ export default function Trailhead() {
           />
         ) : isProfile ? (
           isOtherProfile ? (
-            <OtherProfileScreen userId={profileStack[1]} onBack={goBack} onMessage={(user) => openDM(user)} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} onAdminUpdateUserRole={adminUpdateUserRole} onAdminDeclineAmbassador={adminDeclineAmbassadorRequest} followingIds={followingIds} onFollow={requireAuth(followUser)} onUnfollow={requireAuth(unfollowUser)} fetchFollowCounts={fetchFollowCounts} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} allBuilds={allBuilds} onLoadAllBuilds={loadAllBuildsOnce} onlineUserIds={onlineUserIds} allTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} />
+            <OtherProfileScreen userId={profileStack[1]} onBack={goBack} onMessage={(user) => openDM(user)} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} onAdminUpdateUserRole={adminUpdateUserRole} onAdminDeclineAmbassador={adminDeclineAmbassadorRequest} onAdminToggleModerator={adminToggleUserModerator} onAdminToggleBetaTester={adminToggleUserBetaTester} onAdminViewAsAmbassador={adminViewAsAmbassador} onReportContent={requireAuth(openContentReport)} followingIds={followingIds} onFollow={requireAuth(followUser)} onUnfollow={requireAuth(unfollowUser)} fetchFollowCounts={fetchFollowCounts} onOpenFollowList={requireAuth(openFollowList)} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} allBuilds={allBuilds} onLoadAllBuilds={loadAllBuildsOnce} onlineUserIds={onlineUserIds} allTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} />
           ) : (
-            <ProfileScreen onOpenAdminDashboard={() => { setProfileStack([]); setScreen("admin"); if (typeof window !== "undefined") window.history.pushState({}, "", "/admin"); }} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} convoyRsvps={convoyRsvps} followerCount={myFollowerCount} followingCount={myFollowingCount} onSubscribePush={subscribeToPush} onUnsubscribePush={unsubscribeFromPush} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} savedRoutes={savedRoutes} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} savedTrips={(() => { const ids = savedTripIds || {}; const pool = [...(allTripReports || []), ...(allTripPlans || [])]; const seen = {}; const out = []; pool.forEach(t => { if (t && t.id && ids[t.id] && !seen[t.id]) { seen[t.id] = true; out.push(t); } }); return out; })()} onUnsaveTrip={requireAuth(toggleSaveTrip)} onOpenSavedTrip={(t) => { if (!t) return; if (t.slug) setPendingTripNav(t.slug); else setDetailTripId(t.id); }} pendingScroll={pendingProfileScroll} onConsumePendingScroll={() => setPendingProfileScroll(null)} onStartNav={(route) => setActiveNavRoute(route)} myTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} onNewTripPlan={requireAuth(() => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("routes"); enterPlanBuilder(); })} initialUserName={(currentProfile && currentProfile.full_name) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name) || null} initialUserHandle={(currentProfile && currentProfile.handle) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle) || null} initialUserBio={currentProfile ? currentProfile.bio : null} initialIsPublic={currentProfile ? currentProfile.is_public : null} onSaveProfile={saveProfile} onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={deleteBuild} profilePic={profilePic} onSetProfilePic={handleSetProfilePic} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => deletePost(id)} onEditPost={(id, newText) => updatePost(id, { title: newText })} onUpdateConvoy={(convoyId, updates) => {
+            <ProfileScreen onOpenFollowList={openFollowList} onOpenAdminDashboard={() => { setProfileStack([]); setScreen("admin"); if (typeof window !== "undefined") window.history.pushState({}, "", "/admin"); }} onOpenAmbassadorDashboard={() => { setProfileStack([]); setScreen("ambassador"); }} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} currentRole={currentRole} convoyRsvps={convoyRsvps} followerCount={myFollowerCount} followingCount={myFollowingCount} onSubscribePush={subscribeToPush} onUnsubscribePush={unsubscribeFromPush} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} savedRoutes={savedRoutes} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} savedTrips={(() => { const ids = savedTripIds || {}; const pool = [...(allTripReports || []), ...(allTripPlans || [])]; const seen = {}; const out = []; pool.forEach(t => { if (t && t.id && ids[t.id] && !seen[t.id]) { seen[t.id] = true; out.push(t); } }); return out; })()} onUnsaveTrip={requireAuth(toggleSaveTrip)} onOpenSavedTrip={(t) => { if (!t) return; if (t.slug) setPendingTripNav(t.slug); else setDetailTripId(t.id); }} pendingScroll={pendingProfileScroll} onConsumePendingScroll={() => setPendingProfileScroll(null)} onStartNav={(route) => setActiveNavRoute(route)} myTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} onNewTripPlan={requireAuth(() => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("routes"); enterPlanBuilder(); })} initialUserName={(currentProfile && currentProfile.full_name) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name) || null} initialUserHandle={(currentProfile && currentProfile.handle) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle) || null} initialUserBio={currentProfile ? currentProfile.bio : null} initialIsPublic={currentProfile ? currentProfile.is_public : null} onSaveProfile={saveProfile} onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={deleteBuild} profilePic={profilePic} onSetProfilePic={requestProfilePicCrop} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => deletePost(id)} onEditPost={(id, newText) => updatePost(id, { title: newText })} onUpdateConvoy={(convoyId, updates) => {
               updatePost(convoyId, updates);
               // DM going/maybe responders that the convoy was updated.
               const convoy = feedItemsRef.current.find(p => p.id === convoyId);
@@ -31731,9 +41378,36 @@ export default function Trailhead() {
           <>
             {isGuest && screen !== "routes" && <GuestBanner onSignIn={() => setShowGuestPrompt(true)} />}
             {screen === "feed" && renderFeedScopedTo({ hideFilters: false })}
-            {screen === "forum" && <ForumScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} isAdmin={isAdmin} isAmbassador={isAmbassador} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentUserName={(currentProfile && currentProfile.full_name) || "You"} currentUserHandle={(currentProfile && currentProfile.handle) || ""} currentUserAvatar={profilePic || (currentProfile && currentProfile.avatar_url) || null} pendingThread={pendingThread} onPendingHandled={() => setPendingThread(null)} pendingForumSubNav={pendingForumSubNav} onConsumePendingForumSubNav={() => setPendingForumSubNav(null)} pendingForumCatNav={pendingForumCatNav} onConsumePendingForumCatNav={() => setPendingForumCatNav(null)} onAddNotification={requireAuth(addNotification)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onOpenShareCompose={openShareCompose} onOpenShareIntent={openShareIntent} onAddFeedPost={requireAuth((post) => addPost(post))} threadsBySub={forumThreadsBySub} repliesByThread={forumReplies} onAddForumThread={requireAuth(addForumThread)} onUpdateForumThread={requireAuth(updateForumThread)} onDeleteForumThread={requireAuth(deleteForumThread)} onAddForumReply={requireAuth(addForumReply)} onDeleteForumReply={requireAuth(deleteForumReply)} onLoadForumReplies={loadForumReplies} likedForumThreadIds={likedForumThreadIds} forumThreadLikeCounts={forumThreadLikeCounts} onToggleForumThreadLike={requireAuth(toggleForumThreadLike)} likedForumReplyIds={likedForumReplyIds} forumReplyLikeCounts={forumReplyLikeCounts} onToggleForumReplyLike={requireAuth(toggleForumReplyLike)} onBumpForumThreadView={bumpForumThreadView} onAwardPoints={awardPoints} categoriesList={forumCategoriesList} onAddCategory={requireAuth(addForumCategory)} onUpdateCategory={requireAuth(updateForumCategory)} onDeleteCategory={requireAuth(deleteForumCategory)} onAddSubcategory={requireAuth(addForumSubcategory)} onUpdateSubcategory={requireAuth(updateForumSubcategory)} onDeleteSubcategory={requireAuth(deleteForumSubcategory)} />}
-            {screen === "routes" && <RoutesScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} campingSpots={campingSpots} showCampingSpots={showCampingSpots} setShowCampingSpots={setShowCampingSpots} showPublicLands={showPublicLands} setShowPublicLands={setShowPublicLands} showSatellite={showSatellite} setShowSatellite={setShowSatellite} onOpenShareIntent={openShareIntent} tripAuthors={tripAuthors} onLoadRouteData={loadTripRouteData} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} tripReports={allTripReports} showTripReports={showTripReports} setShowTripReports={setShowTripReports} tripPlans={allTripPlans} showTripPlans={showTripPlans} setShowTripPlans={setShowTripPlans} onMapViewportChange={onMapViewportChange} onAddCampingSpot={requireAuth(addCampingSpot)} onUpdateCampingSpot={requireAuth(updateCampingSpot)} onDeleteCampingSpot={requireAuth(deleteCampingSpot)} onAddPhotoToSpot={requireAuth(addPhotoToSpot)} onDeletePhotoFromSpot={requireAuth(deletePhotoFromSpot)} onLoadCampingSpotPhotos={loadCampingSpotPhotos} onLoadCampingSpotElevation={loadCampingSpotElevation} spotAuthors={spotAuthors} onViewUser={openUserProfile} onStartNav={(route) => setActiveNavRoute(route)} onOpenTripDetail={(slug) => setPendingTripNav(slug)} onOpenTripPlanDraft={(id) => setDetailTripId(id)} onNewTripReport={() => setTripCreatorMode("report")} onNewTripPlan={() => requireAuth(() => enterPlanBuilder())()} pendingSpotNav={pendingSpotNav} onConsumePendingSpotNav={() => setPendingSpotNav(null)} pendingHQOpen={pendingHQOpen} onConsumePendingHQOpen={() => setPendingHQOpen(false)} pendingPlanNav={pendingPlanNav} onConsumePendingPlanNav={() => setPendingPlanNav(null)} onShareCampingSpotToFeed={requireAuth(shareCampingSpotToFeed)} onShareHQToFeed={requireAuth(shareHQToFeed)} onShareTripToFeed={requireAuth(shareTripToFeed)} onShareTripPlanToFeed={requireAuth(shareTripPlanToFeed)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onShowToast={showErrorToast} onOpenShareCompose={openShareCompose} savedTripIds={savedTripIds} onToggleSaveTrip={requireAuth(toggleSaveTrip)} planBuilder={{ active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, editingId: planBuilderEditingId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen, accent: (planBuilderEditingId && (tripReports || []).find(t => t.id === planBuilderEditingId && t.kind === "report")) ? T.purple : T.copper }} />}
-            {screen === "builds" && <BuildsScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onViewUser={openUserProfile} userBuilds={userBuilds} allBuilds={allBuilds} onLoadAllBuilds={loadAllBuildsOnce} onLoadBuildById={loadBuildById} allBuildsLoaded={allBuildsLoaded} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} followingIds={followingIds} pendingBuildNav={pendingBuildNav} onConsumePendingBuildNav={() => setPendingBuildNav(null)} onAddBuild={requireAuth(addBuild)} userRoutes={userRoutes} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onOpenShareCompose={openShareCompose} onOpenShareIntent={openShareIntent} onUpdateBuild={requireAuth(updateBuild)} likedBuildIds={likedBuildIds} buildLikeCounts={buildLikeCounts} onToggleBuildLike={requireAuth(toggleBuildLike)} onDeleteBuild={requireAuth(deleteBuild)} onPostBuildToFeed={requireAuth((b, opts) => { const rawBd = b.buildData; const bd = scrubLocalPhotosFromBuildData(rawBd); const isLocalUrl = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:")); const rawHero = b.image || (rawBd && rawBd.mainPhotos && rawBd.mainPhotos[0] && rawBd.mainPhotos[0].url) || null; const cleanHero = isLocalUrl(rawHero) ? ((bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url) || null) : rawHero; const heroImg = isLocalUrl(cleanHero) ? null : cleanHero; const meName = (currentProfile && currentProfile.full_name) || "You"; const myUid = supabaseSession && supabaseSession.user && supabaseSession.user.id; const isReshare = b.userId && myUid && b.userId !== myUid; const ownerHandle = isReshare ? (b.handle || "").replace(/^@/, "") : null; const ownerName = isReshare ? (b.owner || null) : null; addPost({ id: "feedbuild_" + Date.now(), type: "BUILDS", user: meName, initial: meName.charAt(0).toUpperCase(), time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, subtitle: isReshare ? `Shared @${ownerHandle}'s build` : "Added a new build", vehicle: `${b.year} ${b.make} ${b.model}`, photoUrls: heroImg ? [heroImg] : undefined, image: heroImg, likes: 0, comments: 0, buildData: bd, buildRawId: b.rawId != null ? b.rawId : null, sharedFromOwnerHandle: ownerHandle, sharedFromOwnerName: ownerName, _skipBuildIdCol: isReshare }); awardPoints(POINTS.feedPost, "Build Shared"); })} buildComments={buildComments} onLoadBuildComments={loadBuildComments} onAddBuildComment={requireAuth(addBuildComment)} onDeleteBuildComment={deleteBuildComment} likedBuildCommentIds={likedBuildCommentIds} buildCommentLikeCounts={buildCommentLikeCounts} onToggleBuildCommentLike={requireAuth(toggleBuildCommentLike)} currentUserName={(currentProfile && currentProfile.full_name) || ""} currentUserHandle={(currentProfile && currentProfile.handle) ? "@" + currentProfile.handle : ""} currentUserAvatar={(currentProfile && currentProfile.avatar_url) || null} />}
+            {screen === "forum" && <ForumScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} isAdmin={isAdmin} isModerator={isModerator} isAmbassador={isAmbassador} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentUserName={(currentProfile && currentProfile.full_name) || "You"} currentUserHandle={(currentProfile && currentProfile.handle) || ""} currentUserAvatar={profilePic || (currentProfile && currentProfile.avatar_url) || null} pendingThread={pendingThread} onPendingHandled={() => setPendingThread(null)} pendingForumSubNav={pendingForumSubNav} onConsumePendingForumSubNav={() => setPendingForumSubNav(null)} pendingForumCatNav={pendingForumCatNav} onConsumePendingForumCatNav={() => setPendingForumCatNav(null)} onAddNotification={requireAuth(addNotification)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onOpenShareCompose={openShareCompose} onOpenShareIntent={openShareIntent} onAddFeedPost={requireAuth((post) => addPost(post))} threadsBySub={forumThreadsBySub} repliesByThread={forumReplies} onAddForumThread={requireAuth(addForumThread)} onUpdateForumThread={requireAuth(updateForumThread)} onDeleteForumThread={requireAuth(deleteForumThreadRouted)} onAddForumReply={requireAuth(addForumReply)} onDeleteForumReply={requireAuth(deleteForumReplyRouted)} onLoadForumReplies={loadForumReplies} likedForumThreadIds={likedForumThreadIds} forumThreadLikeCounts={forumThreadLikeCounts} onToggleForumThreadLike={requireAuth(toggleForumThreadLike)} likedForumReplyIds={likedForumReplyIds} forumReplyLikeCounts={forumReplyLikeCounts} onToggleForumReplyLike={requireAuth(toggleForumReplyLike)} onBumpForumThreadView={bumpForumThreadView} onAwardPoints={awardPoints} categoriesList={forumCategoriesList} onAddCategory={requireAuth(addForumCategory)} onUpdateCategory={requireAuth(updateForumCategory)} onDeleteCategory={requireAuth(deleteForumCategory)} onAddSubcategory={requireAuth(addForumSubcategory)} onUpdateSubcategory={requireAuth(updateForumSubcategory)} onDeleteSubcategory={requireAuth(deleteForumSubcategory)} onReportContent={requireAuth(openContentReport)} onViewUser={openUserProfile} />}
+            {screen === "routes" && <RoutesScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} campingSpots={campingSpots} showCampingSpots={showCampingSpots} setShowCampingSpots={setShowCampingSpots} showPublicLands={showPublicLands} setShowPublicLands={setShowPublicLands} showSatellite={showSatellite} setShowSatellite={setShowSatellite} onOpenShareIntent={openShareIntent} tripAuthors={tripAuthors} onLoadRouteData={loadTripRouteData} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} tripReports={allTripReports} showTripReports={showTripReports} setShowTripReports={setShowTripReports} tripPlans={allTripPlans} showTripPlans={showTripPlans} setShowTripPlans={setShowTripPlans} onMapViewportChange={onMapViewportChange} onAddCampingSpot={requireAuth(addCampingSpot)} onUpdateCampingSpot={requireAuth(updateCampingSpot)} onDeleteCampingSpot={requireAuth(deleteCampingSpot)} onAddPhotoToSpot={requireAuth(addPhotoToSpot)} onDeletePhotoFromSpot={requireAuth(deletePhotoFromSpot)} onLoadCampingSpotPhotos={loadCampingSpotPhotos} onLoadCampingSpotElevation={loadCampingSpotElevation} spotAuthors={spotAuthors} onViewUser={openUserProfile} onStartNav={(route) => setActiveNavRoute(route)} onOpenTripDetail={(slug) => setPendingTripNav(slug)} onOpenTripPlanDraft={(id) => setDetailTripId(id)} onNewTripReport={() => setTripCreatorMode("report")} onNewTripPlan={() => requireAuth(() => enterPlanBuilder())()} pendingSpotNav={pendingSpotNav} onConsumePendingSpotNav={() => setPendingSpotNav(null)} pendingHQOpen={pendingHQOpen} onConsumePendingHQOpen={() => setPendingHQOpen(false)} pendingPlanNav={pendingPlanNav} onConsumePendingPlanNav={() => setPendingPlanNav(null)} onShareCampingSpotToFeed={requireAuth(shareCampingSpotToFeed)} onShareHQToFeed={requireAuth(shareHQToFeed)} onShareTripToFeed={requireAuth(shareTripToFeed)} onShareTripPlanToFeed={requireAuth(shareTripPlanToFeed)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onShowToast={showErrorToast} onOpenShareCompose={openShareCompose} savedTripIds={savedTripIds} onToggleSaveTrip={requireAuth(toggleSaveTrip)} planBuilder={{ active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, editingId: planBuilderEditingId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen, accent: (planBuilderEditingId && (tripReports || []).find(t => t.id === planBuilderEditingId && t.kind === "report")) ? T.purple : T.copper }} gearDropPinBuilder={{ active: gearDropPinBuilderActive, dropId: gearDropPinBuilderDropId, pins: gearDropPinBuilderPins, saving: gearDropPinBuilderSaving, mode: gearDropPinBuilderMode, addPin: addGearDropPin, removePin: removeGearDropPin, movePin: moveGearDropPin, commit: commitGearDropPinBuilder, exit: exitGearDropPinBuilder }} />}
+            {screen === "builds" && <BuildsScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onViewUser={openUserProfile} userBuilds={userBuilds} allBuilds={allBuilds} onLoadAllBuilds={loadAllBuildsOnce} onLoadBuildById={loadBuildById} allBuildsLoaded={allBuildsLoaded} buildSaving={buildSaving} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} followingIds={followingIds} pendingBuildNav={pendingBuildNav} onConsumePendingBuildNav={() => setPendingBuildNav(null)} onAddBuild={requireAuth(addBuild)} userRoutes={userRoutes} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onOpenShareCompose={openShareCompose} onOpenShareIntent={openShareIntent} onUpdateBuild={requireAuth(updateBuild)} likedBuildIds={likedBuildIds} buildLikeCounts={buildLikeCounts} onToggleBuildLike={requireAuth(toggleBuildLike)} onDeleteBuild={requireAuth(deleteBuild)} onPostBuildToFeed={requireAuth((b, opts) => { const rawBd = b.buildData; const bd = scrubLocalPhotosFromBuildData(rawBd); const isLocalUrl = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:")); const rawHero = b.image || (rawBd && rawBd.mainPhotos && rawBd.mainPhotos[0] && rawBd.mainPhotos[0].url) || null; const cleanHero = isLocalUrl(rawHero) ? ((bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url) || null) : rawHero; const heroImg = isLocalUrl(cleanHero) ? null : cleanHero; const meName = (currentProfile && currentProfile.full_name) || "You"; const myUid = supabaseSession && supabaseSession.user && supabaseSession.user.id; const isReshare = b.userId && myUid && b.userId !== myUid; const ownerHandle = isReshare ? (b.handle || "").replace(/^@/, "") : null; const ownerName = isReshare ? (b.owner || null) : null; addPost({ id: "feedbuild_" + Date.now(), type: "BUILDS", user: meName, initial: meName.charAt(0).toUpperCase(), time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, subtitle: isReshare ? `Shared @${ownerHandle}'s build` : "Added a new build", vehicle: `${b.year} ${b.make} ${b.model}`, photoUrls: heroImg ? [heroImg] : undefined, image: heroImg, likes: 0, comments: 0, buildData: bd, buildRawId: b.rawId != null ? b.rawId : null, sharedFromOwnerHandle: ownerHandle, sharedFromOwnerName: ownerName, _skipBuildIdCol: isReshare }); awardPoints(POINTS.feedPost, "Build Shared"); })} buildComments={buildComments} onLoadBuildComments={loadBuildComments} onAddBuildComment={requireAuth(addBuildComment)} onDeleteBuildComment={deleteBuildComment} likedBuildCommentIds={likedBuildCommentIds} buildCommentLikeCounts={buildCommentLikeCounts} onToggleBuildCommentLike={requireAuth(toggleBuildCommentLike)} currentUserName={(currentProfile && currentProfile.full_name) || ""} currentUserHandle={(currentProfile && currentProfile.handle) ? "@" + currentProfile.handle : ""} currentUserAvatar={(currentProfile && currentProfile.avatar_url) || null} allTripReports={allTripReports} />}
+            {screen === "ambassador" && (isGuest
+              ? <GuestGateScreen title="AMBASSADOR DASHBOARD REQUIRES AN ACCOUNT" subtitle="Sign in to view your ambassador code, commissions, and payouts." onSignIn={goToLoginFromGuest} />
+              : <AmbassadorDashboardScreen
+                  currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id}
+                  currentUserHandle={(currentProfile && currentProfile.handle) || ""}
+                  viewAsProfileId={ambassadorViewAs ? ambassadorViewAs.profileId : null}
+                  viewAsHandle={ambassadorViewAs ? ambassadorViewAs.handle : null}
+                  viewAsName={ambassadorViewAs ? ambassadorViewAs.name : null}
+                  adminAmbassadorList={adminAmbassadorList}
+                  onAdminOrderRemove={adminOrderRemove}
+                  onAdminOrderReassign={adminOrderReassign}
+                  onAdminOrderEditEligible={adminOrderEditEligible}
+                  onAdminLinkOrderToJourney={adminLinkOrderToJourney}
+                  onBack={() => {
+                    if (ambassadorViewAs) {
+                      // Admin troubleshooting flow → return to the target's profile.
+                      const handle = ambassadorViewAs.handle || ambassadorViewAs.profileId;
+                      setAmbassadorViewAs(null);
+                      setScreen("feed");
+                      openUserProfile(handle);
+                    } else {
+                      setScreen("feed");
+                      openProfile();
+                    }
+                  }}
+                />
+            )}
             {screen === "ranks" && (isGuest
               ? <GuestGateScreen title="RANKS REQUIRE AN ACCOUNT" subtitle="Sign in to see the leaderboard and start earning points from your posts, routes and builds." onSignIn={goToLoginFromGuest} />
               : isAdmin
@@ -31741,34 +41415,63 @@ export default function Trailhead() {
                 : <div style={{ padding: 32, textAlign: "center", fontFamily: serif, fontSize: 14, color: T.tertiary, lineHeight: 1.6 }}>Ranks is coming in a future release.</div>
             )}
             {screen === "admin" && (isAdmin
-              ? <AdminDashboardScreen
-                  currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id}
-                  currentUserHandle={(currentProfile && currentProfile.handle) || ""}
-                  currentUserName={(currentProfile && currentProfile.full_name) || ""}
-                  initialTab={pendingAdminTab}
-                  onInitialTabConsumed={() => setPendingAdminTab(null)}
-                  onBack={() => { setScreen("feed"); if (typeof window !== "undefined" && window.location.pathname === "/admin") window.history.pushState({}, "", "/"); }}
-                  onViewUser={(handleOrId) => openUserProfile(handleOrId)}
-                  onOpenAdminEntity={(r) => {
-                    if (!r || !r.kind) return;
-                    // Dispatch the moderation-queue / trending click to the
-                    // right screen. URL pushState happens inside the target
-                    // screen's open handler so deep-link copies still work.
-                    if (r.kind === "post") {
-                      setScreen("feed"); setPendingPostNav(r.entity_id);
-                    } else if (r.kind === "thread") {
-                      setScreen("forum"); openForumThreadById(r.entity_id);
-                    } else if (r.kind === "spot") {
-                      setScreen("routes"); setPendingSpotNav(r.entity_id);
-                    } else if (r.kind === "build") {
-                      setScreen("builds"); setPendingBuildNav({ rawId: r.entity_id, name: r.title || "" });
-                    } else if (r.kind === "trip") {
-                      // URL parsing — r.url is /trips/<slug>; pull the slug.
-                      const slug = (r.url || "").replace(/^\/trips\//, "");
-                      if (slug) setPendingTripNav(slug); else setDetailTripId(r.entity_id);
-                    }
-                  }}
-                />
+              ? (adminSubScreen === "geardrops"
+                ? (editingGearDropId
+                  ? <GearDropEditor
+                      dropId={editingGearDropId}
+                      currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id}
+                      onClose={() => setEditingGearDropId(null)}
+                      onLoad={loadGearDropById}
+                      onUpdate={updateGearDrop}
+                      onDelete={deleteGearDrop}
+                      onLoadEditors={loadGearDropEditors}
+                      onGrantEditor={grantGearDropEditor}
+                      onRevokeEditor={revokeGearDropEditor}
+                      onEnterPinBuilder={(dId, existingPins, opts) => enterGearDropPinBuilder(dId, existingPins, opts)}
+                      onSchedule={scheduleGearDrop}
+                    />
+                  : <GearDropsListScreen
+                      onBack={() => setAdminSubScreen(null)}
+                      gearDrops={gearDrops}
+                      onCreateGearDrop={createGearDrop}
+                      onOpenEditor={(id) => setEditingGearDropId(id)}
+                      onDeleteGearDrop={(id) => deleteGearDrop(id)}
+                    />)
+                : adminSubScreen
+                ? <AdminDashboardScreen
+                    currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id}
+                    currentUserHandle={(currentProfile && currentProfile.handle) || ""}
+                    currentUserName={(currentProfile && currentProfile.full_name) || ""}
+                    initialTab={adminSubScreen}
+                    onInitialTabConsumed={() => { /* parent owns adminSubScreen; nothing to clear here */ }}
+                    hideTabBar
+                    onAdminAddManualOrder={adminAddManualOrder}
+                    onBack={() => { setAdminSubScreen(null); refreshAdminBadges(); }}
+                    onViewUser={(handleOrId) => openUserProfile(handleOrId)}
+                    onOpenAdminEntity={(r) => {
+                      if (!r || !r.kind) return;
+                      // Dispatch to the right surface — used by the recent
+                      // activity feed AND the reports queue's "VIEW CONTENT".
+                      if (r.kind === "post") {
+                        setScreen("feed"); setPendingPostNav(r.entity_id);
+                      } else if (r.kind === "thread") {
+                        setScreen("forum"); openForumThreadById(r.entity_id);
+                      } else if (r.kind === "spot") {
+                        setScreen("routes"); setPendingSpotNav(r.entity_id);
+                      } else if (r.kind === "build") {
+                        setScreen("builds"); setPendingBuildNav({ rawId: r.entity_id, name: r.title || "" });
+                      } else if (r.kind === "trip") {
+                        const slug = (r.url || "").replace(/^\/trips\//, "");
+                        if (slug) setPendingTripNav(slug); else setDetailTripId(r.entity_id);
+                      }
+                    }}
+                  />
+                : <AdminHubScreen
+                    onBack={() => { setScreen("feed"); if (typeof window !== "undefined" && window.location.pathname === "/admin") window.history.pushState({}, "", "/"); }}
+                    onSelect={(k) => setAdminSubScreen(k)}
+                    openReportCount={pendingReportCount}
+                    openBugCount={openBugCount}
+                  />)
               : <div style={{ padding: 32, textAlign: "center", fontFamily: serif, fontSize: 14, color: T.tertiary, lineHeight: 1.6 }}>Not authorized.</div>
             )}
           </>
@@ -31887,6 +41590,7 @@ export default function Trailhead() {
         return (
           <TripReportEditor
             trip={trip}
+            userBuilds={userBuilds}
             currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id}
             onClose={() => setEditingTripId(null)}
             onSave={(updates) => updateTripDraft(trip.id, updates)}
@@ -31918,6 +41622,7 @@ export default function Trailhead() {
             <TripReportDetail
               trip={trip}
               author={author}
+              userBuilds={userBuilds}
               currentUserId={myUid}
               initialEditMode={detailTripInitialEdit}
               onBack={() => { setDetailTripId(null); setDetailTripInitialEdit(false); }}
@@ -31925,6 +41630,7 @@ export default function Trailhead() {
               onUpdate={requireAuth(updateTripDraft)}
               onReorderPins={requireAuth(reorderTripPins)}
               onDelete={requireAuth(async (id) => { await deleteTripDraft(id); setDetailTripId(null); setDetailTripInitialEdit(false); })}
+              onPublish={requireAuth(async (id) => { await publishTripDraft(id); })}
               onEditPlanRoute={(t) => {
                 // Re-enter the plan builder with this trip's points
                 // pre-loaded so the user can drag/add/remove on the map.
@@ -32049,6 +41755,40 @@ export default function Trailhead() {
       {shareComposeTarget && (
         <ShareComposeModal target={shareComposeTarget} onClose={() => setShareComposeTarget(null)} />
       )}
+      {reportTarget && (
+        <ContentReportForm
+          target={reportTarget}
+          onClose={() => setReportTarget(null)}
+          onSubmit={submitContentReport}
+        />
+      )}
+      {moderatorHideTarget && (
+        <ModeratorHideModal
+          target={moderatorHideTarget}
+          onClose={() => setModeratorHideTarget(null)}
+          onSubmit={submitModeratorHide}
+        />
+      )}
+      {followListTarget && (
+        <FollowListOverlay
+          target={followListTarget}
+          currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id}
+          followingIds={followingIds}
+          onFollow={requireAuth(followUser)}
+          onUnfollow={requireAuth(unfollowUser)}
+          fetchFollowList={fetchFollowList}
+          onViewUser={openUserProfile}
+          onClose={() => setFollowListTarget(null)}
+        />
+      )}
+      {cropperFile && (
+        <ProfilePicCropperModal
+          file={cropperFile}
+          onClose={() => setCropperFile(null)}
+          onCropped={(blob) => { setCropperFile(null); handleSetProfilePic(blob); }}
+        />
+      )}
+      {reportToast && <ReportSubmittedToast onDone={() => setReportToast(false)} />}
       {/* Recipient picker — opens after share-compose's "Choose
           Recipient". Component is hoisted to module scope so its hooks
           have stable identity across root re-renders. */}
@@ -32117,6 +41857,11 @@ export default function Trailhead() {
           tripReports={allTripReports}
           showTripReports={showTripReports}
           setShowTripReports={setShowTripReports}
+          tripPlans={allTripPlans}
+          showTripPlans={showTripPlans}
+          setShowTripPlans={setShowTripPlans}
+          showSatellite={showSatellite}
+          setShowSatellite={setShowSatellite}
           onAddCampingSpot={requireAuth(addCampingSpot)}
           onStartDirections={startDirectionsTo}
           // Trip-report flow already collects metadata in the editor, so
@@ -32430,6 +42175,46 @@ export default function Trailhead() {
       {/* Guest sign-in prompt */}
       {showGuestPrompt && (
         <GuestPromptModal onClose={() => setShowGuestPrompt(false)} onSignIn={goToLoginFromGuest} />
+      )}
+
+      {/* Public gear drop detail overlay. Opened from the GEAR DROPS feed
+          filter card list. Beta-gated via the source list — anyone with a
+          direct dropId hitting this branch lands on the public detail. */}
+      {viewingGearDropId && GEAR_DROPS_ENABLED && (
+        <GearDropDetailScreen
+          dropId={viewingGearDropId}
+          currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id}
+          isAdmin={isAdmin}
+          onClose={() => setViewingGearDropId(null)}
+          onLoad={loadGearDropById}
+          onJoin={joinGearDrop}
+          myRun={myGearDropRuns[viewingGearDropId] || null}
+          onLoadComments={loadGearDropComments}
+          onAddComment={addGearDropComment}
+          onDeleteComment={deleteGearDropComment}
+          onLoadParticipants={loadGearDropParticipants}
+          onViewUser={openUserProfile}
+          onStartDirections={requireAuth(startDirectionsTo)}
+          onLeave={leaveGearDrop}
+          onOpenRun={(rid) => setRunScreenRunId(rid)}
+        />
+      )}
+
+      {/* Race overlay — opened when a joined participant taps VIEW YOUR
+          RUN on a live gear drop. Mounts above the detail screen so
+          closing the run returns to the detail screen seamlessly. */}
+      {runScreenRunId && GEAR_DROPS_ENABLED && (
+        <GearDropRunScreen
+          runId={runScreenRunId}
+          currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id}
+          onClose={() => setRunScreenRunId(null)}
+          onLoadRun={loadGearDropRunById}
+          onLoadDrop={loadGearDropById}
+          onAdvance={advanceGearDropRun}
+          onShowToast={showErrorToast}
+          onLoadParticipants={loadGearDropParticipants}
+          onViewUser={openUserProfile}
+        />
       )}
 
       {/* Points Toast Notifications */}
