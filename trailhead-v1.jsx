@@ -12537,6 +12537,13 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
   // when open). Cleared on re-tap so the same row toggles.
   const [highlightedPinIdx, setHighlightedPinIdx] = useState(null);
   const togglePinHighlight = (idx) => setHighlightedPinIdx(prev => (prev === idx ? null : idx));
+  // Photo lightbox — `carouselImages` is the list of image URLs being
+  // viewed; `carouselIndex` is the slide to open on. Tapping a photo
+  // thumbnail in the PHOTOS grid (read-only mode) populates both and
+  // mounts <ImageCarousel/>. Videos are skipped from the list since
+  // ImageCarousel doesn't handle them.
+  const [carouselImages, setCarouselImages] = useState(null);
+  const [carouselIndex, setCarouselIndex] = useState(0);
   // Reset when the trip swaps so opening a different plan starts in
   // read-only.
   useEffect(() => { setEditingMode(!!initialEditMode); setHeroFullscreen(false); setConfirmDelete(false); setConfirmPublish(false); setPublishing(false); setDonePrompt(false); setHighlightedPinIdx(null); }, [trip.id]);
@@ -13521,8 +13528,29 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
             {photos.map((p, i) => {
               const url = typeof p === "string" ? p : (p && p.url) || "";
               const isVid = typeof p === "object" && p && p.type === "video";
+              // Read-only image cells open the lightbox at the tapped
+              // photo's position within the IMAGE-ONLY filtered list (so
+              // skipping a video doesn't desync the carousel index).
+              const openLightbox = (!canEditInline && !isVid && url) ? () => {
+                const imgUrls = [];
+                let tappedIdx = 0;
+                photos.forEach((q, j) => {
+                  const qUrl = typeof q === "string" ? q : (q && q.url) || "";
+                  const qIsVid = typeof q === "object" && q && q.type === "video";
+                  if (qUrl && !qIsVid) {
+                    if (j === i) tappedIdx = imgUrls.length;
+                    imgUrls.push(qUrl);
+                  }
+                });
+                if (imgUrls.length > 0) {
+                  setCarouselIndex(tappedIdx);
+                  setCarouselImages(imgUrls);
+                }
+              } : null;
               return (
-                <div key={i} style={{ position: "relative", width: "100%", aspectRatio: "1 / 1", borderRadius: 8, overflow: "hidden", border: `1px solid ${T.charcoal}` }}>
+                <div key={i}
+                     onClick={openLightbox || undefined}
+                     style={{ position: "relative", width: "100%", aspectRatio: "1 / 1", borderRadius: 8, overflow: "hidden", border: `1px solid ${T.charcoal}`, cursor: openLightbox ? "pointer" : "default" }}>
                   {isVid
                     ? <video src={url + "#t=0.001"} preload="metadata" playsInline muted style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", background: "#000" }} />
                     : <LoadingImage src={url} accent={isPlan ? T.copper : T.purple} width={480} style={{ width: "100%", height: "100%" }} />}
@@ -13664,6 +13692,17 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
           </div>
         </div>,
         document.body
+      )}
+
+      {/* Photo lightbox — populated when a thumbnail in the PHOTOS grid
+          is tapped (read-only mode only). Videos are excluded from the
+          image list since ImageCarousel only handles still images. */}
+      {carouselImages && carouselImages.length > 0 && (
+        <ImageCarousel
+          images={carouselImages}
+          startIndex={carouselIndex}
+          onClose={() => setCarouselImages(null)}
+        />
       )}
     </div>
   );
