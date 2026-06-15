@@ -13665,9 +13665,6 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
         </div>,
         document.body
       )}
-      {carouselImages && carouselImages.length > 0 && (
-        <ImageCarousel images={carouselImages} startIndex={carouselIndex} onClose={() => setCarouselImages(null)} />
-      )}
     </div>
   );
 }
