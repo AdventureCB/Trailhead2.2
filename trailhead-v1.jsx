@@ -9645,7 +9645,7 @@ const RouteMapPreview = memo(function RouteMapPreviewImpl({ pins, points, photos
                 setSelectedWaypoint({ desc: p.desc || "", photo: p.photo || null, lat: p.lat, lng: p.lng });
               });
             }
-            if (isPhoto && photoList.length > 0) {
+            if (isPhoto) {
               // Match photo pin to a photo from the photos array.
               let matchedPhoto = null;
               let matchedPhotoIdx = -1;
@@ -9663,13 +9663,22 @@ const RouteMapPreview = memo(function RouteMapPreviewImpl({ pins, points, photos
                 matchedPhotoIdx = photoIdx;
                 photoIdx++;
               }
+              // Fallback — the camera icon renders whenever p.photo is
+              // truthy, but the photos[] array may not carry an entry
+              // for it (older trips, manual pin-photo edits, gear-drop
+              // submissions). Use the pin's own photo URL so the click
+              // always shows something; idx stays -1 so onPhotoSelect
+              // (which expects an index into photos[]) is a no-op.
+              if (!matchedPhoto && p.photo) {
+                matchedPhoto = typeof p.photo === "string" ? p.photo : (p.photo && p.photo.url) || null;
+              }
               if (matchedPhoto) {
                 entry.photoUrl = matchedPhoto;
                 entry.photoIdx = matchedPhotoIdx;
                 el.addEventListener("click", (ev) => {
                   ev.stopPropagation();
                   if (isFullscreen) setSelectedPhoto(matchedPhoto);
-                  if (onPhotoSelect) onPhotoSelect(matchedPhotoIdx);
+                  if (onPhotoSelect && matchedPhotoIdx >= 0) onPhotoSelect(matchedPhotoIdx);
                 });
               }
             }
@@ -12905,6 +12914,42 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
   const points = Array.isArray(rd.points) ? rd.points : [];
   const photos = Array.isArray(rd.photos) ? rd.photos : [];
   const hasMap = pins.length > 0 || points.length > 0;
+  // Merged photo list — gallery photos (route_data.photos) PLUS each
+  // pin's per-pin photo (pins[i].photo). Dedupes by URL so a photo
+  // that lives in both places shows once. Used by the read-only PHOTOS
+  // grid and as the source-of-truth carousel list so a tap on a pin
+  // card thumbnail opens the same lightbox at the right index.
+  // Videos are surfaced as inline thumbnails in the grid but kept out
+  // of the carousel URL list (the lightbox is image-only). Edit mode
+  // still iterates `photos` directly so the × remove button isn't
+  // ambiguous between gallery and pin sources.
+  const gridEntries = useMemo(() => {
+    const entries = [];
+    const seen = new Set();
+    const add = (raw, source, pinIdx) => {
+      const url = typeof raw === "string" ? raw : (raw && raw.url) || "";
+      if (!url || seen.has(url)) return;
+      seen.add(url);
+      const isVid = typeof raw === "object" && raw && raw.type === "video";
+      entries.push({ url, isVid, source, pinIdx });
+    };
+    photos.forEach(p => add(p, "gallery"));
+    pins.forEach((p, i) => { if (p && p.photo) add(p.photo, "pin", i); });
+    return entries;
+  }, [photos, pins]);
+  const carouselUrlList = useMemo(
+    () => gridEntries.filter(e => !e.isVid).map(e => e.url),
+    [gridEntries]
+  );
+  // Helper used by both the PHOTOS grid and per-pin thumbnail cells —
+  // opens the lightbox starting at the supplied URL's index in the
+  // image-only list. No-op if the URL isn't there (e.g. videos).
+  const openCarouselAtUrl = (url) => {
+    const idx = carouselUrlList.indexOf(url);
+    if (idx < 0) return;
+    setCarouselIndex(idx);
+    setCarouselImages(carouselUrlList);
+  };
   // Per-pin elevations — fetched once per trip via Open-Elevation when
   // pins don't already carry an elev_ft field. Cached in component
   // state so subsequent re-renders don't refetch. Open-Elevation can be
@@ -13455,6 +13500,22 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
                     ) : hasNote ? (
                       <p style={{ fontFamily: serif, fontSize: 13, color: T.warmStone, margin: 0, lineHeight: 1.5 }}>{p.note}</p>
                     ) : null}
+                    {/* Per-pin photo — read-only thumbnail. Tap opens the
+                        merged carousel at this photo. stopPropagation so
+                        the surrounding card's tap-to-highlight doesn't
+                        also fire when the user is reaching for the photo. */}
+                    {!canEditInline && p && p.photo && (() => {
+                      const pinPhotoUrl = typeof p.photo === "string" ? p.photo : (p.photo && p.photo.url) || "";
+                      if (!pinPhotoUrl) return null;
+                      return (
+                        <div
+                          onClick={e => { e.stopPropagation(); openCarouselAtUrl(pinPhotoUrl); }}
+                          style={{ marginTop: 10, width: "100%", aspectRatio: "16 / 10", borderRadius: 6, overflow: "hidden", border: `1px solid ${T.charcoal}`, cursor: "pointer", background: "#000" }}
+                        >
+                          <img src={txImg(pinPhotoUrl, 600)} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               );
@@ -13520,49 +13581,51 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
       )}
 
       {/* Photos — visible when there are any OR when the owner is in
-          edit mode (so they have a place to add their first photo). */}
-      {(photos.length > 0 || canEditInline) && (
+          edit mode (so they have a place to add their first photo).
+          Read-only mode merges gallery + per-pin photos via gridEntries;
+          edit mode iterates the raw gallery `photos` array so the ×
+          remove button only ever targets gallery photos (pin photos are
+          managed via the pin builder elsewhere). */}
+      {((canEditInline ? photos.length : gridEntries.length) > 0 || canEditInline) && (
         <div style={{ padding: "0 16px 16px" }}>
           <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 2, fontWeight: 600, display: "block", marginBottom: 8 }}>PHOTOS{canEditInline ? " — TAP × TO REMOVE" : ""}</span>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
-            {photos.map((p, i) => {
-              const url = typeof p === "string" ? p : (p && p.url) || "";
-              const isVid = typeof p === "object" && p && p.type === "video";
-              // Read-only image cells open the lightbox at the tapped
-              // photo's position within the IMAGE-ONLY filtered list (so
-              // skipping a video doesn't desync the carousel index).
-              const openLightbox = (!canEditInline && !isVid && url) ? () => {
-                const imgUrls = [];
-                let tappedIdx = 0;
-                photos.forEach((q, j) => {
-                  const qUrl = typeof q === "string" ? q : (q && q.url) || "";
-                  const qIsVid = typeof q === "object" && q && q.type === "video";
-                  if (qUrl && !qIsVid) {
-                    if (j === i) tappedIdx = imgUrls.length;
-                    imgUrls.push(qUrl);
-                  }
-                });
-                if (imgUrls.length > 0) {
-                  setCarouselIndex(tappedIdx);
-                  setCarouselImages(imgUrls);
-                }
-              } : null;
-              return (
-                <div key={i}
-                     onClick={openLightbox || undefined}
-                     style={{ position: "relative", width: "100%", aspectRatio: "1 / 1", borderRadius: 8, overflow: "hidden", border: `1px solid ${T.charcoal}`, cursor: openLightbox ? "pointer" : "default" }}>
-                  {isVid
-                    ? <video src={url + "#t=0.001"} preload="metadata" playsInline muted style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", background: "#000" }} />
-                    : <LoadingImage src={url} accent={isPlan ? T.copper : T.purple} width={480} style={{ width: "100%", height: "100%" }} />}
-                  {canEditInline && (
+            {canEditInline ? (
+              photos.map((p, i) => {
+                const url = typeof p === "string" ? p : (p && p.url) || "";
+                const isVid = typeof p === "object" && p && p.type === "video";
+                return (
+                  <div key={i} style={{ position: "relative", width: "100%", aspectRatio: "1 / 1", borderRadius: 8, overflow: "hidden", border: `1px solid ${T.charcoal}` }}>
+                    {isVid
+                      ? <video src={url + "#t=0.001"} preload="metadata" playsInline muted style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", background: "#000" }} />
+                      : <LoadingImage src={url} accent={isPlan ? T.copper : T.purple} width={480} style={{ width: "100%", height: "100%" }} />}
                     <button onClick={() => removePhoto(i)} title="Remove photo"
                             style={{ position: "absolute", top: 4, right: 4, width: 22, height: 22, borderRadius: "50%", background: "rgba(0,0,0,0.7)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
                       <X size={12} color={T.white} />
                     </button>
-                  )}
-                </div>
-              );
-            })}
+                  </div>
+                );
+              })
+            ) : (
+              gridEntries.map((entry, i) => {
+                const openLightbox = !entry.isVid ? () => openCarouselAtUrl(entry.url) : null;
+                return (
+                  <div key={`${entry.source}-${entry.pinIdx ?? "g"}-${i}`}
+                       onClick={openLightbox || undefined}
+                       style={{ position: "relative", width: "100%", aspectRatio: "1 / 1", borderRadius: 8, overflow: "hidden", border: `1px solid ${T.charcoal}`, cursor: openLightbox ? "pointer" : "default" }}>
+                    {entry.isVid
+                      ? <video src={entry.url + "#t=0.001"} preload="metadata" playsInline muted style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", background: "#000" }} />
+                      : <LoadingImage src={entry.url} accent={isPlan ? T.copper : T.purple} width={480} style={{ width: "100%", height: "100%" }} />}
+                    {entry.source === "pin" && entry.pinIdx != null && (
+                      <div style={{ position: "absolute", top: 4, left: 4, padding: "2px 6px", borderRadius: 8, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", gap: 3 }}>
+                        <MapPin size={9} color={T.copper} />
+                        <span style={{ fontFamily: sans, fontSize: 9, color: T.white, fontWeight: 700, letterSpacing: 0.4 }}>{entry.pinIdx === 0 ? "S" : entry.pinIdx === pins.length - 1 ? "E" : entry.pinIdx + 1}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
             {canEditInline && (
               <>
                 <input ref={photoFileRef} type="file" accept="image/*,video/*" multiple onChange={handlePhotoFiles} style={{ display: "none" }} />
