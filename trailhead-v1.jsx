@@ -13695,14 +13695,20 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
       )}
 
       {/* Photo lightbox — populated when a thumbnail in the PHOTOS grid
-          is tapped (read-only mode only). Videos are excluded from the
-          image list since ImageCarousel only handles still images. */}
-      {carouselImages && carouselImages.length > 0 && (
+          is tapped (read-only mode only). Portaled to document.body
+          because TripReportDetail mounts inside a transformed wrapper —
+          `position: fixed` on the carousel would otherwise be scoped to
+          that ancestor instead of the viewport, parking the lightbox at
+          the top of the article (same trap the confirm-delete portal
+          comment further up calls out). Videos are excluded since
+          ImageCarousel only handles still images. */}
+      {carouselImages && carouselImages.length > 0 && createPortal(
         <ImageCarousel
           images={carouselImages}
           startIndex={carouselIndex}
           onClose={() => setCarouselImages(null)}
-        />
+        />,
+        document.body
       )}
     </div>
   );
