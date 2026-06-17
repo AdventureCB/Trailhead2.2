@@ -27468,6 +27468,146 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onLoadCandidates, onS
 // the inventory upload modal, and a history of past submissions w/ admin
 // review status. Read-only when the contract isn't status='active' (the
 // partner_self_insert RLS policy blocks upload otherwise anyway).
+// Top-of-dashboard schedule view — surfaces a 12-month strip across
+// the term (one cell per month, tinted by ended/current/future, with
+// per-cell submission dots colored by status) plus a list of upcoming
+// due dates pulled from every quota's per-period boundaries (or each
+// milestone's due_at). Lets the partner glance at "what's next" + "what
+// did I submit when" without scrolling through quota cards.
+function ContentPartnerScheduleCard({ contract }) {
+  const startMs = contract && contract.camper_delivered_at ? new Date(contract.camper_delivered_at).getTime() : null;
+  const endMs   = contract && contract.term_ends_at        ? new Date(contract.term_ends_at).getTime()        : null;
+  const now = Date.now();
+  // Hooks must live above any early return — see feedback_hooks_before_early_return.
+  const monthCells = useMemo(() => {
+    if (!startMs || !endMs || endMs <= startMs) return [];
+    const periodCount = 12;
+    const periodMs = (endMs - startMs) / periodCount;
+    const cells = [];
+    for (let i = 0; i < periodCount; i++) {
+      const pStart = startMs + i * periodMs;
+      const pEnd = startMs + (i + 1) * periodMs;
+      const ended = now >= pEnd;
+      const isCurrent = !ended && now >= pStart;
+      const subs = [];
+      const seen = new Set();
+      (contract.deliverables || []).forEach(d => {
+        const t = d.submitted_at ? new Date(d.submitted_at).getTime() : 0;
+        if (t < pStart || t >= pEnd) return;
+        if (seen.has(d.submission_group_id)) return;
+        seen.add(d.submission_group_id);
+        // Dedup by group; a multi-kind submission counts as ONE dot. Use
+        // the worst status in the group so a single rejection darkens it.
+        const groupRows = (contract.deliverables || []).filter(r => r.submission_group_id === d.submission_group_id);
+        const groupStatus = groupRows.some(r => r.status === 'pending') ? 'pending'
+                          : groupRows.every(r => r.status === 'approved') ? 'approved'
+                          : groupRows.every(r => r.status === 'rejected') ? 'rejected'
+                          : 'mixed';
+        subs.push({ id: d.submission_group_id, status: groupStatus, submitted_at: d.submitted_at });
+      });
+      cells.push({ index: i, start: pStart, end: pEnd, ended, isCurrent, subs });
+    }
+    return cells;
+  }, [contract && contract.deliverables, startMs, endMs, now]);
+
+  const upcoming = useMemo(() => {
+    if (!startMs || !endMs || endMs <= startMs) return [];
+    const events = [];
+    (contract.quotas || []).forEach(q => {
+      if (q.cadence === 'month' || q.cadence === 'quarter') {
+        const pCount = q.cadence === 'quarter' ? 4 : 12;
+        const pMs = (endMs - startMs) / pCount;
+        const schedule = q.schedule && typeof q.schedule === 'object' ? q.schedule : null;
+        const keys = q.cadence === 'quarter' ? ['q1','q2','q3','q4'] : ['m1','m2','m3','m4','m5','m6','m7','m8','m9','m10','m11','m12'];
+        for (let i = 0; i < pCount; i++) {
+          const pEnd = startMs + (i + 1) * pMs;
+          if (pEnd <= now) continue;
+          const baseTarget = schedule ? (Number(schedule[keys[i]]) || 0) : Math.round((Number(q.total_target) || 0) / pCount);
+          if (baseTarget <= 0) continue;
+          events.push({ type: 'period_due', dueAt: pEnd, quota: q, base: baseTarget });
+        }
+      } else if (q.cadence === 'milestone' && q.due_at) {
+        const dueMs = new Date(q.due_at).getTime();
+        if (dueMs > now) events.push({ type: 'milestone_due', dueAt: dueMs, quota: q, base: Number(q.total_target) || 0 });
+      } else if (q.cadence === 'term') {
+        if (endMs > now) events.push({ type: 'term_due', dueAt: endMs, quota: q, base: Number(q.total_target) || 0 });
+      }
+    });
+    events.sort((a, b) => a.dueAt - b.dueAt);
+    return events.slice(0, 6);
+  }, [contract && contract.quotas, startMs, endMs, now]);
+
+  if (!startMs || !endMs || endMs <= startMs) return null;
+
+  const fmtDate = (ms) => new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const daysUntil = (ms) => Math.max(0, Math.ceil((ms - now) / (24 * 60 * 60 * 1000)));
+
+  return (
+    <div>
+      <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 600, display: "block", marginBottom: 10 }}>SCHEDULE</span>
+      <div style={{ padding: 14, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10 }}>
+        {/* 12-month strip across the term */}
+        <div style={{ display: 'flex', gap: 3, marginBottom: upcoming.length > 0 ? 14 : 0, overflowX: 'auto', paddingBottom: 2 }}>
+          {monthCells.map(c => {
+            const monthName = new Date(c.start + (c.end - c.start) / 2).toLocaleDateString(undefined, { month: 'short' });
+            const tint = c.isCurrent ? `${T.copper}25` : T.darkBg;
+            const border = c.isCurrent ? T.copper : c.ended ? `${T.charcoal}` : `${T.charcoal}80`;
+            const labelColor = c.isCurrent ? T.white : c.ended ? T.tertiary : `${T.tertiary}80`;
+            const dotColor = (s) => s === 'approved' ? T.green
+                                 : s === 'pending' ? T.copper
+                                 : s === 'rejected' ? T.red
+                                 : `${T.copper}80`;
+            return (
+              <div
+                key={c.index}
+                title={`${monthName} — ${c.subs.length} submission${c.subs.length === 1 ? "" : "s"}`}
+                style={{ flex: '1 1 0', minWidth: 38, padding: '6px 2px', background: tint, border: `1px solid ${border}`, borderRadius: 4, textAlign: 'center' }}
+              >
+                <div style={{ fontFamily: sans, fontSize: 8, color: labelColor, fontWeight: 700, letterSpacing: 0.4 }}>{monthName.toUpperCase()}</div>
+                <div style={{ minHeight: 10, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 2, marginTop: 3 }}>
+                  {c.subs.length === 0 && c.ended && <div style={{ width: 4, height: 4, borderRadius: '50%', background: `${T.tertiary}40` }} />}
+                  {c.subs.length === 0 && c.isCurrent && <div style={{ width: 4, height: 4, borderRadius: '50%', background: T.copper, boxShadow: `0 0 4px ${T.copper}` }} />}
+                  {c.subs.slice(0, 4).map(s => (
+                    <div key={s.id} style={{ width: 5, height: 5, borderRadius: '50%', background: dotColor(s.status) }} />
+                  ))}
+                  {c.subs.length > 4 && <span style={{ fontFamily: sans, fontSize: 7, color: labelColor, fontWeight: 700 }}>+{c.subs.length - 4}</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        {/* Legend */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, fontFamily: sans, fontSize: 8, color: T.tertiary, fontWeight: 600, letterSpacing: 0.4, marginBottom: upcoming.length > 0 ? 12 : 0 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 5, height: 5, borderRadius: '50%', background: T.green }} /> APPROVED</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 5, height: 5, borderRadius: '50%', background: T.copper }} /> PENDING</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 5, height: 5, borderRadius: '50%', background: T.red }} /> REJECTED</span>
+        </div>
+        {/* Upcoming due dates */}
+        {upcoming.length > 0 ? (
+          <div>
+            <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.2, fontWeight: 700, marginBottom: 8 }}>UPCOMING DUE DATES</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {upcoming.map((ev, idx) => {
+                const d = daysUntil(ev.dueAt);
+                const urgent = d <= 7;
+                return (
+                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', background: T.darkBg, border: `1px solid ${urgent ? T.red : T.charcoal}`, borderRadius: 6 }}>
+                    <Clock size={11} color={urgent ? T.red : T.copper} />
+                    <span style={{ fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 700, minWidth: 52 }}>{fmtDate(ev.dueAt)}</span>
+                    <span style={{ fontFamily: sans, fontSize: 9, color: urgent ? T.red : T.tertiary, fontWeight: 600, letterSpacing: 0.4 }}>{d}d</span>
+                    <span style={{ flex: 1, fontFamily: serif, fontSize: 11, color: T.white, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{contentPartnerKindLabel(ev.quota)}</span>
+                    <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700 }}>{ev.base} due</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 // One progress card per quota — surfaces cumulative term progress on
 // top + a CURRENT PERIOD subsection (effective target = base + any
 // carryover from prior under-deliveries) + a PRIOR PERIODS strip
@@ -27488,10 +27628,13 @@ function ContentPartnerQuotaCard({ quota, contract }) {
     : prog.status === "milestone_past_due" ? "PAST DUE"
     : prog.status === "milestone_due_soon" ? "DUE SOON"
     : "ON TRACK";
-  const cadenceLabel = quota.cadence === "month" ? "/MO"
-    : quota.cadence === "quarter" ? "/Q"
-    : quota.cadence === "milestone" ? " · MILESTONE"
-    : " · TOTAL";
+  // The card's top label shows the TERM TOTAL — `quota.total_target` is
+  // always the year-wide target regardless of cadence. The cadence is a
+  // distribution hint shown alongside, NOT a divisor.
+  const cadenceLabel = quota.cadence === "milestone" ? " · MILESTONE"
+    : quota.cadence === "month" ? "/YR · MONTHLY"
+    : quota.cadence === "quarter" ? "/YR · QUARTERLY"
+    : "/YR";
   const cp = prog.currentPeriod;
   const cpPct = cp && cp.effectiveTarget > 0
     ? Math.min(100, Math.round((cp.approvedInPeriod / cp.effectiveTarget) * 100))
@@ -27721,6 +27864,9 @@ function ContentPartnerDashboard({ onClose, onLoad, onLoadById, onSubmit, onReco
                       : null}
                   </div>
                 </div>
+
+                {/* Schedule: month strip + upcoming due dates */}
+                <ContentPartnerScheduleCard contract={contract} />
 
                 {/* Per-kind progress */}
                 <div>
