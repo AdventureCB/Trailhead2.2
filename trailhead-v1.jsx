@@ -20293,7 +20293,7 @@ function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, init
 }
 
 /* ─── OTHER USER PROFILE (Public view / Follow logic) ─── */
-function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, isAdmin, onAdminUpdateUserRole, onAdminDeclineAmbassador, onAdminToggleModerator, onAdminToggleBetaTester, onAdminViewAsAmbassador, onReportContent, followingIds, onFollow, onUnfollow, fetchFollowCounts, renderFeedScopedTo, currentProfile, convoyRsvps, onViewBuild, allBuilds, onLoadAllBuilds, onlineUserIds, allTripPlans, onOpenTripPlan, onOpenFollowList }) {
+function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, isAdmin, onAdminUpdateUserRole, onAdminDeclineAmbassador, onAdminToggleModerator, onAdminToggleBetaTester, onAdminToggleContentPartner, onAdminViewAsAmbassador, onReportContent, followingIds, onFollow, onUnfollow, fetchFollowCounts, renderFeedScopedTo, currentProfile, convoyRsvps, onViewBuild, allBuilds, onLoadAllBuilds, onlineUserIds, allTripPlans, onOpenTripPlan, onOpenFollowList }) {
   // Trigger the cross-user builds load — the builds tab below filters
   // allBuilds for the viewed user. Root is idempotent via a ref.
   useEffect(() => { if (typeof onLoadAllBuilds === "function") onLoadAllBuilds(); }, []);
@@ -20376,6 +20376,7 @@ function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, isAdmin,
           ambassadorTier: null,
           isModerator: !!data.is_moderator,
           isBetaTester: !!data.is_beta_tester,
+          isContentPartner: !!data.is_content_partner,
           builds: [], trips: [], activity: [],
         });
         // Side-fetch ambassador tier so the admin role-picker knows
@@ -20679,6 +20680,32 @@ function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, isAdmin,
                   </div>
                   <span style={{ width: 36, height: 20, borderRadius: 10, background: isBeta ? T.green : T.charcoal, position: "relative", flexShrink: 0, transition: "background 120ms" }}>
                     <span style={{ position: "absolute", top: 2, left: isBeta ? 18 : 2, width: 16, height: 16, borderRadius: "50%", background: T.white, transition: "left 120ms" }} />
+                  </span>
+                </button>
+              );
+            })()}
+
+            {/* Content partner toggle — gates the partner-facing dashboard
+                + UPLOAD CONTENT button. Independent of role / ambassador
+                status; the dashboard reads the contract row admin will set
+                up separately on the Content Partners admin screen. Toggle
+                on here ≠ contract created — that's a follow-up admin step. */}
+            {onAdminToggleContentPartner && (() => {
+              const isPartner = !!p.isContentPartner;
+              return (
+                <button onClick={() => {
+                  if (!confirm(isPartner ? "Remove content partner access from this user?" : "Grant content partner access? They'll see their partner dashboard once you've set up their contract on the admin Content Partners screen.")) return;
+                  onAdminToggleContentPartner(resolvedTargetId, !isPartner).then(res => {
+                    if (res && res.ok) setDbProfile(prev => prev ? { ...prev, isContentPartner: !isPartner } : prev);
+                    else if (res && res.error) alert("Content partner toggle failed: " + res.error);
+                  });
+                }} style={{ marginTop: 8, width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", background: isPartner ? `${T.copper}25` : T.darkCard, border: `1px solid ${isPartner ? T.copper : T.charcoal}`, borderRadius: 8, cursor: "pointer" }}>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
+                    <span style={{ fontFamily: sans, fontSize: 11, color: isPartner ? T.copper : T.white, fontWeight: 700, letterSpacing: 0.5 }}>CONTENT PARTNER</span>
+                    <span style={{ fontFamily: serif, fontSize: 10, color: T.tertiary, lineHeight: 1.3 }}>Influencer creator on a discounted-build content contract.</span>
+                  </div>
+                  <span style={{ width: 36, height: 20, borderRadius: 10, background: isPartner ? T.copper : T.charcoal, position: "relative", flexShrink: 0, transition: "background 120ms" }}>
+                    <span style={{ position: "absolute", top: 2, left: isPartner ? 18 : 2, width: 16, height: 16, borderRadius: "50%", background: T.white, transition: "left 120ms" }} />
                   </span>
                 </button>
               );
@@ -26201,6 +26228,593 @@ function GearDropRunScreen({ runId, currentUserId, onClose, onLoadRun, onLoadDro
   );
 }
 
+// ─── Content Partners list (admin) ──────────────────────────────────────
+// Tabbed list of all content_partners contracts, grouped by status.
+// + NEW PARTNER opens the editor without a partner id. Tap any row to
+// edit. Pending-deliverable badges surface per-row.
+const CONTENT_PARTNER_STATUS_LABEL = {
+  pending_delivery: "PENDING DELIVERY",
+  active: "ACTIVE",
+  completed: "COMPLETED",
+  breached: "BREACHED",
+  ended: "ENDED",
+};
+const CONTENT_PARTNER_STATUS_COLOR = {
+  pending_delivery: "#C49A6C",
+  active: "#4A7C59",
+  completed: "#8B7D6B",
+  breached: "#BD472A",
+  ended: "#8B7D6B",
+};
+const CONTENT_PARTNER_KIND_LABEL = {
+  photo: "Photos",
+  short_video: "Short videos",
+  long_video: "Walkaround / review",
+  basecamp_video: "Basecamp video",
+};
+const CONTENT_PARTNER_KIND_ORDER = ["photo", "short_video", "long_video", "basecamp_video"];
+
+function ContentPartnersAdminScreen({ onBack, onOpenEditor, onNewPartner, onLoadPartners, onLoadPendingCounts }) {
+  const [partners, setPartners] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState("active");
+  const [pendingByPartner, setPendingByPartner] = useState({});
+
+  const refresh = async () => {
+    setLoading(true);
+    const res = await onLoadPartners();
+    if (res && res.ok && Array.isArray(res.data)) setPartners(res.data);
+    setLoading(false);
+    // Pending counts come from a separate aggregate (Chunk 3 wires the
+    // full approval queue; for now we just count rows per partner).
+    if (onLoadPendingCounts) {
+      const counts = await onLoadPendingCounts();
+      if (counts && counts.ok) setPendingByPartner(counts.data || {});
+    }
+  };
+
+  useEffect(() => { refresh(); }, []);
+
+  const bucketed = useMemo(() => {
+    const buckets = { active: [], pending_delivery: [], completed: [], ended: [] };
+    (partners || []).forEach(p => {
+      if (p.status === "active") buckets.active.push(p);
+      else if (p.status === "pending_delivery") buckets.pending_delivery.push(p);
+      else if (p.status === "completed") buckets.completed.push(p);
+      else buckets.ended.push(p); // ended + breached + archived
+    });
+    return buckets;
+  }, [partners]);
+
+  const renderRow = (p) => {
+    const statusColor = CONTENT_PARTNER_STATUS_COLOR[p.status] || "#8B7D6B";
+    const pending = pendingByPartner[p.id] || 0;
+    const author = p.profile;
+    const quotaSummary = (p.quotas || [])
+      .slice()
+      .sort((a, b) => CONTENT_PARTNER_KIND_ORDER.indexOf(a.kind) - CONTENT_PARTNER_KIND_ORDER.indexOf(b.kind))
+      .map(q => `${q.total_target} ${CONTENT_PARTNER_KIND_LABEL[q.kind] || q.kind}`)
+      .join(" · ");
+    return (
+      <button key={p.id} onClick={() => onOpenEditor(p.id)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 12, background: T.darkCard, border: `1px solid ${T.charcoal}`, cursor: "pointer", textAlign: "left", width: "100%" }}>
+        <div style={{ width: 38, height: 38, borderRadius: "50%", background: T.charcoal, overflow: "hidden", flexShrink: 0 }}>
+          {author && author.avatar_url && <img src={author.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+            <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{(author && author.full_name) || "Unassigned"}</span>
+            <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: statusColor, padding: "2px 7px", borderRadius: 8, fontWeight: 700, letterSpacing: 0.4 }}>{CONTENT_PARTNER_STATUS_LABEL[p.status] || p.status.toUpperCase()}</span>
+            {pending > 0 && <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: T.red, padding: "2px 7px", borderRadius: 8, fontWeight: 700 }}>{pending} PENDING</span>}
+          </div>
+          <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginBottom: 2 }}>{author ? `@${author.handle}` : "@—"} · {p.discount_pct ? `${p.discount_pct}% off` : "discount —"}</div>
+          {quotaSummary && <div style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{quotaSummary}</div>}
+        </div>
+        <ChevronRight size={16} color={T.tertiary} />
+      </button>
+    );
+  };
+
+  const tabs = [
+    { k: "active", label: "ACTIVE", count: bucketed.active.length },
+    { k: "pending_delivery", label: "PENDING DELIVERY", count: bucketed.pending_delivery.length },
+    { k: "completed", label: "COMPLETED", count: bucketed.completed.length },
+    { k: "ended", label: "ENDED", count: bucketed.ended.length },
+  ];
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 16px", borderBottom: `1px solid ${T.charcoal}` }}>
+        <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+          <ChevronLeft size={20} color={T.white} />
+        </button>
+        <Camera size={16} color={T.copper} />
+        <span style={{ flex: 1, fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, letterSpacing: 0.8 }}>CONTENT PARTNERS</span>
+        <button onClick={onNewPartner} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "7px 12px", background: T.copper, border: "none", borderRadius: 8, color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.6, cursor: "pointer" }}>
+          <Plus size={12} color={T.white} /> NEW
+        </button>
+      </div>
+      <div style={{ display: "flex", gap: 4, padding: "10px 12px", borderBottom: `1px solid ${T.charcoal}`, overflowX: "auto" }}>
+        {tabs.map(t => (
+          <button key={t.k} onClick={() => setTab(t.k)} style={{ flexShrink: 0, padding: "6px 12px", borderRadius: 16, background: tab === t.k ? T.copper : T.darkCard, border: `1px solid ${tab === t.k ? T.copper : T.charcoal}`, color: tab === t.k ? T.white : T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}>
+            {t.label} {t.count > 0 ? `· ${t.count}` : ""}
+          </button>
+        ))}
+      </div>
+      <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+        {loading
+          ? <div style={{ padding: 20, textAlign: "center", fontFamily: serif, fontSize: 13, color: T.tertiary }}>Loading…</div>
+          : bucketed[tab].length === 0
+            ? <div style={{ padding: 30, textAlign: "center", fontFamily: serif, fontSize: 13, color: T.tertiary }}>No partners in this status.</div>
+            : bucketed[tab].map(renderRow)}
+      </div>
+    </div>
+  );
+}
+
+// ─── Content Partner editor (admin) ─────────────────────────────────────
+// Form for creating / editing a single content_partners row + its quota
+// lines. profile_id picker accepts a UUID OR a handle (resolved to id on
+// blur). camper_delivered_at + 1yr auto-fills term_ends_at unless the
+// admin overrides. Quota lines have per-kind defaults pulled from the
+// sample contracts (e.g. photo · 100 · quarter · 15/35/35/15).
+function ContentPartnerEditor({ partnerId, onBack, onLoad, onSave, onDelete, onAddBackdated }) {
+  const [partner, setPartner] = useState(null);
+  const [profileSearch, setProfileSearch] = useState("");
+  const [profileMatches, setProfileMatches] = useState([]);
+  const [resolvedProfile, setResolvedProfile] = useState(null);
+  const [status, setStatus] = useState("pending_delivery");
+  const [contractSignedAt, setContractSignedAt] = useState("");
+  const [camperDeliveredAt, setCamperDeliveredAt] = useState("");
+  const [termEndsAt, setTermEndsAt] = useState("");
+  const [discountPct, setDiscountPct] = useState("");
+  const [contractUrl, setContractUrl] = useState("");
+  const [dropboxUrl, setDropboxUrl] = useState("");
+  const [basecampActivity, setBasecampActivity] = useState("");
+  const [notes, setNotes] = useState("");
+  // Quotas — always four rows (one per kind), each carrying an `enabled`
+  // flag. Disabled rows render collapsed and are filtered out at save.
+  // Starting all OFF means no opinion is baked in — admin sets each
+  // contract's mix explicitly per the signed agreement.
+  const blankQuotas = () => CONTENT_PARTNER_KIND_ORDER.map(kind => ({
+    kind,
+    enabled: false,
+    total_target: 0,
+    cadence: kind === "long_video" || kind === "basecamp_video" ? "milestone" : "term",
+    schedule_text: "",
+    due_at: "",
+  }));
+  const [quotas, setQuotas] = useState(blankQuotas);
+  const [deliverables, setDeliverables] = useState([]);
+  // Backdate form draft. kind comes from the enabled quota list once it
+  // resolves; left blank until the admin picks one.
+  const [backdateDraft, setBackdateDraft] = useState({ kind: "", quantity: "", submitted_at: "", notes: "" });
+  const [backdating, setBackdating] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!partnerId) {
+      setPartner(null);
+      setQuotas(blankQuotas());
+      setDeliverables([]);
+      setLoaded(true);
+      return;
+    }
+    (async () => {
+      const res = await onLoad(partnerId);
+      if (cancelled || !res || !res.ok) return;
+      const p = res.data;
+      setPartner(p);
+      setResolvedProfile(p.profile || null);
+      if (p.profile) setProfileSearch(p.profile.handle || "");
+      setStatus(p.status || "pending_delivery");
+      setContractSignedAt(p.contract_signed_at || "");
+      setCamperDeliveredAt(p.camper_delivered_at || "");
+      setTermEndsAt(p.term_ends_at || "");
+      setDiscountPct(p.discount_pct != null ? String(p.discount_pct) : "");
+      setContractUrl(p.contract_url || "");
+      setDropboxUrl(p.dropbox_upload_folder_url || "");
+      setBasecampActivity(p.basecamp_activity || "");
+      setNotes(p.notes || "");
+      setDeliverables(p.deliverables || []);
+      // Merge saved quota rows onto the canonical 4-row template so the
+      // admin always sees every kind (disabled when there's no row in DB).
+      const savedByKind = {};
+      (p.quotas || []).forEach(q => { savedByKind[q.kind] = q; });
+      setQuotas(CONTENT_PARTNER_KIND_ORDER.map(kind => {
+        const q = savedByKind[kind];
+        if (q) {
+          return {
+            kind,
+            enabled: true,
+            total_target: q.total_target,
+            cadence: q.cadence,
+            schedule_text: q.schedule ? JSON.stringify(q.schedule) : "",
+            due_at: q.due_at ? new Date(q.due_at).toISOString().slice(0, 10) : "",
+          };
+        }
+        return {
+          kind,
+          enabled: false,
+          total_target: 0,
+          cadence: kind === "long_video" || kind === "basecamp_video" ? "milestone" : "term",
+          schedule_text: "",
+          due_at: "",
+        };
+      }));
+      setLoaded(true);
+    })();
+    return () => { cancelled = true; };
+  }, [partnerId]);
+
+  // Reload deliverables (and totals) after a backdate insert — saves the
+  // admin a manual refresh.
+  const reloadDeliverables = async () => {
+    if (!partnerId) return;
+    const res = await onLoad(partnerId);
+    if (res && res.ok) setDeliverables(res.data.deliverables || []);
+  };
+
+  // Auto-compute term_ends_at when camper_delivered_at changes, unless the
+  // admin has set it explicitly (we leave alone any non-empty value the
+  // admin actively typed since the last delivered-at change).
+  useEffect(() => {
+    if (!camperDeliveredAt) return;
+    const d = new Date(camperDeliveredAt);
+    if (isNaN(d.getTime())) return;
+    const end = new Date(d);
+    end.setFullYear(end.getFullYear() + 1);
+    const endStr = end.toISOString().slice(0, 10);
+    setTermEndsAt(prev => (!prev || prev === "" ? endStr : prev));
+  }, [camperDeliveredAt]);
+
+  // Profile picker — search by handle (with @ stripped). Light debounce.
+  useEffect(() => {
+    if (!profileSearch.trim() || resolvedProfile && (`@${resolvedProfile.handle}` === profileSearch || resolvedProfile.handle === profileSearch.replace(/^@/, ""))) {
+      return;
+    }
+    const handle = profileSearch.trim().replace(/^@/, "");
+    if (handle.length < 2) { setProfileMatches([]); return; }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      try {
+        const { data } = await supabase.from("profiles")
+          .select("id, handle, full_name, avatar_url, is_content_partner")
+          .ilike("handle", `${handle}%`)
+          .limit(8);
+        if (!cancelled) setProfileMatches(data || []);
+      } catch (e) { /* non-fatal */ }
+    }, 250);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [profileSearch, resolvedProfile]);
+
+  const handleSave = async () => {
+    if (saving) return;
+    const profileId = resolvedProfile && resolvedProfile.id;
+    if (!profileId) { alert("Pick the partner's profile first."); return; }
+    setSaving(true);
+    try {
+      // Only persist enabled quota rows; disabled rows are wiped from
+      // the contract (save replaces the full set per saveContentPartner).
+      const cleanQuotas = quotas
+        .filter(q => q.enabled && Number(q.total_target) > 0)
+        .map(q => {
+          let schedule = null;
+          if (q.schedule_text && q.schedule_text.trim()) {
+            try { schedule = JSON.parse(q.schedule_text); }
+            catch (e) { /* leave null; admin can re-enter */ }
+          }
+          return {
+            kind: q.kind,
+            total_target: q.total_target,
+            cadence: q.cadence,
+            schedule,
+            due_at: q.due_at ? new Date(q.due_at).toISOString() : null,
+          };
+        });
+      const res = await onSave({
+        id: partnerId || null,
+        profile_id: profileId,
+        status,
+        contract_signed_at: contractSignedAt || null,
+        camper_delivered_at: camperDeliveredAt || null,
+        term_ends_at: termEndsAt || null,
+        discount_pct: discountPct,
+        contract_url: contractUrl,
+        dropbox_upload_folder_url: dropboxUrl,
+        basecamp_activity: basecampActivity,
+        notes,
+        quotas: cleanQuotas,
+      });
+      if (res && res.ok) {
+        onBack();
+      } else if (res && res.error) {
+        alert("Save failed: " + res.error);
+      }
+    } finally { setSaving(false); }
+  };
+
+  const handleDelete = async () => {
+    if (!partnerId) return;
+    const res = await onDelete(partnerId);
+    if (res && res.ok) onBack();
+    else if (res && res.error && res.error !== "Cancelled") alert("Delete failed: " + res.error);
+  };
+
+  const updateQuota = (idx, patch) => {
+    setQuotas(prev => prev.map((q, i) => i === idx ? { ...q, ...patch } : q));
+  };
+
+  const fieldStyle = { width: "100%", boxSizing: "border-box", padding: "10px 12px", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8, color: T.white, fontFamily: serif, fontSize: 13 };
+  const labelStyle = { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600, display: "block", marginBottom: 6 };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 16px", borderBottom: `1px solid ${T.charcoal}`, position: "sticky", top: 0, background: T.darkBg, zIndex: 4 }}>
+        <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+          <ChevronLeft size={20} color={T.white} />
+        </button>
+        <Camera size={16} color={T.copper} />
+        <span style={{ flex: 1, fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.8 }}>{partnerId ? "EDIT PARTNER" : "NEW PARTNER"}</span>
+        <button onClick={handleSave} disabled={saving} style={{ padding: "8px 14px", background: saving ? T.charcoal : T.copper, border: "none", borderRadius: 8, color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.6, cursor: saving ? "default" : "pointer" }}>
+          {saving ? "SAVING…" : "SAVE"}
+        </button>
+      </div>
+      {!loaded
+        ? <div style={{ padding: 30, textAlign: "center", fontFamily: serif, fontSize: 13, color: T.tertiary }}>Loading…</div>
+        : (
+          <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 18 }}>
+            <div>
+              <label style={labelStyle}>PARTNER</label>
+              {resolvedProfile
+                ? <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: T.darkCard, border: `1px solid ${T.copper}40`, borderRadius: 8 }}>
+                    <div style={{ width: 32, height: 32, borderRadius: "50%", background: T.charcoal, overflow: "hidden", flexShrink: 0 }}>
+                      {resolvedProfile.avatar_url && <img src={resolvedProfile.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700 }}>{resolvedProfile.full_name || "User"}</div>
+                      <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>@{resolvedProfile.handle}</div>
+                    </div>
+                    {!partnerId && (
+                      <button onClick={() => { setResolvedProfile(null); setProfileSearch(""); setProfileMatches([]); }} style={{ background: "none", border: "none", padding: 4, cursor: "pointer" }}>
+                        <X size={14} color={T.tertiary} />
+                      </button>
+                    )}
+                  </div>
+                : (
+                  <>
+                    <input value={profileSearch} onChange={e => setProfileSearch(e.target.value)} placeholder="Type @handle…" style={fieldStyle} />
+                    {profileMatches.length > 0 && (
+                      <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 4 }}>
+                        {profileMatches.map(m => (
+                          <button key={m.id} onClick={() => { setResolvedProfile(m); setProfileMatches([]); setProfileSearch(`@${m.handle || ""}`); }} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8, cursor: "pointer", textAlign: "left" }}>
+                            <div style={{ width: 26, height: 26, borderRadius: "50%", background: T.charcoal, overflow: "hidden" }}>
+                              {m.avatar_url && <img src={m.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>{m.full_name || "User"}</div>
+                              <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>@{m.handle}</div>
+                            </div>
+                            {m.is_content_partner && <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 700, letterSpacing: 0.4 }}>FLAGGED</span>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+            </div>
+
+            <div>
+              <label style={labelStyle}>STATUS</label>
+              <select value={status} onChange={e => setStatus(e.target.value)} style={fieldStyle}>
+                <option value="pending_delivery">Pending delivery (contract signed, camper not yet shipped)</option>
+                <option value="active">Active (term running)</option>
+                <option value="completed">Completed (term fulfilled)</option>
+                <option value="breached">Breached (failed to deliver — visibility only)</option>
+                <option value="ended">Ended (archived)</option>
+              </select>
+            </div>
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>CONTRACT SIGNED</label>
+                <input type="date" value={contractSignedAt} onChange={e => setContractSignedAt(e.target.value)} style={fieldStyle} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>CAMPER DELIVERED</label>
+                <input type="date" value={camperDeliveredAt} onChange={e => setCamperDeliveredAt(e.target.value)} style={fieldStyle} />
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>TERM ENDS</label>
+                <input type="date" value={termEndsAt} onChange={e => setTermEndsAt(e.target.value)} style={fieldStyle} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>DISCOUNT %</label>
+                <input type="number" min="0" max="100" step="1" value={discountPct} onChange={e => setDiscountPct(e.target.value)} placeholder="25 or 50" style={fieldStyle} />
+              </div>
+            </div>
+
+            <div>
+              <label style={labelStyle}>SIGNED CONTRACT URL (Dropbox / JotForm)</label>
+              <input value={contractUrl} onChange={e => setContractUrl(e.target.value)} placeholder="https://…" style={fieldStyle} />
+            </div>
+
+            <div>
+              <label style={labelStyle}>DROPBOX UPLOAD FOLDER (partner sees this on their dashboard)</label>
+              <input value={dropboxUrl} onChange={e => setDropboxUrl(e.target.value)} placeholder="https://www.dropbox.com/scl/fo/…" style={fieldStyle} />
+            </div>
+
+            <div>
+              <label style={labelStyle}>BASECAMP ACTIVITY ("Basecamp for ___")</label>
+              <input value={basecampActivity} onChange={e => setBasecampActivity(e.target.value)} placeholder="hiking · fishing · camping · …" style={fieldStyle} />
+            </div>
+
+            <div>
+              <label style={labelStyle}>ADMIN NOTES</label>
+              <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="Internal context — campaign, season, special-case agreements" style={{ ...fieldStyle, resize: "vertical" }} />
+            </div>
+
+            <div style={{ borderTop: `1px solid ${T.charcoal}`, paddingTop: 14 }}>
+              <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, letterSpacing: 1.2, fontWeight: 700, display: "block", marginBottom: 10 }}>QUOTAS</span>
+              <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: "0 0 12px", lineHeight: 1.4 }}>
+                Toggle each deliverable kind on or off per contract. "term" = total over the contract year; "quarter"/"month" = per-period (schedule jsonb optional); "milestone" = one-shot with a hard due date. Disabled rows are removed from the contract on save.
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {quotas.map((q, idx) => (
+                  <div key={q.kind} style={{ padding: 12, background: T.darkCard, border: `1px solid ${q.enabled ? T.copper + "60" : T.charcoal}`, borderRadius: 10 }}>
+                    <button type="button" onClick={() => updateQuota(idx, { enabled: !q.enabled })} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: 0, background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
+                      <span style={{ fontFamily: sans, fontSize: 11, color: q.enabled ? T.white : T.tertiary, fontWeight: 700, flex: 1 }}>{CONTENT_PARTNER_KIND_LABEL[q.kind] || q.kind}</span>
+                      <span style={{ fontFamily: sans, fontSize: 9, color: q.enabled ? T.copper : T.tertiary, fontWeight: 700, letterSpacing: 0.4 }}>{q.enabled ? "ENABLED" : "OFF"}</span>
+                      <span style={{ width: 36, height: 20, borderRadius: 10, background: q.enabled ? T.copper : T.charcoal, position: "relative", flexShrink: 0, transition: "background 120ms" }}>
+                        <span style={{ position: "absolute", top: 2, left: q.enabled ? 18 : 2, width: 16, height: 16, borderRadius: "50%", background: T.white, transition: "left 120ms" }} />
+                      </span>
+                    </button>
+                    {q.enabled && (
+                      <div style={{ marginTop: 10 }}>
+                        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                          <div style={{ flex: 1 }}>
+                            <label style={{ ...labelStyle, fontSize: 9 }}>TOTAL TARGET</label>
+                            <input type="number" min="0" step="1" value={q.total_target} onChange={e => updateQuota(idx, { total_target: Number(e.target.value) || 0 })} style={fieldStyle} />
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <label style={{ ...labelStyle, fontSize: 9 }}>CADENCE</label>
+                            <select value={q.cadence} onChange={e => updateQuota(idx, { cadence: e.target.value })} style={fieldStyle}>
+                              <option value="term">Term</option>
+                              <option value="quarter">Quarter</option>
+                              <option value="month">Month</option>
+                              <option value="milestone">Milestone (one-shot)</option>
+                            </select>
+                          </div>
+                        </div>
+                        {(q.cadence === "quarter" || q.cadence === "month") && (
+                          <div style={{ marginBottom: 8 }}>
+                            <label style={{ ...labelStyle, fontSize: 9 }}>SCHEDULE (optional JSON, e.g. {"{\"Q1\":15,\"Q2\":35,\"Q3\":35,\"Q4\":15}"})</label>
+                            <input value={q.schedule_text || ""} onChange={e => updateQuota(idx, { schedule_text: e.target.value })} placeholder='{"Q1":15,"Q2":35,"Q3":35,"Q4":15}' style={fieldStyle} />
+                          </div>
+                        )}
+                        {q.cadence === "milestone" && (
+                          <div>
+                            <label style={{ ...labelStyle, fontSize: 9 }}>DUE DATE</label>
+                            <input type="date" value={q.due_at || ""} onChange={e => updateQuota(idx, { due_at: e.target.value })} style={fieldStyle} />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {partnerId && onAddBackdated && (() => {
+              const enabledQuotas = quotas.filter(q => q.enabled);
+              if (enabledQuotas.length === 0) return null;
+              // Totals from already-saved deliverables (approved only — pending
+              // doesn't count toward the partner's standing). Lets the admin
+              // see where they sit before backdating more.
+              const approvedByKind = {};
+              const pendingByKind = {};
+              deliverables.forEach(d => {
+                if (d.status === "approved") {
+                  approvedByKind[d.kind] = (approvedByKind[d.kind] || 0) + (Number(d.quantity_accepted) || 0);
+                } else if (d.status === "pending") {
+                  pendingByKind[d.kind] = (pendingByKind[d.kind] || 0) + (Number(d.quantity_reported) || 0);
+                }
+              });
+              const targetByKind = {};
+              quotas.forEach(q => { if (q.enabled) targetByKind[q.kind] = Number(q.total_target) || 0; });
+              return (
+                <div style={{ borderTop: `1px solid ${T.charcoal}`, paddingTop: 14 }}>
+                  <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, letterSpacing: 1.2, fontWeight: 700, display: "block", marginBottom: 6 }}>BACKDATE DELIVERIES</span>
+                  <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: "0 0 12px", lineHeight: 1.4 }}>
+                    Log content the partner delivered BEFORE this system existed, or any out-of-band approvals. Entries land as approved automatically (admin authoring is the review).
+                  </p>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
+                    {enabledQuotas.map(q => {
+                      const got = approvedByKind[q.kind] || 0;
+                      const pending = pendingByKind[q.kind] || 0;
+                      const target = targetByKind[q.kind] || 0;
+                      return (
+                        <div key={q.kind} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8 }}>
+                          <span style={{ flex: 1, fontFamily: sans, fontSize: 11, color: T.white }}>{CONTENT_PARTNER_KIND_LABEL[q.kind]}</span>
+                          <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>
+                            <span style={{ color: T.copper, fontWeight: 700 }}>{got}</span> approved
+                            {pending > 0 && <span> · <span style={{ color: T.tertiary }}>{pending} pending</span></span>}
+                            <span> / {target} target</span>
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{ padding: 12, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10 }}>
+                    <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                      <div style={{ flex: 1.4 }}>
+                        <label style={{ ...labelStyle, fontSize: 9 }}>KIND</label>
+                        <select value={backdateDraft.kind} onChange={e => setBackdateDraft(d => ({ ...d, kind: e.target.value }))} style={fieldStyle}>
+                          <option value="">— Pick a kind —</option>
+                          {enabledQuotas.map(q => <option key={q.kind} value={q.kind}>{CONTENT_PARTNER_KIND_LABEL[q.kind]}</option>)}
+                        </select>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <label style={{ ...labelStyle, fontSize: 9 }}>COUNT</label>
+                        <input type="number" min="1" step="1" value={backdateDraft.quantity} onChange={e => setBackdateDraft(d => ({ ...d, quantity: e.target.value }))} placeholder="5" style={fieldStyle} />
+                      </div>
+                      <div style={{ flex: 1.2 }}>
+                        <label style={{ ...labelStyle, fontSize: 9 }}>DELIVERED DATE</label>
+                        <input type="date" value={backdateDraft.submitted_at} onChange={e => setBackdateDraft(d => ({ ...d, submitted_at: e.target.value }))} style={fieldStyle} />
+                      </div>
+                    </div>
+                    <div style={{ marginBottom: 8 }}>
+                      <label style={{ ...labelStyle, fontSize: 9 }}>NOTES (optional)</label>
+                      <input value={backdateDraft.notes} onChange={e => setBackdateDraft(d => ({ ...d, notes: e.target.value }))} placeholder="Optional context — campaign, batch label, etc." style={fieldStyle} />
+                    </div>
+                    <button
+                      disabled={backdating || !backdateDraft.kind || !backdateDraft.quantity}
+                      onClick={async () => {
+                        if (backdating) return;
+                        setBackdating(true);
+                        try {
+                          const res = await onAddBackdated({
+                            partnerId,
+                            kind: backdateDraft.kind,
+                            quantity: Number(backdateDraft.quantity),
+                            submittedAt: backdateDraft.submitted_at || null,
+                            notes: backdateDraft.notes || null,
+                          });
+                          if (res && res.ok) {
+                            setBackdateDraft({ kind: "", quantity: "", submitted_at: "", notes: "" });
+                            await reloadDeliverables();
+                          } else if (res && res.error) {
+                            alert("Add failed: " + res.error);
+                          }
+                        } finally { setBackdating(false); }
+                      }}
+                      style={{ width: "100%", padding: "10px 14px", background: backdating || !backdateDraft.kind || !backdateDraft.quantity ? T.charcoal : T.copper, border: "none", borderRadius: 8, color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.6, cursor: backdating || !backdateDraft.kind || !backdateDraft.quantity ? "default" : "pointer" }}
+                    >
+                      {backdating ? "ADDING…" : "+ ADD BACKDATED DELIVERY"}
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {partnerId && (
+              <div style={{ borderTop: `1px solid ${T.charcoal}`, paddingTop: 14 }}>
+                <span style={{ fontFamily: sans, fontSize: 11, color: T.red, letterSpacing: 1.2, fontWeight: 700, display: "block", marginBottom: 10 }}>DANGER ZONE</span>
+                <button onClick={handleDelete} style={{ width: "100%", padding: "12px 14px", background: `${T.red}25`, border: `1px solid ${T.red}`, borderRadius: 10, color: T.red, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer" }}>
+                  DELETE CONTRACT
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+    </div>
+  );
+}
+
 // ─── Gear Drops list (admin) ────────────────────────────────────────────
 // Tabbed list of all gear_drops the admin can see, grouped by status.
 // + NEW DROP creates a draft via onCreateGearDrop then opens the editor
@@ -26327,6 +26941,7 @@ function AdminHubScreen({ onBack, onSelect, openReportCount, openBugCount }) {
     { key: "bugs",       label: "BUG REPORTS", desc: "In-app bug submissions + admin discussion.",      icon: AlertTriangle,  badge: openBugCount,    color: T.red },
     { key: "moderation", label: "MODERATION", desc: "AI auto-moderation logs and blocked uploads.",     icon: ShieldCheck,    color: T.copper },
     { key: "discounts",  label: "AMBASSADORS",  desc: "Ambassador commission analytics, discount codes, bulk promo templates.", icon: Tag,           color: T.copper },
+    { key: "partners",   label: "CONTENT PARTNERS", desc: "Influencer creator contracts, quotas, and delivery tracking.", icon: Camera, color: T.copper },
     GEAR_DROPS_ENABLED && { key: "geardrops", label: "GEAR DROPS", desc: "Sponsored events: route + prize + race mechanics.", icon: Gift, color: T.green },
     { key: "push",       label: "PUSH",       desc: "Broadcast push notifications and view history.",   icon: Bell,           color: T.copper },
     { key: "analytics",  label: "ANALYTICS",  desc: "Active users, signups, posts, engagement.",        icon: TrendingUp,     color: T.green },
@@ -33926,6 +34541,13 @@ export default function Trailhead() {
   // Admins always inherit it so the team sees in-flight features without
   // an explicit grant.
   const isBetaTester = isAdmin || !!(currentProfile && currentProfile.is_beta_tester);
+  // Content partner = additive role admin can grant. Gates the partner
+  // dashboard surface + the UPLOAD CONTENT button. Independent of
+  // role / is_ambassador so a single user can be ambassador + partner.
+  // Admin does NOT auto-inherit — admins aren't generally partners, and
+  // the dashboard wouldn't render anything meaningful without a contract
+  // row (the admin sees partner data via the admin Content Partners tab).
+  const isContentPartner = !!(currentProfile && currentProfile.is_content_partner);
 
   // ─── Stripe return handler ────────────────────────────────────────
   // Fires once after the ambassador returns from Stripe-hosted onboarding
@@ -35588,6 +36210,10 @@ export default function Trailhead() {
   // edited. When non-null, the GearDropEditor overlay (Phase 1.3) mounts
   // over GearDropsListScreen. Cleared on close.
   const [editingGearDropId, setEditingGearDropId] = useState(null);
+  // Content partner editor target — `""` means new (no id yet), uuid
+  // means edit an existing contract. null = show the list. Mirrors the
+  // gear-drops editor routing pattern.
+  const [editingContentPartnerId, setEditingContentPartnerId] = useState(null);
   // Public detail target — set when a beta tester (or admin) taps a drop
   // card from the feed. Opens GearDropDetailScreen as a full-screen overlay.
   const [viewingGearDropId, setViewingGearDropId] = useState(null);
@@ -37681,6 +38307,224 @@ export default function Trailhead() {
       return { ok: true };
     } catch (e) {
       console.error("[adminToggleUserBetaTester] failed", e);
+      return { error: "Network error" };
+    }
+  };
+
+  // Admin-only: flip a user's `is_content_partner` flag. Independent of
+  // role / is_ambassador — a single user can be both an ambassador and
+  // a content partner. Toggling on does NOT create a contract row; admin
+  // sets that up separately on the Content Partners admin screen.
+  const adminToggleUserContentPartner = async (targetUid, makeContentPartner) => {
+    if (!isAdmin || !targetUid) return { error: "Not authorized" };
+    try {
+      const { data: rows, error } = await supabase.from("profiles").update({
+        is_content_partner: !!makeContentPartner,
+        updated_at: new Date().toISOString(),
+      }).eq("id", targetUid).select("id");
+      if (error) return { error: error.message || "Update failed" };
+      if (!rows || rows.length === 0) return { error: "Update blocked — admin override policy missing on profiles?" };
+      return { ok: true };
+    } catch (e) {
+      console.error("[adminToggleUserContentPartner] failed", e);
+      return { error: "Network error" };
+    }
+  };
+
+  // ─── Content partner helpers (admin) ─────────────────────────────────
+  // Fetch the full content_partners list with each row's quotas, profile
+  // snapshot, and a pending-deliverables count. Used by the admin Content
+  // Partners list screen. Two round trips (partners + quotas) then a
+  // grouped count for the badge — small enough that a single query plan
+  // isn't worth the joined-shape complexity.
+  const loadAllContentPartners = async () => {
+    if (!isAdmin) return { error: "Not authorized" };
+    try {
+      const { data: partners, error: pErr } = await supabase
+        .from("content_partners")
+        .select("id, profile_id, status, contract_signed_at, camper_delivered_at, term_ends_at, discount_pct, contract_url, dropbox_upload_folder_url, basecamp_activity, notes, created_at, updated_at")
+        .order("created_at", { ascending: false });
+      if (pErr) return { error: pErr.message };
+      const rows = partners || [];
+      const partnerIds = rows.map(r => r.id);
+      const profileIds = Array.from(new Set(rows.map(r => r.profile_id).filter(Boolean)));
+      // Quotas + profile snapshots in parallel.
+      const [quotasRes, profsRes] = await Promise.all([
+        partnerIds.length
+          ? supabase.from("content_partner_quotas").select("id, partner_id, kind, total_target, cadence, schedule, due_at").in("partner_id", partnerIds)
+          : Promise.resolve({ data: [] }),
+        profileIds.length
+          ? supabase.from("profiles").select("id, handle, full_name, avatar_url").in("id", profileIds)
+          : Promise.resolve({ data: [] }),
+      ]);
+      const quotasByPartner = {};
+      (quotasRes.data || []).forEach(q => {
+        if (!quotasByPartner[q.partner_id]) quotasByPartner[q.partner_id] = [];
+        quotasByPartner[q.partner_id].push(q);
+      });
+      const profilesById = {};
+      (profsRes.data || []).forEach(p => { profilesById[p.id] = p; });
+      return {
+        ok: true,
+        data: rows.map(r => ({
+          ...r,
+          quotas: quotasByPartner[r.id] || [],
+          profile: profilesById[r.profile_id] || null,
+        })),
+      };
+    } catch (e) {
+      console.error("[loadAllContentPartners] failed", e);
+      return { error: "Network error" };
+    }
+  };
+
+  // Load a single contract + quotas + deliverables. Used by the editor and
+  // the partner-facing dashboard. RLS gates which rows the caller sees.
+  const loadContentPartnerById = async (id) => {
+    if (!id) return { error: "Missing id" };
+    try {
+      const [partnerRes, quotasRes, delivsRes] = await Promise.all([
+        supabase.from("content_partners").select("*").eq("id", id).maybeSingle(),
+        supabase.from("content_partner_quotas").select("*").eq("partner_id", id),
+        supabase.from("content_partner_deliverables").select("*").eq("partner_id", id).order("submitted_at", { ascending: false }),
+      ]);
+      if (partnerRes.error) return { error: partnerRes.error.message };
+      if (!partnerRes.data) return { error: "Partner not found" };
+      let profile = null;
+      if (partnerRes.data.profile_id) {
+        const { data: p } = await supabase.from("profiles").select("id, handle, full_name, avatar_url, is_content_partner").eq("id", partnerRes.data.profile_id).maybeSingle();
+        profile = p || null;
+      }
+      return {
+        ok: true,
+        data: {
+          ...partnerRes.data,
+          quotas: quotasRes.data || [],
+          deliverables: delivsRes.data || [],
+          profile,
+        },
+      };
+    } catch (e) {
+      console.error("[loadContentPartnerById] failed", e);
+      return { error: "Network error" };
+    }
+  };
+
+  // Create or update a content_partners row. `quotas` is the full list of
+  // quota rows the partner should have after save — we replace the set
+  // each save (delete-all + insert-all) so quota edits don't accumulate
+  // stale rows. Cheap because each partner has at most 4 quota rows.
+  // Also flips profiles.is_content_partner=true on create so the partner
+  // dashboard mounts immediately for the assignee.
+  const saveContentPartner = async ({ id, profile_id, status, contract_signed_at, camper_delivered_at, term_ends_at, discount_pct, contract_url, dropbox_upload_folder_url, basecamp_activity, notes, quotas }) => {
+    if (!isAdmin) return { error: "Not authorized" };
+    const adminUid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    const row = {
+      profile_id,
+      status: status || "pending_delivery",
+      contract_signed_at: contract_signed_at || null,
+      camper_delivered_at: camper_delivered_at || null,
+      term_ends_at: term_ends_at || null,
+      discount_pct: discount_pct != null && discount_pct !== "" ? Number(discount_pct) : null,
+      contract_url: contract_url || null,
+      dropbox_upload_folder_url: dropbox_upload_folder_url || null,
+      basecamp_activity: basecamp_activity || null,
+      notes: notes || null,
+    };
+    try {
+      let saved;
+      if (id) {
+        const { data, error } = await supabase.from("content_partners").update(row).eq("id", id).select("*").single();
+        if (error) return { error: error.message || "Update failed" };
+        saved = data;
+      } else {
+        const { data, error } = await supabase.from("content_partners").insert({ ...row, created_by: adminUid }).select("*").single();
+        if (error) return { error: error.message || "Create failed" };
+        saved = data;
+        // Flip the assignee's is_content_partner flag so their dashboard
+        // mounts as soon as the contract row exists.
+        if (profile_id) {
+          await supabase.from("profiles").update({ is_content_partner: true, updated_at: new Date().toISOString() }).eq("id", profile_id);
+        }
+      }
+      // Replace the quota set — delete then insert. Each partner has at
+      // most ~4 quotas so we don't bother with a diff.
+      if (Array.isArray(quotas)) {
+        const { error: delErr } = await supabase.from("content_partner_quotas").delete().eq("partner_id", saved.id);
+        if (delErr) return { error: delErr.message || "Quota wipe failed" };
+        const cleanQuotas = quotas
+          .filter(q => q && q.kind && q.total_target && Number(q.total_target) > 0)
+          .map(q => ({
+            partner_id: saved.id,
+            kind: q.kind,
+            total_target: Number(q.total_target),
+            cadence: q.cadence || "term",
+            schedule: q.schedule || null,
+            due_at: q.due_at || null,
+          }));
+        if (cleanQuotas.length > 0) {
+          const { error: insErr } = await supabase.from("content_partner_quotas").insert(cleanQuotas);
+          if (insErr) return { error: insErr.message || "Quota save failed" };
+        }
+      }
+      return { ok: true, data: saved };
+    } catch (e) {
+      console.error("[saveContentPartner] failed", e);
+      return { error: "Network error" };
+    }
+  };
+
+  // Admin-only: log a backdated deliverable on behalf of the partner.
+  // Used when admin needs to credit content delivered BEFORE the partner
+  // started using this system, OR to manually approve content received
+  // outside the in-app upload flow. Row is inserted with status='approved'
+  // and quantity_accepted = quantity (no separate review step needed —
+  // admin authoring it IS the review). submitted_at can be any date in
+  // the past; reviewed_at is set to now.
+  const adminAddBackdatedDeliverable = async ({ partnerId, kind, quantity, submittedAt, notes }) => {
+    if (!isAdmin) return { error: "Not authorized" };
+    if (!partnerId || !kind) return { error: "Missing partner or kind" };
+    const qty = Number(quantity);
+    if (!qty || qty < 1) return { error: "Quantity must be > 0" };
+    const adminUid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    const submittedIso = submittedAt
+      ? new Date(submittedAt + (submittedAt.length === 10 ? "T12:00:00Z" : "")).toISOString()
+      : new Date().toISOString();
+    try {
+      const { data, error } = await supabase.from("content_partner_deliverables").insert({
+        partner_id: partnerId,
+        kind,
+        quantity_reported: qty,
+        quantity_accepted: qty,
+        partner_notes: notes || null,
+        submitted_at: submittedIso,
+        status: "approved",
+        reviewed_by: adminUid,
+        reviewed_at: new Date().toISOString(),
+        reviewer_notes: "Backdated by admin",
+      }).select("*").single();
+      if (error) return { error: error.message || "Insert failed" };
+      return { ok: true, data };
+    } catch (e) {
+      console.error("[adminAddBackdatedDeliverable] failed", e);
+      return { error: "Network error" };
+    }
+  };
+
+  // Delete a contract row. Cascades wipe quotas + deliverables. Doesn't
+  // un-flip profile.is_content_partner because the user may have other
+  // contracts; admin handles that on OtherProfileScreen.
+  const deleteContentPartner = async (id) => {
+    if (!isAdmin || !id) return { error: "Not authorized" };
+    if (typeof confirm === "function" && !confirm("Delete this content partner contract? Quotas + deliverables will be wiped. This cannot be undone.")) {
+      return { error: "Cancelled" };
+    }
+    try {
+      const { error } = await supabase.from("content_partners").delete().eq("id", id);
+      if (error) return { error: error.message };
+      return { ok: true };
+    } catch (e) {
+      console.error("[deleteContentPartner] failed", e);
       return { error: "Network error" };
     }
   };
@@ -42279,6 +43123,7 @@ export default function Trailhead() {
                   { k: "bugs",       label: "BUGS",       badge: openBugCount },
                   { k: "moderation", label: "MODERATION" },
                   { k: "discounts",  label: "AMBASSADORS" },
+                  { k: "partners",   label: "CONTENT PARTNERS" },
                   { k: "push",       label: "PUSH" },
                   { k: "analytics",  label: "ANALYTICS" },
                 ].map(item => {
@@ -42507,7 +43352,7 @@ export default function Trailhead() {
           />
         ) : isProfile ? (
           isOtherProfile ? (
-            <OtherProfileScreen userId={profileStack[1]} onBack={goBack} onMessage={(user) => openDM(user)} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} onAdminUpdateUserRole={adminUpdateUserRole} onAdminDeclineAmbassador={adminDeclineAmbassadorRequest} onAdminToggleModerator={adminToggleUserModerator} onAdminToggleBetaTester={adminToggleUserBetaTester} onAdminViewAsAmbassador={adminViewAsAmbassador} onReportContent={requireAuth(openContentReport)} followingIds={followingIds} onFollow={requireAuth(followUser)} onUnfollow={requireAuth(unfollowUser)} fetchFollowCounts={fetchFollowCounts} onOpenFollowList={requireAuth(openFollowList)} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} allBuilds={allBuilds} onLoadAllBuilds={loadAllBuildsOnce} onlineUserIds={onlineUserIds} allTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} />
+            <OtherProfileScreen userId={profileStack[1]} onBack={goBack} onMessage={(user) => openDM(user)} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} onAdminUpdateUserRole={adminUpdateUserRole} onAdminDeclineAmbassador={adminDeclineAmbassadorRequest} onAdminToggleModerator={adminToggleUserModerator} onAdminToggleBetaTester={adminToggleUserBetaTester} onAdminToggleContentPartner={adminToggleUserContentPartner} onAdminViewAsAmbassador={adminViewAsAmbassador} onReportContent={requireAuth(openContentReport)} followingIds={followingIds} onFollow={requireAuth(followUser)} onUnfollow={requireAuth(unfollowUser)} fetchFollowCounts={fetchFollowCounts} onOpenFollowList={requireAuth(openFollowList)} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} allBuilds={allBuilds} onLoadAllBuilds={loadAllBuildsOnce} onlineUserIds={onlineUserIds} allTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} />
           ) : (
             <ProfileScreen onOpenFollowList={openFollowList} onOpenAdminDashboard={() => { setProfileStack([]); setScreen("admin"); if (typeof window !== "undefined") window.history.pushState({}, "", "/admin"); }} onOpenAmbassadorDashboard={() => { setProfileStack([]); setScreen("ambassador"); }} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} currentRole={currentRole} convoyRsvps={convoyRsvps} followerCount={myFollowerCount} followingCount={myFollowingCount} onSubscribePush={subscribeToPush} onUnsubscribePush={unsubscribeFromPush} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} savedRoutes={savedRoutes} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} savedTrips={(() => { const ids = savedTripIds || {}; const pool = [...(allTripReports || []), ...(allTripPlans || [])]; const seen = {}; const out = []; pool.forEach(t => { if (t && t.id && ids[t.id] && !seen[t.id]) { seen[t.id] = true; out.push(t); } }); return out; })()} onUnsaveTrip={requireAuth(toggleSaveTrip)} onOpenSavedTrip={(t) => { if (!t) return; if (t.slug) setPendingTripNav(t.slug); else setDetailTripId(t.id); }} pendingScroll={pendingProfileScroll} onConsumePendingScroll={() => setPendingProfileScroll(null)} onStartNav={(route) => setActiveNavRoute(route)} myTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} onNewTripPlan={requireAuth(() => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("routes"); enterPlanBuilder(); })} initialUserName={(currentProfile && currentProfile.full_name) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name) || null} initialUserHandle={(currentProfile && currentProfile.handle) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle) || null} initialUserBio={currentProfile ? currentProfile.bio : null} initialIsPublic={currentProfile ? currentProfile.is_public : null} onSaveProfile={saveProfile} onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={deleteBuild} profilePic={profilePic} onSetProfilePic={requestProfilePicCrop} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => deletePost(id)} onEditPost={(id, newText) => updatePost(id, { title: newText })} onUpdateConvoy={(convoyId, updates) => {
               updatePost(convoyId, updates);
@@ -42585,6 +43430,22 @@ export default function Trailhead() {
                       onCreateGearDrop={createGearDrop}
                       onOpenEditor={(id) => setEditingGearDropId(id)}
                       onDeleteGearDrop={(id) => deleteGearDrop(id)}
+                    />)
+                : adminSubScreen === "partners"
+                ? (editingContentPartnerId !== null
+                  ? <ContentPartnerEditor
+                      partnerId={editingContentPartnerId || null}
+                      onBack={() => setEditingContentPartnerId(null)}
+                      onLoad={loadContentPartnerById}
+                      onSave={saveContentPartner}
+                      onDelete={deleteContentPartner}
+                      onAddBackdated={adminAddBackdatedDeliverable}
+                    />
+                  : <ContentPartnersAdminScreen
+                      onBack={() => setAdminSubScreen(null)}
+                      onOpenEditor={(id) => setEditingContentPartnerId(id)}
+                      onNewPartner={() => setEditingContentPartnerId("")}
+                      onLoadPartners={loadAllContentPartners}
                     />)
                 : adminSubScreen
                 ? <AdminDashboardScreen
