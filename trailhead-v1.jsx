@@ -26610,6 +26610,7 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onLoadCandidates, onS
   const [discountPct, setDiscountPct] = useState("");
   const [contractUrl, setContractUrl] = useState("");
   const [dropboxUrl, setDropboxUrl] = useState("");
+  const [dropboxApprovedUrl, setDropboxApprovedUrl] = useState("");
   const [notes, setNotes] = useState("");
   // Pre-populated candidate list — admin sees every is_content_partner=true
   // user at a glance, no typing required. Filtered live by `profileSearch`.
@@ -26699,6 +26700,7 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onLoadCandidates, onS
       setDiscountPct(p.discount_pct != null ? String(p.discount_pct) : "");
       setContractUrl(p.contract_url || "");
       setDropboxUrl(p.dropbox_upload_folder_url || "");
+      setDropboxApprovedUrl(p.dropbox_approved_folder_url || "");
       setNotes(p.notes || "");
       setDeliverables(p.deliverables || []);
       // Merge saved quota rows onto the canonical 4-row template so the
@@ -26798,6 +26800,22 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onLoadCandidates, onS
       //   • term / milestone → total = termTotal, schedule = null
       //   • quarter / month w/ evenDist=ON → total = perPeriod * count, schedule = null
       //   • quarter / month w/ evenDist=OFF → total = sum(scheduleMap), schedule = the map
+      // Defense in depth: surface a warning if any enabled quota would be
+      // dropped because its target is still 0 (the toggle handler bumps
+      // defaults to 1, but admin could have manually zeroed a field).
+      const zeroTargetEnabled = quotas.filter(q => {
+        if (!q.enabled) return false;
+        if (q.cadence === "term" || q.cadence === "milestone") return !q.termTotal;
+        if (q.evenDist) return !q.perPeriod;
+        const periods = periodKeysFor(q.cadence);
+        return periods.every(k => !(q.scheduleMap && q.scheduleMap[k]));
+      });
+      if (zeroTargetEnabled.length > 0) {
+        const labels = zeroTargetEnabled.map(q => q.label || CONTENT_PARTNER_KIND_LABEL[q.kind] || q.kind).join(", ");
+        if (typeof confirm === "function" && !confirm(`${zeroTargetEnabled.length} enabled quota${zeroTargetEnabled.length === 1 ? "" : "s"} (${labels}) still ${zeroTargetEnabled.length === 1 ? "has" : "have"} a 0 target and will be dropped on save. Continue anyway?`)) {
+          return;
+        }
+      }
       const cleanQuotas = quotas
         .filter(q => q.enabled)
         .map(q => {
@@ -26839,6 +26857,7 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onLoadCandidates, onS
         discount_pct: discountPct,
         contract_url: contractUrl,
         dropbox_upload_folder_url: dropboxUrl,
+        dropbox_approved_folder_url: dropboxApprovedUrl,
         notes,
         quotas: cleanQuotas,
       });
@@ -26984,8 +27003,13 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onLoadCandidates, onS
             </div>
 
             <div>
-              <label style={labelStyle}>DROPBOX UPLOAD FOLDER (partner sees this on their dashboard)</label>
+              <label style={labelStyle}>DROPBOX UPLOAD FOLDER (where the partner drops PENDING content)</label>
               <input value={dropboxUrl} onChange={e => setDropboxUrl(e.target.value)} placeholder="https://www.dropbox.com/scl/fo/…" style={fieldStyle} />
+            </div>
+
+            <div>
+              <label style={labelStyle}>DROPBOX APPROVED FOLDER (where you move content after review)</label>
+              <input value={dropboxApprovedUrl} onChange={e => setDropboxApprovedUrl(e.target.value)} placeholder="https://www.dropbox.com/scl/fo/…" style={fieldStyle} />
             </div>
 
             <div>
@@ -27017,7 +27041,20 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onLoadCandidates, onS
                         </button>
                       </div>
                     )}
-                    <button type="button" onClick={() => updateQuota(idx, { enabled: !q.enabled })} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: 0, background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
+                    <button type="button" onClick={() => {
+                      // When enabling a quota that's still at 0, bump to a
+                      // sensible default so SAVE doesn't silently drop it.
+                      // (The save filter requires total_target > 0; admin
+                      // expects to set the number, not have the row vanish.)
+                      const nextEnabled = !q.enabled;
+                      const patch = { enabled: nextEnabled };
+                      if (nextEnabled) {
+                        if (q.cadence === "term" && (!q.termTotal || q.termTotal <= 0)) patch.termTotal = 1;
+                        else if (q.cadence === "milestone" && (!q.termTotal || q.termTotal <= 0)) patch.termTotal = 1;
+                        else if ((q.cadence === "quarter" || q.cadence === "month") && q.evenDist && (!q.perPeriod || q.perPeriod <= 0)) patch.perPeriod = 1;
+                      }
+                      updateQuota(idx, patch);
+                    }} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: 0, background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
                       {!q.isCustom && <span style={{ fontFamily: sans, fontSize: 11, color: q.enabled ? T.white : T.tertiary, fontWeight: 700, flex: 1 }}>{q.label || CONTENT_PARTNER_KIND_LABEL[q.kind] || q.kind}</span>}
                       {q.isCustom && <span style={{ flex: 1 }} />}
                       <span style={{ fontFamily: sans, fontSize: 9, color: q.enabled ? T.copper : T.tertiary, fontWeight: 700, letterSpacing: 0.4 }}>{q.enabled ? "ENABLED" : "OFF"}</span>
@@ -27412,17 +27449,24 @@ function ContentPartnerDashboard({ onClose, onLoad, onSubmit }) {
                     {contract.status === "ended" && "This contract has ended."}
                     {contract.status === "breached" && "Reach out to the team — there's a delivery shortfall to resolve."}
                   </div>
-                  <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                    {contract.dropbox_upload_folder_url
-                      ? <a href={contract.dropbox_upload_folder_url} target="_blank" rel="noopener noreferrer" style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", background: T.darkBg, border: `1px solid ${T.copper}`, borderRadius: 8, color: T.copper, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.6, textDecoration: "none" }}>
-                          <ExternalLink size={12} color={T.copper} /> DROPBOX FOLDER
-                        </a>
-                      : <div style={{ flex: 1, padding: "10px 12px", background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 8, color: T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textAlign: "center" }}>FOLDER NOT ASSIGNED</div>}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      {contract.dropbox_upload_folder_url
+                        ? <a href={contract.dropbox_upload_folder_url} target="_blank" rel="noopener noreferrer" style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", background: T.darkBg, border: `1px solid ${T.copper}`, borderRadius: 8, color: T.copper, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.6, textDecoration: "none" }}>
+                            <ExternalLink size={12} color={T.copper} /> UPLOAD FOLDER
+                          </a>
+                        : <div style={{ flex: 1, padding: "10px 12px", background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 8, color: T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textAlign: "center" }}>UPLOAD FOLDER NOT ASSIGNED</div>}
+                      {contract.dropbox_approved_folder_url
+                        ? <a href={contract.dropbox_approved_folder_url} target="_blank" rel="noopener noreferrer" style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", background: T.darkBg, border: `1px solid ${T.green}`, borderRadius: 8, color: T.green, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.6, textDecoration: "none" }}>
+                            <CheckCircle size={12} color={T.green} /> APPROVED FOLDER
+                          </a>
+                        : null}
+                    </div>
                     {contract.contract_url
-                      ? <a href={contract.contract_url} target="_blank" rel="noopener noreferrer" style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", background: T.darkBg, border: `1px solid ${T.copper}`, borderRadius: 8, color: T.copper, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.6, textDecoration: "none" }}>
-                          <FileText size={12} color={T.copper} /> CONTRACT
+                      ? <a href={contract.contract_url} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", background: T.darkBg, border: `1px solid ${T.copper}`, borderRadius: 8, color: T.copper, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.6, textDecoration: "none" }}>
+                          <FileText size={12} color={T.copper} /> VIEW SIGNED CONTRACT
                         </a>
-                      : <div style={{ flex: 1, padding: "10px 12px", background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 8, color: T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textAlign: "center" }}>CONTRACT NOT LINKED</div>}
+                      : null}
                   </div>
                 </div>
 
@@ -27582,6 +27626,14 @@ function ContentPartnerUploadModal({ contract, enabledQuotas, onClose, onSubmit,
         notes: notes.trim() || null,
       });
       if (res && res.ok) {
+        // Inventory submitted — now open the Dropbox upload folder in
+        // a new tab so the partner can drop in the files they just
+        // reported. Skipped silently if no folder is assigned (admin
+        // hasn't set one yet); the partner sees the dashboard refresh
+        // with their PENDING submission either way.
+        if (contract.dropbox_upload_folder_url) {
+          try { window.open(contract.dropbox_upload_folder_url, "_blank", "noopener,noreferrer"); } catch (_) {}
+        }
         if (onComplete) onComplete();
       } else if (res && res.error) {
         setErrorMsg(res.error);
@@ -39171,7 +39223,7 @@ export default function Trailhead() {
     try {
       const { data: partners, error: pErr } = await supabase
         .from("content_partners")
-        .select("id, profile_id, status, contract_signed_at, camper_delivered_at, term_ends_at, discount_pct, contract_url, dropbox_upload_folder_url, basecamp_activity, notes, created_at, updated_at")
+        .select("id, profile_id, status, contract_signed_at, camper_delivered_at, term_ends_at, discount_pct, contract_url, dropbox_upload_folder_url, dropbox_approved_folder_url, notes, created_at, updated_at")
         .order("created_at", { ascending: false });
       if (pErr) return { error: pErr.message };
       const rows = partners || [];
@@ -39280,9 +39332,9 @@ export default function Trailhead() {
   // quota rows the partner should have after save — we replace the set
   // each save (delete-all + insert-all) so quota edits don't accumulate
   // stale rows. Cheap because each partner has at most 4 quota rows.
-  // Also flips profiles.is_content_partner=true on create so the partner
-  // dashboard mounts immediately for the assignee.
-  const saveContentPartner = async ({ id, profile_id, status, contract_signed_at, camper_delivered_at, term_ends_at, discount_pct, contract_url, dropbox_upload_folder_url, basecamp_activity, notes, quotas }) => {
+  // Also flips profiles.is_content_partner=true on create AND inserts a
+  // welcome notification so the partner sees they've been onboarded.
+  const saveContentPartner = async ({ id, profile_id, status, contract_signed_at, camper_delivered_at, term_ends_at, discount_pct, contract_url, dropbox_upload_folder_url, dropbox_approved_folder_url, notes, quotas }) => {
     if (!isAdmin) return { error: "Not authorized" };
     const adminUid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
     const row = {
@@ -39294,11 +39346,12 @@ export default function Trailhead() {
       discount_pct: discount_pct != null && discount_pct !== "" ? Number(discount_pct) : null,
       contract_url: contract_url || null,
       dropbox_upload_folder_url: dropbox_upload_folder_url || null,
-      basecamp_activity: basecamp_activity || null,
+      dropbox_approved_folder_url: dropbox_approved_folder_url || null,
       notes: notes || null,
     };
     try {
       let saved;
+      let wasCreate = false;
       if (id) {
         const { data, error } = await supabase.from("content_partners").update(row).eq("id", id).select("*").single();
         if (error) return { error: error.message || "Update failed" };
@@ -39307,6 +39360,7 @@ export default function Trailhead() {
         const { data, error } = await supabase.from("content_partners").insert({ ...row, created_by: adminUid }).select("*").single();
         if (error) return { error: error.message || "Create failed" };
         saved = data;
+        wasCreate = true;
         // Flip the assignee's is_content_partner flag so their dashboard
         // mounts as soon as the contract row exists.
         if (profile_id) {
@@ -39332,7 +39386,36 @@ export default function Trailhead() {
           }));
         if (cleanQuotas.length > 0) {
           const { error: insErr } = await supabase.from("content_partner_quotas").insert(cleanQuotas);
-          if (insErr) return { error: insErr.message || "Quota save failed" };
+          if (insErr) {
+            // Surface BOTH the message AND the row count so admin can see
+            // when a batch insert silently truncates (e.g. UNIQUE violation
+            // on a colliding custom-kind slug). Log full payload for diagnosis.
+            console.error("[saveContentPartner] quota insert failed", { error: insErr, rows: cleanQuotas });
+            return { error: insErr.message || "Quota save failed" };
+          }
+        }
+      }
+      // Welcome notification on contract create — fires AFTER the quotas
+      // land so the partner sees a dashboard worth opening. Best-effort:
+      // if the notification insert fails (e.g. partner row missing) we
+      // still return success on the contract itself.
+      if (wasCreate && profile_id) {
+        let actorName = "LPO Team";
+        try {
+          const { data: me } = await supabase.from("profiles").select("full_name, handle").eq("id", adminUid).maybeSingle();
+          if (me) actorName = me.full_name || (me.handle ? `@${me.handle}` : actorName);
+        } catch (_) {}
+        try {
+          await supabase.from("notifications").insert({
+            user_id: profile_id,
+            type: "content_partner_review",
+            actor_id: adminUid,
+            actor_name: actorName,
+            text: "You've been onboarded as a Lone Peak content partner. Tap to open your dashboard and review your quotas.",
+            data: { partner_id: saved.id, kind: "welcome" },
+          });
+        } catch (e) {
+          console.warn("[saveContentPartner] welcome notif insert failed", e);
         }
       }
       return { ok: true, data: saved };
@@ -39596,7 +39679,7 @@ export default function Trailhead() {
     try {
       const { data: rows, error } = await supabase
         .from("content_partners")
-        .select("id, profile_id, status, contract_signed_at, camper_delivered_at, term_ends_at, discount_pct, contract_url, dropbox_upload_folder_url, notes, created_at, updated_at")
+        .select("id, profile_id, status, contract_signed_at, camper_delivered_at, term_ends_at, discount_pct, contract_url, dropbox_upload_folder_url, dropbox_approved_folder_url, notes, created_at, updated_at")
         .eq("profile_id", uid)
         .order("created_at", { ascending: false });
       if (error) return { error: error.message || "Lookup failed" };
