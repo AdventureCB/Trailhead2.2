@@ -39414,13 +39414,16 @@ export default function Trailhead() {
           if (me) actorName = me.full_name || (me.handle ? `@${me.handle}` : actorName);
         } catch (_) {}
         try {
+          // `data` jsonb is used by server-side PL/pgSQL inserts only —
+          // PostgREST's schema cache doesn't expose it, so client-side
+          // inserts must stick to the columns every other client notif
+          // uses. The bell text carries the partner-relevant info.
           const { error: notifErr } = await supabase.from("notifications").insert({
             user_id: profile_id,
             type: "content_partner_review",
             actor_id: adminUid,
             actor_name: actorName,
             text: "You've been onboarded as a Lone Peak content partner. Tap to open your dashboard and review your quotas.",
-            data: { partner_id: saved.id, kind: "welcome" },
           });
           if (notifErr) {
             console.warn("[saveContentPartner] welcome notif insert returned error", {
@@ -39620,7 +39623,6 @@ export default function Trailhead() {
             actor_id: adminUid,
             actor_name: actorName,
             text,
-            data: { submission_group_id: groupId, partner_id: partnerId },
           });
           if (notifErr) console.warn("[reviewContentPartnerSubmission] notif insert returned error", { code: notifErr.code, message: notifErr.message, details: notifErr.details, hint: notifErr.hint });
         } catch (e) {
@@ -39673,7 +39675,6 @@ export default function Trailhead() {
             text: breach
               ? `Your content partnership has been flagged as not in good standing. Reach out to the team.`
               : `Your content partnership has been restored to active status.`,
-            data: { partner_id: partnerId, breach },
           });
           if (notifErr) console.warn("[setContentPartnerBreachStatus] notif insert returned error", { code: notifErr.code, message: notifErr.message, details: notifErr.details, hint: notifErr.hint });
         } catch (e) {
