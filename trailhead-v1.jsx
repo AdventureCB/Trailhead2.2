@@ -27016,7 +27016,7 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onLoadCandidates, onS
             </div>
 
             <div>
-              <label style={labelStyle}>DROPBOX APPROVED FOLDER URL (partner views the content you moved after approval)</label>
+              <label style={labelStyle}>DROPBOX APPROVED FOLDER URL (admin-only — where YOU move approved content; not shown to the partner)</label>
               <input value={dropboxApprovedUrl} onChange={e => setDropboxApprovedUrl(e.target.value)} placeholder="https://www.dropbox.com/scl/fo/…" style={fieldStyle} />
             </div>
 
@@ -27458,18 +27458,15 @@ function ContentPartnerDashboard({ onClose, onLoad, onSubmit }) {
                     {contract.status === "breached" && "Reach out to the team — there's a delivery shortfall to resolve."}
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      {contract.dropbox_pending_folder_url
-                        ? <a href={contract.dropbox_pending_folder_url} target="_blank" rel="noopener noreferrer" style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", background: T.darkBg, border: `1px solid ${T.copper}`, borderRadius: 8, color: T.copper, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.6, textDecoration: "none" }}>
-                            <ExternalLink size={12} color={T.copper} /> PENDING FOLDER
-                          </a>
-                        : <div style={{ flex: 1, padding: "10px 12px", background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 8, color: T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textAlign: "center" }}>PENDING FOLDER NOT ASSIGNED</div>}
-                      {contract.dropbox_approved_folder_url
-                        ? <a href={contract.dropbox_approved_folder_url} target="_blank" rel="noopener noreferrer" style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", background: T.darkBg, border: `1px solid ${T.green}`, borderRadius: 8, color: T.green, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.6, textDecoration: "none" }}>
-                            <CheckCircle size={12} color={T.green} /> APPROVED FOLDER
-                          </a>
-                        : null}
-                    </div>
+                    {/* APPROVED folder URL is intentionally NOT exposed to the
+                        partner — admin uses it as an internal organizing
+                        target only. Partner sees their pending uploads + the
+                        signed contract. */}
+                    {contract.dropbox_pending_folder_url
+                      ? <a href={contract.dropbox_pending_folder_url} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", background: T.darkBg, border: `1px solid ${T.copper}`, borderRadius: 8, color: T.copper, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.6, textDecoration: "none" }}>
+                          <ExternalLink size={12} color={T.copper} /> PENDING FOLDER
+                        </a>
+                      : <div style={{ padding: "10px 12px", background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 8, color: T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textAlign: "center" }}>PENDING FOLDER NOT ASSIGNED</div>}
                     {contract.contract_url
                       ? <a href={contract.contract_url} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", background: T.darkBg, border: `1px solid ${T.copper}`, borderRadius: 8, color: T.copper, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.6, textDecoration: "none" }}>
                           <FileText size={12} color={T.copper} /> VIEW SIGNED CONTRACT
