@@ -26245,15 +26245,21 @@ function GearDropRunScreen({ runId, currentUserId, onClose, onLoadRun, onLoadDro
 const CONTENT_PARTNER_STATUS_LABEL = {
   pending_delivery: "PENDING DELIVERY",
   active: "ACTIVE",
+  // at_risk = auto-flipped from active on content-delivery deficit;
+  // self-clearing once partner catches up (handled by recompute RPC).
+  at_risk: "AT RISK OF DEFAULT",
   completed: "COMPLETED",
+  // breached = MANUAL only — admin flag for off-app issues that require
+  // invoicing (damages, contract dispute). Auto RPC never touches this.
   breached: "BREACHED",
   ended: "ENDED",
 };
 const CONTENT_PARTNER_STATUS_COLOR = {
   pending_delivery: "#C49A6C",
   active: "#4A7C59",
+  at_risk: "#D17B3A", // amber-copper — warning, recoverable
   completed: "#8B7D6B",
-  breached: "#BD472A",
+  breached: "#BD472A", // brand red — stop signal, requires admin
   ended: "#8B7D6B",
 };
 const CONTENT_PARTNER_KIND_LABEL = {
@@ -26585,9 +26591,10 @@ function ContentPartnersAdminScreen({ onBack, onOpenEditor, onNewPartner, onLoad
   useEffect(() => { refresh(); }, []);
 
   const bucketed = useMemo(() => {
-    const buckets = { active: [], breached: [], pending_delivery: [], completed: [], ended: [] };
+    const buckets = { active: [], at_risk: [], breached: [], pending_delivery: [], completed: [], ended: [] };
     (partners || []).forEach(p => {
       if (p.status === "active") buckets.active.push(p);
+      else if (p.status === "at_risk") buckets.at_risk.push(p);
       else if (p.status === "breached") buckets.breached.push(p);
       else if (p.status === "pending_delivery") buckets.pending_delivery.push(p);
       else if (p.status === "completed") buckets.completed.push(p);
@@ -26614,12 +26621,6 @@ function ContentPartnersAdminScreen({ onBack, onOpenEditor, onNewPartner, onLoad
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
             <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{(author && author.full_name) || "Unassigned"}</span>
             <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: statusColor, padding: "2px 7px", borderRadius: 8, fontWeight: 700, letterSpacing: 0.4 }}>{CONTENT_PARTNER_STATUS_LABEL[p.status] || p.status.toUpperCase()}</span>
-            {p.status === "breached" && p.breach_source === "auto" && (
-              <span style={{ fontFamily: sans, fontSize: 8, color: T.red, background: T.darkBg, padding: "2px 6px", borderRadius: 6, fontWeight: 700, letterSpacing: 0.3, border: `1px solid ${T.red}80` }}>AUTO</span>
-            )}
-            {p.status === "breached" && p.breach_source === "manual" && (
-              <span style={{ fontFamily: sans, fontSize: 8, color: T.red, background: T.darkBg, padding: "2px 6px", borderRadius: 6, fontWeight: 700, letterSpacing: 0.3, border: `1px solid ${T.red}80` }}>MANUAL</span>
-            )}
             {pending > 0 && <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: T.red, padding: "2px 7px", borderRadius: 8, fontWeight: 700 }}>{pending} PENDING</span>}
           </div>
           <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginBottom: 2 }}>{author ? `@${author.handle}` : "@—"} · {p.discount_pct ? `${p.discount_pct}% off` : "discount —"}</div>
@@ -26631,11 +26632,13 @@ function ContentPartnersAdminScreen({ onBack, onOpenEditor, onNewPartner, onLoad
   };
 
   const totalPending = pendingGroups.length;
+  const atRiskCount = bucketed.at_risk.length;
   const breachedCount = bucketed.breached.length;
   const tabs = [
     { k: "pending_review", label: "PENDING REVIEW", count: totalPending, urgent: totalPending > 0 },
     { k: "active", label: "ACTIVE", count: bucketed.active.length },
-    { k: "breached", label: "NOT IN GOOD STANDING", count: breachedCount, urgent: breachedCount > 0 },
+    { k: "at_risk", label: "AT RISK", count: atRiskCount, urgent: atRiskCount > 0 },
+    { k: "breached", label: "BREACHED", count: breachedCount, urgent: breachedCount > 0 },
     { k: "pending_delivery", label: "PENDING DELIVERY", count: bucketed.pending_delivery.length },
     { k: "completed", label: "COMPLETED", count: bucketed.completed.length },
     { k: "ended", label: "ENDED", count: bucketed.ended.length },
@@ -27073,8 +27076,9 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onLoadCandidates, onS
               <select value={status} onChange={e => setStatus(e.target.value)} style={fieldStyle}>
                 <option value="pending_delivery">Pending delivery (contract signed, camper not yet shipped)</option>
                 <option value="active">Active (term running)</option>
+                <option value="at_risk">At risk of default (auto — managed by recompute)</option>
                 <option value="completed">Completed (term fulfilled)</option>
-                <option value="breached">Breached (failed to deliver — visibility only)</option>
+                <option value="breached">Breached (manual — requires invoicing)</option>
                 <option value="ended">Ended (archived)</option>
               </select>
             </div>
@@ -27400,16 +27404,16 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onLoadCandidates, onS
 
             {partnerId && (
               <div style={{ borderTop: `1px solid ${T.charcoal}`, paddingTop: 14, display: "flex", flexDirection: "column", gap: 14 }}>
-                {/* Breach flag — separate from the status dropdown so the
-                    paper-trailed reason gets captured and the partner is
-                    notified. Toggles depending on the contract's current
-                    status. Off-app conversation handles invoicing. */}
+                {/* MANUAL breach flag — reserved for issues that require
+                    invoicing (off-app damages, contract dispute). The
+                    auto deficit RPC uses 'at_risk' and never touches
+                    'breached'. */}
                 {onSetBreach && (status === "breached" ? (
                   <div>
                     <span style={{ fontFamily: sans, fontSize: 11, color: T.red, letterSpacing: 1.2, fontWeight: 700, display: "block", marginBottom: 10 }}>STANDING</span>
                     <button
                       onClick={async () => {
-                        if (typeof confirm === "function" && !confirm("Restore this partner to active status?")) return;
+                        if (typeof confirm === "function" && !confirm("Clear the breach and restore this partner to active status?")) return;
                         const res = await onSetBreach({ partnerId, breach: false, reason: null });
                         if (res && res.ok) {
                           setStatus("active");
@@ -27418,32 +27422,37 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onLoadCandidates, onS
                       }}
                       style={{ width: "100%", padding: "12px 14px", background: T.darkBg, border: `1px solid ${T.copper}`, borderRadius: 10, color: T.copper, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer" }}
                     >
-                      RESTORE TO ACTIVE
+                      CLEAR BREACH · RESTORE TO ACTIVE
                     </button>
                     <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: "8px 0 0", lineHeight: 1.4 }}>
-                      Partner is currently flagged as not in good standing. Restoring clears the flag and notifies them.
+                      Partner is flagged as BREACHED (invoicing required). Clearing this lifts the flag and notifies them. Off-app conversation handles the actual settlement.
                     </p>
                   </div>
                 ) : (
                   <div>
                     <span style={{ fontFamily: sans, fontSize: 11, color: T.red, letterSpacing: 1.2, fontWeight: 700, display: "block", marginBottom: 10 }}>STANDING</span>
+                    {status === "at_risk" && (
+                      <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: "0 0 10px", lineHeight: 1.5 }}>
+                        Partner is currently <strong style={{ color: "#D17B3A" }}>AT RISK OF DEFAULT</strong> — auto-set by the deficit recompute. They'll auto-restore to ACTIVE when their cumulative approved content catches up. Use BREACH below only for off-app issues that need invoicing.
+                      </p>
+                    )}
                     <button
                       onClick={async () => {
-                        const reason = typeof prompt === "function" ? prompt("Reason for flagging? (required — gets appended to admin notes + sent to the partner)") : "";
+                        const reason = typeof prompt === "function" ? prompt("Reason for breach? (required — gets appended to admin notes + sent to the partner). Use this only for off-app obligations that require invoicing.") : "";
                         if (!reason || !reason.trim()) return;
-                        if (typeof confirm === "function" && !confirm("Flag this partner as NOT IN GOOD STANDING? They'll see it on their dashboard and get a notification.")) return;
+                        if (typeof confirm === "function" && !confirm("Flag this partner as BREACHED? Use this only when invoicing is required (off-app damages, contract dispute). They'll see it on their dashboard and get a notification.")) return;
                         const res = await onSetBreach({ partnerId, breach: true, reason: reason.trim() });
                         if (res && res.ok) {
                           setStatus("breached");
-                          alert("Partner flagged. Take the invoicing conversation off-app.");
+                          alert("Partner flagged BREACHED. Take the invoicing conversation off-app.");
                         } else if (res && res.error) alert("Flag failed: " + res.error);
                       }}
                       style={{ width: "100%", padding: "12px 14px", background: `${T.red}25`, border: `1px solid ${T.red}`, borderRadius: 10, color: T.red, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer" }}
                     >
-                      FLAG NOT IN GOOD STANDING
+                      FLAG BREACH · REQUIRES INVOICING
                     </button>
                     <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: "8px 0 0", lineHeight: 1.4 }}>
-                      Use when a partner has materially fallen short on delivery. Reason gets appended to the admin notes and sent to the partner. Damages stay off-app.
+                      For off-app obligations: damages, contract dispute, etc. Reason gets appended to admin notes and sent to the partner. Damages stay off-app. (Use AT RISK auto-flip for content-delivery shortfalls — that's already wired.)
                     </p>
                   </div>
                 ))}
@@ -27773,11 +27782,12 @@ function ContentPartnerDashboard({ onClose, onLoad, onLoadById, onSubmit, onReco
 
   useEffect(() => { refresh(); }, [forcedPartnerId]);
 
-  // UPLOAD CONTENT shows on any contract where the partner is allowed
-  // to submit — that's 'active' OR 'breached'. Breached partners NEED
-  // to upload to auto-restore (chunk 5 RLS widening lets the INSERT
-  // through). Pending_delivery / completed / ended still hide the CTA.
-  const canUpload = contract && (contract.status === "active" || contract.status === "breached");
+  // UPLOAD CONTENT shows on any status where the partner is allowed
+  // to submit — active, at_risk (auto-deficit), or breached (manual
+  // damage flag). at_risk uploads drive auto-restore once cumulative
+  // approval catches up; breached uploads still record content but
+  // need admin to manually clear the flag.
+  const canUpload = contract && (contract.status === "active" || contract.status === "at_risk" || contract.status === "breached");
   const enabledQuotas = useMemo(() => {
     if (!contract) return [];
     const order = (q) => {
@@ -27805,10 +27815,7 @@ function ContentPartnerDashboard({ onClose, onLoad, onLoadById, onSubmit, onReco
   }, [contract]);
 
   const statusPillColor = contract
-    ? (contract.status === "active" ? T.green
-      : contract.status === "pending_delivery" ? T.copper
-      : contract.status === "breached" ? T.red
-      : T.tertiary)
+    ? (CONTENT_PARTNER_STATUS_COLOR[contract.status] || T.tertiary)
     : T.tertiary;
   const statusPillLabel = contract
     ? (CONTENT_PARTNER_STATUS_LABEL[contract.status] || (contract.status || "").toUpperCase())
@@ -27848,8 +27855,8 @@ function ContentPartnerDashboard({ onClose, onLoad, onLoadById, onSubmit, onReco
                     )}
                     {contract.status === "completed" && "Term completed. Thanks for the content — your discount code is on its way."}
                     {contract.status === "ended" && "This contract has ended."}
-                    {contract.status === "breached" && contract.breach_source === "auto" && "You're behind on your cumulative content delivery. Submit additional content to automatically restore good standing — once your approved totals catch up, your status flips back to active."}
-                    {contract.status === "breached" && contract.breach_source !== "auto" && "Reach out to the team — there's a partnership issue to resolve."}
+                    {contract.status === "at_risk" && "You're behind on your cumulative content delivery. Submit additional content to automatically restore good standing — once your approved totals catch up, your status flips back to active."}
+                    {contract.status === "breached" && "Your account has been flagged by the LPO team — reach out to resolve the issue. Invoicing for any off-app obligations is handled outside the app."}
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
                     {/* APPROVED folder URL is intentionally NOT exposed to the
@@ -39593,10 +39600,10 @@ export default function Trailhead() {
   // grouped count for the badge — small enough that a single query plan
   // isn't worth the joined-shape complexity.
   // Per-partner recompute. Walks the cadence-based quotas server-side
-  // and flips status='active' ↔ 'breached' (breach_source='auto') based
-  // on cumulative deliverables vs cumulative base targets through ended
-  // periods. Manual breaches (breach_source='manual') are not touched.
-  // Safe to call on partner self-load (RLS-bypassing SECURITY DEFINER).
+  // and flips status='active' ↔ 'at_risk' based on cumulative deliverables
+  // vs cumulative base targets through ended periods. Manual breach
+  // (status='breached') is never touched here. Safe to call on partner
+  // self-load (RLS-bypassing SECURITY DEFINER).
   const recomputeContentPartnerStanding = async (partnerId) => {
     if (!partnerId) return { error: "Missing partner id" };
     try {
