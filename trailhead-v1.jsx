@@ -26278,11 +26278,17 @@ function contentPartnerKindLabel(kindOrQuota) {
 
 // Compute progress numbers for a single quota line given the contract's
 // term window (camper_delivered_at + 1yr) and the list of deliverables.
-// Returns {target, accepted, pending, expectedNow, status} where status
-// is "on_track" / "behind" / "ahead" / "milestone_due_soon" /
-// "milestone_past_due" / "milestone_done". expectedNow is what SHOULD
-// have been delivered by today based on cadence + schedule (used by the
-// dashboard to color the progress bar without breaking past-due credit).
+// Returns the legacy {target, accepted, pending, expectedNow, status}
+// PLUS — for month/quarter cadences — a `periods[]` breakdown with
+// per-period base + rolloverIn + effectiveTarget + approvedInPeriod
+// for the dashboard's per-period UI. `cumulativeBaseExpected` and
+// `cumulativeApprovedInPeriods` cover ENDED periods only and feed the
+// auto-compliance check (deficit > 0 → not in good standing).
+//
+// Rollover semantics: each period's effectiveTarget = base + prior
+// period's rolloverOut (= max(0, prior.effectiveTarget - prior.approved)).
+// The deficit is NOT used to credit prior periods retroactively — it
+// raises the bar in the CURRENT period so the partner can catch up.
 function computeContentPartnerQuotaProgress(quota, deliverables, contract) {
   const list = (deliverables || []).filter(d => d && d.kind === quota.kind);
   const accepted = list.filter(d => d.status === "approved").reduce((s, d) => s + (Number(d.quantity_accepted) || 0), 0);
@@ -26290,6 +26296,11 @@ function computeContentPartnerQuotaProgress(quota, deliverables, contract) {
   const target = Number(quota.total_target) || 0;
   let expectedNow = 0;
   let status = "on_track";
+  let periods = [];
+  let currentPeriod = null;
+  let cumulativeBaseExpected = 0;
+  let cumulativeApprovedInPeriods = 0;
+  let deficit = 0;
   const now = Date.now();
   const startMs = contract && contract.camper_delivered_at ? new Date(contract.camper_delivered_at).getTime() : null;
   const endMs   = contract && contract.term_ends_at        ? new Date(contract.term_ends_at).getTime()        : null;
@@ -26301,6 +26312,10 @@ function computeContentPartnerQuotaProgress(quota, deliverables, contract) {
     } else if (dueMs && now > dueMs) {
       expectedNow = target;
       status = "milestone_past_due";
+      // Past-due milestone counts toward compliance deficit.
+      cumulativeBaseExpected = target;
+      cumulativeApprovedInPeriods = Math.min(target, accepted);
+      deficit = Math.max(0, target - accepted);
     } else if (dueMs && (dueMs - now) < 1000 * 60 * 60 * 24 * 14) {
       expectedNow = 0;
       status = "milestone_due_soon";
@@ -26316,6 +26331,12 @@ function computeContentPartnerQuotaProgress(quota, deliverables, contract) {
       expectedNow = 0;
     }
     status = accepted >= expectedNow ? (accepted >= target ? "ahead" : "on_track") : "behind";
+    // Term-cadence quotas only count toward compliance after the term ends.
+    if (endMs && now >= endMs) {
+      cumulativeBaseExpected = target;
+      cumulativeApprovedInPeriods = Math.min(target, accepted);
+      deficit = Math.max(0, target - accepted);
+    }
   } else if (quota.cadence === "quarter" || quota.cadence === "month") {
     const periodCount = quota.cadence === "quarter" ? 4 : 12;
     const schedule = quota.schedule && typeof quota.schedule === "object" ? quota.schedule : null;
@@ -26324,26 +26345,88 @@ function computeContentPartnerQuotaProgress(quota, deliverables, contract) {
       : ["m1","m2","m3","m4","m5","m6","m7","m8","m9","m10","m11","m12"];
     // Default to even split when schedule is null
     const perPeriod = schedule ? null : Math.round(target / periodCount);
-    let elapsedPeriods = 0;
-    let partialFraction = 0;
-    if (startMs && endMs && now > startMs) {
+    if (startMs && endMs && endMs > startMs) {
       const periodMs = (endMs - startMs) / periodCount;
+      let rollover = 0;
+      for (let i = 0; i < periodCount; i++) {
+        const pStart = startMs + i * periodMs;
+        const pEnd = startMs + (i + 1) * periodMs;
+        const baseTarget = schedule ? (Number(schedule[periodKeys[i]]) || 0) : perPeriod;
+        const ended = now >= pEnd;
+        const isCurrent = !ended && now >= pStart;
+        const approvedInPeriod = list
+          .filter(d => d.status === "approved")
+          .filter(d => {
+            const t = d.submitted_at ? new Date(d.submitted_at).getTime() : 0;
+            return t >= pStart && t < pEnd;
+          })
+          .reduce((s, d) => s + (Number(d.quantity_accepted) || 0), 0);
+        const pendingInPeriod = list
+          .filter(d => d.status === "pending")
+          .filter(d => {
+            const t = d.submitted_at ? new Date(d.submitted_at).getTime() : 0;
+            return t >= pStart && t < pEnd;
+          })
+          .reduce((s, d) => s + (Number(d.quantity_reported) || 0), 0);
+        const effectiveTarget = baseTarget + rollover;
+        let rolloverOut = 0;
+        if (ended) {
+          rolloverOut = Math.max(0, effectiveTarget - approvedInPeriod);
+          cumulativeBaseExpected += baseTarget;
+          cumulativeApprovedInPeriods += approvedInPeriod;
+        }
+        const p = {
+          index: i,
+          key: periodKeys[i],
+          start: pStart,
+          end: pEnd,
+          baseTarget,
+          rolloverIn: rollover,
+          effectiveTarget,
+          rolloverOut,
+          approvedInPeriod,
+          pendingInPeriod,
+          ended,
+          isCurrent,
+          met: ended && approvedInPeriod >= effectiveTarget,
+        };
+        periods.push(p);
+        if (isCurrent) currentPeriod = p;
+        if (ended) rollover = rolloverOut;
+      }
+      deficit = Math.max(0, cumulativeBaseExpected - cumulativeApprovedInPeriods);
+      // expectedNow: cumulative base targets through ended periods plus a
+      // pro-rated slice of the current period's base target (matches the
+      // legacy semantics used by the existing top-level progress bar).
+      let cum = 0;
+      let elapsedFull = 0;
+      let partial = 0;
       const within = (now - startMs) / periodMs;
-      elapsedPeriods = Math.floor(within);
-      partialFraction = within - elapsedPeriods;
-      if (elapsedPeriods >= periodCount) { elapsedPeriods = periodCount; partialFraction = 0; }
+      elapsedFull = Math.floor(Math.max(0, within));
+      partial = Math.max(0, within - elapsedFull);
+      if (elapsedFull >= periodCount) { elapsedFull = periodCount; partial = 0; }
+      if (schedule) {
+        for (let i = 0; i < elapsedFull && i < periodCount; i++) cum += Number(schedule[periodKeys[i]]) || 0;
+        if (elapsedFull < periodCount) cum += Math.round((Number(schedule[periodKeys[elapsedFull]]) || 0) * partial);
+      } else {
+        cum = Math.round(perPeriod * (elapsedFull + partial));
+      }
+      expectedNow = Math.min(target, Math.max(0, cum));
     }
-    let cumulative = 0;
-    if (schedule) {
-      for (let i = 0; i < elapsedPeriods && i < periodCount; i++) cumulative += Number(schedule[periodKeys[i]]) || 0;
-      if (elapsedPeriods < periodCount) cumulative += Math.round((Number(schedule[periodKeys[elapsedPeriods]]) || 0) * partialFraction);
-    } else {
-      cumulative = Math.round(perPeriod * (elapsedPeriods + partialFraction));
-    }
-    expectedNow = Math.min(target, Math.max(0, cumulative));
     status = accepted >= expectedNow ? (accepted >= target ? "ahead" : "on_track") : "behind";
   }
-  return { target, accepted, pending, expectedNow, status };
+  return {
+    target,
+    accepted,
+    pending,
+    expectedNow,
+    status,
+    periods,
+    currentPeriod,
+    cumulativeBaseExpected,
+    cumulativeApprovedInPeriods,
+    deficit,
+  };
 }
 
 // One row per pending submission group. Renders the partner identity,
@@ -26471,7 +26554,7 @@ function PendingSubmissionCard({ group, onReview, onReviewed }) {
   );
 }
 
-function ContentPartnersAdminScreen({ onBack, onOpenEditor, onNewPartner, onLoadPartners, onLoadPendingCounts, onLoadPendingSubmissions, onReviewSubmission }) {
+function ContentPartnersAdminScreen({ onBack, onOpenEditor, onNewPartner, onLoadPartners, onLoadPendingCounts, onLoadPendingSubmissions, onReviewSubmission, onRecomputeAll }) {
   const [partners, setPartners] = useState([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("pending_review");
@@ -26481,6 +26564,10 @@ function ContentPartnersAdminScreen({ onBack, onOpenEditor, onNewPartner, onLoad
 
   const refresh = async () => {
     setLoading(true);
+    // Sweep standings FIRST so any period boundary crossed since the last
+    // admin visit results in the correct status pill on the row that
+    // follows. Best-effort — partner list still loads if the sweep fails.
+    if (onRecomputeAll) { try { await onRecomputeAll(); } catch (_) {} }
     const res = await onLoadPartners();
     if (res && res.ok && Array.isArray(res.data)) setPartners(res.data);
     setLoading(false);
@@ -26498,12 +26585,13 @@ function ContentPartnersAdminScreen({ onBack, onOpenEditor, onNewPartner, onLoad
   useEffect(() => { refresh(); }, []);
 
   const bucketed = useMemo(() => {
-    const buckets = { active: [], pending_delivery: [], completed: [], ended: [] };
+    const buckets = { active: [], breached: [], pending_delivery: [], completed: [], ended: [] };
     (partners || []).forEach(p => {
       if (p.status === "active") buckets.active.push(p);
+      else if (p.status === "breached") buckets.breached.push(p);
       else if (p.status === "pending_delivery") buckets.pending_delivery.push(p);
       else if (p.status === "completed") buckets.completed.push(p);
-      else buckets.ended.push(p); // ended + breached + archived
+      else buckets.ended.push(p); // ended + archived
     });
     return buckets;
   }, [partners]);
@@ -26526,6 +26614,12 @@ function ContentPartnersAdminScreen({ onBack, onOpenEditor, onNewPartner, onLoad
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
             <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{(author && author.full_name) || "Unassigned"}</span>
             <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: statusColor, padding: "2px 7px", borderRadius: 8, fontWeight: 700, letterSpacing: 0.4 }}>{CONTENT_PARTNER_STATUS_LABEL[p.status] || p.status.toUpperCase()}</span>
+            {p.status === "breached" && p.breach_source === "auto" && (
+              <span style={{ fontFamily: sans, fontSize: 8, color: T.red, background: T.darkBg, padding: "2px 6px", borderRadius: 6, fontWeight: 700, letterSpacing: 0.3, border: `1px solid ${T.red}80` }}>AUTO</span>
+            )}
+            {p.status === "breached" && p.breach_source === "manual" && (
+              <span style={{ fontFamily: sans, fontSize: 8, color: T.red, background: T.darkBg, padding: "2px 6px", borderRadius: 6, fontWeight: 700, letterSpacing: 0.3, border: `1px solid ${T.red}80` }}>MANUAL</span>
+            )}
             {pending > 0 && <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: T.red, padding: "2px 7px", borderRadius: 8, fontWeight: 700 }}>{pending} PENDING</span>}
           </div>
           <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginBottom: 2 }}>{author ? `@${author.handle}` : "@—"} · {p.discount_pct ? `${p.discount_pct}% off` : "discount —"}</div>
@@ -26537,9 +26631,11 @@ function ContentPartnersAdminScreen({ onBack, onOpenEditor, onNewPartner, onLoad
   };
 
   const totalPending = pendingGroups.length;
+  const breachedCount = bucketed.breached.length;
   const tabs = [
     { k: "pending_review", label: "PENDING REVIEW", count: totalPending, urgent: totalPending > 0 },
     { k: "active", label: "ACTIVE", count: bucketed.active.length },
+    { k: "breached", label: "NOT IN GOOD STANDING", count: breachedCount, urgent: breachedCount > 0 },
     { k: "pending_delivery", label: "PENDING DELIVERY", count: bucketed.pending_delivery.length },
     { k: "completed", label: "COMPLETED", count: bucketed.completed.length },
     { k: "ended", label: "ENDED", count: bucketed.ended.length },
@@ -26598,7 +26694,7 @@ function ContentPartnersAdminScreen({ onBack, onOpenEditor, onNewPartner, onLoad
 // blur). camper_delivered_at + 1yr auto-fills term_ends_at unless the
 // admin overrides. Quota lines have per-kind defaults pulled from the
 // sample contracts (e.g. photo · 100 · quarter · 15/35/35/15).
-function ContentPartnerEditor({ partnerId, onBack, onLoad, onLoadCandidates, onSave, onDelete, onAddBackdated, onSetBreach }) {
+function ContentPartnerEditor({ partnerId, onBack, onLoad, onLoadCandidates, onSave, onDelete, onAddBackdated, onSetBreach, onViewAsPartner }) {
   const [partner, setPartner] = useState(null);
   const [profileSearch, setProfileSearch] = useState("");
   const [resolvedProfile, setResolvedProfile] = useState(null);
@@ -26894,6 +26990,11 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onLoadCandidates, onS
         </button>
         <Camera size={16} color={T.copper} />
         <span style={{ flex: 1, fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.8 }}>{partnerId ? "EDIT PARTNER" : "NEW PARTNER"}</span>
+        {partnerId && onViewAsPartner && (
+          <button onClick={() => onViewAsPartner(partnerId)} title="Open the partner's dashboard view" style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "8px 12px", background: T.darkCard, border: `1px solid ${T.copper}`, borderRadius: 8, color: T.copper, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer", marginRight: 6 }}>
+            <Eye size={11} color={T.copper} /> VIEW DASHBOARD
+          </button>
+        )}
         <button onClick={handleSave} disabled={saving} style={{ padding: "8px 14px", background: saving ? T.charcoal : T.copper, border: "none", borderRadius: 8, color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.6, cursor: saving ? "default" : "pointer" }}>
           {saving ? "SAVING…" : "SAVE"}
         </button>
@@ -27367,7 +27468,131 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onLoadCandidates, onS
 // the inventory upload modal, and a history of past submissions w/ admin
 // review status. Read-only when the contract isn't status='active' (the
 // partner_self_insert RLS policy blocks upload otherwise anyway).
-function ContentPartnerDashboard({ onClose, onLoad, onSubmit }) {
+// One progress card per quota — surfaces cumulative term progress on
+// top + a CURRENT PERIOD subsection (effective target = base + any
+// carryover from prior under-deliveries) + a PRIOR PERIODS strip
+// showing approved/effective per ended period. Period rows are tinted
+// green/red based on whether they were met or fell short.
+function ContentPartnerQuotaCard({ quota, contract }) {
+  const prog = computeContentPartnerQuotaProgress(quota, contract.deliverables, contract);
+  const cumulativePct = prog.target > 0 ? Math.min(100, Math.round((prog.accepted / prog.target) * 100)) : 0;
+  const expectedPct = prog.target > 0 ? Math.min(100, Math.round((prog.expectedNow / prog.target) * 100)) : 0;
+  const barColor = prog.status === "behind" || prog.status === "milestone_past_due"
+    ? T.red
+    : prog.status === "ahead" || prog.status === "milestone_done"
+      ? T.green
+      : T.copper;
+  const statusLabel = prog.status === "ahead" ? "AHEAD"
+    : prog.status === "behind" ? "BEHIND"
+    : prog.status === "milestone_done" ? "DONE"
+    : prog.status === "milestone_past_due" ? "PAST DUE"
+    : prog.status === "milestone_due_soon" ? "DUE SOON"
+    : "ON TRACK";
+  const cadenceLabel = quota.cadence === "month" ? "/MO"
+    : quota.cadence === "quarter" ? "/Q"
+    : quota.cadence === "milestone" ? " · MILESTONE"
+    : " · TOTAL";
+  const cp = prog.currentPeriod;
+  const cpPct = cp && cp.effectiveTarget > 0
+    ? Math.min(100, Math.round((cp.approvedInPeriod / cp.effectiveTarget) * 100))
+    : 0;
+  const cpBarColor = cp && cp.approvedInPeriod >= cp.effectiveTarget ? T.green
+    : cp && cp.approvedInPeriod * 2 < cp.effectiveTarget ? T.red
+    : T.copper;
+  const cpLabel = quota.cadence === "month" ? `MONTH ${(cp ? cp.index : 0) + 1}`
+    : quota.cadence === "quarter" ? `QUARTER ${(cp ? cp.index : 0) + 1}`
+    : "";
+  const endedPeriods = (prog.periods || []).filter(p => p.ended);
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div style={{ padding: 14, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+        <span style={{ flex: 1, fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700 }}>{contentPartnerKindLabel(quota)}<span style={{ color: T.tertiary, fontWeight: 600, marginLeft: 6, letterSpacing: 0.5 }}>{quota.total_target}{cadenceLabel}</span></span>
+        <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: barColor, padding: "2px 8px", borderRadius: 8, fontWeight: 700, letterSpacing: 0.4 }}>{statusLabel}</span>
+      </div>
+      {/* Cumulative term progress */}
+      <div style={{ position: "relative", height: 10, background: T.darkBg, borderRadius: 5, overflow: "hidden", marginBottom: 6 }}>
+        <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: `${cumulativePct}%`, background: barColor, transition: "width 240ms" }} />
+        {quota.cadence !== "milestone" && (
+          <div title={`Expected by now: ${prog.expectedNow}`} style={{ position: "absolute", top: -2, bottom: -2, left: `calc(${expectedPct}% - 1px)`, width: 2, background: T.white, opacity: 0.6 }} />
+        )}
+      </div>
+      <div style={{ display: "flex", gap: 12, fontFamily: sans, fontSize: 10, color: T.tertiary, marginBottom: cp || endedPeriods.length > 0 ? 12 : 0 }}>
+        <span><span style={{ color: T.white, fontWeight: 700 }}>{prog.accepted}</span> approved</span>
+        {prog.pending > 0 && <span>· <span style={{ color: T.copper }}>{prog.pending}</span> pending</span>}
+        <span style={{ marginLeft: "auto" }}>of <span style={{ color: T.white, fontWeight: 700 }}>{prog.target}</span> target</span>
+      </div>
+      {/* CURRENT period card */}
+      {cp && (
+        <div style={{ padding: 10, background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 8, marginBottom: endedPeriods.length > 0 ? 8 : 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+            <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 700, letterSpacing: 0.8 }}>THIS {cpLabel ? cpLabel.split(" ")[0] : "PERIOD"}</span>
+            <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, fontWeight: 600 }}>{cpLabel}</span>
+            <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 700 }}>
+              {cp.approvedInPeriod}/{cp.effectiveTarget}
+            </span>
+          </div>
+          <div style={{ position: "relative", height: 8, background: T.charcoal, borderRadius: 4, overflow: "hidden", marginBottom: 6 }}>
+            <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: `${cpPct}%`, background: cpBarColor, transition: "width 240ms" }} />
+          </div>
+          <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, lineHeight: 1.4 }}>
+            {cp.rolloverIn > 0
+              ? <span>Target: <span style={{ color: T.white, fontWeight: 700 }}>{cp.effectiveTarget}</span> · base {cp.baseTarget} + <span style={{ color: T.red, fontWeight: 700 }}>{cp.rolloverIn} carryover</span></span>
+              : <span>Target: <span style={{ color: T.white, fontWeight: 700 }}>{cp.effectiveTarget}</span>{cp.pendingInPeriod > 0 && <span> · <span style={{ color: T.copper }}>{cp.pendingInPeriod}</span> pending</span>}</span>}
+          </div>
+        </div>
+      )}
+      {/* Prior periods strip */}
+      {endedPeriods.length > 0 && (
+        <div>
+          <button
+            onClick={() => setExpanded(e => !e)}
+            style={{ width: "100%", display: "flex", alignItems: "center", gap: 6, padding: "6px 0", background: "none", border: "none", cursor: "pointer", color: T.tertiary, fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 0.8 }}
+          >
+            <span>PRIOR PERIODS · {endedPeriods.filter(p => p.met).length}/{endedPeriods.length} MET</span>
+            <div style={{ flex: 1, display: "flex", gap: 2, marginLeft: 4 }}>
+              {endedPeriods.map(p => (
+                <div key={p.index} style={{ flex: 1, height: 6, borderRadius: 2, background: p.met ? T.green : T.red, opacity: p.met ? 0.85 : 0.7 }} />
+              ))}
+            </div>
+            <span style={{ marginLeft: 2 }}>{expanded ? "▲" : "▼"}</span>
+          </button>
+          {expanded && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
+              {endedPeriods.map(p => {
+                const cellPrefix = quota.cadence === "quarter" ? "Q" : "M";
+                return (
+                  <div key={p.index} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", background: p.met ? `${T.green}15` : `${T.red}15`, border: `1px solid ${p.met ? T.green : T.red}40`, borderRadius: 6 }}>
+                    <span style={{ fontFamily: sans, fontSize: 9, color: T.white, fontWeight: 700, width: 28 }}>{cellPrefix}{p.index + 1}</span>
+                    <span style={{ fontFamily: sans, fontSize: 10, color: T.white }}>
+                      {p.approvedInPeriod}/{p.effectiveTarget}
+                    </span>
+                    {p.rolloverIn > 0 && (
+                      <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>(base {p.baseTarget} + {p.rolloverIn})</span>
+                    )}
+                    <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: 9, color: p.met ? T.green : T.red, fontWeight: 700, letterSpacing: 0.4 }}>
+                      {p.met ? "MET" : `-${p.effectiveTarget - p.approvedInPeriod}`}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+      {quota.cadence === "milestone" && quota.due_at && (
+        <div style={{ marginTop: 6, fontFamily: sans, fontSize: 10, color: T.tertiary }}>
+          Due {new Date(quota.due_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+        </div>
+      )}
+      {quota.notes && (
+        <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: "8px 0 0", lineHeight: 1.4 }}>{quota.notes}</p>
+      )}
+    </div>
+  );
+}
+
+function ContentPartnerDashboard({ onClose, onLoad, onLoadById, onSubmit, onRecompute, forcedPartnerId, isAdminView }) {
   const [contract, setContract] = useState(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState(null);
@@ -27376,13 +27601,34 @@ function ContentPartnerDashboard({ onClose, onLoad, onSubmit }) {
   const refresh = async () => {
     setLoading(true);
     setErrorMsg(null);
-    const res = await onLoad();
-    if (res && res.ok) setContract(res.data);
-    else if (res && res.error) setErrorMsg(res.error);
+    // Run server-side recompute FIRST so the status pill (and any
+    // auto-flip / auto-restore notif) lands before we hydrate. For
+    // admin-view mode we still recompute the partner under inspection.
+    if (onRecompute && forcedPartnerId) {
+      try { await onRecompute(forcedPartnerId); } catch (_) {}
+    }
+    let res;
+    if (forcedPartnerId && onLoadById) {
+      res = await onLoadById(forcedPartnerId);
+    } else {
+      // Self-load path. Recompute too — the partner has the same RPC grant.
+      if (onRecompute && !forcedPartnerId) {
+        // We don't know our own partner id yet; the RPC is called below
+        // once the contract lands. Single round-trip OK on first load.
+      }
+      res = await onLoad();
+    }
+    if (res && res.ok) {
+      setContract(res.data);
+      // Self-load: now that we know our partner id, recompute (best-effort).
+      if (!forcedPartnerId && onRecompute && res.data && res.data.id) {
+        try { await onRecompute(res.data.id); } catch (_) {}
+      }
+    } else if (res && res.error) setErrorMsg(res.error);
     setLoading(false);
   };
 
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => { refresh(); }, [forcedPartnerId]);
 
   const isActive = contract && contract.status === "active";
   const enabledQuotas = useMemo(() => {
@@ -27455,7 +27701,8 @@ function ContentPartnerDashboard({ onClose, onLoad, onSubmit }) {
                     )}
                     {contract.status === "completed" && "Term completed. Thanks for the content — your discount code is on its way."}
                     {contract.status === "ended" && "This contract has ended."}
-                    {contract.status === "breached" && "Reach out to the team — there's a delivery shortfall to resolve."}
+                    {contract.status === "breached" && contract.breach_source === "auto" && "You're behind on your cumulative content delivery. Submit additional content to automatically restore good standing — once your approved totals catch up, your status flips back to active."}
+                    {contract.status === "breached" && contract.breach_source !== "auto" && "Reach out to the team — there's a partnership issue to resolve."}
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
                     {/* APPROVED folder URL is intentionally NOT exposed to the
@@ -27481,50 +27728,9 @@ function ContentPartnerDashboard({ onClose, onLoad, onSubmit }) {
                   {enabledQuotas.length === 0
                     ? <div style={{ padding: 16, fontFamily: serif, fontSize: 12, color: T.tertiary, textAlign: "center", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10 }}>No quotas configured yet — sit tight.</div>
                     : <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                        {enabledQuotas.map(q => {
-                          const prog = computeContentPartnerQuotaProgress(q, contract.deliverables, contract);
-                          const progressPct = prog.target > 0 ? Math.min(100, Math.round((prog.accepted / prog.target) * 100)) : 0;
-                          const expectedPct = prog.target > 0 ? Math.min(100, Math.round((prog.expectedNow / prog.target) * 100)) : 0;
-                          const barColor = prog.status === "behind" || prog.status === "milestone_past_due"
-                            ? T.red
-                            : prog.status === "ahead" || prog.status === "milestone_done"
-                              ? T.green
-                              : T.copper;
-                          const statusLabel = prog.status === "ahead" ? "AHEAD"
-                            : prog.status === "behind" ? "BEHIND"
-                            : prog.status === "milestone_done" ? "DONE"
-                            : prog.status === "milestone_past_due" ? "PAST DUE"
-                            : prog.status === "milestone_due_soon" ? "DUE SOON"
-                            : "ON TRACK";
-                          return (
-                            <div key={q.id || q.kind} style={{ padding: 14, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10 }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                                <span style={{ flex: 1, fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700 }}>{contentPartnerKindLabel(q)}</span>
-                                <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: barColor, padding: "2px 8px", borderRadius: 8, fontWeight: 700, letterSpacing: 0.4 }}>{statusLabel}</span>
-                              </div>
-                              {/* Progress bar w/ "expected now" tick. */}
-                              <div style={{ position: "relative", height: 10, background: T.darkBg, borderRadius: 5, overflow: "hidden", marginBottom: 6 }}>
-                                <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: `${progressPct}%`, background: barColor, transition: "width 240ms" }} />
-                                {q.cadence !== "milestone" && (
-                                  <div title={`Expected by now: ${prog.expectedNow}`} style={{ position: "absolute", top: -2, bottom: -2, left: `calc(${expectedPct}% - 1px)`, width: 2, background: T.white, opacity: 0.6 }} />
-                                )}
-                              </div>
-                              <div style={{ display: "flex", gap: 12, fontFamily: sans, fontSize: 10, color: T.tertiary }}>
-                                <span><span style={{ color: T.white, fontWeight: 700 }}>{prog.accepted}</span> approved</span>
-                                {prog.pending > 0 && <span>· <span style={{ color: T.copper }}>{prog.pending}</span> pending</span>}
-                                <span style={{ marginLeft: "auto" }}>of <span style={{ color: T.white, fontWeight: 700 }}>{prog.target}</span> target</span>
-                              </div>
-                              {q.cadence === "milestone" && q.due_at && (
-                                <div style={{ marginTop: 6, fontFamily: sans, fontSize: 10, color: T.tertiary }}>
-                                  Due {new Date(q.due_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
-                                </div>
-                              )}
-                              {q.notes && (
-                                <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: "8px 0 0", lineHeight: 1.4 }}>{q.notes}</p>
-                              )}
-                            </div>
-                          );
-                        })}
+                        {enabledQuotas.map(q => (
+                          <ContentPartnerQuotaCard key={q.id || q.kind} quota={q} contract={contract} />
+                        ))}
                       </div>}
                 </div>
 
@@ -27580,12 +27786,20 @@ function ContentPartnerDashboard({ onClose, onLoad, onSubmit }) {
               </div>
             )}
 
-      {/* Sticky upload CTA */}
-      {isActive && enabledQuotas.length > 0 && (
+      {/* Sticky upload CTA — hidden in admin-view mode (admin's looking
+          at this dashboard for QA, not to submit on the partner's behalf). */}
+      {!isAdminView && isActive && enabledQuotas.length > 0 && (
         <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, padding: 14, background: T.darkBg, borderTop: `1px solid ${T.charcoal}`, display: "flex", justifyContent: "center", zIndex: 6 }}>
           <button onClick={() => setUploadOpen(true)} style={{ width: "100%", maxWidth: 430, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "14px 16px", background: T.copper, border: "none", borderRadius: 12, color: T.white, fontFamily: sans, fontSize: 13, fontWeight: 800, letterSpacing: 1, cursor: "pointer" }}>
             <ArrowUp size={14} color={T.white} /> UPLOAD CONTENT
           </button>
+        </div>
+      )}
+      {isAdminView && (
+        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, padding: 10, background: T.darkBg, borderTop: `1px solid ${T.copper}40`, display: "flex", justifyContent: "center", zIndex: 6 }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", background: T.darkCard, border: `1px solid ${T.copper}`, borderRadius: 10, color: T.copper, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1 }}>
+            <Eye size={12} color={T.copper} /> VIEWING AS PARTNER
+          </div>
         </div>
       )}
 
@@ -37100,6 +37314,11 @@ export default function Trailhead() {
   // Partner-facing dashboard overlay — toggled from the user's own profile
   // when isContentPartner is true.
   const [showContentPartnerDashboard, setShowContentPartnerDashboard] = useState(false);
+  // Admin "view as partner" overlay — set when admin clicks VIEW DASHBOARD
+  // from the editor. Renders ContentPartnerDashboard in admin-view mode
+  // (no UPLOAD CONTENT button) using loadContentPartnerById instead of
+  // the self-loader. Null = closed.
+  const [adminPartnerViewId, setAdminPartnerViewId] = useState(null);
   // Public detail target — set when a beta tester (or admin) taps a drop
   // card from the feed. Opens GearDropDetailScreen as a full-screen overlay.
   const [viewingGearDropId, setViewingGearDropId] = useState(null);
@@ -39223,12 +39442,44 @@ export default function Trailhead() {
   // Partners list screen. Two round trips (partners + quotas) then a
   // grouped count for the badge — small enough that a single query plan
   // isn't worth the joined-shape complexity.
+  // Per-partner recompute. Walks the cadence-based quotas server-side
+  // and flips status='active' ↔ 'breached' (breach_source='auto') based
+  // on cumulative deliverables vs cumulative base targets through ended
+  // periods. Manual breaches (breach_source='manual') are not touched.
+  // Safe to call on partner self-load (RLS-bypassing SECURITY DEFINER).
+  const recomputeContentPartnerStanding = async (partnerId) => {
+    if (!partnerId) return { error: "Missing partner id" };
+    try {
+      const { data, error } = await supabase.rpc("recompute_content_partner_standing", { p_partner_id: partnerId });
+      if (error) return { error: error.message };
+      return { ok: true, data: Array.isArray(data) ? data[0] : data };
+    } catch (e) {
+      console.error("[recomputeContentPartnerStanding] failed", e);
+      return { error: "Network error" };
+    }
+  };
+
+  // Admin-only bulk sweep. Used on admin list-load to catch period
+  // boundaries crossed without any individual partner triggering a
+  // recompute on their own dashboard.
+  const recomputeAllContentPartnerStandings = async () => {
+    if (!isAdmin) return { error: "Not authorized" };
+    try {
+      const { data, error } = await supabase.rpc("recompute_all_content_partner_standings");
+      if (error) return { error: error.message };
+      return { ok: true, data: data || [] };
+    } catch (e) {
+      console.error("[recomputeAllContentPartnerStandings] failed", e);
+      return { error: "Network error" };
+    }
+  };
+
   const loadAllContentPartners = async () => {
     if (!isAdmin) return { error: "Not authorized" };
     try {
       const { data: partners, error: pErr } = await supabase
         .from("content_partners")
-        .select("id, profile_id, status, contract_signed_at, camper_delivered_at, term_ends_at, discount_pct, contract_url, dropbox_upload_folder_url, dropbox_pending_folder_url, dropbox_approved_folder_url, notes, created_at, updated_at")
+        .select("id, profile_id, status, breach_source, contract_signed_at, camper_delivered_at, term_ends_at, discount_pct, contract_url, dropbox_upload_folder_url, dropbox_pending_folder_url, dropbox_approved_folder_url, notes, created_at, updated_at")
         .order("created_at", { ascending: false });
       if (pErr) return { error: pErr.message };
       const rows = partners || [];
@@ -39629,6 +39880,10 @@ export default function Trailhead() {
           console.warn("[reviewContentPartnerSubmission] notif insert threw", e);
         }
       }
+      // Approval may have cleared a deficit (auto-restore) or — rarely
+      // — a rejection may have introduced one. Recompute server-side so
+      // the partner sees the corrected status on their next refresh.
+      try { await supabase.rpc("recompute_content_partner_standing", { p_partner_id: partnerId }); } catch (_) {}
       return { ok: true, approved: approvedCount, rejected: rejectedCount };
     } catch (e) {
       console.error("[reviewContentPartnerSubmission] failed", e);
@@ -39655,6 +39910,10 @@ export default function Trailhead() {
       const nextNotes = existing.notes ? `${existing.notes}\n\n${stampedReason}` : stampedReason;
       const { error } = await supabase.from("content_partners").update({
         status: breach ? "breached" : "active",
+        // Stamp source on manual flips so the auto-restore RPC won't
+        // undo a manual breach — and clear it on manual restore so the
+        // partner can re-enter the auto track.
+        breach_source: breach ? "manual" : null,
         notes: nextNotes,
         updated_at: new Date().toISOString(),
       }).eq("id", partnerId);
@@ -39698,7 +39957,7 @@ export default function Trailhead() {
     try {
       const { data: rows, error } = await supabase
         .from("content_partners")
-        .select("id, profile_id, status, contract_signed_at, camper_delivered_at, term_ends_at, discount_pct, contract_url, dropbox_upload_folder_url, dropbox_pending_folder_url, dropbox_approved_folder_url, notes, created_at, updated_at")
+        .select("id, profile_id, status, breach_source, contract_signed_at, camper_delivered_at, term_ends_at, discount_pct, contract_url, dropbox_upload_folder_url, dropbox_pending_folder_url, dropbox_approved_folder_url, notes, created_at, updated_at")
         .eq("profile_id", uid)
         .order("created_at", { ascending: false });
       if (error) return { error: error.message || "Lookup failed" };
@@ -44707,6 +44966,7 @@ export default function Trailhead() {
                       onDelete={deleteContentPartner}
                       onAddBackdated={adminAddBackdatedDeliverable}
                       onSetBreach={setContentPartnerBreachStatus}
+                      onViewAsPartner={(id) => setAdminPartnerViewId(id)}
                     />
                   : <ContentPartnersAdminScreen
                       onBack={() => setAdminSubScreen(null)}
@@ -44716,6 +44976,7 @@ export default function Trailhead() {
                       onLoadPendingCounts={loadContentPartnerPendingCounts}
                       onLoadPendingSubmissions={loadAllPendingContentPartnerSubmissions}
                       onReviewSubmission={reviewContentPartnerSubmission}
+                      onRecomputeAll={recomputeAllContentPartnerStandings}
                     />)
                 : adminSubScreen
                 ? <AdminDashboardScreen
@@ -45507,6 +45768,20 @@ export default function Trailhead() {
           onClose={() => setShowContentPartnerDashboard(false)}
           onLoad={loadMyContentPartnerContract}
           onSubmit={submitContentPartnerInventory}
+          onRecompute={recomputeContentPartnerStanding}
+        />
+      )}
+
+      {/* Admin "view as partner" overlay — opens the partner-facing
+          dashboard for any contract via the admin loader. UPLOAD button
+          is hidden in this mode (admin shouldn't submit on behalf of). */}
+      {adminPartnerViewId && (
+        <ContentPartnerDashboard
+          onClose={() => setAdminPartnerViewId(null)}
+          onLoadById={loadContentPartnerById}
+          forcedPartnerId={adminPartnerViewId}
+          isAdminView={true}
+          onRecompute={recomputeContentPartnerStanding}
         />
       )}
 
