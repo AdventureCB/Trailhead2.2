@@ -19236,7 +19236,7 @@ function BugReportForm({ currentUserId, currentUserHandle, onClose, onSubmitted 
 }
 
 /* ─── PROFILE SCREEN (Own Profile) ─── */
-function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, initialUserBio, initialIsPublic, onViewUser, onLogout, userBuilds, onAddBuild, onUpdateBuild, onDeleteBuild, profilePic, onSetProfilePic, notifPrefs, onSetNotifPrefs, feedItems, onDeletePost, onEditPost, onUpdateConvoy, onGoToPost, myPoints: myPointsProp, onSaveProfile, followerCount, followingCount, convoyRsvps, onSubscribePush, onUnsubscribePush, renderFeedScopedTo, onViewBuild, savedRoutes, onUnsaveRoute, onStartNav, myTripPlans, onOpenTripPlan, onNewTripPlan, isAdmin, currentRole, savedTrips, onUnsaveTrip, onOpenSavedTrip, pendingScroll, onConsumePendingScroll, onOpenAdminDashboard, onOpenAmbassadorDashboard, onOpenFollowList }) {
+function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, initialUserBio, initialIsPublic, onViewUser, onLogout, userBuilds, onAddBuild, onUpdateBuild, onDeleteBuild, profilePic, onSetProfilePic, notifPrefs, onSetNotifPrefs, feedItems, onDeletePost, onEditPost, onUpdateConvoy, onGoToPost, myPoints: myPointsProp, onSaveProfile, followerCount, followingCount, convoyRsvps, onSubscribePush, onUnsubscribePush, renderFeedScopedTo, onViewBuild, savedRoutes, onUnsaveRoute, onStartNav, myTripPlans, onOpenTripPlan, onNewTripPlan, isAdmin, currentRole, savedTrips, onUnsaveTrip, onOpenSavedTrip, pendingScroll, onConsumePendingScroll, onOpenAdminDashboard, onOpenAmbassadorDashboard, onOpenContentPartnerDashboard, isContentPartner, onOpenFollowList }) {
   const [isPublic, setIsPublic] = useState(initialIsPublic == null ? true : !!initialIsPublic);
   const [activeTab, setActiveTab] = useState("builds");
   const [activeBuild, setActiveBuild] = useState(0);
@@ -19803,6 +19803,16 @@ function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, init
             <button onClick={onOpenAmbassadorDashboard} style={{ display: "flex", alignItems: "center", gap: 6, background: T.darkCard, padding: "10px 20px", borderRadius: 8, border: `1px solid ${T.copper}40`, cursor: "pointer" }}>
               <Tag size={14} color={T.copper} />
               <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, letterSpacing: 1, fontWeight: 600 }}>AMBASSADOR</span>
+            </button>
+          )}
+          {/* Content partner dashboard — visible only when the admin has
+              flipped is_content_partner=true on this profile. Same pill
+              style as AMBASSADOR for visual parity since the roles can
+              coexist on the same user. */}
+          {onOpenContentPartnerDashboard && isContentPartner && (
+            <button onClick={onOpenContentPartnerDashboard} style={{ display: "flex", alignItems: "center", gap: 6, background: T.darkCard, padding: "10px 20px", borderRadius: 8, border: `1px solid ${T.copper}40`, cursor: "pointer" }}>
+              <Camera size={14} color={T.copper} />
+              <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, letterSpacing: 1, fontWeight: 600 }}>PARTNERSHIP</span>
             </button>
           )}
         </div>
@@ -26254,6 +26264,88 @@ const CONTENT_PARTNER_KIND_LABEL = {
 };
 const CONTENT_PARTNER_KIND_ORDER = ["photo", "short_video", "long_video", "basecamp_video"];
 
+// Resolve a human-readable label for any quota/deliverable kind. Built-in
+// kinds come from CONTENT_PARTNER_KIND_LABEL; custom kinds fall back to
+// the quota's stored label, then a humanized `kind` value.
+function contentPartnerKindLabel(kindOrQuota) {
+  if (!kindOrQuota) return "—";
+  if (typeof kindOrQuota === "object") {
+    if (kindOrQuota.label) return kindOrQuota.label;
+    return CONTENT_PARTNER_KIND_LABEL[kindOrQuota.kind] || (kindOrQuota.kind || "").replace(/^custom_/, "").replace(/_/g, " ");
+  }
+  return CONTENT_PARTNER_KIND_LABEL[kindOrQuota] || String(kindOrQuota).replace(/^custom_/, "").replace(/_/g, " ");
+}
+
+// Compute progress numbers for a single quota line given the contract's
+// term window (camper_delivered_at + 1yr) and the list of deliverables.
+// Returns {target, accepted, pending, expectedNow, status} where status
+// is "on_track" / "behind" / "ahead" / "milestone_due_soon" /
+// "milestone_past_due" / "milestone_done". expectedNow is what SHOULD
+// have been delivered by today based on cadence + schedule (used by the
+// dashboard to color the progress bar without breaking past-due credit).
+function computeContentPartnerQuotaProgress(quota, deliverables, contract) {
+  const list = (deliverables || []).filter(d => d && d.kind === quota.kind);
+  const accepted = list.filter(d => d.status === "approved").reduce((s, d) => s + (Number(d.quantity_accepted) || 0), 0);
+  const pending  = list.filter(d => d.status === "pending").reduce((s, d) => s + (Number(d.quantity_reported) || 0), 0);
+  const target = Number(quota.total_target) || 0;
+  let expectedNow = 0;
+  let status = "on_track";
+  const now = Date.now();
+  const startMs = contract && contract.camper_delivered_at ? new Date(contract.camper_delivered_at).getTime() : null;
+  const endMs   = contract && contract.term_ends_at        ? new Date(contract.term_ends_at).getTime()        : null;
+  if (quota.cadence === "milestone") {
+    const dueMs = quota.due_at ? new Date(quota.due_at).getTime() : null;
+    if (accepted >= target) {
+      expectedNow = target;
+      status = "milestone_done";
+    } else if (dueMs && now > dueMs) {
+      expectedNow = target;
+      status = "milestone_past_due";
+    } else if (dueMs && (dueMs - now) < 1000 * 60 * 60 * 24 * 14) {
+      expectedNow = 0;
+      status = "milestone_due_soon";
+    } else {
+      expectedNow = 0;
+      status = "on_track";
+    }
+  } else if (quota.cadence === "term") {
+    if (startMs && endMs && now > startMs) {
+      const ratio = Math.max(0, Math.min(1, (now - startMs) / (endMs - startMs)));
+      expectedNow = Math.round(target * ratio);
+    } else {
+      expectedNow = 0;
+    }
+    status = accepted >= expectedNow ? (accepted >= target ? "ahead" : "on_track") : "behind";
+  } else if (quota.cadence === "quarter" || quota.cadence === "month") {
+    const periodCount = quota.cadence === "quarter" ? 4 : 12;
+    const schedule = quota.schedule && typeof quota.schedule === "object" ? quota.schedule : null;
+    const periodKeys = quota.cadence === "quarter"
+      ? ["q1","q2","q3","q4"]
+      : ["m1","m2","m3","m4","m5","m6","m7","m8","m9","m10","m11","m12"];
+    // Default to even split when schedule is null
+    const perPeriod = schedule ? null : Math.round(target / periodCount);
+    let elapsedPeriods = 0;
+    let partialFraction = 0;
+    if (startMs && endMs && now > startMs) {
+      const periodMs = (endMs - startMs) / periodCount;
+      const within = (now - startMs) / periodMs;
+      elapsedPeriods = Math.floor(within);
+      partialFraction = within - elapsedPeriods;
+      if (elapsedPeriods >= periodCount) { elapsedPeriods = periodCount; partialFraction = 0; }
+    }
+    let cumulative = 0;
+    if (schedule) {
+      for (let i = 0; i < elapsedPeriods && i < periodCount; i++) cumulative += Number(schedule[periodKeys[i]]) || 0;
+      if (elapsedPeriods < periodCount) cumulative += Math.round((Number(schedule[periodKeys[elapsedPeriods]]) || 0) * partialFraction);
+    } else {
+      cumulative = Math.round(perPeriod * (elapsedPeriods + partialFraction));
+    }
+    expectedNow = Math.min(target, Math.max(0, cumulative));
+    status = accepted >= expectedNow ? (accepted >= target ? "ahead" : "on_track") : "behind";
+  }
+  return { target, accepted, pending, expectedNow, status };
+}
+
 function ContentPartnersAdminScreen({ onBack, onOpenEditor, onNewPartner, onLoadPartners, onLoadPendingCounts }) {
   const [partners, setPartners] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -27021,6 +27113,332 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onLoadCandidates, onS
             )}
           </div>
         )}
+    </div>
+  );
+}
+
+// ─── Content Partner dashboard (partner-facing) ─────────────────────────
+// Full-screen overlay accessed from the signed-in user's own profile when
+// is_content_partner is true. Shows their current contract, per-kind
+// quota progress, links to the assigned Dropbox folder + signed contract,
+// the inventory upload modal, and a history of past submissions w/ admin
+// review status. Read-only when the contract isn't status='active' (the
+// partner_self_insert RLS policy blocks upload otherwise anyway).
+function ContentPartnerDashboard({ onClose, onLoad, onSubmit }) {
+  const [contract, setContract] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
+
+  const refresh = async () => {
+    setLoading(true);
+    setErrorMsg(null);
+    const res = await onLoad();
+    if (res && res.ok) setContract(res.data);
+    else if (res && res.error) setErrorMsg(res.error);
+    setLoading(false);
+  };
+
+  useEffect(() => { refresh(); }, []);
+
+  const isActive = contract && contract.status === "active";
+  const enabledQuotas = useMemo(() => {
+    if (!contract) return [];
+    const order = (q) => {
+      const i = CONTENT_PARTNER_KIND_ORDER.indexOf(q.kind);
+      return i >= 0 ? i : 100 + (q.kind || "").length;
+    };
+    return (contract.quotas || []).slice().sort((a, b) => order(a) - order(b));
+  }, [contract]);
+
+  const termDaysLeft = (() => {
+    if (!contract || !contract.term_ends_at) return null;
+    const ms = new Date(contract.term_ends_at).getTime() - Date.now();
+    return Math.max(0, Math.round(ms / (1000 * 60 * 60 * 24)));
+  })();
+
+  const submissionsByGroup = useMemo(() => {
+    const groups = {};
+    (contract && contract.deliverables || []).forEach(d => {
+      if (!groups[d.submission_group_id]) groups[d.submission_group_id] = [];
+      groups[d.submission_group_id].push(d);
+    });
+    const list = Object.values(groups);
+    list.sort((a, b) => new Date(b[0].submitted_at).getTime() - new Date(a[0].submitted_at).getTime());
+    return list;
+  }, [contract]);
+
+  const statusPillColor = contract
+    ? (contract.status === "active" ? T.green
+      : contract.status === "pending_delivery" ? T.copper
+      : contract.status === "breached" ? T.red
+      : T.tertiary)
+    : T.tertiary;
+  const statusPillLabel = contract
+    ? (CONTENT_PARTNER_STATUS_LABEL[contract.status] || (contract.status || "").toUpperCase())
+    : "";
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: T.darkBg, zIndex: 200, overflowY: "auto" }}>
+      <div style={{ position: "sticky", top: 0, padding: "14px 16px", background: T.darkBg, borderBottom: `1px solid ${T.charcoal}`, display: "flex", alignItems: "center", gap: 8, zIndex: 5 }}>
+        <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+          <ChevronLeft size={20} color={T.white} />
+        </button>
+        <Camera size={16} color={T.copper} />
+        <span style={{ flex: 1, fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.8 }}>CONTENT PARTNERSHIP</span>
+      </div>
+
+      {loading
+        ? <div style={{ padding: 30, textAlign: "center", fontFamily: serif, fontSize: 13, color: T.tertiary }}>Loading…</div>
+        : errorMsg
+          ? <div style={{ padding: 24, fontFamily: serif, fontSize: 13, color: T.red, textAlign: "center", lineHeight: 1.5 }}>{errorMsg}</div>
+          : !contract
+            ? <div style={{ padding: 30, fontFamily: serif, fontSize: 13, color: T.tertiary, textAlign: "center", lineHeight: 1.6 }}>
+                <p style={{ margin: "0 0 6px" }}>No contract on file yet.</p>
+                <p style={{ margin: 0, fontSize: 11, opacity: 0.85 }}>Reach out to the team — once your contract is loaded into the system you'll see your quotas here.</p>
+              </div>
+            : (
+              <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 16 }}>
+                {/* Header status card */}
+                <div style={{ padding: 16, background: T.darkCard, border: `1px solid ${statusPillColor}40`, borderRadius: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                    <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: statusPillColor, padding: "3px 9px", borderRadius: 8, fontWeight: 700, letterSpacing: 0.5 }}>{statusPillLabel}</span>
+                    {contract.discount_pct != null && <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700 }}>{contract.discount_pct}% off camper</span>}
+                  </div>
+                  <div style={{ fontFamily: serif, fontSize: 13, color: T.white, lineHeight: 1.5 }}>
+                    {contract.status === "pending_delivery" && "Your camper is being prepared. Once it ships, your 1-year term begins and you can start uploading content."}
+                    {contract.status === "active" && (
+                      <>Your term is running. {termDaysLeft != null && <span><strong style={{ color: T.copper }}>{termDaysLeft}</strong> days left.</span>}</>
+                    )}
+                    {contract.status === "completed" && "Term completed. Thanks for the content — your discount code is on its way."}
+                    {contract.status === "ended" && "This contract has ended."}
+                    {contract.status === "breached" && "Reach out to the team — there's a delivery shortfall to resolve."}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                    {contract.dropbox_upload_folder_url
+                      ? <a href={contract.dropbox_upload_folder_url} target="_blank" rel="noopener noreferrer" style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", background: T.darkBg, border: `1px solid ${T.copper}`, borderRadius: 8, color: T.copper, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.6, textDecoration: "none" }}>
+                          <ExternalLink size={12} color={T.copper} /> DROPBOX FOLDER
+                        </a>
+                      : <div style={{ flex: 1, padding: "10px 12px", background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 8, color: T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textAlign: "center" }}>FOLDER NOT ASSIGNED</div>}
+                    {contract.contract_url
+                      ? <a href={contract.contract_url} target="_blank" rel="noopener noreferrer" style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", background: T.darkBg, border: `1px solid ${T.copper}`, borderRadius: 8, color: T.copper, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.6, textDecoration: "none" }}>
+                          <FileText size={12} color={T.copper} /> CONTRACT
+                        </a>
+                      : <div style={{ flex: 1, padding: "10px 12px", background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 8, color: T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textAlign: "center" }}>CONTRACT NOT LINKED</div>}
+                  </div>
+                </div>
+
+                {/* Per-kind progress */}
+                <div>
+                  <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 600, display: "block", marginBottom: 10 }}>DELIVERABLES</span>
+                  {enabledQuotas.length === 0
+                    ? <div style={{ padding: 16, fontFamily: serif, fontSize: 12, color: T.tertiary, textAlign: "center", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10 }}>No quotas configured yet — sit tight.</div>
+                    : <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                        {enabledQuotas.map(q => {
+                          const prog = computeContentPartnerQuotaProgress(q, contract.deliverables, contract);
+                          const progressPct = prog.target > 0 ? Math.min(100, Math.round((prog.accepted / prog.target) * 100)) : 0;
+                          const expectedPct = prog.target > 0 ? Math.min(100, Math.round((prog.expectedNow / prog.target) * 100)) : 0;
+                          const barColor = prog.status === "behind" || prog.status === "milestone_past_due"
+                            ? T.red
+                            : prog.status === "ahead" || prog.status === "milestone_done"
+                              ? T.green
+                              : T.copper;
+                          const statusLabel = prog.status === "ahead" ? "AHEAD"
+                            : prog.status === "behind" ? "BEHIND"
+                            : prog.status === "milestone_done" ? "DONE"
+                            : prog.status === "milestone_past_due" ? "PAST DUE"
+                            : prog.status === "milestone_due_soon" ? "DUE SOON"
+                            : "ON TRACK";
+                          return (
+                            <div key={q.id || q.kind} style={{ padding: 14, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                                <span style={{ flex: 1, fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700 }}>{contentPartnerKindLabel(q)}</span>
+                                <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: barColor, padding: "2px 8px", borderRadius: 8, fontWeight: 700, letterSpacing: 0.4 }}>{statusLabel}</span>
+                              </div>
+                              {/* Progress bar w/ "expected now" tick. */}
+                              <div style={{ position: "relative", height: 10, background: T.darkBg, borderRadius: 5, overflow: "hidden", marginBottom: 6 }}>
+                                <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: `${progressPct}%`, background: barColor, transition: "width 240ms" }} />
+                                {q.cadence !== "milestone" && (
+                                  <div title={`Expected by now: ${prog.expectedNow}`} style={{ position: "absolute", top: -2, bottom: -2, left: `calc(${expectedPct}% - 1px)`, width: 2, background: T.white, opacity: 0.6 }} />
+                                )}
+                              </div>
+                              <div style={{ display: "flex", gap: 12, fontFamily: sans, fontSize: 10, color: T.tertiary }}>
+                                <span><span style={{ color: T.white, fontWeight: 700 }}>{prog.accepted}</span> approved</span>
+                                {prog.pending > 0 && <span>· <span style={{ color: T.copper }}>{prog.pending}</span> pending</span>}
+                                <span style={{ marginLeft: "auto" }}>of <span style={{ color: T.white, fontWeight: 700 }}>{prog.target}</span> target</span>
+                              </div>
+                              {q.cadence === "milestone" && q.due_at && (
+                                <div style={{ marginTop: 6, fontFamily: sans, fontSize: 10, color: T.tertiary }}>
+                                  Due {new Date(q.due_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                                </div>
+                              )}
+                              {q.notes && (
+                                <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: "8px 0 0", lineHeight: 1.4 }}>{q.notes}</p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>}
+                </div>
+
+                {/* Recent submissions */}
+                {submissionsByGroup.length > 0 && (
+                  <div>
+                    <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 600, display: "block", marginBottom: 10 }}>YOUR SUBMISSIONS</span>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {submissionsByGroup.map(group => {
+                        const first = group[0];
+                        const status = group.every(d => d.status === "approved") ? "approved"
+                                      : group.every(d => d.status === "rejected") ? "rejected"
+                                      : group.some(d => d.status === "pending") ? "pending"
+                                      : "mixed";
+                        const statusColor = status === "approved" ? T.green
+                                          : status === "rejected" ? T.red
+                                          : status === "pending" ? T.copper
+                                          : T.tertiary;
+                        const statusLabel = status === "approved" ? "APPROVED"
+                                          : status === "rejected" ? "REJECTED"
+                                          : status === "pending" ? "PENDING"
+                                          : "MIXED";
+                        const items = group.map(d => {
+                          const reported = d.quantity_reported;
+                          const accepted = d.quantity_accepted;
+                          const label = contentPartnerKindLabel(d.kind);
+                          if (d.status === "approved" && accepted !== reported) {
+                            return `${accepted}/${reported} ${label.toLowerCase()}`;
+                          }
+                          return `${d.quantity_reported} ${label.toLowerCase()}`;
+                        }).join(" · ");
+                        return (
+                          <div key={first.submission_group_id} style={{ padding: 12, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                              <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>{new Date(first.submitted_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</span>
+                              <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: statusColor, padding: "2px 7px", borderRadius: 8, fontWeight: 700, letterSpacing: 0.4 }}>{statusLabel}</span>
+                            </div>
+                            <div style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.4 }}>{items}</div>
+                            {first.partner_notes && (
+                              <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: "6px 0 0", opacity: 0.8, lineHeight: 1.4 }}>"{first.partner_notes}"</p>
+                            )}
+                            {group.some(d => d.reviewer_notes) && (
+                              <p style={{ fontFamily: serif, fontSize: 11, color: T.copper, margin: "6px 0 0", lineHeight: 1.4 }}>Admin: {group.find(d => d.reviewer_notes).reviewer_notes}</p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ height: 80 }} />
+              </div>
+            )}
+
+      {/* Sticky upload CTA */}
+      {isActive && enabledQuotas.length > 0 && (
+        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, padding: 14, background: T.darkBg, borderTop: `1px solid ${T.charcoal}`, display: "flex", justifyContent: "center", zIndex: 6 }}>
+          <button onClick={() => setUploadOpen(true)} style={{ width: "100%", maxWidth: 430, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "14px 16px", background: T.copper, border: "none", borderRadius: 12, color: T.white, fontFamily: sans, fontSize: 13, fontWeight: 800, letterSpacing: 1, cursor: "pointer" }}>
+            <ArrowUp size={14} color={T.white} /> UPLOAD CONTENT
+          </button>
+        </div>
+      )}
+
+      {/* Upload modal */}
+      {uploadOpen && contract && (
+        <ContentPartnerUploadModal
+          contract={contract}
+          enabledQuotas={enabledQuotas}
+          onClose={() => setUploadOpen(false)}
+          onSubmit={onSubmit}
+          onComplete={() => { setUploadOpen(false); refresh(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// Inventory-only upload modal. Per Kyle: the partner reports a count
+// per kind (no Dropbox URL — admin organizes the folder), submits, and
+// the rows land as status='pending' for admin review.
+function ContentPartnerUploadModal({ contract, enabledQuotas, onClose, onSubmit, onComplete }) {
+  const [counts, setCounts] = useState({});
+  const [notes, setNotes] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState(null);
+
+  const totalCount = useMemo(
+    () => enabledQuotas.reduce((s, q) => s + (Number(counts[q.kind]) || 0), 0),
+    [enabledQuotas, counts]
+  );
+
+  const handleSubmit = async () => {
+    if (submitting || totalCount === 0) return;
+    setSubmitting(true);
+    setErrorMsg(null);
+    try {
+      const items = enabledQuotas
+        .map(q => ({ kind: q.kind, quantity: Number(counts[q.kind]) || 0 }))
+        .filter(it => it.quantity > 0);
+      const res = await onSubmit({
+        partnerId: contract.id,
+        items,
+        notes: notes.trim() || null,
+      });
+      if (res && res.ok) {
+        if (onComplete) onComplete();
+      } else if (res && res.error) {
+        setErrorMsg(res.error);
+      }
+    } finally { setSubmitting(false); }
+  };
+
+  return (
+    <div onClick={() => !submitting && onClose()} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.78)", zIndex: 230, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 430, background: T.darkBg, borderRadius: "16px 16px 0 0", border: `1px solid ${T.copper}`, borderBottom: "none", padding: "18px 18px 22px", maxHeight: "85vh", overflowY: "auto" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+          <ArrowUp size={14} color={T.copper} />
+          <span style={{ flex: 1, fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 0.8 }}>UPLOAD CONTENT</span>
+          <button onClick={() => !submitting && onClose()} disabled={submitting} style={{ background: "none", border: "none", padding: 4, cursor: submitting ? "default" : "pointer" }}>
+            <X size={18} color={T.white} />
+          </button>
+        </div>
+        <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 14px", lineHeight: 1.5 }}>
+          Upload your files to the Dropbox folder first, then tell us how many of each kind you delivered. Admin will confirm and credit them to your totals.
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 12 }}>
+          {enabledQuotas.map(q => (
+            <div key={q.kind} style={{ padding: 12, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10, display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700 }}>{contentPartnerKindLabel(q)}</div>
+                {q.notes && <div style={{ fontFamily: serif, fontSize: 10, color: T.tertiary, marginTop: 2, lineHeight: 1.3 }}>{q.notes}</div>}
+              </div>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                inputMode="numeric"
+                value={counts[q.kind] || ""}
+                onChange={e => setCounts(c => ({ ...c, [q.kind]: Math.max(0, Math.floor(Number(e.target.value) || 0)) }))}
+                placeholder="0"
+                style={{ width: 72, padding: "10px 12px", background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 8, color: T.white, fontFamily: sans, fontSize: 14, fontWeight: 700, textAlign: "right" }}
+              />
+            </div>
+          ))}
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600, display: "block", marginBottom: 6 }}>NOTES (OPTIONAL)</label>
+          <textarea value={notes} onChange={e => setNotes(e.target.value.slice(0, 500))} rows={2} placeholder="Folder name, batch label, anything that helps admin find your files" style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8, color: T.white, fontFamily: serif, fontSize: 13, resize: "vertical" }} />
+        </div>
+        {errorMsg && (
+          <div style={{ padding: 10, background: `${T.red}25`, border: `1px solid ${T.red}`, borderRadius: 8, fontFamily: sans, fontSize: 11, color: T.red, marginBottom: 12 }}>{errorMsg}</div>
+        )}
+        <button
+          onClick={handleSubmit}
+          disabled={submitting || totalCount === 0}
+          style={{ width: "100%", padding: 14, background: submitting || totalCount === 0 ? T.charcoal : T.copper, border: "none", borderRadius: 10, color: T.white, fontFamily: sans, fontSize: 13, fontWeight: 800, letterSpacing: 1, cursor: submitting || totalCount === 0 ? "default" : "pointer" }}
+        >
+          {submitting ? "SUBMITTING…" : totalCount > 0 ? `SUBMIT ${totalCount} ITEM${totalCount === 1 ? "" : "S"}` : "ENTER A COUNT ABOVE"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -36424,6 +36842,9 @@ export default function Trailhead() {
   // means edit an existing contract. null = show the list. Mirrors the
   // gear-drops editor routing pattern.
   const [editingContentPartnerId, setEditingContentPartnerId] = useState(null);
+  // Partner-facing dashboard overlay — toggled from the user's own profile
+  // when isContentPartner is true.
+  const [showContentPartnerDashboard, setShowContentPartnerDashboard] = useState(false);
   // Public detail target — set when a beta tester (or admin) taps a drop
   // card from the feed. Opens GearDropDetailScreen as a full-screen overlay.
   const [viewingGearDropId, setViewingGearDropId] = useState(null);
@@ -38756,6 +39177,94 @@ export default function Trailhead() {
       return { ok: true, data };
     } catch (e) {
       console.error("[adminAddBackdatedDeliverable] failed", e);
+      return { error: "Network error" };
+    }
+  };
+
+  // Partner-side: load the signed-in user's most recent contract (active
+  // first, falling back to the most recent of any status). Pulls quotas
+  // + deliverables + the partner's own profile snapshot. RLS gates the
+  // query to rows where profile_id = auth.uid().
+  const loadMyContentPartnerContract = async () => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) return { error: "Sign-in required" };
+    try {
+      const { data: rows, error } = await supabase
+        .from("content_partners")
+        .select("id, profile_id, status, contract_signed_at, camper_delivered_at, term_ends_at, discount_pct, contract_url, dropbox_upload_folder_url, notes, created_at, updated_at")
+        .eq("profile_id", uid)
+        .order("created_at", { ascending: false });
+      if (error) return { error: error.message || "Lookup failed" };
+      const list = rows || [];
+      if (list.length === 0) return { ok: true, data: null };
+      // Prefer the active contract; otherwise newest of any status.
+      const active = list.find(r => r.status === "active");
+      const target = active || list[0];
+      const [quotasRes, delivsRes] = await Promise.all([
+        supabase.from("content_partner_quotas")
+          .select("id, partner_id, kind, label, notes, total_target, cadence, schedule, due_at")
+          .eq("partner_id", target.id),
+        supabase.from("content_partner_deliverables")
+          .select("id, partner_id, submission_group_id, kind, quantity_reported, quantity_accepted, partner_notes, submitted_at, status, reviewed_at, reviewer_notes")
+          .eq("partner_id", target.id)
+          .order("submitted_at", { ascending: false }),
+      ]);
+      return {
+        ok: true,
+        data: {
+          ...target,
+          quotas: quotasRes.data || [],
+          deliverables: delivsRes.data || [],
+        },
+      };
+    } catch (e) {
+      console.error("[loadMyContentPartnerContract] failed", e);
+      return { error: "Network error" };
+    }
+  };
+
+  // Partner-side: submit an inventory of content uploaded to the Dropbox
+  // folder. `items` is an array of { kind, quantity } drawn from the
+  // partner's enabled quotas; only entries with quantity > 0 actually
+  // insert a row. All rows share the same submission_group_id so the
+  // admin queue groups them as a single submission. Each row lands in
+  // status='pending' awaiting admin review.
+  const submitContentPartnerInventory = async ({ partnerId, items, notes }) => {
+    if (!partnerId) return { error: "Missing partner id" };
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) return { error: "Sign-in required" };
+    const clean = (Array.isArray(items) ? items : [])
+      .filter(it => it && it.kind && Number(it.quantity) > 0)
+      .map(it => ({ kind: it.kind, quantity: Math.floor(Number(it.quantity)) }));
+    if (clean.length === 0) return { error: "Enter at least one count above zero." };
+    // Single group id ties all rows in this submission together. We
+    // generate client-side so we can include the same value in every
+    // insert + return it to the caller for the success toast.
+    const groupId = (typeof crypto !== "undefined" && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : ("g" + Date.now() + Math.random().toString(36).slice(2, 8));
+    const rows = clean.map(it => ({
+      partner_id: partnerId,
+      submission_group_id: groupId,
+      kind: it.kind,
+      quantity_reported: it.quantity,
+      partner_notes: notes || null,
+      status: "pending",
+    }));
+    try {
+      const { data, error } = await supabase.from("content_partner_deliverables").insert(rows).select("*");
+      if (error) {
+        // RLS denial surface — most common cause is the contract not being
+        // in status='active' (the partner_insert policy requires it). Surface
+        // that distinctly so the UI can hint at why.
+        if (/row-level security/i.test(error.message || "")) {
+          return { error: "Uploads are only accepted while your contract is active. Reach out if you think this is wrong." };
+        }
+        return { error: error.message || "Insert failed" };
+      }
+      return { ok: true, data: { rows: data || [], group_id: groupId } };
+    } catch (e) {
+      console.error("[submitContentPartnerInventory] failed", e);
       return { error: "Network error" };
     }
   };
@@ -43603,7 +44112,7 @@ export default function Trailhead() {
           isOtherProfile ? (
             <OtherProfileScreen userId={profileStack[1]} onBack={goBack} onMessage={(user) => openDM(user)} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} onAdminUpdateUserRole={adminUpdateUserRole} onAdminDeclineAmbassador={adminDeclineAmbassadorRequest} onAdminToggleModerator={adminToggleUserModerator} onAdminToggleBetaTester={adminToggleUserBetaTester} onAdminToggleContentPartner={adminToggleUserContentPartner} onAdminViewAsAmbassador={adminViewAsAmbassador} onReportContent={requireAuth(openContentReport)} followingIds={followingIds} onFollow={requireAuth(followUser)} onUnfollow={requireAuth(unfollowUser)} fetchFollowCounts={fetchFollowCounts} onOpenFollowList={requireAuth(openFollowList)} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} allBuilds={allBuilds} onLoadAllBuilds={loadAllBuildsOnce} onlineUserIds={onlineUserIds} allTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} />
           ) : (
-            <ProfileScreen onOpenFollowList={openFollowList} onOpenAdminDashboard={() => { setProfileStack([]); setScreen("admin"); if (typeof window !== "undefined") window.history.pushState({}, "", "/admin"); }} onOpenAmbassadorDashboard={() => { setProfileStack([]); setScreen("ambassador"); }} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} currentRole={currentRole} convoyRsvps={convoyRsvps} followerCount={myFollowerCount} followingCount={myFollowingCount} onSubscribePush={subscribeToPush} onUnsubscribePush={unsubscribeFromPush} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} savedRoutes={savedRoutes} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} savedTrips={(() => { const ids = savedTripIds || {}; const pool = [...(allTripReports || []), ...(allTripPlans || [])]; const seen = {}; const out = []; pool.forEach(t => { if (t && t.id && ids[t.id] && !seen[t.id]) { seen[t.id] = true; out.push(t); } }); return out; })()} onUnsaveTrip={requireAuth(toggleSaveTrip)} onOpenSavedTrip={(t) => { if (!t) return; if (t.slug) setPendingTripNav(t.slug); else setDetailTripId(t.id); }} pendingScroll={pendingProfileScroll} onConsumePendingScroll={() => setPendingProfileScroll(null)} onStartNav={(route) => setActiveNavRoute(route)} myTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} onNewTripPlan={requireAuth(() => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("routes"); enterPlanBuilder(); })} initialUserName={(currentProfile && currentProfile.full_name) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name) || null} initialUserHandle={(currentProfile && currentProfile.handle) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle) || null} initialUserBio={currentProfile ? currentProfile.bio : null} initialIsPublic={currentProfile ? currentProfile.is_public : null} onSaveProfile={saveProfile} onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={deleteBuild} profilePic={profilePic} onSetProfilePic={requestProfilePicCrop} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => deletePost(id)} onEditPost={(id, newText) => updatePost(id, { title: newText })} onUpdateConvoy={(convoyId, updates) => {
+            <ProfileScreen onOpenFollowList={openFollowList} onOpenAdminDashboard={() => { setProfileStack([]); setScreen("admin"); if (typeof window !== "undefined") window.history.pushState({}, "", "/admin"); }} onOpenAmbassadorDashboard={() => { setProfileStack([]); setScreen("ambassador"); }} onOpenContentPartnerDashboard={() => setShowContentPartnerDashboard(true)} isContentPartner={isContentPartner} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} currentRole={currentRole} convoyRsvps={convoyRsvps} followerCount={myFollowerCount} followingCount={myFollowingCount} onSubscribePush={subscribeToPush} onUnsubscribePush={unsubscribeFromPush} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} savedRoutes={savedRoutes} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} savedTrips={(() => { const ids = savedTripIds || {}; const pool = [...(allTripReports || []), ...(allTripPlans || [])]; const seen = {}; const out = []; pool.forEach(t => { if (t && t.id && ids[t.id] && !seen[t.id]) { seen[t.id] = true; out.push(t); } }); return out; })()} onUnsaveTrip={requireAuth(toggleSaveTrip)} onOpenSavedTrip={(t) => { if (!t) return; if (t.slug) setPendingTripNav(t.slug); else setDetailTripId(t.id); }} pendingScroll={pendingProfileScroll} onConsumePendingScroll={() => setPendingProfileScroll(null)} onStartNav={(route) => setActiveNavRoute(route)} myTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} onNewTripPlan={requireAuth(() => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("routes"); enterPlanBuilder(); })} initialUserName={(currentProfile && currentProfile.full_name) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name) || null} initialUserHandle={(currentProfile && currentProfile.handle) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle) || null} initialUserBio={currentProfile ? currentProfile.bio : null} initialIsPublic={currentProfile ? currentProfile.is_public : null} onSaveProfile={saveProfile} onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={deleteBuild} profilePic={profilePic} onSetProfilePic={requestProfilePicCrop} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => deletePost(id)} onEditPost={(id, newText) => updatePost(id, { title: newText })} onUpdateConvoy={(convoyId, updates) => {
               updatePost(convoyId, updates);
               // DM going/maybe responders that the convoy was updated.
               const convoy = feedItemsRef.current.find(p => p.id === convoyId);
@@ -44477,6 +44986,16 @@ export default function Trailhead() {
           onShowToast={showErrorToast}
           onLoadParticipants={loadGearDropParticipants}
           onViewUser={openUserProfile}
+        />
+      )}
+
+      {/* Content partner dashboard overlay — partner-facing surface
+          launched from the user's own profile when isContentPartner. */}
+      {showContentPartnerDashboard && (
+        <ContentPartnerDashboard
+          onClose={() => setShowContentPartnerDashboard(false)}
+          onLoad={loadMyContentPartnerContract}
+          onSubmit={submitContentPartnerInventory}
         />
       )}
 
