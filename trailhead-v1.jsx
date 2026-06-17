@@ -26357,10 +26357,9 @@ function ContentPartnersAdminScreen({ onBack, onOpenEditor, onNewPartner, onLoad
 // blur). camper_delivered_at + 1yr auto-fills term_ends_at unless the
 // admin overrides. Quota lines have per-kind defaults pulled from the
 // sample contracts (e.g. photo · 100 · quarter · 15/35/35/15).
-function ContentPartnerEditor({ partnerId, onBack, onLoad, onSave, onDelete, onAddBackdated }) {
+function ContentPartnerEditor({ partnerId, onBack, onLoad, onLoadCandidates, onSave, onDelete, onAddBackdated }) {
   const [partner, setPartner] = useState(null);
   const [profileSearch, setProfileSearch] = useState("");
-  const [profileMatches, setProfileMatches] = useState([]);
   const [resolvedProfile, setResolvedProfile] = useState(null);
   const [status, setStatus] = useState("pending_delivery");
   const [contractSignedAt, setContractSignedAt] = useState("");
@@ -26369,20 +26368,41 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onSave, onDelete, onA
   const [discountPct, setDiscountPct] = useState("");
   const [contractUrl, setContractUrl] = useState("");
   const [dropboxUrl, setDropboxUrl] = useState("");
-  const [basecampActivity, setBasecampActivity] = useState("");
   const [notes, setNotes] = useState("");
+  // Pre-populated candidate list — admin sees every is_content_partner=true
+  // user at a glance, no typing required. Filtered live by `profileSearch`.
+  const [candidates, setCandidates] = useState([]);
+  const [candidatesLoaded, setCandidatesLoaded] = useState(false);
   // Quotas — always four rows (one per kind), each carrying an `enabled`
-  // flag. Disabled rows render collapsed and are filtered out at save.
-  // Starting all OFF means no opinion is baked in — admin sets each
-  // contract's mix explicitly per the signed agreement.
-  const blankQuotas = () => CONTENT_PARTNER_KIND_ORDER.map(kind => ({
-    kind,
-    enabled: false,
-    total_target: 0,
-    cadence: kind === "long_video" || kind === "basecamp_video" ? "milestone" : "term",
-    schedule_text: "",
-    due_at: "",
-  }));
+  // flag. Disabled rows are filtered out at save. Per-cadence sub-state:
+  //   • term      → termTotal (single number)
+  //   • milestone → termTotal + due_at
+  //   • quarter   → evenDist toggle (default ON);
+  //                 ON: perPeriod single input, total = perPeriod*4
+  //                 OFF: q1..q4 inputs, total = sum
+  //   • month     → evenDist toggle (default ON);
+  //                 ON: perPeriod single input, total = perPeriod*12
+  //                 OFF: m1..m12 inputs, total = sum
+  // schedule jsonb on save: null when evenDist=ON; the explicit map
+  // otherwise. The dashboard reads schedule to render per-period
+  // "expected by now" comparisons.
+  const QUARTER_KEYS = ["q1", "q2", "q3", "q4"];
+  const MONTH_KEYS = ["m1", "m2", "m3", "m4", "m5", "m6", "m7", "m8", "m9", "m10", "m11", "m12"];
+  const periodKeysFor = (cadence) => cadence === "quarter" ? QUARTER_KEYS : cadence === "month" ? MONTH_KEYS : [];
+  const emptyMap = (cadence) => Object.fromEntries(periodKeysFor(cadence).map(k => [k, 0]));
+  const blankQuotas = () => CONTENT_PARTNER_KIND_ORDER.map(kind => {
+    const cadence = kind === "long_video" || kind === "basecamp_video" ? "milestone" : "term";
+    return {
+      kind,
+      enabled: false,
+      cadence,
+      termTotal: kind === "long_video" || kind === "basecamp_video" ? 1 : 0,
+      evenDist: true,
+      perPeriod: 0,
+      scheduleMap: emptyMap(cadence),
+      due_at: "",
+    };
+  });
   const [quotas, setQuotas] = useState(blankQuotas);
   const [deliverables, setDeliverables] = useState([]);
   // Backdate form draft. kind comes from the enabled quota list once it
@@ -26399,6 +26419,18 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onSave, onDelete, onA
       setQuotas(blankQuotas());
       setDeliverables([]);
       setLoaded(true);
+      // Pre-populate the picker with every is_content_partner=true user
+      // so admin doesn't have to type before they can pick.
+      if (onLoadCandidates) {
+        (async () => {
+          const res = await onLoadCandidates();
+          if (cancelled) return;
+          setCandidates((res && res.ok && res.data) ? res.data : []);
+          setCandidatesLoaded(true);
+        })();
+      } else {
+        setCandidatesLoaded(true);
+      }
       return;
     }
     (async () => {
@@ -26415,33 +26447,55 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onSave, onDelete, onA
       setDiscountPct(p.discount_pct != null ? String(p.discount_pct) : "");
       setContractUrl(p.contract_url || "");
       setDropboxUrl(p.dropbox_upload_folder_url || "");
-      setBasecampActivity(p.basecamp_activity || "");
       setNotes(p.notes || "");
       setDeliverables(p.deliverables || []);
       // Merge saved quota rows onto the canonical 4-row template so the
       // admin always sees every kind (disabled when there's no row in DB).
+      // When schedule jsonb is set, hydrate the per-period inputs; when
+      // null on quarter/month cadence, treat as evenly distributed.
       const savedByKind = {};
       (p.quotas || []).forEach(q => { savedByKind[q.kind] = q; });
       setQuotas(CONTENT_PARTNER_KIND_ORDER.map(kind => {
         const q = savedByKind[kind];
-        if (q) {
+        if (!q) {
+          const defaultCadence = kind === "long_video" || kind === "basecamp_video" ? "milestone" : "term";
           return {
             kind,
-            enabled: true,
-            total_target: q.total_target,
-            cadence: q.cadence,
-            schedule_text: q.schedule ? JSON.stringify(q.schedule) : "",
-            due_at: q.due_at ? new Date(q.due_at).toISOString().slice(0, 10) : "",
+            enabled: false,
+            cadence: defaultCadence,
+            termTotal: defaultCadence === "milestone" ? 1 : 0,
+            evenDist: true,
+            perPeriod: 0,
+            scheduleMap: emptyMap(defaultCadence),
+            due_at: "",
           };
         }
-        return {
+        const baseShape = {
           kind,
-          enabled: false,
-          total_target: 0,
-          cadence: kind === "long_video" || kind === "basecamp_video" ? "milestone" : "term",
-          schedule_text: "",
-          due_at: "",
+          enabled: true,
+          cadence: q.cadence,
+          termTotal: q.cadence === "term" || q.cadence === "milestone" ? q.total_target : 0,
+          evenDist: true,
+          perPeriod: 0,
+          scheduleMap: emptyMap(q.cadence),
+          due_at: q.due_at ? new Date(q.due_at).toISOString().slice(0, 10) : "",
         };
+        if ((q.cadence === "quarter" || q.cadence === "month") && q.schedule && typeof q.schedule === "object") {
+          const periods = periodKeysFor(q.cadence);
+          const filled = Object.fromEntries(periods.map(k => [k, Number(q.schedule[k]) || 0]));
+          const values = periods.map(k => filled[k]);
+          const allEqual = values.every(v => v === values[0]);
+          baseShape.scheduleMap = filled;
+          baseShape.evenDist = allEqual && values[0] > 0;
+          baseShape.perPeriod = allEqual ? values[0] : 0;
+        } else if (q.cadence === "quarter" || q.cadence === "month") {
+          // schedule null on a periodic quota → assume even split from total.
+          const periodCount = q.cadence === "quarter" ? 4 : 12;
+          const per = Math.round((q.total_target || 0) / periodCount);
+          baseShape.evenDist = true;
+          baseShape.perPeriod = per;
+        }
+        return baseShape;
       }));
       setLoaded(true);
     })();
@@ -26469,25 +26523,16 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onSave, onDelete, onA
     setTermEndsAt(prev => (!prev || prev === "" ? endStr : prev));
   }, [camperDeliveredAt]);
 
-  // Profile picker — search by handle (with @ stripped). Light debounce.
-  useEffect(() => {
-    if (!profileSearch.trim() || resolvedProfile && (`@${resolvedProfile.handle}` === profileSearch || resolvedProfile.handle === profileSearch.replace(/^@/, ""))) {
-      return;
-    }
-    const handle = profileSearch.trim().replace(/^@/, "");
-    if (handle.length < 2) { setProfileMatches([]); return; }
-    let cancelled = false;
-    const t = setTimeout(async () => {
-      try {
-        const { data } = await supabase.from("profiles")
-          .select("id, handle, full_name, avatar_url, is_content_partner")
-          .ilike("handle", `${handle}%`)
-          .limit(8);
-        if (!cancelled) setProfileMatches(data || []);
-      } catch (e) { /* non-fatal */ }
-    }, 250);
-    return () => { cancelled = true; clearTimeout(t); };
-  }, [profileSearch, resolvedProfile]);
+  // Derived: filter the candidate list by the typed search. Live, no
+  // debounce — the dataset is small (every is_content_partner=true user).
+  const filteredCandidates = useMemo(() => {
+    const q = profileSearch.trim().replace(/^@/, "").toLowerCase();
+    if (!q) return candidates;
+    return candidates.filter(c =>
+      (c.handle || "").toLowerCase().includes(q)
+      || (c.full_name || "").toLowerCase().includes(q)
+    );
+  }, [candidates, profileSearch]);
 
   const handleSave = async () => {
     if (saving) return;
@@ -26497,22 +26542,39 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onSave, onDelete, onA
     try {
       // Only persist enabled quota rows; disabled rows are wiped from
       // the contract (save replaces the full set per saveContentPartner).
+      // Compute total_target + schedule jsonb from the per-cadence state:
+      //   • term / milestone → total = termTotal, schedule = null
+      //   • quarter / month w/ evenDist=ON → total = perPeriod * count, schedule = null
+      //   • quarter / month w/ evenDist=OFF → total = sum(scheduleMap), schedule = the map
       const cleanQuotas = quotas
-        .filter(q => q.enabled && Number(q.total_target) > 0)
+        .filter(q => q.enabled)
         .map(q => {
+          let total_target = 0;
           let schedule = null;
-          if (q.schedule_text && q.schedule_text.trim()) {
-            try { schedule = JSON.parse(q.schedule_text); }
-            catch (e) { /* leave null; admin can re-enter */ }
+          if (q.cadence === "term" || q.cadence === "milestone") {
+            total_target = Number(q.termTotal) || 0;
+          } else {
+            const periods = periodKeysFor(q.cadence);
+            if (q.evenDist) {
+              const per = Number(q.perPeriod) || 0;
+              total_target = per * periods.length;
+              schedule = null;
+            } else {
+              const map = {};
+              periods.forEach(k => { map[k] = Number(q.scheduleMap && q.scheduleMap[k]) || 0; });
+              total_target = periods.reduce((sum, k) => sum + (map[k] || 0), 0);
+              schedule = map;
+            }
           }
           return {
             kind: q.kind,
-            total_target: q.total_target,
+            total_target,
             cadence: q.cadence,
             schedule,
             due_at: q.due_at ? new Date(q.due_at).toISOString() : null,
           };
-        });
+        })
+        .filter(q => q.total_target > 0);
       const res = await onSave({
         id: partnerId || null,
         profile_id: profileId,
@@ -26523,7 +26585,6 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onSave, onDelete, onA
         discount_pct: discountPct,
         contract_url: contractUrl,
         dropbox_upload_folder_url: dropboxUrl,
-        basecamp_activity: basecampActivity,
         notes,
         quotas: cleanQuotas,
       });
@@ -26577,30 +26638,40 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onSave, onDelete, onA
                       <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>@{resolvedProfile.handle}</div>
                     </div>
                     {!partnerId && (
-                      <button onClick={() => { setResolvedProfile(null); setProfileSearch(""); setProfileMatches([]); }} style={{ background: "none", border: "none", padding: 4, cursor: "pointer" }}>
+                      <button onClick={() => { setResolvedProfile(null); setProfileSearch(""); }} style={{ background: "none", border: "none", padding: 4, cursor: "pointer" }}>
                         <X size={14} color={T.tertiary} />
                       </button>
                     )}
                   </div>
                 : (
                   <>
-                    <input value={profileSearch} onChange={e => setProfileSearch(e.target.value)} placeholder="Type @handle…" style={fieldStyle} />
-                    {profileMatches.length > 0 && (
-                      <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 4 }}>
-                        {profileMatches.map(m => (
-                          <button key={m.id} onClick={() => { setResolvedProfile(m); setProfileMatches([]); setProfileSearch(`@${m.handle || ""}`); }} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8, cursor: "pointer", textAlign: "left" }}>
-                            <div style={{ width: 26, height: 26, borderRadius: "50%", background: T.charcoal, overflow: "hidden" }}>
-                              {m.avatar_url && <img src={m.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
-                            </div>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>{m.full_name || "User"}</div>
-                              <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>@{m.handle}</div>
-                            </div>
-                            {m.is_content_partner && <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 700, letterSpacing: 0.4 }}>FLAGGED</span>}
-                          </button>
-                        ))}
-                      </div>
-                    )}
+                    <input value={profileSearch} onChange={e => setProfileSearch(e.target.value)} placeholder="Filter by @handle or name…" style={fieldStyle} />
+                    <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4, maxHeight: 320, overflowY: "auto" }}>
+                      {!candidatesLoaded
+                        ? <div style={{ padding: 14, textAlign: "center", fontFamily: serif, fontSize: 12, color: T.tertiary }}>Loading partners…</div>
+                        : filteredCandidates.length === 0
+                          ? (candidates.length === 0
+                              ? <div style={{ padding: 14, textAlign: "center", fontFamily: serif, fontSize: 11, color: T.tertiary, lineHeight: 1.5 }}>No flagged content partners yet. Open the user's profile and flip the CONTENT PARTNER toggle first.</div>
+                              : <div style={{ padding: 14, textAlign: "center", fontFamily: serif, fontSize: 11, color: T.tertiary }}>No matches.</div>
+                            )
+                          : filteredCandidates.map(m => {
+                              const isNew = (m.contract_count || 0) === 0;
+                              return (
+                                <button key={m.id} onClick={() => { setResolvedProfile(m); setProfileSearch(""); }} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8, cursor: "pointer", textAlign: "left" }}>
+                                  <div style={{ width: 26, height: 26, borderRadius: "50%", background: T.charcoal, overflow: "hidden", flexShrink: 0 }}>
+                                    {m.avatar_url && <img src={m.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+                                  </div>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>{m.full_name || "User"}</div>
+                                    <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>@{m.handle}</div>
+                                  </div>
+                                  <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: isNew ? T.green : T.copper, padding: "2px 7px", borderRadius: 8, fontWeight: 700, letterSpacing: 0.4 }}>
+                                    {isNew ? "NEW" : `EXISTING${m.contract_count > 1 ? ` · ${m.contract_count}` : ""}`}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                    </div>
                   </>
                 )}
             </div>
@@ -26649,11 +26720,6 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onSave, onDelete, onA
             </div>
 
             <div>
-              <label style={labelStyle}>BASECAMP ACTIVITY ("Basecamp for ___")</label>
-              <input value={basecampActivity} onChange={e => setBasecampActivity(e.target.value)} placeholder="hiking · fishing · camping · …" style={fieldStyle} />
-            </div>
-
-            <div>
               <label style={labelStyle}>ADMIN NOTES</label>
               <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="Internal context — campaign, season, special-case agreements" style={{ ...fieldStyle, resize: "vertical" }} />
             </div>
@@ -26673,37 +26739,92 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onSave, onDelete, onA
                         <span style={{ position: "absolute", top: 2, left: q.enabled ? 18 : 2, width: 16, height: 16, borderRadius: "50%", background: T.white, transition: "left 120ms" }} />
                       </span>
                     </button>
-                    {q.enabled && (
-                      <div style={{ marginTop: 10 }}>
-                        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                          <div style={{ flex: 1 }}>
-                            <label style={{ ...labelStyle, fontSize: 9 }}>TOTAL TARGET</label>
-                            <input type="number" min="0" step="1" value={q.total_target} onChange={e => updateQuota(idx, { total_target: Number(e.target.value) || 0 })} style={fieldStyle} />
-                          </div>
-                          <div style={{ flex: 1 }}>
+                    {q.enabled && (() => {
+                      // Re-seed scheduleMap/perPeriod when cadence flips so
+                      // the per-period inputs land empty rather than carry
+                      // stale values from the previous cadence shape.
+                      const onCadenceChange = (next) => {
+                        const patch = { cadence: next };
+                        if (next === "quarter" || next === "month") {
+                          patch.evenDist = true;
+                          patch.perPeriod = 0;
+                          patch.scheduleMap = emptyMap(next);
+                        } else if (next === "milestone") {
+                          patch.termTotal = Math.max(1, Number(q.termTotal) || 1);
+                        }
+                        updateQuota(idx, patch);
+                      };
+                      const periods = periodKeysFor(q.cadence);
+                      const computedTotal = q.cadence === "term" || q.cadence === "milestone"
+                        ? Number(q.termTotal) || 0
+                        : q.evenDist
+                          ? (Number(q.perPeriod) || 0) * periods.length
+                          : periods.reduce((s, k) => s + (Number(q.scheduleMap && q.scheduleMap[k]) || 0), 0);
+                      return (
+                        <div style={{ marginTop: 10 }}>
+                          <div style={{ marginBottom: 8 }}>
                             <label style={{ ...labelStyle, fontSize: 9 }}>CADENCE</label>
-                            <select value={q.cadence} onChange={e => updateQuota(idx, { cadence: e.target.value })} style={fieldStyle}>
-                              <option value="term">Term</option>
-                              <option value="quarter">Quarter</option>
-                              <option value="month">Month</option>
-                              <option value="milestone">Milestone (one-shot)</option>
+                            <select value={q.cadence} onChange={e => onCadenceChange(e.target.value)} style={fieldStyle}>
+                              <option value="term">Term — single total over the year</option>
+                              <option value="quarter">Quarter — per-quarter target</option>
+                              <option value="month">Month — per-month target</option>
+                              <option value="milestone">Milestone — one-shot with due date</option>
                             </select>
                           </div>
+                          {q.cadence === "term" && (
+                            <div>
+                              <label style={{ ...labelStyle, fontSize: 9 }}>TOTAL TARGET (OVER THE YEAR)</label>
+                              <input type="number" min="0" step="1" value={q.termTotal} onChange={e => updateQuota(idx, { termTotal: Number(e.target.value) || 0 })} style={fieldStyle} />
+                            </div>
+                          )}
+                          {q.cadence === "milestone" && (
+                            <div style={{ display: "flex", gap: 8 }}>
+                              <div style={{ flex: 1 }}>
+                                <label style={{ ...labelStyle, fontSize: 9 }}>TOTAL TARGET</label>
+                                <input type="number" min="1" step="1" value={q.termTotal} onChange={e => updateQuota(idx, { termTotal: Number(e.target.value) || 1 })} style={fieldStyle} />
+                              </div>
+                              <div style={{ flex: 1.4 }}>
+                                <label style={{ ...labelStyle, fontSize: 9 }}>DUE DATE</label>
+                                <input type="date" value={q.due_at || ""} onChange={e => updateQuota(idx, { due_at: e.target.value })} style={fieldStyle} />
+                              </div>
+                            </div>
+                          )}
+                          {(q.cadence === "quarter" || q.cadence === "month") && (
+                            <>
+                              <button type="button" onClick={() => updateQuota(idx, { evenDist: !q.evenDist })} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 8, marginBottom: 8, cursor: "pointer", textAlign: "left" }}>
+                                <span style={{ flex: 1, fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 600 }}>SAME # EACH {q.cadence === "quarter" ? "QUARTER" : "MONTH"}</span>
+                                <span style={{ width: 32, height: 18, borderRadius: 9, background: q.evenDist ? T.copper : T.charcoal, position: "relative", flexShrink: 0, transition: "background 120ms" }}>
+                                  <span style={{ position: "absolute", top: 2, left: q.evenDist ? 16 : 2, width: 14, height: 14, borderRadius: "50%", background: T.white, transition: "left 120ms" }} />
+                                </span>
+                              </button>
+                              {q.evenDist ? (
+                                <div>
+                                  <label style={{ ...labelStyle, fontSize: 9 }}>PER {q.cadence === "quarter" ? "QUARTER" : "MONTH"}</label>
+                                  <input type="number" min="0" step="1" value={q.perPeriod} onChange={e => updateQuota(idx, { perPeriod: Number(e.target.value) || 0 })} style={fieldStyle} />
+                                </div>
+                              ) : (
+                                <div>
+                                  <label style={{ ...labelStyle, fontSize: 9 }}>{q.cadence === "quarter" ? "QUARTERS" : "MONTHS"}</label>
+                                  <div style={{ display: "grid", gridTemplateColumns: q.cadence === "quarter" ? "repeat(4, 1fr)" : "repeat(3, 1fr)", gap: 6 }}>
+                                    {periods.map((k, i) => (
+                                      <div key={k} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                                        <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.8, fontWeight: 700 }}>{q.cadence === "quarter" ? `Q${i + 1}` : `M${i + 1}`}</span>
+                                        <input type="number" min="0" step="1" value={(q.scheduleMap && q.scheduleMap[k]) || 0}
+                                          onChange={e => updateQuota(idx, { scheduleMap: { ...(q.scheduleMap || {}), [k]: Number(e.target.value) || 0 } })}
+                                          style={{ ...fieldStyle, padding: "8px 10px", fontSize: 12 }} />
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              <div style={{ marginTop: 8, fontFamily: sans, fontSize: 10, color: T.tertiary, textAlign: "right" }}>
+                                Total over year: <span style={{ color: T.copper, fontWeight: 700 }}>{computedTotal}</span>
+                              </div>
+                            </>
+                          )}
                         </div>
-                        {(q.cadence === "quarter" || q.cadence === "month") && (
-                          <div style={{ marginBottom: 8 }}>
-                            <label style={{ ...labelStyle, fontSize: 9 }}>SCHEDULE (optional JSON, e.g. {"{\"Q1\":15,\"Q2\":35,\"Q3\":35,\"Q4\":15}"})</label>
-                            <input value={q.schedule_text || ""} onChange={e => updateQuota(idx, { schedule_text: e.target.value })} placeholder='{"Q1":15,"Q2":35,"Q3":35,"Q4":15}' style={fieldStyle} />
-                          </div>
-                        )}
-                        {q.cadence === "milestone" && (
-                          <div>
-                            <label style={{ ...labelStyle, fontSize: 9 }}>DUE DATE</label>
-                            <input type="date" value={q.due_at || ""} onChange={e => updateQuota(idx, { due_at: e.target.value })} style={fieldStyle} />
-                          </div>
-                        )}
-                      </div>
-                    )}
+                      );
+                    })()}
                   </div>
                 ))}
               </div>
@@ -26724,8 +26845,20 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onSave, onDelete, onA
                   pendingByKind[d.kind] = (pendingByKind[d.kind] || 0) + (Number(d.quantity_reported) || 0);
                 }
               });
+              // Compute the per-kind total target from the live state so the
+              // summary reflects in-progress edits before the admin hits SAVE.
               const targetByKind = {};
-              quotas.forEach(q => { if (q.enabled) targetByKind[q.kind] = Number(q.total_target) || 0; });
+              quotas.forEach(q => {
+                if (!q.enabled) return;
+                if (q.cadence === "term" || q.cadence === "milestone") {
+                  targetByKind[q.kind] = Number(q.termTotal) || 0;
+                } else {
+                  const periods = periodKeysFor(q.cadence);
+                  targetByKind[q.kind] = q.evenDist
+                    ? (Number(q.perPeriod) || 0) * periods.length
+                    : periods.reduce((s, k) => s + (Number(q.scheduleMap && q.scheduleMap[k]) || 0), 0);
+                }
+              });
               return (
                 <div style={{ borderTop: `1px solid ${T.charcoal}`, paddingTop: 14 }}>
                   <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, letterSpacing: 1.2, fontWeight: 700, display: "block", marginBottom: 6 }}>BACKDATE DELIVERIES</span>
@@ -38378,6 +38511,43 @@ export default function Trailhead() {
     }
   };
 
+  // Admin-only: fetch every profile flagged is_content_partner=true with
+  // a count of how many content_partners contract rows they already have.
+  // Powers the NEW PARTNER picker — admin sees the pre-flagged shortlist
+  // immediately, each marked NEW (no contracts yet) or EXISTING (at least
+  // one contract on file).
+  const loadContentPartnerCandidates = async () => {
+    if (!isAdmin) return { error: "Not authorized" };
+    try {
+      const { data: profs, error: pErr } = await supabase
+        .from("profiles")
+        .select("id, handle, full_name, avatar_url")
+        .eq("is_content_partner", true)
+        .order("handle", { ascending: true });
+      if (pErr) return { error: pErr.message };
+      const ids = (profs || []).map(p => p.id);
+      if (ids.length === 0) return { ok: true, data: [] };
+      const { data: contracts } = await supabase
+        .from("content_partners")
+        .select("profile_id")
+        .in("profile_id", ids);
+      const countByProfile = {};
+      (contracts || []).forEach(c => {
+        countByProfile[c.profile_id] = (countByProfile[c.profile_id] || 0) + 1;
+      });
+      return {
+        ok: true,
+        data: (profs || []).map(p => ({
+          ...p,
+          contract_count: countByProfile[p.id] || 0,
+        })),
+      };
+    } catch (e) {
+      console.error("[loadContentPartnerCandidates] failed", e);
+      return { error: "Network error" };
+    }
+  };
+
   // Load a single contract + quotas + deliverables. Used by the editor and
   // the partner-facing dashboard. RLS gates which rows the caller sees.
   const loadContentPartnerById = async (id) => {
@@ -43437,6 +43607,7 @@ export default function Trailhead() {
                       partnerId={editingContentPartnerId || null}
                       onBack={() => setEditingContentPartnerId(null)}
                       onLoad={loadContentPartnerById}
+                      onLoadCandidates={loadContentPartnerCandidates}
                       onSave={saveContentPartner}
                       onDelete={deleteContentPartner}
                       onAddBackdated={adminAddBackdatedDeliverable}
