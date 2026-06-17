@@ -26609,8 +26609,9 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onLoadCandidates, onS
   const [termEndsAt, setTermEndsAt] = useState("");
   const [discountPct, setDiscountPct] = useState("");
   const [contractUrl, setContractUrl] = useState("");
-  const [dropboxUrl, setDropboxUrl] = useState("");
-  const [dropboxApprovedUrl, setDropboxApprovedUrl] = useState("");
+  const [dropboxUrl, setDropboxUrl] = useState("");           // Dropbox FILE REQUEST URL — what the partner submits to
+  const [dropboxPendingUrl, setDropboxPendingUrl] = useState("");   // VIEW URL for pending uploads
+  const [dropboxApprovedUrl, setDropboxApprovedUrl] = useState(""); // VIEW URL for approved content
   const [notes, setNotes] = useState("");
   // Pre-populated candidate list — admin sees every is_content_partner=true
   // user at a glance, no typing required. Filtered live by `profileSearch`.
@@ -26700,6 +26701,7 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onLoadCandidates, onS
       setDiscountPct(p.discount_pct != null ? String(p.discount_pct) : "");
       setContractUrl(p.contract_url || "");
       setDropboxUrl(p.dropbox_upload_folder_url || "");
+      setDropboxPendingUrl(p.dropbox_pending_folder_url || "");
       setDropboxApprovedUrl(p.dropbox_approved_folder_url || "");
       setNotes(p.notes || "");
       setDeliverables(p.deliverables || []);
@@ -26857,6 +26859,7 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onLoadCandidates, onS
         discount_pct: discountPct,
         contract_url: contractUrl,
         dropbox_upload_folder_url: dropboxUrl,
+        dropbox_pending_folder_url: dropboxPendingUrl,
         dropbox_approved_folder_url: dropboxApprovedUrl,
         notes,
         quotas: cleanQuotas,
@@ -27003,12 +27006,17 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onLoadCandidates, onS
             </div>
 
             <div>
-              <label style={labelStyle}>DROPBOX UPLOAD FOLDER (where the partner drops PENDING content)</label>
-              <input value={dropboxUrl} onChange={e => setDropboxUrl(e.target.value)} placeholder="https://www.dropbox.com/scl/fo/…" style={fieldStyle} />
+              <label style={labelStyle}>DROPBOX UPLOAD REQUEST URL (partner submits files here — file-request link, not a folder browse URL)</label>
+              <input value={dropboxUrl} onChange={e => setDropboxUrl(e.target.value)} placeholder="https://www.dropbox.com/request/…" style={fieldStyle} />
             </div>
 
             <div>
-              <label style={labelStyle}>DROPBOX APPROVED FOLDER (where you move content after review)</label>
+              <label style={labelStyle}>DROPBOX PENDING FOLDER URL (partner views their uploaded-not-yet-reviewed content)</label>
+              <input value={dropboxPendingUrl} onChange={e => setDropboxPendingUrl(e.target.value)} placeholder="https://www.dropbox.com/scl/fo/…" style={fieldStyle} />
+            </div>
+
+            <div>
+              <label style={labelStyle}>DROPBOX APPROVED FOLDER URL (partner views the content you moved after approval)</label>
               <input value={dropboxApprovedUrl} onChange={e => setDropboxApprovedUrl(e.target.value)} placeholder="https://www.dropbox.com/scl/fo/…" style={fieldStyle} />
             </div>
 
@@ -27451,11 +27459,11 @@ function ContentPartnerDashboard({ onClose, onLoad, onSubmit }) {
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
                     <div style={{ display: "flex", gap: 8 }}>
-                      {contract.dropbox_upload_folder_url
-                        ? <a href={contract.dropbox_upload_folder_url} target="_blank" rel="noopener noreferrer" style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", background: T.darkBg, border: `1px solid ${T.copper}`, borderRadius: 8, color: T.copper, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.6, textDecoration: "none" }}>
-                            <ExternalLink size={12} color={T.copper} /> UPLOAD FOLDER
+                      {contract.dropbox_pending_folder_url
+                        ? <a href={contract.dropbox_pending_folder_url} target="_blank" rel="noopener noreferrer" style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", background: T.darkBg, border: `1px solid ${T.copper}`, borderRadius: 8, color: T.copper, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.6, textDecoration: "none" }}>
+                            <ExternalLink size={12} color={T.copper} /> PENDING FOLDER
                           </a>
-                        : <div style={{ flex: 1, padding: "10px 12px", background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 8, color: T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textAlign: "center" }}>UPLOAD FOLDER NOT ASSIGNED</div>}
+                        : <div style={{ flex: 1, padding: "10px 12px", background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 8, color: T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textAlign: "center" }}>PENDING FOLDER NOT ASSIGNED</div>}
                       {contract.dropbox_approved_folder_url
                         ? <a href={contract.dropbox_approved_folder_url} target="_blank" rel="noopener noreferrer" style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", background: T.darkBg, border: `1px solid ${T.green}`, borderRadius: 8, color: T.green, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.6, textDecoration: "none" }}>
                             <CheckCircle size={12} color={T.green} /> APPROVED FOLDER
@@ -27652,7 +27660,7 @@ function ContentPartnerUploadModal({ contract, enabledQuotas, onClose, onSubmit,
           </button>
         </div>
         <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 14px", lineHeight: 1.5 }}>
-          Upload your files to the Dropbox folder first, then tell us how many of each kind you delivered. Admin will confirm and credit them to your totals.
+          Report how many of each kind you're submitting, then hit SUBMIT — we'll record the inventory and open the Dropbox upload page so you can drop the files in. Admin reviews and credits them to your totals.
         </p>
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 12 }}>
           {enabledQuotas.map(q => (
@@ -39223,7 +39231,7 @@ export default function Trailhead() {
     try {
       const { data: partners, error: pErr } = await supabase
         .from("content_partners")
-        .select("id, profile_id, status, contract_signed_at, camper_delivered_at, term_ends_at, discount_pct, contract_url, dropbox_upload_folder_url, dropbox_approved_folder_url, notes, created_at, updated_at")
+        .select("id, profile_id, status, contract_signed_at, camper_delivered_at, term_ends_at, discount_pct, contract_url, dropbox_upload_folder_url, dropbox_pending_folder_url, dropbox_approved_folder_url, notes, created_at, updated_at")
         .order("created_at", { ascending: false });
       if (pErr) return { error: pErr.message };
       const rows = partners || [];
@@ -39334,7 +39342,7 @@ export default function Trailhead() {
   // stale rows. Cheap because each partner has at most 4 quota rows.
   // Also flips profiles.is_content_partner=true on create AND inserts a
   // welcome notification so the partner sees they've been onboarded.
-  const saveContentPartner = async ({ id, profile_id, status, contract_signed_at, camper_delivered_at, term_ends_at, discount_pct, contract_url, dropbox_upload_folder_url, dropbox_approved_folder_url, notes, quotas }) => {
+  const saveContentPartner = async ({ id, profile_id, status, contract_signed_at, camper_delivered_at, term_ends_at, discount_pct, contract_url, dropbox_upload_folder_url, dropbox_pending_folder_url, dropbox_approved_folder_url, notes, quotas }) => {
     if (!isAdmin) return { error: "Not authorized" };
     const adminUid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
     const row = {
@@ -39346,6 +39354,7 @@ export default function Trailhead() {
       discount_pct: discount_pct != null && discount_pct !== "" ? Number(discount_pct) : null,
       contract_url: contract_url || null,
       dropbox_upload_folder_url: dropbox_upload_folder_url || null,
+      dropbox_pending_folder_url: dropbox_pending_folder_url || null,
       dropbox_approved_folder_url: dropbox_approved_folder_url || null,
       notes: notes || null,
     };
@@ -39397,8 +39406,10 @@ export default function Trailhead() {
       }
       // Welcome notification on contract create — fires AFTER the quotas
       // land so the partner sees a dashboard worth opening. Best-effort:
-      // if the notification insert fails (e.g. partner row missing) we
-      // still return success on the contract itself.
+      // if the notification insert fails we still return success on the
+      // contract itself, but surface the full error payload (code +
+      // details + hint) so we can diagnose 23502 / 23514 / RLS denials
+      // from the console instead of just seeing a 400 in the network tab.
       if (wasCreate && profile_id) {
         let actorName = "LPO Team";
         try {
@@ -39406,7 +39417,7 @@ export default function Trailhead() {
           if (me) actorName = me.full_name || (me.handle ? `@${me.handle}` : actorName);
         } catch (_) {}
         try {
-          await supabase.from("notifications").insert({
+          const { error: notifErr } = await supabase.from("notifications").insert({
             user_id: profile_id,
             type: "content_partner_review",
             actor_id: adminUid,
@@ -39414,8 +39425,16 @@ export default function Trailhead() {
             text: "You've been onboarded as a Lone Peak content partner. Tap to open your dashboard and review your quotas.",
             data: { partner_id: saved.id, kind: "welcome" },
           });
+          if (notifErr) {
+            console.warn("[saveContentPartner] welcome notif insert returned error", {
+              code: notifErr.code,
+              message: notifErr.message,
+              details: notifErr.details,
+              hint: notifErr.hint,
+            });
+          }
         } catch (e) {
-          console.warn("[saveContentPartner] welcome notif insert failed", e);
+          console.warn("[saveContentPartner] welcome notif threw", e);
         }
       }
       return { ok: true, data: saved };
@@ -39598,7 +39617,7 @@ export default function Trailhead() {
           : `Your submission was reviewed: ${approvedCount} approved, ${rejectedCount} rejected.`;
       if (profileId) {
         try {
-          await supabase.from("notifications").insert({
+          const { error: notifErr } = await supabase.from("notifications").insert({
             user_id: profileId,
             type: "content_partner_review",
             actor_id: adminUid,
@@ -39606,8 +39625,9 @@ export default function Trailhead() {
             text,
             data: { submission_group_id: groupId, partner_id: partnerId },
           });
+          if (notifErr) console.warn("[reviewContentPartnerSubmission] notif insert returned error", { code: notifErr.code, message: notifErr.message, details: notifErr.details, hint: notifErr.hint });
         } catch (e) {
-          console.warn("[reviewContentPartnerSubmission] notif insert failed", e);
+          console.warn("[reviewContentPartnerSubmission] notif insert threw", e);
         }
       }
       return { ok: true, approved: approvedCount, rejected: rejectedCount };
@@ -39648,7 +39668,7 @@ export default function Trailhead() {
       } catch (_) {}
       if (existing.profile_id) {
         try {
-          await supabase.from("notifications").insert({
+          const { error: notifErr } = await supabase.from("notifications").insert({
             user_id: existing.profile_id,
             type: "content_partner_review",
             actor_id: adminUid,
@@ -39658,8 +39678,9 @@ export default function Trailhead() {
               : `Your content partnership has been restored to active status.`,
             data: { partner_id: partnerId, breach },
           });
+          if (notifErr) console.warn("[setContentPartnerBreachStatus] notif insert returned error", { code: notifErr.code, message: notifErr.message, details: notifErr.details, hint: notifErr.hint });
         } catch (e) {
-          console.warn("[setContentPartnerBreachStatus] notif insert failed", e);
+          console.warn("[setContentPartnerBreachStatus] notif insert threw", e);
         }
       }
       return { ok: true };
@@ -39679,7 +39700,7 @@ export default function Trailhead() {
     try {
       const { data: rows, error } = await supabase
         .from("content_partners")
-        .select("id, profile_id, status, contract_signed_at, camper_delivered_at, term_ends_at, discount_pct, contract_url, dropbox_upload_folder_url, dropbox_approved_folder_url, notes, created_at, updated_at")
+        .select("id, profile_id, status, contract_signed_at, camper_delivered_at, term_ends_at, discount_pct, contract_url, dropbox_upload_folder_url, dropbox_pending_folder_url, dropbox_approved_folder_url, notes, created_at, updated_at")
         .eq("profile_id", uid)
         .order("created_at", { ascending: false });
       if (error) return { error: error.message || "Lookup failed" };
