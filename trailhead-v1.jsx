@@ -27773,7 +27773,11 @@ function ContentPartnerDashboard({ onClose, onLoad, onLoadById, onSubmit, onReco
 
   useEffect(() => { refresh(); }, [forcedPartnerId]);
 
-  const isActive = contract && contract.status === "active";
+  // UPLOAD CONTENT shows on any contract where the partner is allowed
+  // to submit — that's 'active' OR 'breached'. Breached partners NEED
+  // to upload to auto-restore (chunk 5 RLS widening lets the INSERT
+  // through). Pending_delivery / completed / ended still hide the CTA.
+  const canUpload = contract && (contract.status === "active" || contract.status === "breached");
   const enabledQuotas = useMemo(() => {
     if (!contract) return [];
     const order = (q) => {
@@ -27934,7 +27938,7 @@ function ContentPartnerDashboard({ onClose, onLoad, onLoadById, onSubmit, onReco
 
       {/* Sticky upload CTA — hidden in admin-view mode (admin's looking
           at this dashboard for QA, not to submit on the partner's behalf). */}
-      {!isAdminView && isActive && enabledQuotas.length > 0 && (
+      {!isAdminView && canUpload && enabledQuotas.length > 0 && (
         <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, padding: 14, background: T.darkBg, borderTop: `1px solid ${T.charcoal}`, display: "flex", justifyContent: "center", zIndex: 6 }}>
           <button onClick={() => setUploadOpen(true)} style={{ width: "100%", maxWidth: 430, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "14px 16px", background: T.copper, border: "none", borderRadius: 12, color: T.white, fontFamily: sans, fontSize: 13, fontWeight: 800, letterSpacing: 1, cursor: "pointer" }}>
             <ArrowUp size={14} color={T.white} /> UPLOAD CONTENT
