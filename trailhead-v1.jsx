@@ -26293,7 +26293,7 @@ function ContentPartnersAdminScreen({ onBack, onOpenEditor, onNewPartner, onLoad
     const quotaSummary = (p.quotas || [])
       .slice()
       .sort((a, b) => CONTENT_PARTNER_KIND_ORDER.indexOf(a.kind) - CONTENT_PARTNER_KIND_ORDER.indexOf(b.kind))
-      .map(q => `${q.total_target} ${CONTENT_PARTNER_KIND_LABEL[q.kind] || q.kind}`)
+      .map(q => `${q.total_target} ${(q.label || (q.label || CONTENT_PARTNER_KIND_LABEL[q.kind] || q.kind) || q.kind)}`)
       .join(" · ");
     return (
       <button key={p.id} onClick={() => onOpenEditor(p.id)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 12, background: T.darkCard, border: `1px solid ${T.charcoal}`, cursor: "pointer", textAlign: "left", width: "100%" }}>
@@ -26361,6 +26361,7 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onLoadCandidates, onS
   const [partner, setPartner] = useState(null);
   const [profileSearch, setProfileSearch] = useState("");
   const [resolvedProfile, setResolvedProfile] = useState(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [status, setStatus] = useState("pending_delivery");
   const [contractSignedAt, setContractSignedAt] = useState("");
   const [camperDeliveredAt, setCamperDeliveredAt] = useState("");
@@ -26394,6 +26395,9 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onLoadCandidates, onS
     const cadence = kind === "long_video" || kind === "basecamp_video" ? "milestone" : "term";
     return {
       kind,
+      isCustom: false,
+      label: "",     // built-ins use the canonical map; custom kinds fill this
+      notes: "",
       enabled: false,
       cadence,
       termTotal: kind === "long_video" || kind === "basecamp_video" ? 1 : 0,
@@ -26403,6 +26407,13 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onLoadCandidates, onS
       due_at: "",
     };
   });
+  // Slug-ify a custom kind label into a stable `kind` identifier.
+  // Prefix with `custom_` so it never collides with a built-in.
+  const slugifyCustomKind = (label) => {
+    const base = String(label || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+    if (!base) return `custom_${Math.random().toString(36).slice(2, 8)}`;
+    return `custom_${base}`;
+  };
   const [quotas, setQuotas] = useState(blankQuotas);
   const [deliverables, setDeliverables] = useState([]);
   // Backdate form draft. kind comes from the enabled quota list once it
@@ -26450,37 +26461,28 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onLoadCandidates, onS
       setNotes(p.notes || "");
       setDeliverables(p.deliverables || []);
       // Merge saved quota rows onto the canonical 4-row template so the
-      // admin always sees every kind (disabled when there's no row in DB).
-      // When schedule jsonb is set, hydrate the per-period inputs; when
-      // null on quarter/month cadence, treat as evenly distributed.
-      const savedByKind = {};
-      (p.quotas || []).forEach(q => { savedByKind[q.kind] = q; });
-      setQuotas(CONTENT_PARTNER_KIND_ORDER.map(kind => {
-        const q = savedByKind[kind];
-        if (!q) {
-          const defaultCadence = kind === "long_video" || kind === "basecamp_video" ? "milestone" : "term";
-          return {
-            kind,
-            enabled: false,
-            cadence: defaultCadence,
-            termTotal: defaultCadence === "milestone" ? 1 : 0,
-            evenDist: true,
-            perPeriod: 0,
-            scheduleMap: emptyMap(defaultCadence),
-            due_at: "",
-          };
-        }
+      // admin always sees every built-in kind (disabled when there's no
+      // row in DB). Custom kinds (anything not in CONTENT_PARTNER_KIND_ORDER)
+      // append after the built-ins. schedule jsonb hydration: matching
+      // per-period values → evenDist=ON; otherwise → evenDist=OFF with the
+      // grid populated.
+      const hydrateRow = (q, kind, defaultCadence, isCustom) => {
         const baseShape = {
           kind,
-          enabled: true,
-          cadence: q.cadence,
-          termTotal: q.cadence === "term" || q.cadence === "milestone" ? q.total_target : 0,
+          isCustom,
+          label: q && q.label ? q.label : "",
+          notes: q && q.notes ? q.notes : "",
+          enabled: !!q,
+          cadence: q ? q.cadence : defaultCadence,
+          termTotal: !q
+            ? (defaultCadence === "milestone" ? 1 : 0)
+            : (q.cadence === "term" || q.cadence === "milestone" ? q.total_target : 0),
           evenDist: true,
           perPeriod: 0,
-          scheduleMap: emptyMap(q.cadence),
-          due_at: q.due_at ? new Date(q.due_at).toISOString().slice(0, 10) : "",
+          scheduleMap: emptyMap(q ? q.cadence : defaultCadence),
+          due_at: q && q.due_at ? new Date(q.due_at).toISOString().slice(0, 10) : "",
         };
-        if ((q.cadence === "quarter" || q.cadence === "month") && q.schedule && typeof q.schedule === "object") {
+        if (q && (q.cadence === "quarter" || q.cadence === "month") && q.schedule && typeof q.schedule === "object") {
           const periods = periodKeysFor(q.cadence);
           const filled = Object.fromEntries(periods.map(k => [k, Number(q.schedule[k]) || 0]));
           const values = periods.map(k => filled[k]);
@@ -26488,15 +26490,24 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onLoadCandidates, onS
           baseShape.scheduleMap = filled;
           baseShape.evenDist = allEqual && values[0] > 0;
           baseShape.perPeriod = allEqual ? values[0] : 0;
-        } else if (q.cadence === "quarter" || q.cadence === "month") {
-          // schedule null on a periodic quota → assume even split from total.
+        } else if (q && (q.cadence === "quarter" || q.cadence === "month")) {
           const periodCount = q.cadence === "quarter" ? 4 : 12;
           const per = Math.round((q.total_target || 0) / periodCount);
           baseShape.evenDist = true;
           baseShape.perPeriod = per;
         }
         return baseShape;
-      }));
+      };
+      const savedByKind = {};
+      (p.quotas || []).forEach(q => { savedByKind[q.kind] = q; });
+      const builtinRows = CONTENT_PARTNER_KIND_ORDER.map(kind => {
+        const defaultCadence = kind === "long_video" || kind === "basecamp_video" ? "milestone" : "term";
+        return hydrateRow(savedByKind[kind] || null, kind, defaultCadence, false);
+      });
+      const customRows = (p.quotas || [])
+        .filter(q => !CONTENT_PARTNER_KIND_ORDER.includes(q.kind))
+        .map(q => hydrateRow(q, q.kind, q.cadence || "term", true));
+      setQuotas([...builtinRows, ...customRows]);
       setLoaded(true);
     })();
     return () => { cancelled = true; };
@@ -26568,13 +26579,15 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onLoadCandidates, onS
           }
           return {
             kind: q.kind,
+            label: q.isCustom ? (q.label || null) : null,
+            notes: q.notes || null,
             total_target,
             cadence: q.cadence,
             schedule,
             due_at: q.due_at ? new Date(q.due_at).toISOString() : null,
           };
         })
-        .filter(q => q.total_target > 0);
+        .filter(q => q.total_target > 0 && (!q.kind.startsWith("custom_") || q.kind !== "custom_" /* drop malformed */));
       const res = await onSave({
         id: partnerId || null,
         profile_id: profileId,
@@ -26644,35 +26657,50 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onLoadCandidates, onS
                     )}
                   </div>
                 : (
-                  <>
-                    <input value={profileSearch} onChange={e => setProfileSearch(e.target.value)} placeholder="Filter by @handle or name…" style={fieldStyle} />
-                    <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4, maxHeight: 320, overflowY: "auto" }}>
-                      {!candidatesLoaded
-                        ? <div style={{ padding: 14, textAlign: "center", fontFamily: serif, fontSize: 12, color: T.tertiary }}>Loading partners…</div>
-                        : filteredCandidates.length === 0
-                          ? (candidates.length === 0
-                              ? <div style={{ padding: 14, textAlign: "center", fontFamily: serif, fontSize: 11, color: T.tertiary, lineHeight: 1.5 }}>No flagged content partners yet. Open the user's profile and flip the CONTENT PARTNER toggle first.</div>
-                              : <div style={{ padding: 14, textAlign: "center", fontFamily: serif, fontSize: 11, color: T.tertiary }}>No matches.</div>
-                            )
-                          : filteredCandidates.map(m => {
-                              const isNew = (m.contract_count || 0) === 0;
-                              return (
-                                <button key={m.id} onClick={() => { setResolvedProfile(m); setProfileSearch(""); }} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8, cursor: "pointer", textAlign: "left" }}>
-                                  <div style={{ width: 26, height: 26, borderRadius: "50%", background: T.charcoal, overflow: "hidden", flexShrink: 0 }}>
-                                    {m.avatar_url && <img src={m.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
-                                  </div>
-                                  <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>{m.full_name || "User"}</div>
-                                    <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>@{m.handle}</div>
-                                  </div>
-                                  <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: isNew ? T.green : T.copper, padding: "2px 7px", borderRadius: 8, fontWeight: 700, letterSpacing: 0.4 }}>
-                                    {isNew ? "NEW" : `EXISTING${m.contract_count > 1 ? ` · ${m.contract_count}` : ""}`}
-                                  </span>
-                                </button>
-                              );
-                            })}
-                    </div>
-                  </>
+                  <div style={{ position: "relative" }}>
+                    <input
+                      value={profileSearch}
+                      onChange={e => { setProfileSearch(e.target.value); setPickerOpen(true); }}
+                      onFocus={() => setPickerOpen(true)}
+                      onBlur={() => setTimeout(() => setPickerOpen(false), 180)}
+                      placeholder="Tap to pick — type to filter by @handle or name"
+                      style={{ ...fieldStyle, paddingRight: 32 }}
+                    />
+                    <ChevronDown size={16} color={T.tertiary} style={{ position: "absolute", right: 10, top: "50%", transform: `translateY(-50%) rotate(${pickerOpen ? 180 : 0}deg)`, transition: "transform 120ms", pointerEvents: "none" }} />
+                    {pickerOpen && (
+                      <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, padding: 4, background: T.darkBg, border: `1px solid ${T.copper}80`, borderRadius: 8, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", display: "flex", flexDirection: "column", gap: 3, maxHeight: 320, overflowY: "auto", zIndex: 10 }}>
+                        {!candidatesLoaded
+                          ? <div style={{ padding: 14, textAlign: "center", fontFamily: serif, fontSize: 12, color: T.tertiary }}>Loading partners…</div>
+                          : filteredCandidates.length === 0
+                            ? (candidates.length === 0
+                                ? <div style={{ padding: 14, textAlign: "center", fontFamily: serif, fontSize: 11, color: T.tertiary, lineHeight: 1.5 }}>No flagged content partners yet. Flip the CONTENT PARTNER toggle on a user's profile first.</div>
+                                : <div style={{ padding: 14, textAlign: "center", fontFamily: serif, fontSize: 11, color: T.tertiary }}>No matches.</div>
+                              )
+                            : filteredCandidates.map(m => {
+                                const isNew = (m.contract_count || 0) === 0;
+                                return (
+                                  <button key={m.id}
+                                    // onMouseDown fires BEFORE the input's onBlur, so the picker
+                                    // doesn't slam closed before the click handler runs.
+                                    onMouseDown={e => e.preventDefault()}
+                                    onClick={() => { setResolvedProfile(m); setProfileSearch(""); setPickerOpen(false); }}
+                                    style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 6, cursor: "pointer", textAlign: "left" }}>
+                                    <div style={{ width: 26, height: 26, borderRadius: "50%", background: T.charcoal, overflow: "hidden", flexShrink: 0 }}>
+                                      {m.avatar_url && <img src={m.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+                                    </div>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>{m.full_name || "User"}</div>
+                                      <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>@{m.handle}</div>
+                                    </div>
+                                    <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: isNew ? T.green : T.copper, padding: "2px 7px", borderRadius: 8, fontWeight: 700, letterSpacing: 0.4 }}>
+                                      {isNew ? "NEW" : `EXISTING${m.contract_count > 1 ? ` · ${m.contract_count}` : ""}`}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                      </div>
+                    )}
+                  </div>
                 )}
             </div>
 
@@ -26731,9 +26759,26 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onLoadCandidates, onS
               </p>
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {quotas.map((q, idx) => (
-                  <div key={q.kind} style={{ padding: 12, background: T.darkCard, border: `1px solid ${q.enabled ? T.copper + "60" : T.charcoal}`, borderRadius: 10 }}>
+                  <div key={`${q.kind}-${idx}`} style={{ padding: 12, background: T.darkCard, border: `1px solid ${q.enabled ? T.copper + "60" : T.charcoal}`, borderRadius: 10 }}>
+                    {q.isCustom && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                        <input
+                          value={q.label}
+                          onChange={e => {
+                            const nextLabel = e.target.value;
+                            updateQuota(idx, { label: nextLabel, kind: slugifyCustomKind(nextLabel) });
+                          }}
+                          placeholder="Custom kind name (e.g. Instagram story)"
+                          style={{ flex: 1, padding: "8px 10px", background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 6, color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 700 }}
+                        />
+                        <button type="button" onClick={() => setQuotas(prev => prev.filter((_, i) => i !== idx))} title="Remove this quota" style={{ background: "none", border: "none", padding: 4, cursor: "pointer" }}>
+                          <Trash2 size={14} color={T.tertiary} />
+                        </button>
+                      </div>
+                    )}
                     <button type="button" onClick={() => updateQuota(idx, { enabled: !q.enabled })} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: 0, background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
-                      <span style={{ fontFamily: sans, fontSize: 11, color: q.enabled ? T.white : T.tertiary, fontWeight: 700, flex: 1 }}>{CONTENT_PARTNER_KIND_LABEL[q.kind] || q.kind}</span>
+                      {!q.isCustom && <span style={{ fontFamily: sans, fontSize: 11, color: q.enabled ? T.white : T.tertiary, fontWeight: 700, flex: 1 }}>{q.label || CONTENT_PARTNER_KIND_LABEL[q.kind] || q.kind}</span>}
+                      {q.isCustom && <span style={{ flex: 1 }} />}
                       <span style={{ fontFamily: sans, fontSize: 9, color: q.enabled ? T.copper : T.tertiary, fontWeight: 700, letterSpacing: 0.4 }}>{q.enabled ? "ENABLED" : "OFF"}</span>
                       <span style={{ width: 36, height: 20, borderRadius: 10, background: q.enabled ? T.copper : T.charcoal, position: "relative", flexShrink: 0, transition: "background 120ms" }}>
                         <span style={{ position: "absolute", top: 2, left: q.enabled ? 18 : 2, width: 16, height: 16, borderRadius: "50%", background: T.white, transition: "left 120ms" }} />
@@ -26822,11 +26867,43 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onLoadCandidates, onS
                               </div>
                             </>
                           )}
+                          {/* Per-quota notes — optional admin context. Visible
+                              only when the row is enabled. Surfaces under the
+                              quota inputs so admin can capture brief / style
+                              guidance / link to the campaign doc. */}
+                          <div style={{ marginTop: 10 }}>
+                            <label style={{ ...labelStyle, fontSize: 9 }}>NOTES (OPTIONAL)</label>
+                            <textarea value={q.notes || ""} onChange={e => updateQuota(idx, { notes: e.target.value })} rows={2} placeholder="Brief, style guidance, or a link to the campaign doc" style={{ ...fieldStyle, resize: "vertical" }} />
+                          </div>
                         </div>
                       );
                     })()}
                   </div>
                 ))}
+                {/* Append-a-custom-kind. Starts enabled with an empty label
+                    so admin types the name + numbers, hits SAVE. Custom
+                    kinds use a `custom_<slug>` identifier so they don't
+                    collide with built-ins; admin can remove via the Trash2
+                    button in the card header. */}
+                <button
+                  type="button"
+                  onClick={() => setQuotas(prev => [...prev, {
+                    kind: slugifyCustomKind(""),
+                    isCustom: true,
+                    label: "",
+                    notes: "",
+                    enabled: true,
+                    cadence: "term",
+                    termTotal: 0,
+                    evenDist: true,
+                    perPeriod: 0,
+                    scheduleMap: emptyMap("term"),
+                    due_at: "",
+                  }])}
+                  style={{ width: "100%", padding: "12px 14px", background: "none", border: `1px dashed ${T.copper}`, borderRadius: 10, color: T.copper, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.6, cursor: "pointer" }}
+                >
+                  + ADD CUSTOM KIND
+                </button>
               </div>
             </div>
 
@@ -26872,7 +26949,7 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onLoadCandidates, onS
                       const target = targetByKind[q.kind] || 0;
                       return (
                         <div key={q.kind} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8 }}>
-                          <span style={{ flex: 1, fontFamily: sans, fontSize: 11, color: T.white }}>{CONTENT_PARTNER_KIND_LABEL[q.kind]}</span>
+                          <span style={{ flex: 1, fontFamily: sans, fontSize: 11, color: T.white }}>{(q.label || CONTENT_PARTNER_KIND_LABEL[q.kind] || q.kind)}</span>
                           <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>
                             <span style={{ color: T.copper, fontWeight: 700 }}>{got}</span> approved
                             {pending > 0 && <span> · <span style={{ color: T.tertiary }}>{pending} pending</span></span>}
@@ -26888,7 +26965,7 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onLoadCandidates, onS
                         <label style={{ ...labelStyle, fontSize: 9 }}>KIND</label>
                         <select value={backdateDraft.kind} onChange={e => setBackdateDraft(d => ({ ...d, kind: e.target.value }))} style={fieldStyle}>
                           <option value="">— Pick a kind —</option>
-                          {enabledQuotas.map(q => <option key={q.kind} value={q.kind}>{CONTENT_PARTNER_KIND_LABEL[q.kind]}</option>)}
+                          {enabledQuotas.map(q => <option key={q.kind} value={q.kind}>{(q.label || CONTENT_PARTNER_KIND_LABEL[q.kind] || q.kind)}</option>)}
                         </select>
                       </div>
                       <div style={{ flex: 1 }}>
@@ -38484,7 +38561,7 @@ export default function Trailhead() {
       // Quotas + profile snapshots in parallel.
       const [quotasRes, profsRes] = await Promise.all([
         partnerIds.length
-          ? supabase.from("content_partner_quotas").select("id, partner_id, kind, total_target, cadence, schedule, due_at").in("partner_id", partnerIds)
+          ? supabase.from("content_partner_quotas").select("id, partner_id, kind, label, notes, total_target, cadence, schedule, due_at").in("partner_id", partnerIds)
           : Promise.resolve({ data: [] }),
         profileIds.length
           ? supabase.from("profiles").select("id, handle, full_name, avatar_url").in("id", profileIds)
@@ -38627,6 +38704,8 @@ export default function Trailhead() {
           .map(q => ({
             partner_id: saved.id,
             kind: q.kind,
+            label: q.label || null,
+            notes: q.notes || null,
             total_target: Number(q.total_target),
             cadence: q.cadence || "term",
             schedule: q.schedule || null,
