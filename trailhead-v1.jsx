@@ -26346,22 +26346,152 @@ function computeContentPartnerQuotaProgress(quota, deliverables, contract) {
   return { target, accepted, pending, expectedNow, status };
 }
 
-function ContentPartnersAdminScreen({ onBack, onOpenEditor, onNewPartner, onLoadPartners, onLoadPendingCounts }) {
+// One row per pending submission group. Renders the partner identity,
+// what was reported (per kind), and the inline approval form: each kind
+// gets a "accepted" input that defaults to the reported quantity; admin
+// can adjust or zero out. CONFIRM ALL = approve at reported quantities;
+// REJECT ALL = zero all out. Required reason for any rejection. On
+// submit, parent re-fetches the queue so the card disappears.
+function PendingSubmissionCard({ group, onReview, onReviewed }) {
+  const partner = group.partner;
+  const profile = group.profile;
+  const [accepted, setAccepted] = useState(() => {
+    const map = {};
+    (group.rows || []).forEach(r => { map[r.id] = r.quantity_reported; });
+    return map;
+  });
+  const [reviewerNotes, setReviewerNotes] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  const daysAgo = (() => {
+    const ms = Date.now() - new Date(group.submitted_at).getTime();
+    return Math.max(0, Math.round(ms / (1000 * 60 * 60 * 24)));
+  })();
+  const anyRejected = (group.rows || []).some(r => Number(accepted[r.id]) === 0);
+  const allRejected = (group.rows || []).every(r => Number(accepted[r.id]) === 0);
+
+  const submit = async (mode) => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      let decisions = (group.rows || []).map(r => ({
+        id: r.id,
+        accepted: mode === "confirm_all" ? r.quantity_reported
+                : mode === "reject_all"  ? 0
+                : Math.max(0, Math.floor(Number(accepted[r.id]) || 0)),
+      }));
+      // Reason required when any kind is being rejected.
+      const willRejectAny = decisions.some(d => Number(d.accepted) === 0);
+      if (willRejectAny && !reviewerNotes.trim()) {
+        setError("A reason is required when rejecting (or partially rejecting) a submission.");
+        return;
+      }
+      const res = await onReview({
+        groupId: group.group_id,
+        partnerId: group.partner_id,
+        profileId: partner ? partner.profile_id : null,
+        rowDecisions: decisions,
+        reviewerNotes: reviewerNotes.trim() || null,
+      });
+      if (res && res.ok) {
+        if (onReviewed) onReviewed();
+      } else if (res && res.error) {
+        setError(res.error);
+      }
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div style={{ padding: 14, background: T.darkCard, border: `1px solid ${T.copper}40`, borderRadius: 12, display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ width: 36, height: 36, borderRadius: "50%", background: T.charcoal, overflow: "hidden", flexShrink: 0 }}>
+          {profile && profile.avatar_url && <img src={profile.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700 }}>{(profile && profile.full_name) || "Partner"}</div>
+          <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>@{(profile && profile.handle) || "—"} · {daysAgo === 0 ? "today" : `${daysAgo}d ago`}</div>
+        </div>
+        {partner && partner.dropbox_upload_folder_url && (
+          <a href={partner.dropbox_upload_folder_url} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 10px", background: T.darkBg, border: `1px solid ${T.copper}80`, borderRadius: 8, color: T.copper, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textDecoration: "none" }}>
+            <ExternalLink size={10} color={T.copper} /> FOLDER
+          </a>
+        )}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {(group.rows || []).map(r => {
+          const label = r.kind_label || CONTENT_PARTNER_KIND_LABEL[r.kind] || (r.kind || "").replace(/^custom_/, "").replace(/_/g, " ");
+          return (
+            <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 8 }}>
+              <span style={{ flex: 1, fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>{label}</span>
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>reported <span style={{ color: T.white, fontWeight: 700 }}>{r.quantity_reported}</span></span>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                inputMode="numeric"
+                value={accepted[r.id] != null ? accepted[r.id] : ""}
+                onChange={e => setAccepted(prev => ({ ...prev, [r.id]: Math.max(0, Math.floor(Number(e.target.value) || 0)) }))}
+                style={{ width: 64, padding: "8px 10px", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8, color: T.white, fontFamily: sans, fontSize: 13, fontWeight: 700, textAlign: "right" }}
+              />
+              <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.5, width: 50, textAlign: "right" }}>accepted</span>
+            </div>
+          );
+        })}
+      </div>
+      {group.partner_notes && (
+        <div style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, fontStyle: "italic", lineHeight: 1.4 }}>"{group.partner_notes}"</div>
+      )}
+      <div>
+        <label style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600, display: "block", marginBottom: 6 }}>REVIEWER NOTES {anyRejected && <span style={{ color: T.red }}>· REQUIRED FOR REJECTIONS</span>}</label>
+        <textarea
+          value={reviewerNotes}
+          onChange={e => setReviewerNotes(e.target.value)}
+          rows={2}
+          placeholder={anyRejected ? "Why are you rejecting / adjusting?" : "Optional context for the partner"}
+          style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 8, color: T.white, fontFamily: serif, fontSize: 12, resize: "vertical" }}
+        />
+      </div>
+      {error && (
+        <div style={{ padding: 8, background: `${T.red}25`, border: `1px solid ${T.red}`, borderRadius: 6, fontFamily: sans, fontSize: 11, color: T.red }}>{error}</div>
+      )}
+      <div style={{ display: "flex", gap: 8 }}>
+        <button onClick={() => submit("reject_all")} disabled={busy} style={{ flex: 1, padding: "10px 14px", background: `${T.red}25`, border: `1px solid ${T.red}`, borderRadius: 8, color: T.red, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, cursor: busy ? "default" : "pointer" }}>
+          REJECT ALL
+        </button>
+        <button onClick={() => submit("adjust")} disabled={busy} style={{ flex: 1, padding: "10px 14px", background: T.darkBg, border: `1px solid ${T.copper}`, borderRadius: 8, color: T.copper, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, cursor: busy ? "default" : "pointer" }}>
+          SAVE AS ENTERED
+        </button>
+        <button onClick={() => submit("confirm_all")} disabled={busy} style={{ flex: 1.4, padding: "10px 14px", background: busy ? T.charcoal : T.green, border: "none", borderRadius: 8, color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.6, cursor: busy ? "default" : "pointer" }}>
+          {busy ? "WORKING…" : "CONFIRM AS REPORTED"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ContentPartnersAdminScreen({ onBack, onOpenEditor, onNewPartner, onLoadPartners, onLoadPendingCounts, onLoadPendingSubmissions, onReviewSubmission }) {
   const [partners, setPartners] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState("active");
+  const [tab, setTab] = useState("pending_review");
   const [pendingByPartner, setPendingByPartner] = useState({});
+  const [pendingGroups, setPendingGroups] = useState([]);
+  const [pendingGroupsLoaded, setPendingGroupsLoaded] = useState(false);
 
   const refresh = async () => {
     setLoading(true);
     const res = await onLoadPartners();
     if (res && res.ok && Array.isArray(res.data)) setPartners(res.data);
     setLoading(false);
-    // Pending counts come from a separate aggregate (Chunk 3 wires the
-    // full approval queue; for now we just count rows per partner).
     if (onLoadPendingCounts) {
       const counts = await onLoadPendingCounts();
       if (counts && counts.ok) setPendingByPartner(counts.data || {});
+    }
+    if (onLoadPendingSubmissions) {
+      const subs = await onLoadPendingSubmissions();
+      setPendingGroups(subs && subs.ok ? (subs.data || []) : []);
+      setPendingGroupsLoaded(true);
     }
   };
 
@@ -26406,7 +26536,9 @@ function ContentPartnersAdminScreen({ onBack, onOpenEditor, onNewPartner, onLoad
     );
   };
 
+  const totalPending = pendingGroups.length;
   const tabs = [
+    { k: "pending_review", label: "PENDING REVIEW", count: totalPending, urgent: totalPending > 0 },
     { k: "active", label: "ACTIVE", count: bucketed.active.length },
     { k: "pending_delivery", label: "PENDING DELIVERY", count: bucketed.pending_delivery.length },
     { k: "completed", label: "COMPLETED", count: bucketed.completed.length },
@@ -26426,18 +26558,35 @@ function ContentPartnersAdminScreen({ onBack, onOpenEditor, onNewPartner, onLoad
         </button>
       </div>
       <div style={{ display: "flex", gap: 4, padding: "10px 12px", borderBottom: `1px solid ${T.charcoal}`, overflowX: "auto" }}>
-        {tabs.map(t => (
-          <button key={t.k} onClick={() => setTab(t.k)} style={{ flexShrink: 0, padding: "6px 12px", borderRadius: 16, background: tab === t.k ? T.copper : T.darkCard, border: `1px solid ${tab === t.k ? T.copper : T.charcoal}`, color: tab === t.k ? T.white : T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}>
-            {t.label} {t.count > 0 ? `· ${t.count}` : ""}
-          </button>
-        ))}
+        {tabs.map(t => {
+          const isSel = tab === t.k;
+          const accent = t.urgent ? T.red : T.copper;
+          return (
+            <button key={t.k} onClick={() => setTab(t.k)} style={{ flexShrink: 0, padding: "6px 12px", borderRadius: 16, background: isSel ? accent : T.darkCard, border: `1px solid ${isSel ? accent : (t.urgent ? T.red : T.charcoal)}`, color: isSel ? T.white : (t.urgent ? T.red : T.tertiary), fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}>
+              {t.label} {t.count > 0 ? `· ${t.count}` : ""}
+            </button>
+          );
+        })}
       </div>
       <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
-        {loading
-          ? <div style={{ padding: 20, textAlign: "center", fontFamily: serif, fontSize: 13, color: T.tertiary }}>Loading…</div>
-          : bucketed[tab].length === 0
-            ? <div style={{ padding: 30, textAlign: "center", fontFamily: serif, fontSize: 13, color: T.tertiary }}>No partners in this status.</div>
-            : bucketed[tab].map(renderRow)}
+        {tab === "pending_review"
+          ? (!pendingGroupsLoaded
+              ? <div style={{ padding: 20, textAlign: "center", fontFamily: serif, fontSize: 13, color: T.tertiary }}>Loading…</div>
+              : pendingGroups.length === 0
+                ? <div style={{ padding: 30, textAlign: "center", fontFamily: serif, fontSize: 13, color: T.tertiary }}>No pending submissions right now.</div>
+                : pendingGroups.map(group => (
+                    <PendingSubmissionCard
+                      key={group.group_id}
+                      group={group}
+                      onReview={onReviewSubmission}
+                      onReviewed={() => refresh()}
+                    />
+                  )))
+          : loading
+            ? <div style={{ padding: 20, textAlign: "center", fontFamily: serif, fontSize: 13, color: T.tertiary }}>Loading…</div>
+            : bucketed[tab].length === 0
+              ? <div style={{ padding: 30, textAlign: "center", fontFamily: serif, fontSize: 13, color: T.tertiary }}>No partners in this status.</div>
+              : bucketed[tab].map(renderRow)}
       </div>
     </div>
   );
@@ -26449,7 +26598,7 @@ function ContentPartnersAdminScreen({ onBack, onOpenEditor, onNewPartner, onLoad
 // blur). camper_delivered_at + 1yr auto-fills term_ends_at unless the
 // admin overrides. Quota lines have per-kind defaults pulled from the
 // sample contracts (e.g. photo · 100 · quarter · 15/35/35/15).
-function ContentPartnerEditor({ partnerId, onBack, onLoad, onLoadCandidates, onSave, onDelete, onAddBackdated }) {
+function ContentPartnerEditor({ partnerId, onBack, onLoad, onLoadCandidates, onSave, onDelete, onAddBackdated, onSetBreach }) {
   const [partner, setPartner] = useState(null);
   const [profileSearch, setProfileSearch] = useState("");
   const [resolvedProfile, setResolvedProfile] = useState(null);
@@ -27104,11 +27253,60 @@ function ContentPartnerEditor({ partnerId, onBack, onLoad, onLoadCandidates, onS
             })()}
 
             {partnerId && (
-              <div style={{ borderTop: `1px solid ${T.charcoal}`, paddingTop: 14 }}>
-                <span style={{ fontFamily: sans, fontSize: 11, color: T.red, letterSpacing: 1.2, fontWeight: 700, display: "block", marginBottom: 10 }}>DANGER ZONE</span>
-                <button onClick={handleDelete} style={{ width: "100%", padding: "12px 14px", background: `${T.red}25`, border: `1px solid ${T.red}`, borderRadius: 10, color: T.red, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer" }}>
-                  DELETE CONTRACT
-                </button>
+              <div style={{ borderTop: `1px solid ${T.charcoal}`, paddingTop: 14, display: "flex", flexDirection: "column", gap: 14 }}>
+                {/* Breach flag — separate from the status dropdown so the
+                    paper-trailed reason gets captured and the partner is
+                    notified. Toggles depending on the contract's current
+                    status. Off-app conversation handles invoicing. */}
+                {onSetBreach && (status === "breached" ? (
+                  <div>
+                    <span style={{ fontFamily: sans, fontSize: 11, color: T.red, letterSpacing: 1.2, fontWeight: 700, display: "block", marginBottom: 10 }}>STANDING</span>
+                    <button
+                      onClick={async () => {
+                        if (typeof confirm === "function" && !confirm("Restore this partner to active status?")) return;
+                        const res = await onSetBreach({ partnerId, breach: false, reason: null });
+                        if (res && res.ok) {
+                          setStatus("active");
+                          alert("Partner restored to active.");
+                        } else if (res && res.error) alert("Restore failed: " + res.error);
+                      }}
+                      style={{ width: "100%", padding: "12px 14px", background: T.darkBg, border: `1px solid ${T.copper}`, borderRadius: 10, color: T.copper, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer" }}
+                    >
+                      RESTORE TO ACTIVE
+                    </button>
+                    <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: "8px 0 0", lineHeight: 1.4 }}>
+                      Partner is currently flagged as not in good standing. Restoring clears the flag and notifies them.
+                    </p>
+                  </div>
+                ) : (
+                  <div>
+                    <span style={{ fontFamily: sans, fontSize: 11, color: T.red, letterSpacing: 1.2, fontWeight: 700, display: "block", marginBottom: 10 }}>STANDING</span>
+                    <button
+                      onClick={async () => {
+                        const reason = typeof prompt === "function" ? prompt("Reason for flagging? (required — gets appended to admin notes + sent to the partner)") : "";
+                        if (!reason || !reason.trim()) return;
+                        if (typeof confirm === "function" && !confirm("Flag this partner as NOT IN GOOD STANDING? They'll see it on their dashboard and get a notification.")) return;
+                        const res = await onSetBreach({ partnerId, breach: true, reason: reason.trim() });
+                        if (res && res.ok) {
+                          setStatus("breached");
+                          alert("Partner flagged. Take the invoicing conversation off-app.");
+                        } else if (res && res.error) alert("Flag failed: " + res.error);
+                      }}
+                      style={{ width: "100%", padding: "12px 14px", background: `${T.red}25`, border: `1px solid ${T.red}`, borderRadius: 10, color: T.red, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer" }}
+                    >
+                      FLAG NOT IN GOOD STANDING
+                    </button>
+                    <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: "8px 0 0", lineHeight: 1.4 }}>
+                      Use when a partner has materially fallen short on delivery. Reason gets appended to the admin notes and sent to the partner. Damages stay off-app.
+                    </p>
+                  </div>
+                ))}
+                <div>
+                  <span style={{ fontFamily: sans, fontSize: 11, color: T.red, letterSpacing: 1.2, fontWeight: 700, display: "block", marginBottom: 10 }}>DANGER ZONE</span>
+                  <button onClick={handleDelete} style={{ width: "100%", padding: "12px 14px", background: `${T.red}25`, border: `1px solid ${T.red}`, borderRadius: 10, color: T.red, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer" }}>
+                    DELETE CONTRACT
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -39181,6 +39379,213 @@ export default function Trailhead() {
     }
   };
 
+  // Admin-only: list every pending submission grouped by submission_group_id.
+  // Each result carries the partner profile snapshot + the per-kind rows in
+  // that submission so the review queue can render them inline. Newest
+  // submissions first.
+  const loadAllPendingContentPartnerSubmissions = async () => {
+    if (!isAdmin) return { error: "Not authorized" };
+    try {
+      const { data: rows, error } = await supabase
+        .from("content_partner_deliverables")
+        .select("id, partner_id, submission_group_id, kind, quantity_reported, quantity_accepted, partner_notes, submitted_at, status, reviewed_at, reviewer_notes")
+        .eq("status", "pending")
+        .order("submitted_at", { ascending: true });
+      if (error) return { error: error.message };
+      const list = rows || [];
+      if (list.length === 0) return { ok: true, data: [] };
+      const partnerIds = Array.from(new Set(list.map(r => r.partner_id)));
+      // Partner rows + the partner's profile snapshot, both indexed for the
+      // hydration loop below.
+      const [partnersRes, quotasRes] = await Promise.all([
+        supabase.from("content_partners").select("id, profile_id, status, dropbox_upload_folder_url").in("id", partnerIds),
+        supabase.from("content_partner_quotas").select("id, partner_id, kind, label").in("partner_id", partnerIds),
+      ]);
+      const partnerById = {};
+      const profileIds = [];
+      (partnersRes.data || []).forEach(p => {
+        partnerById[p.id] = p;
+        if (p.profile_id) profileIds.push(p.profile_id);
+      });
+      const { data: profs } = profileIds.length
+        ? await supabase.from("profiles").select("id, handle, full_name, avatar_url").in("id", Array.from(new Set(profileIds)))
+        : { data: [] };
+      const profileById = {};
+      (profs || []).forEach(p => { profileById[p.id] = p; });
+      // Label map: for custom kinds we want to show the admin-defined label,
+      // not the slug. Index by (partner_id, kind).
+      const labelByPartnerKind = {};
+      (quotasRes.data || []).forEach(q => { labelByPartnerKind[`${q.partner_id}:${q.kind}`] = q.label || null; });
+      // Group by submission_group_id, preserving the order of the first row's
+      // submitted_at.
+      const groups = {};
+      const order = [];
+      list.forEach(row => {
+        if (!groups[row.submission_group_id]) {
+          groups[row.submission_group_id] = {
+            group_id: row.submission_group_id,
+            partner_id: row.partner_id,
+            partner: partnerById[row.partner_id] || null,
+            profile: partnerById[row.partner_id] ? profileById[partnerById[row.partner_id].profile_id] || null : null,
+            submitted_at: row.submitted_at,
+            partner_notes: row.partner_notes,
+            rows: [],
+          };
+          order.push(row.submission_group_id);
+        }
+        const label = labelByPartnerKind[`${row.partner_id}:${row.kind}`];
+        groups[row.submission_group_id].rows.push({ ...row, kind_label: label });
+      });
+      return { ok: true, data: order.map(gid => groups[gid]) };
+    } catch (e) {
+      console.error("[loadAllPendingContentPartnerSubmissions] failed", e);
+      return { error: "Network error" };
+    }
+  };
+
+  // Admin-only: aggregate pending count per partner — fuels the badge on
+  // each partner row in the ACTIVE / PENDING-DELIVERY tabs.
+  const loadContentPartnerPendingCounts = async () => {
+    if (!isAdmin) return { error: "Not authorized" };
+    try {
+      const { data, error } = await supabase
+        .from("content_partner_deliverables")
+        .select("partner_id, submission_group_id")
+        .eq("status", "pending");
+      if (error) return { error: error.message };
+      const byPartner = {};
+      const seenGroups = new Set();
+      (data || []).forEach(r => {
+        const key = `${r.partner_id}:${r.submission_group_id}`;
+        if (seenGroups.has(key)) return;
+        seenGroups.add(key);
+        byPartner[r.partner_id] = (byPartner[r.partner_id] || 0) + 1;
+      });
+      return { ok: true, data: byPartner };
+    } catch (e) {
+      console.error("[loadContentPartnerPendingCounts] failed", e);
+      return { error: "Network error" };
+    }
+  };
+
+  // Admin-only: review a pending submission group. `perKind` maps each
+  // row's id → the quantity_accepted admin is approving (0 = reject that
+  // kind). All rows in the group are stamped with reviewer_id +
+  // reviewer_notes; status flips per-row: > 0 accepted → 'approved',
+  // 0 → 'rejected'. A single notification fans to the partner so the bell
+  // + push surface the outcome. Wrapped to update partner contract status
+  // updated_at so the realtime sub on the partner dashboard refetches.
+  const reviewContentPartnerSubmission = async ({ groupId, partnerId, profileId, rowDecisions, reviewerNotes }) => {
+    if (!isAdmin || !groupId) return { error: "Not authorized" };
+    const adminUid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    const reviewedAt = new Date().toISOString();
+    const decisions = Array.isArray(rowDecisions) ? rowDecisions : [];
+    if (decisions.length === 0) return { error: "Nothing to review" };
+    try {
+      // Per-row UPDATEs — Supabase doesn't expose a batched update on
+      // distinct row ids in one round trip. Run them in parallel.
+      const results = await Promise.all(decisions.map(d => {
+        const accepted = Math.max(0, Math.floor(Number(d.accepted) || 0));
+        const nextStatus = accepted > 0 ? "approved" : "rejected";
+        return supabase.from("content_partner_deliverables").update({
+          quantity_accepted: accepted,
+          status: nextStatus,
+          reviewed_by: adminUid,
+          reviewed_at: reviewedAt,
+          reviewer_notes: reviewerNotes || null,
+        }).eq("id", d.id);
+      }));
+      const failed = results.find(r => r && r.error);
+      if (failed) return { error: failed.error.message || "Update failed" };
+      // Bump partner's updated_at so any subscribed dashboard refetches.
+      try { await supabase.from("content_partners").update({ updated_at: reviewedAt }).eq("id", partnerId); } catch (_) {}
+      // Notification — best-effort. Pull the admin's display name so the
+      // partner sees who reviewed; fall back to 'LPO Team'.
+      let actorName = "LPO Team";
+      try {
+        const { data: me } = await supabase.from("profiles").select("full_name, handle").eq("id", adminUid).maybeSingle();
+        if (me) actorName = me.full_name || (me.handle ? `@${me.handle}` : actorName);
+      } catch (_) {}
+      const approvedCount = decisions.filter(d => Number(d.accepted) > 0).length;
+      const rejectedCount = decisions.length - approvedCount;
+      const text = rejectedCount === 0
+        ? `Your submission was approved (${approvedCount} ${approvedCount === 1 ? "kind" : "kinds"}).`
+        : approvedCount === 0
+          ? `Your submission was rejected.`
+          : `Your submission was reviewed: ${approvedCount} approved, ${rejectedCount} rejected.`;
+      if (profileId) {
+        try {
+          await supabase.from("notifications").insert({
+            user_id: profileId,
+            type: "content_partner_review",
+            actor_id: adminUid,
+            actor_name: actorName,
+            text,
+            data: { submission_group_id: groupId, partner_id: partnerId },
+          });
+        } catch (e) {
+          console.warn("[reviewContentPartnerSubmission] notif insert failed", e);
+        }
+      }
+      return { ok: true, approved: approvedCount, rejected: rejectedCount };
+    } catch (e) {
+      console.error("[reviewContentPartnerSubmission] failed", e);
+      return { error: "Network error" };
+    }
+  };
+
+  // Admin-only: flag a partner contract as 'breached' (or restore to
+  // 'active') with a required reason. Appends the reason to the contract
+  // notes so the off-app conversation has a paper trail in the editor.
+  // Notifies the partner of the status change.
+  const setContentPartnerBreachStatus = async ({ partnerId, breach, reason }) => {
+    if (!isAdmin || !partnerId) return { error: "Not authorized" };
+    if (breach && (!reason || !reason.trim())) return { error: "Reason required to flag" };
+    const adminUid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    try {
+      // Read current contract so we can append to notes + know the profile_id
+      // for the notification.
+      const { data: existing } = await supabase.from("content_partners").select("id, profile_id, notes").eq("id", partnerId).maybeSingle();
+      if (!existing) return { error: "Contract not found" };
+      const stampedReason = breach
+        ? `[${new Date().toISOString().slice(0, 10)}] BREACHED — ${reason.trim()}`
+        : `[${new Date().toISOString().slice(0, 10)}] RESTORED TO ACTIVE`;
+      const nextNotes = existing.notes ? `${existing.notes}\n\n${stampedReason}` : stampedReason;
+      const { error } = await supabase.from("content_partners").update({
+        status: breach ? "breached" : "active",
+        notes: nextNotes,
+        updated_at: new Date().toISOString(),
+      }).eq("id", partnerId);
+      if (error) return { error: error.message };
+      // Notification
+      let actorName = "LPO Team";
+      try {
+        const { data: me } = await supabase.from("profiles").select("full_name, handle").eq("id", adminUid).maybeSingle();
+        if (me) actorName = me.full_name || (me.handle ? `@${me.handle}` : actorName);
+      } catch (_) {}
+      if (existing.profile_id) {
+        try {
+          await supabase.from("notifications").insert({
+            user_id: existing.profile_id,
+            type: "content_partner_review",
+            actor_id: adminUid,
+            actor_name: actorName,
+            text: breach
+              ? `Your content partnership has been flagged as not in good standing. Reach out to the team.`
+              : `Your content partnership has been restored to active status.`,
+            data: { partner_id: partnerId, breach },
+          });
+        } catch (e) {
+          console.warn("[setContentPartnerBreachStatus] notif insert failed", e);
+        }
+      }
+      return { ok: true };
+    } catch (e) {
+      console.error("[setContentPartnerBreachStatus] failed", e);
+      return { error: "Network error" };
+    }
+  };
+
   // Partner-side: load the signed-in user's most recent contract (active
   // first, falling back to the most recent of any status). Pulls quotas
   // + deliverables + the partner's own profile snapshot. RLS gates the
@@ -44199,12 +44604,16 @@ export default function Trailhead() {
                       onSave={saveContentPartner}
                       onDelete={deleteContentPartner}
                       onAddBackdated={adminAddBackdatedDeliverable}
+                      onSetBreach={setContentPartnerBreachStatus}
                     />
                   : <ContentPartnersAdminScreen
                       onBack={() => setAdminSubScreen(null)}
                       onOpenEditor={(id) => setEditingContentPartnerId(id)}
                       onNewPartner={() => setEditingContentPartnerId("")}
                       onLoadPartners={loadAllContentPartners}
+                      onLoadPendingCounts={loadContentPartnerPendingCounts}
+                      onLoadPendingSubmissions={loadAllPendingContentPartnerSubmissions}
+                      onReviewSubmission={reviewContentPartnerSubmission}
                     />)
                 : adminSubScreen
                 ? <AdminDashboardScreen
