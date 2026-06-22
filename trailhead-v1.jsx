@@ -36187,7 +36187,7 @@ export default function Trailhead() {
     try {
       const { data: row, error } = await supabase
         .from("trip_reports")
-        .select("id,user_id,name,slug,description,hero_img,start_lat,start_lng,end_lat,end_lng,route_geom,kind,visibility,status,distance_mi,elev_gain_ft,max_elev_ft,duration_min,region,state_code,build_id,terrains,tags,difficulty,planned_start,planned_end,party_size,view_count,created_at,updated_at")
+        .select("id,user_id,name,slug,description,hero_img,start_lat,start_lng,end_lat,end_lng,route_geom,kind,visibility,status,distance_mi,elev_gain_ft,max_elev_ft,duration_min,region,state_code,build_id,terrains,tags,difficulty,planned_start,planned_end,party_size,view_count,created_at,updated_at,gear_drop_id,progress,finished_at,last_unlocked_at")
         .eq("slug", slug)
         .maybeSingle();
       if (error || !row) return false;
@@ -36394,7 +36394,7 @@ export default function Trailhead() {
     try {
       const { data: tripRows } = await supabase
         .from("trip_reports")
-        .select("id,user_id,name,slug,description,hero_img,start_lat,start_lng,end_lat,end_lng,route_geom,kind,visibility,status,distance_mi,elev_gain_ft,max_elev_ft,duration_min,region,state_code,build_id,terrains,tags,difficulty,planned_start,planned_end,party_size,view_count,created_at,updated_at")
+        .select("id,user_id,name,slug,description,hero_img,start_lat,start_lng,end_lat,end_lng,route_geom,kind,visibility,status,distance_mi,elev_gain_ft,max_elev_ft,duration_min,region,state_code,build_id,terrains,tags,difficulty,planned_start,planned_end,party_size,view_count,created_at,updated_at,gear_drop_id,progress,finished_at,last_unlocked_at")
         .eq("status", "published")
         .order("created_at", { ascending: false })
         .limit(100);
