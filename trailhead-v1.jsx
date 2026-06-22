@@ -23399,6 +23399,20 @@ function GDSection({ title, actionLabel, onAction, children }) {
   );
 }
 
+// Slugify a gear drop title for /drops/<slug> URLs. Pure function —
+// lives at module scope so GearDropEditor can call it from the title
+// onSave handler (without it, the editor crashed with ReferenceError
+// because the version inside the Trailhead root component is out of
+// scope for module-level components).
+function slugifyGearDropTitle(title) {
+  const cleaned = (title || "gear-drop")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+  return cleaned || "gear-drop";
+}
+
 function GDInput({ label, value, onSave, type = "text", placeholder }) {
   const [local, setLocal] = useState(value);
   useEffect(() => { setLocal(value); }, [value]);
@@ -40730,15 +40744,6 @@ export default function Trailhead() {
       return data;
     } catch (e) { console.error("[loadGearDropById] threw", e); return null; }
   }, []);
-
-  const slugifyGearDropTitle = (title) => {
-    const cleaned = (title || "gear-drop")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 80);
-    return cleaned || "gear-drop";
-  };
 
   const createGearDrop = async (payload = {}) => {
     if (!isAdmin) return { error: "Not authorized" };
