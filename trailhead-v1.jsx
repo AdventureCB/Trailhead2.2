@@ -38884,17 +38884,39 @@ export default function Trailhead() {
   // dep arrays don't TDZ-crash on the first render.
   //
   // 1) Resolve `pendingTripNav` (a slug from feed-card taps, explore-pin
-  //    taps, or `/trips/<slug>` deep links) to `detailTripId` once the
-  //    matching row appears in the merged list. Plans share the slug
-  //    namespace and the same detail surface, so we look across both.
+  //    taps, `/trips/<slug>` deep links, OR a gear drop racer recap
+  //    card) to `detailTripId` once the matching row appears in state.
+  //    Reports + plans share the slug namespace and the same detail
+  //    surface. Mementos (kind='gear_drop_run') are intentionally
+  //    excluded from `allTripReports` / `allTripPlans` (per project
+  //    memory — they're not in the listing or explore map), so we
+  //    also scan raw `tripReports` for them. When the slug isn't in
+  //    state at all (cold deep-link or a memento we haven't hydrated
+  //    yet), fall back to loadTripBySlugFast which fetches by slug
+  //    directly and pushes the row into tripReports — the effect
+  //    re-runs and resolves on the next pass.
   useEffect(() => {
     if (!pendingTripNav) return;
     const trip = (allTripReports || []).find(t => t.slug === pendingTripNav)
-              || (allTripPlans || []).find(t => t.slug === pendingTripNav);
-    if (!trip) return;
-    setDetailTripId(trip.id);
-    setPendingTripNav(null);
-  }, [pendingTripNav, allTripReports, allTripPlans]);
+              || (allTripPlans   || []).find(t => t.slug === pendingTripNav)
+              || (tripReports    || []).find(t => t.slug === pendingTripNav);
+    if (trip) {
+      setDetailTripId(trip.id);
+      setPendingTripNav(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const ok = await loadTripBySlugFast(pendingTripNav);
+      if (cancelled || !ok) {
+        // No row found — clear pendingTripNav so we don't poll forever.
+        if (!cancelled) setPendingTripNav(null);
+      }
+      // On success, loadTripBySlugFast added to tripReports; the effect
+      // re-runs from the dep change and resolves above.
+    })();
+    return () => { cancelled = true; };
+  }, [pendingTripNav, allTripReports, allTripPlans, tripReports]);
 
   // /drops/<slug> resolver. First check the cached list (admin/beta have
   // it populated already); if missing, fetch by slug directly. RLS gates
