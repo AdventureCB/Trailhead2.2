@@ -26621,7 +26621,7 @@ function GearDropLiveTracker({ drop, racers, currentUserId, onClose }) {
 // RPC which validates proximity server-side and atomically claims winner
 // on the final waypoint. A realtime subscription on trip_reports keeps
 // the leaderboard live so racers can see each other advance in real time.
-function GearDropRunScreen({ runId, currentUserId, onClose, onLoadRun, onLoadDrop, onAdvance, onShowToast, onLoadParticipants, onViewUser }) {
+function GearDropRunScreen({ runId, currentUserId, onClose, onLoadRun, onLoadDrop, onAdvance, onShowToast, onLoadParticipants, onViewUser, onOpenDrop }) {
   const [run, setRun] = useState(null);
   const [drop, setDrop] = useState(null);
   const [userLoc, setUserLoc] = useState(null);
@@ -27305,9 +27305,43 @@ function GearDropRunScreen({ runId, currentUserId, onClose, onLoadRun, onLoadDro
                 <div style={{ fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 }}>{drop.prize_title}</div>
               </div>
             )}
-            <button onClick={() => { setWinState(null); }} style={{ width: "100%", padding: 14, background: T.copper, border: "none", borderRadius: 10, color: T.white, fontFamily: sans, fontSize: 13, fontWeight: 800, letterSpacing: 0.8, cursor: "pointer" }}>
-              CLOSE
-            </button>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {onOpenDrop && drop && drop.id && (
+                <button onClick={() => { setWinState(null); onOpenDrop(drop.id); }} style={{ width: "100%", padding: 14, background: T.copper, border: "none", borderRadius: 10, color: T.white, fontFamily: sans, fontSize: 13, fontWeight: 800, letterSpacing: 0.8, cursor: "pointer" }}>
+                  VIEW EVENT
+                </button>
+              )}
+              <button onClick={() => { setWinState(null); }} style={{ width: "100%", padding: "11px 14px", background: T.darkBg, border: `1px solid ${T.copper}`, borderRadius: 10, color: T.copper, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.6, cursor: "pointer" }}>
+                CLOSE
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Finisher (non-winner) popup — fires the moment a racer submits
+          their final waypoint. Confirms the run wrapped + gives them a
+          one-tap path back to the event page (leaderboard, recap cards,
+          afterparty info). Closing keeps them on the run screen with
+          the inline "you finished" banner. */}
+      {winState && !winState.won && winState.finished && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 7, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <div style={{ width: "100%", maxWidth: 360, padding: 28, background: T.darkCard, border: `2px solid ${T.green}`, borderRadius: 18, textAlign: "center", boxShadow: `0 0 32px ${T.green}40` }}>
+            <CheckCircle size={48} color={T.green} style={{ marginBottom: 10 }} />
+            <h1 style={{ fontFamily: sans, fontSize: 22, color: T.white, fontWeight: 800, margin: "0 0 8px", letterSpacing: 0.4 }}>RUN COMPLETE</h1>
+            <p style={{ fontFamily: serif, fontSize: 13, color: T.white, opacity: 0.92, lineHeight: 1.5, margin: "0 0 18px" }}>
+              You wrapped <strong>{drop.title}</strong>. Your recap is auto-published — head back to the event page to see the leaderboard, racer recaps, and any afterparty info.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {onOpenDrop && drop && drop.id && (
+                <button onClick={() => { setWinState(null); onOpenDrop(drop.id); }} style={{ width: "100%", padding: 14, background: T.green, border: "none", borderRadius: 10, color: T.white, fontFamily: sans, fontSize: 13, fontWeight: 800, letterSpacing: 0.8, cursor: "pointer" }}>
+                  BACK TO EVENT
+                </button>
+              )}
+              <button onClick={() => { setWinState(null); }} style={{ width: "100%", padding: "11px 14px", background: T.darkBg, border: `1px solid ${T.green}`, borderRadius: 10, color: T.green, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.6, cursor: "pointer" }}>
+                CLOSE
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -47134,6 +47168,7 @@ export default function Trailhead() {
           onShowToast={showErrorToast}
           onLoadParticipants={loadGearDropParticipants}
           onViewUser={openUserProfile}
+          onOpenDrop={(dropId) => { closeRunScreen(); setViewingGearDropId(dropId); }}
         />
       )}
 
