@@ -24230,11 +24230,88 @@ function GearDropEditor({ dropId, currentUserId, onClose, onLoad, onUpdate, onDe
           <GDRichEditor label="About this event" value={drop.about || ""} onSave={(v) => patch({ about: v })} placeholder="Tell people what the day looks like, who it's for, what they should bring…" />
         </GDSection>
 
-        <GDSection title="PRIZE">
-          <GDInput label="Prize title" value={drop.prize_title || ""} onSave={(v) => patch({ prize_title: v })} />
-          <GDRichEditor label="Prize description" value={drop.prize_description || ""} onSave={(v) => patch({ prize_description: v })} placeholder="Describe the prize. Spec list, condition, retail value, brand-supplied story, etc." />
-          <GDInput type="number" label="Approximate value of prize package (USD)" value={drop.prize_value_cents != null ? (drop.prize_value_cents / 100).toString() : ""} onSave={(v) => patch({ prize_value_cents: v === "" ? null : Math.round(parseFloat(v) * 100) })} />
-          <GDMultiImagePicker label="Prize photos · carousel on the public page" value={drop.prize_photos || []} onSave={(v) => patch({ prize_photos: v })} currentUserId={currentUserId} max={8} />
+        <GDSection title="PRIZE PACK" actionLabel="+ ADD ITEM" onAction={() => {
+          const items = Array.isArray(drop.prize_items) ? drop.prize_items.slice() : [];
+          items.push({
+            id: (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            title: "",
+            description: "",
+            value_cents: null,
+            photos: [],
+          });
+          patch({ prize_items: items });
+        }}>
+          {(() => {
+            const items = Array.isArray(drop.prize_items) ? drop.prize_items : [];
+            const totalCents = items.reduce((s, it) => s + (Number(it.value_cents) || 0), 0);
+            const totalDollars = totalCents / 100;
+            const totalWhole = totalDollars % 1 === 0;
+            return (
+              <>
+                {items.length === 0 && (
+                  <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: "0 0 4px", lineHeight: 1.4 }}>
+                    No prize items yet. Tap + ADD ITEM to build the pack — each item gets its own title, description, value, and photo carousel.
+                  </p>
+                )}
+                {items.map((item, idx) => {
+                  const updateItem = (patchObj) => {
+                    const next = items.slice();
+                    next[idx] = { ...next[idx], ...patchObj };
+                    patch({ prize_items: next });
+                  };
+                  const removeItem = () => {
+                    if (typeof confirm === "function" && !confirm(`Remove "${item.title || `Item ${idx + 1}`}" from the prize pack?`)) return;
+                    const next = items.slice();
+                    next.splice(idx, 1);
+                    patch({ prize_items: next });
+                  };
+                  const moveUp = () => {
+                    if (idx === 0) return;
+                    const next = items.slice();
+                    [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+                    patch({ prize_items: next });
+                  };
+                  const moveDown = () => {
+                    if (idx === items.length - 1) return;
+                    const next = items.slice();
+                    [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+                    patch({ prize_items: next });
+                  };
+                  return (
+                    <div key={item.id || idx} style={{ display: "flex", flexDirection: "column", gap: 8, padding: 12, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10, marginBottom: 8 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+                        <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 0.6 }}>ITEM {idx + 1}</span>
+                        <div style={{ display: "flex", gap: 4 }}>
+                          <button onClick={moveUp} disabled={idx === 0} style={{ background: "none", border: "none", padding: 4, cursor: idx === 0 ? "default" : "pointer", opacity: idx === 0 ? 0.3 : 1 }} title="Move up">
+                            <ChevronUp size={14} color={T.white} />
+                          </button>
+                          <button onClick={moveDown} disabled={idx === items.length - 1} style={{ background: "none", border: "none", padding: 4, cursor: idx === items.length - 1 ? "default" : "pointer", opacity: idx === items.length - 1 ? 0.3 : 1 }} title="Move down">
+                            <ChevronDown size={14} color={T.white} />
+                          </button>
+                          <button onClick={removeItem} style={{ background: "none", border: "none", padding: 4, cursor: "pointer" }} title="Remove">
+                            <Trash2 size={12} color={T.tertiary} />
+                          </button>
+                        </div>
+                      </div>
+                      <GDInput label="Item title" value={item.title || ""} onSave={(v) => updateItem({ title: v })} />
+                      <GDRichEditor label="Description" value={item.description || ""} onSave={(v) => updateItem({ description: v })} placeholder="Spec list, condition, brand-supplied story, etc." />
+                      <GDInput type="number" label="Approximate value (USD)" value={item.value_cents != null ? (item.value_cents / 100).toString() : ""} onSave={(v) => updateItem({ value_cents: v === "" ? null : Math.round(parseFloat(v) * 100) })} />
+                      <GDMultiImagePicker label="Photos · carousel" value={Array.isArray(item.photos) ? item.photos : []} onSave={(v) => updateItem({ photos: v })} currentUserId={currentUserId} max={6} />
+                    </div>
+                  );
+                })}
+                {items.length > 0 && (
+                  <div style={{ padding: "10px 12px", background: T.darkBg, border: `1px solid ${T.copper}`, borderRadius: 8, display: "flex", alignItems: "center", gap: 8 }}>
+                    <Trophy size={12} color={T.copper} />
+                    <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 0.6, flex: 1 }}>TOTAL APPROX. VALUE</span>
+                    <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 800 }}>
+                      {totalCents > 0 ? `~$${totalWhole ? totalDollars.toLocaleString() : totalDollars.toFixed(2)}` : "—"}
+                    </span>
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </GDSection>
 
         <GDSection title="LIFECYCLE">
@@ -24791,6 +24868,9 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, onClose, onLoad,
   const [showParticipants, setShowParticipants] = useState(false);
   const [participants, setParticipants] = useState([]);
   const [participantsLoaded, setParticipantsLoaded] = useState(false);
+  // Lightbox tracks BOTH which prize item AND which photo within it so
+  // multi-item packs each open their own carousel cleanly. Shape:
+  // { itemIdx, photoIdx } or null.
   const [lightboxStartIdx, setLightboxStartIdx] = useState(null);
   // Arrival-at-start GPS gate. Once a participant has joined and they
   // drive to the start point, watchPosition fires the arrival popup
@@ -25068,14 +25148,32 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, onClose, onLoad,
   const waypointCount = (drop.route_data && drop.route_data.pins && drop.route_data.pins.length) || 0;
   const startMapUrl = gearDropStaticMapUrl(drop.start_lat, drop.start_lng, { width: 900, height: 320, zoom: 11 });
   const heroSrc = drop.hero_img || startMapUrl;
-  // Display as approx. since the editor labels it as such — drop the
-  // decimals on whole-dollar amounts (a $5,000 prize shouldn't read $5,000.00).
-  const prizeValueLabel = (() => {
-    if (drop.prize_value_cents == null) return null;
-    const dollars = drop.prize_value_cents / 100;
+  // Normalize prize_items, falling back to the legacy single-prize
+  // fields when prize_items hasn't been populated yet (defensive — the
+  // phase_7 migration auto-backfills, but old drops in dev caches +
+  // unmigrated prod rows still hit this path).
+  const prizeItems = (() => {
+    const fromCol = Array.isArray(drop.prize_items) ? drop.prize_items : [];
+    if (fromCol.length > 0) return fromCol;
+    const hasLegacy = drop.prize_title || drop.prize_description || drop.prize_value_cents != null
+      || (Array.isArray(drop.prize_photos) && drop.prize_photos.length > 0);
+    if (!hasLegacy) return [];
+    return [{
+      id: "legacy",
+      title: drop.prize_title || "Prize",
+      description: drop.prize_description || null,
+      value_cents: drop.prize_value_cents != null ? drop.prize_value_cents : null,
+      photos: Array.isArray(drop.prize_photos) ? drop.prize_photos : [],
+    }];
+  })();
+  const totalPrizeCents = prizeItems.reduce((s, it) => s + (Number(it.value_cents) || 0), 0);
+  const fmtPrizeValue = (cents) => {
+    if (cents == null || cents === 0) return null;
+    const dollars = cents / 100;
     const whole = dollars % 1 === 0;
     return `~$${whole ? dollars.toLocaleString() : dollars.toFixed(2)}`;
-  })();
+  };
+  const totalPrizeLabel = fmtPrizeValue(totalPrizeCents);
 
   return (
     <div style={{ position: "fixed", inset: 0, background: T.darkBg, zIndex: 200, overflowY: "auto", paddingBottom: 110 }}>
@@ -25145,30 +25243,52 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, onClose, onLoad,
           </div>
         )}
 
-        {/* Prize card */}
-        <div style={{ padding: 16, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-            <Trophy size={14} color={T.copper} />
-            <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 0.8 }}>PRIZE</span>
-            {prizeValueLabel && <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginLeft: "auto" }}>{prizeValueLabel}</span>}
-          </div>
-          <div style={{ fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700, marginBottom: 6 }}>{drop.prize_title || "Prize"}</div>
-          {drop.prize_description && (
-            <div style={{ color: T.white, opacity: 0.85 }} dangerouslySetInnerHTML={{ __html: `${GD_RB_CSS}<div class="gd-rb" style="font-size:13px">${sanitizeForumHtml(drop.prize_description)}</div>` }} />
-          )}
-          {/* Prize photo carousel */}
-          {Array.isArray(drop.prize_photos) && drop.prize_photos.length > 0 && (
-            <div style={{ marginTop: 12, display: "flex", gap: 8, overflowX: "auto", scrollSnapType: "x mandatory", scrollBehavior: "smooth", padding: "2px 0", margin: "12px -4px 0" }}>
-              {drop.prize_photos.map((p, i) => {
-                const url = typeof p === "string" ? p : (p && p.url);
-                if (!url) return null;
-                return (
-                  <button key={i} onClick={() => setLightboxStartIdx(i)} style={{ flex: "0 0 80%", scrollSnapAlign: "center", aspectRatio: "4/3", background: `url(${url}) center/cover`, borderRadius: 12, border: `1px solid ${T.charcoal}`, cursor: "pointer", padding: 0 }} />
-                );
-              })}
+        {/* Prize pack — one card per item, with section header showing
+            total approx. value when multiple items are configured. */}
+        {prizeItems.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Trophy size={14} color={T.copper} />
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 0.8 }}>
+                {prizeItems.length === 1 ? "PRIZE" : "PRIZE PACK"}
+              </span>
+              {prizeItems.length > 1 && totalPrizeLabel && (
+                <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: 10, color: T.tertiary }}>{prizeItems.length} items · {totalPrizeLabel} total</span>
+              )}
+              {prizeItems.length === 1 && totalPrizeLabel && (
+                <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: 10, color: T.tertiary }}>{totalPrizeLabel}</span>
+              )}
             </div>
-          )}
-        </div>
+            {prizeItems.map((item, itemIdx) => {
+              const itemValueLabel = fmtPrizeValue(item.value_cents);
+              const itemPhotos = Array.isArray(item.photos) ? item.photos : [];
+              return (
+                <div key={item.id || itemIdx} style={{ padding: 16, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                    <span style={{ fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 }}>{item.title || `Item ${itemIdx + 1}`}</span>
+                    {prizeItems.length > 1 && itemValueLabel && (
+                      <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700 }}>{itemValueLabel}</span>
+                    )}
+                  </div>
+                  {item.description && (
+                    <div style={{ color: T.white, opacity: 0.85 }} dangerouslySetInnerHTML={{ __html: `${GD_RB_CSS}<div class="gd-rb" style="font-size:13px">${sanitizeForumHtml(item.description)}</div>` }} />
+                  )}
+                  {itemPhotos.length > 0 && (
+                    <div style={{ marginTop: 12, display: "flex", gap: 8, overflowX: "auto", scrollSnapType: "x mandatory", scrollBehavior: "smooth", padding: "2px 0", margin: "12px -4px 0" }}>
+                      {itemPhotos.map((p, photoIdx) => {
+                        const url = typeof p === "string" ? p : (p && p.url);
+                        if (!url) return null;
+                        return (
+                          <button key={photoIdx} onClick={() => setLightboxStartIdx({ itemIdx, photoIdx })} style={{ flex: "0 0 80%", scrollSnapAlign: "center", aspectRatio: "4/3", background: `url(${url}) center/cover`, borderRadius: 12, border: `1px solid ${T.charcoal}`, cursor: "pointer", padding: 0 }} />
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Countdown / status card */}
         {(countdownLabel || isLive || isEnded) && (
@@ -25493,14 +25613,23 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, onClose, onLoad,
         </div>
       </div>
 
-      {/* Prize photo lightbox — full-screen swipeable carousel */}
-      {lightboxStartIdx != null && Array.isArray(drop.prize_photos) && drop.prize_photos.length > 0 && (
-        <ImageCarousel
-          images={drop.prize_photos.map(p => typeof p === "string" ? p : (p && p.url)).filter(Boolean)}
-          startIndex={lightboxStartIdx}
-          onClose={() => setLightboxStartIdx(null)}
-        />
-      )}
+      {/* Prize photo lightbox — full-screen swipeable carousel scoped
+          to the tapped item's photo set. */}
+      {lightboxStartIdx != null && (() => {
+        const item = prizeItems[lightboxStartIdx.itemIdx];
+        if (!item) return null;
+        const urls = (Array.isArray(item.photos) ? item.photos : [])
+          .map(p => typeof p === "string" ? p : (p && p.url))
+          .filter(Boolean);
+        if (urls.length === 0) return null;
+        return (
+          <ImageCarousel
+            images={urls}
+            startIndex={lightboxStartIdx.photoIdx || 0}
+            onClose={() => setLightboxStartIdx(null)}
+          />
+        );
+      })()}
 
       {/* Participants modal — tappable JOINED stat opens it */}
       {showParticipants && (
@@ -40728,7 +40857,7 @@ export default function Trailhead() {
     try {
       const { data, error } = await supabase
         .from("gear_drops")
-        .select("id, title, brand_partner_name, brand_partner_url, brand_logo_url, hero_img, prize_title, prize_value_cents, status, starts_at, ends_at, signup_open_until, late_signup_window_min, start_lat, start_lng, afterparty_lat, afterparty_lng, afterparty_label, convoy_post_id, host_admin_id, winner_run_id, winner_announced_at, created_at, updated_at")
+        .select("id, title, brand_partner_name, brand_partner_url, brand_logo_url, hero_img, prize_title, prize_value_cents, prize_items, status, starts_at, ends_at, signup_open_until, late_signup_window_min, start_lat, start_lng, afterparty_lat, afterparty_lng, afterparty_label, convoy_post_id, host_admin_id, winner_run_id, winner_announced_at, created_at, updated_at")
         .order("created_at", { ascending: false });
       if (error) { console.error("[loadGearDrops]", error); return; }
       setGearDrops(data || []);
@@ -40767,6 +40896,7 @@ export default function Trailhead() {
       prize_title: payload.prize_title || "Prize",
       prize_description: payload.prize_description || null,
       prize_value_cents: payload.prize_value_cents || null,
+      prize_items: Array.isArray(payload.prize_items) ? payload.prize_items : [],
       route_data: payload.route_data || { pins: [], points: [] },
       start_lat: payload.start_lat || null,
       start_lng: payload.start_lng || null,
@@ -40874,6 +41004,7 @@ export default function Trailhead() {
       prize_title: source.prize_title || "Prize",
       prize_description: source.prize_description || null,
       prize_value_cents: source.prize_value_cents || null,
+      prize_items: Array.isArray(source.prize_items) ? JSON.parse(JSON.stringify(source.prize_items)) : [],
       route_data: source.route_data || { pins: [], points: [] },
       start_lat: source.start_lat || null,
       start_lng: source.start_lng || null,
