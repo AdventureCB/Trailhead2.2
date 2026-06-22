@@ -23399,13 +23399,13 @@ function GDSection({ title, actionLabel, onAction, children }) {
   );
 }
 
-function GDInput({ label, value, onSave, type = "text" }) {
+function GDInput({ label, value, onSave, type = "text", placeholder }) {
   const [local, setLocal] = useState(value);
   useEffect(() => { setLocal(value); }, [value]);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
       <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.4 }}>{label}</span>
-      <input type={type} value={local} onChange={(e) => setLocal(e.target.value)} onBlur={() => { if (local !== value) onSave(local); }} style={{ padding: "10px 12px", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8, color: T.white, fontFamily: sans, fontSize: 13, boxSizing: "border-box", width: "100%" }} />
+      <input type={type} value={local} placeholder={placeholder} onChange={(e) => setLocal(e.target.value)} onBlur={() => { if (local !== value) onSave(local); }} style={{ padding: "10px 12px", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8, color: T.white, fontFamily: sans, fontSize: 13, boxSizing: "border-box", width: "100%" }} />
     </div>
   );
 }
@@ -23916,6 +23916,13 @@ function GDPinRow({ idx, pin, isFirst, isLast, onUpdate, onRemove, currentUserId
           toggle since it controls how the FINAL pin is unmasked. */}
       <GDTextarea label={isEndpoint ? "Endpoint hint (free-form text)" : "Hint / notes (optional)"} value={pin.hint_text || ""} onSave={(v) => onUpdate({ hint_text: v })} />
       <GDImagePicker label="Hint photo (optional)" value={pin.hint_photo_url || null} onSave={(v) => onUpdate({ hint_photo_url: v })} currentUserId={currentUserId} />
+      {/* Submission prompts — the racer sees these above the photo + note
+          inputs on the submit sheet. Use them to ask for specific content
+          (e.g. "Take a photo of the trail marker sign", "Write down the
+          temperature reading on the thermometer"). Both are optional; if
+          unset the generic "photo proof" / "what did you see?" labels show. */}
+      <GDTextarea label="Photo prompt (what should the racer photograph here?)" value={pin.photo_prompt || ""} onSave={(v) => onUpdate({ photo_prompt: v })} />
+      <GDTextarea label="Note prompt (what should the racer write down?)" value={pin.note_prompt || ""} onSave={(v) => onUpdate({ note_prompt: v })} />
       {isEndpoint && (
         <GDToggle label="Radius-reveal mode (pin appears only after GPS enters radius)" checked={(pin.display_mode || "radius_reveal") === "radius_reveal"} onChange={(b) => onUpdate({ display_mode: b ? "radius_reveal" : "pin" })} />
       )}
@@ -24190,9 +24197,20 @@ function GearDropEditor({ dropId, currentUserId, onClose, onLoad, onUpdate, onDe
 
       <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 22 }}>
         <GDSection title="BASIC INFO">
-          <GDInput label="Title" value={drop.title || ""} onSave={(v) => patch({ title: v })} />
-          <GDInput label="URL slug (used in /drops/<slug> — change with care)" value={drop.slug || ""} onSave={(v) => patch({ slug: v.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "") })} />
+          <GDInput label="Title" value={drop.title || ""} onSave={(v) => {
+            // Auto-keep slug in sync with title UNTIL admin manually edits the
+            // slug. Detection: if current slug matches slugify(current title),
+            // we're still on the auto track — update both. Once the slug
+            // diverges (admin typed something custom), title edits no longer
+            // touch the slug.
+            const autoTracking = !drop.slug || drop.slug === slugifyGearDropTitle(drop.title || "");
+            const patchObj = { title: v };
+            if (autoTracking) patchObj.slug = slugifyGearDropTitle(v);
+            patch(patchObj);
+          }} />
+          <GDInput label="URL slug (used in /drops/<slug> — auto-syncs with title until you customize)" value={drop.slug || ""} onSave={(v) => patch({ slug: v.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "") })} />
           <GDInput label="Brand partner name" value={drop.brand_partner_name || ""} onSave={(v) => patch({ brand_partner_name: v })} />
+          <GDInput label="Brand partner URL (optional — makes the brand row clickable)" value={drop.brand_partner_url || ""} onSave={(v) => patch({ brand_partner_url: v.trim() || null })} placeholder="https://example.com" />
           <GDImagePicker label="Brand logo · square (will show next to the brand name)" value={drop.brand_logo_url || null} onSave={(v) => patch({ brand_logo_url: v })} currentUserId={currentUserId} aspectRatio="1/1" previewWidth={120} />
           <GDImagePicker label="Hero image · 16:9 (shown at the top of the public page)" value={drop.hero_img || null} onSave={(v) => patch({ hero_img: v })} currentUserId={currentUserId} aspectRatio="16/9" previewWidth={220} />
           <GDRichEditor label="About this event" value={drop.about || ""} onSave={(v) => patch({ about: v })} placeholder="Tell people what the day looks like, who it's for, what they should bring…" />
@@ -24470,7 +24488,7 @@ function GearDropMementoScreen({ trip: tripProp, currentUserId, onClose, onOpenD
 
         const { data: dropRow, error: dropErr } = await supabase
           .from("gear_drops")
-          .select("id, slug, title, hero_img, brand_partner_name, brand_logo_url, route_data, winner_run_id, winner_announced_at, ends_at")
+          .select("id, slug, title, hero_img, brand_partner_name, brand_partner_url, brand_logo_url, route_data, winner_run_id, winner_announced_at, ends_at")
           .eq("id", workingTrip.gear_drop_id)
           .maybeSingle();
         if (cancelled) return;
@@ -24641,10 +24659,17 @@ function GearDropMementoScreen({ trip: tripProp, currentUserId, onClose, onOpenD
           )}
 
           <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
-            <button onClick={() => onOpenDrop && drop.slug && onOpenDrop(drop.slug)} disabled={!onOpenDrop || !drop.slug} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "none", border: "none", padding: 0, cursor: onOpenDrop && drop.slug ? "pointer" : "default", textAlign: "left" }}>
-              <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 1 }}>{(drop.brand_partner_name || "LONE PEAK OVERLAND").toUpperCase()}</span>
-              {drop.slug && onOpenDrop && <ChevronRight size={11} color={T.copper} />}
-            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <button onClick={() => onOpenDrop && drop.slug && onOpenDrop(drop.slug)} disabled={!onOpenDrop || !drop.slug} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "none", border: "none", padding: 0, cursor: onOpenDrop && drop.slug ? "pointer" : "default", textAlign: "left" }}>
+                <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 1 }}>{(drop.brand_partner_name || "LONE PEAK OVERLAND").toUpperCase()}</span>
+                {drop.slug && onOpenDrop && <ChevronRight size={11} color={T.copper} />}
+              </button>
+              {drop.brand_partner_url && (
+                <a href={drop.brand_partner_url} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 7px", border: `1px solid ${T.copper}`, borderRadius: 6, color: T.copper, textDecoration: "none", fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 0.5 }}>
+                  VISIT <ExternalLink size={9} color={T.copper} />
+                </a>
+              )}
+            </div>
             <h1 style={{ margin: 0, fontFamily: sans, fontSize: 22, color: T.white, fontWeight: 800, lineHeight: 1.2 }}>{drop.title}</h1>
 
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4 }}>
@@ -25057,17 +25082,27 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, onClose, onLoad,
 
         {/* Brand partner row — moved out of the hero overlay so wide /
             non-square logos read cleanly and aren't squeezed into a chip. */}
-        {drop.brand_partner_name && (
-          <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 16px", background: T.darkCard, border: `1px solid ${T.copper}`, borderRadius: 12 }}>
-            {drop.brand_logo_url && (
-              <img src={drop.brand_logo_url} alt="" style={{ width: 56, height: 56, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
-            )}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 700, letterSpacing: 1, marginBottom: 4 }}>BRAND PARTNER</div>
-              <div style={{ fontFamily: sans, fontSize: 17, color: T.white, fontWeight: 700, lineHeight: 1.2 }}>{drop.brand_partner_name}</div>
-            </div>
-          </div>
-        )}
+        {drop.brand_partner_name && (() => {
+          // Make the brand row a real <a> when the host wired a partner
+          // URL. Same visual but with cursor + ExternalLink affordance.
+          const hasUrl = !!(drop.brand_partner_url && drop.brand_partner_url.trim());
+          const inner = (
+            <>
+              {drop.brand_logo_url && (
+                <img src={drop.brand_logo_url} alt="" style={{ width: 56, height: 56, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 700, letterSpacing: 1, marginBottom: 4 }}>BRAND PARTNER</div>
+                <div style={{ fontFamily: sans, fontSize: 17, color: T.white, fontWeight: 700, lineHeight: 1.2 }}>{drop.brand_partner_name}</div>
+              </div>
+              {hasUrl && <ExternalLink size={16} color={T.copper} />}
+            </>
+          );
+          const style = { display: "flex", alignItems: "center", gap: 14, padding: "14px 16px", background: T.darkCard, border: `1px solid ${T.copper}`, borderRadius: 12, textDecoration: "none", color: "inherit" };
+          return hasUrl
+            ? <a href={drop.brand_partner_url} target="_blank" rel="noopener noreferrer" style={style}>{inner}</a>
+            : <div style={style}>{inner}</div>;
+        })()}
 
         {/* About this event (host-written rich text) */}
         {drop.about && drop.about.trim().length > 0 && (
@@ -26538,7 +26573,17 @@ function GearDropRunScreen({ runId, currentUserId, onClose, onLoadRun, onLoadDro
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.4 }}>Photo proof · required</span>
+              {/* Host-authored prompts (per pin) take precedence over the
+                  generic labels. Photo prompt → shown above the photo
+                  picker; note prompt → shown above the textarea AND used
+                  as the textarea placeholder so the racer sees the
+                  guidance even after tapping in. */}
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 0.4, fontWeight: 700 }}>
+                {nextPin && nextPin.photo_prompt ? "PHOTO PROMPT · required" : "Photo proof · required"}
+              </span>
+              {nextPin && nextPin.photo_prompt && (
+                <p style={{ margin: "-4px 0 0", fontFamily: serif, fontSize: 13, color: T.white, lineHeight: 1.4, whiteSpace: "pre-wrap" }}>{nextPin.photo_prompt}</p>
+              )}
               {submitPhoto ? (
                 <div style={{ position: "relative" }}>
                   <img src={submitPhoto.url} alt="" style={{ width: "100%", maxHeight: 300, objectFit: "cover", borderRadius: 10, display: "block" }} />
@@ -26554,11 +26599,16 @@ function GearDropRunScreen({ runId, currentUserId, onClose, onLoadRun, onLoadDro
               )}
               <input ref={photoFileRef} type="file" accept="image/*" capture="environment" onChange={handlePhotoPick} style={{ display: "none" }} />
 
-              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.4, marginTop: 4 }}>Note · what did you see / find?</span>
+              <span style={{ fontFamily: sans, fontSize: 10, color: nextPin && nextPin.note_prompt ? T.copper : T.tertiary, letterSpacing: 0.4, marginTop: 4, fontWeight: nextPin && nextPin.note_prompt ? 700 : 400 }}>
+                {nextPin && nextPin.note_prompt ? "NOTE PROMPT · required" : "Note · what did you see / find?"}
+              </span>
+              {nextPin && nextPin.note_prompt && (
+                <p style={{ margin: "-4px 0 0", fontFamily: serif, fontSize: 13, color: T.white, lineHeight: 1.4, whiteSpace: "pre-wrap" }}>{nextPin.note_prompt}</p>
+              )}
               <textarea
                 value={submitNote}
                 onChange={(e) => setSubmitNote(e.target.value)}
-                placeholder="Short note about this stop — required."
+                placeholder={nextPin && nextPin.note_prompt ? "Your answer…" : "Short note about this stop — required."}
                 rows={3}
                 style={{ width: "100%", padding: 12, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10, color: T.white, fontFamily: serif, fontSize: 14, boxSizing: "border-box", resize: "vertical" }}
               />
@@ -40656,7 +40706,7 @@ export default function Trailhead() {
     try {
       const { data, error } = await supabase
         .from("gear_drops")
-        .select("id, title, brand_partner_name, brand_logo_url, hero_img, prize_title, prize_value_cents, status, starts_at, ends_at, signup_open_until, late_signup_window_min, start_lat, start_lng, afterparty_lat, afterparty_lng, afterparty_label, convoy_post_id, host_admin_id, winner_run_id, winner_announced_at, created_at, updated_at")
+        .select("id, title, brand_partner_name, brand_partner_url, brand_logo_url, hero_img, prize_title, prize_value_cents, status, starts_at, ends_at, signup_open_until, late_signup_window_min, start_lat, start_lng, afterparty_lat, afterparty_lng, afterparty_label, convoy_post_id, host_admin_id, winner_run_id, winner_announced_at, created_at, updated_at")
         .order("created_at", { ascending: false });
       if (error) { console.error("[loadGearDrops]", error); return; }
       setGearDrops(data || []);
@@ -40698,6 +40748,7 @@ export default function Trailhead() {
       slug,
       title: payload.title || "Untitled Drop",
       brand_partner_name: payload.brand_partner_name || null,
+      brand_partner_url: payload.brand_partner_url || null,
       brand_logo_url: payload.brand_logo_url || null,
       hero_img: payload.hero_img || null,
       prize_title: payload.prize_title || "Prize",
@@ -40804,6 +40855,7 @@ export default function Trailhead() {
     const payload = {
       title: (source.title || "Untitled Drop") + " (copy)",
       brand_partner_name: source.brand_partner_name || null,
+      brand_partner_url: source.brand_partner_url || null,
       brand_logo_url: source.brand_logo_url || null,
       hero_img: source.hero_img || null,
       prize_title: source.prize_title || "Prize",
