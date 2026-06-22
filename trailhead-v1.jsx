@@ -25260,11 +25260,15 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, onClose, onLoad,
   const [liveTrackerOpen, setLiveTrackerOpen] = useState(false);
   const [statusTransitioning, setStatusTransitioning] = useState(false);
 
-  // Heartbeat the clock once a minute for live countdown rerenders.
+  // Heartbeat the clock — 1s when a scheduled drop is counting down so
+  // the hero countdown's seconds tick visibly; 60s otherwise (signup
+  // window check + ENDED transitions don't need finer granularity).
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 60000);
+    const isScheduledNow = drop && drop.status === "scheduled";
+    const ms = isScheduledNow ? 1000 : 60000;
+    const t = setInterval(() => setNow(Date.now()), ms);
     return () => clearInterval(t);
-  }, []);
+  }, [drop && drop.status]);
 
   // GPS watch — only when joined, no submissions yet, drop not over.
   // Once the user has submitted pin 0 the run screen takes over the GPS
@@ -25506,6 +25510,17 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, onClose, onLoad,
     if (hours > 0) return `${hours}h ${mins}m`;
     return `${mins}m`;
   })();
+  // Hero countdown — broken into D / H / M / S columns so the seconds
+  // tick visibly on the centered overlay card.
+  const countdownParts = (() => {
+    if (deltaMs == null || deltaMs <= 0) return null;
+    const totalSec = Math.floor(deltaMs / 1000);
+    const days  = Math.floor(totalSec / 86400);
+    const hours = Math.floor((totalSec - days * 86400) / 3600);
+    const mins  = Math.floor((totalSec - days * 86400 - hours * 3600) / 60);
+    const secs  = totalSec - days * 86400 - hours * 3600 - mins * 60;
+    return { days, hours, mins, secs };
+  })();
 
   const statusColor = isLive ? T.red : isScheduled ? T.copper : T.tertiary;
   const statusLabel = isLive ? "LIVE NOW" : isScheduled ? "UPCOMING" : isEnded ? (hasWinner ? "ENDED · WINNER DECLARED" : "ENDED") : drop.status;
@@ -25577,6 +25592,40 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, onClose, onLoad,
             <div style={{ position: "absolute", top: 14, right: 14, display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 11px", background: T.red, borderRadius: 999, boxShadow: `0 4px 16px ${T.red}80` }}>
               <span style={{ width: 8, height: 8, borderRadius: "50%", background: T.white, animation: "gd-pulse 1.2s ease-in-out infinite" }} />
               <span style={{ fontFamily: sans, fontSize: 9, color: T.white, fontWeight: 800, letterSpacing: 1 }}>IN PROGRESS</span>
+            </div>
+          )}
+
+          {/* STARTS IN countdown — scheduled drops only. Centered card
+              with D/H/M/S columns ticking every second. Falls off once
+              the drop flips to live and the IN PROGRESS chip takes over. */}
+          {isScheduled && countdownParts && (
+            <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+              <div style={{ width: "100%", maxWidth: 360, padding: "16px 18px 18px", background: "rgba(15,15,15,0.92)", border: `2px solid ${T.copper}`, borderRadius: 16, boxShadow: `0 0 32px ${T.copper}55`, backdropFilter: "blur(8px)", textAlign: "center" }}>
+                <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 12 }}>
+                  <Clock size={12} color={T.copper} />
+                  <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 800, letterSpacing: 1.4 }}>STARTS IN</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "center", gap: 6 }}>
+                  {[
+                    { label: "DAYS", value: countdownParts.days },
+                    { label: "HRS",  value: countdownParts.hours },
+                    { label: "MIN",  value: countdownParts.mins },
+                    { label: "SEC",  value: countdownParts.secs },
+                  ].map((col, idx) => (
+                    <div key={col.label} style={{ flex: 1, padding: "8px 4px", background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 8 }}>
+                      <div style={{ fontFamily: sans, fontSize: 26, color: T.white, fontWeight: 800, lineHeight: 1, letterSpacing: -0.5, fontVariantNumeric: "tabular-nums" }}>
+                        {String(col.value).padStart(2, "0")}
+                      </div>
+                      <div style={{ fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 0.8, marginTop: 4, fontWeight: 700 }}>{col.label}</div>
+                    </div>
+                  ))}
+                </div>
+                {drop.starts_at && (
+                  <div style={{ marginTop: 12, fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.4 }}>
+                    {new Date(drop.starts_at).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
