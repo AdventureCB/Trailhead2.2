@@ -26644,6 +26644,10 @@ function GearDropRunScreen({ runId, currentUserId, onClose, onLoadRun, onLoadDro
   const [leaderboard, setLeaderboard] = useState([]);
   const [leaderboardOpen, setLeaderboardOpen] = useState(false);
   const [leaderboardLoaded, setLeaderboardLoaded] = useState(false);
+  // Hint card — host-authored hint_text/photo for the active waypoint.
+  // Hidden by default in the full-screen map layout so the map stays
+  // unobstructed; tap HINT button to expand.
+  const [hintOpen, setHintOpen] = useState(false);
 
   // Initial load — run row + linked drop.
   useEffect(() => {
@@ -27006,83 +27010,121 @@ function GearDropRunScreen({ runId, currentUserId, onClose, onLoadRun, onLoadDro
     );
   }
 
+  // Hint card visibility — collapsed by default in the new full-screen
+  // layout so the map stays unobstructed; expands on tap when a host
+  // configured hint_text / hint_photo for the active waypoint.
+  const hasHint = !!(nextPin && (nextPin.hint_text || nextPin.hint_photo_url));
+
   return (
-    <div style={{ position: "fixed", inset: 0, background: T.darkBg, zIndex: 220, overflowY: "auto" }}>
-      <div style={{ position: "sticky", top: 0, padding: "14px 16px", background: T.darkBg, borderBottom: `1px solid ${T.charcoal}`, zIndex: 5, display: "flex", alignItems: "center", gap: 8 }}>
-        <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
-          <ChevronLeft size={20} color={T.white} />
-        </button>
-        <Gift size={16} color={T.green} />
-        <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.8, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{drop.title}</span>
-        <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: T.red, padding: "3px 10px", borderRadius: 8, fontWeight: 700, letterSpacing: 0.6 }}>LIVE</span>
+    <div style={{ position: "fixed", inset: 0, background: T.darkBg, zIndex: 220, overflow: "hidden" }}>
+      {/* ─── Full-screen Mapbox map ─────────────────────────────────────
+          Always mounted once drop loads so the map persists across
+          finished / submit / win overlays. Inner container is
+          absolutely positioned to fill the screen; everything else
+          floats above it. */}
+      <div ref={mapContainerRef} style={{ position: "absolute", inset: 0, background: T.darkBg }} />
+
+      {/* ─── Top overlay stack ──────────────────────────────────────────
+          Header bar (back + title + LIVE chip) + target chip + hint
+          button. Dark gradient from top so they stay legible against
+          any basemap tile. */}
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, padding: "12px 12px 28px", background: "linear-gradient(180deg, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.4) 70%, transparent 100%)", display: "flex", flexDirection: "column", gap: 10, pointerEvents: "none" }}>
+        {/* Header row */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, pointerEvents: "auto" }}>
+          <button onClick={onClose} style={{ width: 36, height: 36, borderRadius: 18, background: "rgba(0,0,0,0.55)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(6px)" }}>
+            <ChevronLeft size={20} color={T.white} />
+          </button>
+          <span style={{ flex: 1, fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textShadow: "0 1px 4px rgba(0,0,0,0.7)" }}>{drop.title}</span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontFamily: sans, fontSize: 9, color: T.white, background: T.red, padding: "5px 10px", borderRadius: 999, fontWeight: 800, letterSpacing: 0.8, boxShadow: `0 2px 12px ${T.red}80` }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: T.white, animation: "gd-pulse 1.2s ease-in-out infinite" }} /> LIVE
+          </span>
+        </div>
+
+        {/* Target chip (only when racing) */}
+        {!finished && nextPin && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "rgba(15,15,15,0.85)", border: `1px solid ${T.charcoal}`, borderRadius: 12, backdropFilter: "blur(8px)", pointerEvents: "auto" }}>
+            <Target size={16} color={isStart ? T.green : isLast ? T.red : T.copper} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.8, fontWeight: 700 }}>
+                {isStart ? `START · STOP 1 OF ${totalStops}` : isLast ? `FINAL · STOP ${totalStops} OF ${totalStops}` : `STOP ${nextIdx + 1} OF ${totalStops}`}
+              </div>
+              <div style={{ fontFamily: sans, fontSize: 15, color: T.white, fontWeight: 700, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nextPin.label || (isStart ? "Start" : isLast ? "Endpoint" : `Waypoint ${nextIdx}`)}</div>
+            </div>
+            {hasHint && (
+              <button onClick={() => setHintOpen(o => !o)} style={{ padding: "6px 10px", background: hintOpen ? T.copper : "transparent", border: `1px solid ${T.copper}`, borderRadius: 6, color: hintOpen ? T.white : T.copper, fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, cursor: "pointer" }}>
+                {hintOpen ? "HIDE" : "HINT"}
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Expandable hint card — pinned under the target chip when open. */}
+        {!finished && nextPin && hasHint && hintOpen && (
+          <div style={{ padding: 12, background: "rgba(15,15,15,0.92)", border: `1px solid ${T.copper}40`, borderRadius: 10, pointerEvents: "auto", maxHeight: "40vh", overflowY: "auto" }}>
+            {nextPin.hint_text && (
+              <p style={{ fontFamily: serif, fontSize: 13, color: T.white, lineHeight: 1.5, margin: 0, whiteSpace: "pre-wrap" }}>{nextPin.hint_text}</p>
+            )}
+            {nextPin.hint_photo_url && (
+              <img src={nextPin.hint_photo_url} alt="" style={{ width: "100%", borderRadius: 8, display: "block", marginTop: nextPin.hint_text ? 10 : 0 }} />
+            )}
+          </div>
+        )}
+
+        {/* GPS error toast — sits under target chip when present. */}
+        {gpsError && (
+          <div style={{ padding: "10px 12px", background: `rgba(189,71,42,0.92)`, border: `1px solid ${T.red}`, borderRadius: 10, fontFamily: sans, fontSize: 12, color: T.white, pointerEvents: "auto", boxShadow: `0 4px 14px ${T.red}80` }}>
+            {gpsError}
+          </div>
+        )}
       </div>
 
-      {gpsError && (
-        <div style={{ margin: 16, padding: 12, background: `${T.red}25`, border: `1px solid ${T.red}`, borderRadius: 10, fontFamily: sans, fontSize: 12, color: T.red }}>
-          {gpsError}
-        </div>
-      )}
-
+      {/* ─── Finished banner (overlay) ──────────────────────────────────
+          When the racer has wrapped, replace the active-race bottom
+          stack with a single overlay banner above the map. */}
       {finished && !winState && (
-        <div style={{ margin: 16, padding: 20, background: T.darkCard, border: `1px solid ${T.green}`, borderRadius: 12, textAlign: "center" }}>
+        <div style={{ position: "absolute", left: 12, right: 12, bottom: 12, padding: 20, background: "rgba(15,15,15,0.95)", border: `1px solid ${T.green}`, borderRadius: 14, textAlign: "center", backdropFilter: "blur(8px)" }}>
           <CheckCircle size={36} color={T.green} style={{ marginBottom: 8 }} />
           <h2 style={{ fontFamily: sans, fontSize: 18, color: T.white, fontWeight: 700, margin: "0 0 6px" }}>You finished this run.</h2>
           <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, margin: 0 }}>{run.finished_at ? `Completed ${new Date(run.finished_at).toLocaleString()}` : "All waypoints submitted."}</p>
         </div>
       )}
 
+      {/* ─── Bottom overlay stack ──────────────────────────────────────
+          Distance + ARRIVED + progress + leaderboard. Floats above the
+          map with a dark gradient so it doesn't visually crash with
+          basemap content. Pointer-events on the wrapper are 'none' so
+          empty gradient areas don't eat map taps; individual cards
+          re-enable. */}
       {!finished && nextPin && (
-        <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 14 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10 }}>
-            <Target size={16} color={isStart ? T.green : isLast ? T.red : T.copper} />
-            <div style={{ flex: 1 }}>
-              <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.8, fontWeight: 700 }}>
-                {isStart ? `START · STOP 1 OF ${totalStops}` : isLast ? `FINAL · STOP ${totalStops} OF ${totalStops}` : `STOP ${nextIdx + 1} OF ${totalStops}`}
-              </div>
-              <div style={{ fontFamily: sans, fontSize: 15, color: T.white, fontWeight: 700, marginTop: 2 }}>{nextPin.label || (isStart ? "Start" : isLast ? "Endpoint" : `Waypoint ${nextIdx}`)}</div>
+        <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "60px 12px 14px", background: "linear-gradient(0deg, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.55) 60%, transparent 100%)", display: "flex", flexDirection: "column", gap: 10, pointerEvents: "none" }}>
+          {/* Distance display + ARRIVED button — visually one card. */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 0, padding: 0, background: "rgba(15,15,15,0.94)", border: `1px solid ${inRange ? T.green : T.charcoal}`, borderRadius: 14, overflow: "hidden", pointerEvents: "auto", backdropFilter: "blur(8px)" }}>
+            <div style={{ padding: "14px 16px 8px", textAlign: "center" }}>
+              <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.8, fontWeight: 700 }}>DISTANCE TO WAYPOINT</div>
+              {distance != null ? (
+                <>
+                  <div style={{ fontFamily: sans, fontSize: 34, color: inRange ? T.green : T.white, fontWeight: 800, letterSpacing: -0.5, marginTop: 2 }}>
+                    {distance < 1000 ? `${Math.round(distance)} m` : `${(distance / 1000).toFixed(2)} km`}
+                  </div>
+                  <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 2 }}>
+                    {inRange ? "IN RANGE · TAP ARRIVED" : `${Math.round(radius)}m gate · keep going`}
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, padding: "10px 0" }}>Acquiring GPS…</div>
+              )}
+            </div>
+            <button onClick={() => setSubmitOpen(true)} disabled={!inRange || submitting} style={{ width: "100%", padding: 16, background: inRange ? T.green : T.charcoal, border: "none", borderTop: `1px solid ${inRange ? T.green : T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 14, fontWeight: 800, letterSpacing: 1, cursor: inRange ? "pointer" : "default" }}>
+              {inRange ? (isStart ? "START RUN — SUBMIT" : "ARRIVED — SUBMIT") : "MOVE CLOSER"}
+            </button>
+            <div style={{ padding: "8px 16px 10px", fontFamily: sans, fontSize: 9, color: T.tertiary, textAlign: "center", letterSpacing: 0.5 }}>
+              {unlockedCount} of {totalStops} stops complete
             </div>
           </div>
 
-          {/* Live Mapbox map — target marker + radius ring + user puck. */}
-          <div ref={mapContainerRef} style={{ width: "100%", height: 280, borderRadius: 12, overflow: "hidden", background: T.darkCard, border: `1px solid ${T.charcoal}` }} />
-
-          {nextPin.hint_text && (
-            <div style={{ padding: 14, background: `${T.charcoal}80`, border: `1px solid ${T.charcoal}`, borderRadius: 10 }}>
-              <div style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 700, letterSpacing: 0.8, marginBottom: 6 }}>HINT</div>
-              <p style={{ fontFamily: serif, fontSize: 13, color: T.white, opacity: 0.92, lineHeight: 1.5, margin: 0, whiteSpace: "pre-wrap" }}>{nextPin.hint_text}</p>
-            </div>
-          )}
-          {nextPin.hint_photo_url && (
-            <img src={nextPin.hint_photo_url} alt="" style={{ width: "100%", borderRadius: 12, display: "block" }} />
-          )}
-
-          <div style={{ padding: 16, background: T.darkCard, border: `1px solid ${inRange ? T.green : T.charcoal}`, borderRadius: 12, textAlign: "center" }}>
-            <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.6, marginBottom: 6 }}>DISTANCE TO WAYPOINT</div>
-            {distance != null ? (
-              <>
-                <div style={{ fontFamily: sans, fontSize: 36, color: inRange ? T.green : T.white, fontWeight: 800, letterSpacing: -0.5 }}>
-                  {distance < 1000 ? `${Math.round(distance)} m` : `${(distance / 1000).toFixed(2)} km`}
-                </div>
-                <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 4 }}>
-                  {inRange ? "IN RANGE · TAP ARRIVED" : `${Math.round(radius)}m gate · keep going`}
-                </div>
-              </>
-            ) : (
-              <div style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, padding: 14 }}>Acquiring GPS…</div>
-            )}
-          </div>
-
-          <button onClick={() => setSubmitOpen(true)} disabled={!inRange || submitting} style={{ width: "100%", padding: 16, background: inRange ? T.green : T.charcoal, border: "none", borderRadius: 12, color: T.white, fontFamily: sans, fontSize: 14, fontWeight: 800, letterSpacing: 1, cursor: inRange ? "pointer" : "default" }}>
-            {inRange ? (isStart ? "START RUN — SUBMIT" : "ARRIVED — SUBMIT") : "MOVE CLOSER"}
-          </button>
-
-          <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, textAlign: "center", marginTop: -4 }}>
-            Progress: {unlockedCount} of {totalStops} stops complete
-          </div>
-
-          {/* Live leaderboard — collapsible. Updates via realtime sub on
-              trip_reports for this drop. */}
-          <div style={{ background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 12, overflow: "hidden" }}>
+          {/* Leaderboard — collapsible. When open expands upward (max
+              45vh) so it doesn't blow past the visible map. */}
+          <div style={{ background: "rgba(15,15,15,0.94)", border: `1px solid ${T.charcoal}`, borderRadius: 12, overflow: "hidden", pointerEvents: "auto", backdropFilter: "blur(8px)" }}>
             <button
               onClick={() => setLeaderboardOpen(o => !o)}
               style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}
@@ -27093,7 +27135,7 @@ function GearDropRunScreen({ runId, currentUserId, onClose, onLoadRun, onLoadDro
               <ChevronRight size={14} color={T.tertiary} style={{ transform: leaderboardOpen ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
             </button>
             {leaderboardOpen && (
-              <div style={{ borderTop: `1px solid ${T.charcoal}`, padding: "8px 0" }}>
+              <div style={{ borderTop: `1px solid ${T.charcoal}`, padding: "8px 0", maxHeight: "45vh", overflowY: "auto" }}>
                 {!leaderboardLoaded ? (
                   <div style={{ padding: 14, fontFamily: serif, fontSize: 12, color: T.tertiary, textAlign: "center" }}>Loading…</div>
                 ) : sortedLeaderboard.length === 0 ? (
