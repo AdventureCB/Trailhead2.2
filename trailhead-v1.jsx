@@ -38566,8 +38566,20 @@ export default function Trailhead() {
   // show "you're in" + the run screen route correctly.
   const [myGearDropRuns, setMyGearDropRuns] = useState({});
   // Current run-screen target. Set when a joined user taps VIEW YOUR RUN
-  // on a live gear drop. Cleared by GearDropRunScreen.onClose.
-  const [runScreenRunId, setRunScreenRunId] = useState(null);
+  // on a live gear drop. Cleared by GearDropRunScreen.onClose. Use
+  // openRunScreen / closeRunScreen below — they sync localStorage so a
+  // cold-boot can resume the run automatically.
+  const [runScreenRunId, setRunScreenRunIdRaw] = useState(null);
+  const ACTIVE_RUN_LS_KEY = "th_active_gd_run";
+  const openRunScreen = (rid) => {
+    setRunScreenRunIdRaw(rid);
+    try { if (rid) localStorage.setItem(ACTIVE_RUN_LS_KEY, rid); } catch (_) {}
+  };
+  const closeRunScreen = () => {
+    setRunScreenRunIdRaw(null);
+    try { localStorage.removeItem(ACTIVE_RUN_LS_KEY); } catch (_) {}
+  };
+  const setRunScreenRunId = openRunScreen;
   // "Race just started" popup — fires when a drop the user has joined
   // transitions from scheduled (or draft) to live via the host's GO LIVE
   // button. Modal renders at root so it surfaces no matter what screen
@@ -41655,6 +41667,34 @@ export default function Trailhead() {
     if (!GEAR_DROPS_ENABLED) { setMyGearDropRuns({}); return; }
     loadMyGearDropRuns();
   }, [loadMyGearDropRuns]);
+
+  // ── Cold-boot run-screen resume ──────────────────────────────────────
+  // If the user closed the app (or lost wifi / killed the tab) while a
+  // race was in progress, restore the run screen on next mount so they
+  // can pick right back up. Trigger conditions:
+  //   - kill switch on, user signed in, run screen not already open
+  //   - localStorage has an active-run id from a prior session
+  //   - myGearDropRuns has loaded AND the linked run is still unfinished
+  // Explicit close (back button) clears the localStorage key, so a
+  // user who deliberately bailed doesn't get bounced back in.
+  useEffect(() => {
+    if (!GEAR_DROPS_ENABLED) return;
+    if (runScreenRunId) return; // already open / restored
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) return;
+    let savedId = null;
+    try { savedId = localStorage.getItem(ACTIVE_RUN_LS_KEY); } catch (_) {}
+    if (!savedId) return;
+    const runs = Object.values(myGearDropRuns || {});
+    if (runs.length === 0) return; // myGearDropRuns hasn't hydrated yet
+    const target = runs.find(r => r.id === savedId);
+    if (!target || target.finished_at) {
+      // Stale or finished — clear and skip.
+      try { localStorage.removeItem(ACTIVE_RUN_LS_KEY); } catch (_) {}
+      return;
+    }
+    setRunScreenRunIdRaw(savedId);
+  }, [supabaseSession, myGearDropRuns, runScreenRunId]);
 
   // ── Race-just-started popup listener ─────────────────────────────────
   // Subscribes to gear_drops UPDATE events at root so a status flip to
@@ -47087,7 +47127,7 @@ export default function Trailhead() {
         <GearDropRunScreen
           runId={runScreenRunId}
           currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id}
-          onClose={() => setRunScreenRunId(null)}
+          onClose={closeRunScreen}
           onLoadRun={loadGearDropRunById}
           onLoadDrop={loadGearDropById}
           onAdvance={advanceGearDropRun}
