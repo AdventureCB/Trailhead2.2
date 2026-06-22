@@ -24605,6 +24605,139 @@ function GearDropRaceStartedAlert({ drop, run, onStartRace, onGetDirections, onV
   );
 }
 
+// "Someone else won!" popup — fires for joined NON-winner racers when
+// the host (or the atomic claim path) declares a winner. Gives them
+// two paths: continue racing (only meaningful if they haven't finished
+// yet — for the final waypoint to fire and publish their memento) or
+// route to the afterparty (in-app turn-by-turn nav). When no afterparty
+// is configured, only CONTINUE / VIEW EVENT show. Fetches the winner's
+// profile snippet on mount so the body copy reads "@handle won [drop]".
+function GearDropWinnerAlert({ drop, run, onContinueRace, onRouteToAfterparty, onViewDrop, onClose }) {
+  const [winnerProfile, setWinnerProfile] = useState(null);
+  const hasAfterparty = drop && drop.afterparty_lat != null && drop.afterparty_lng != null;
+  const userFinished = !!(run && run.finished_at);
+
+  useEffect(() => {
+    if (!drop || !drop.winner_run_id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        // Winner run → user_id → profile.
+        const { data: winnerRun } = await supabase
+          .from("trip_reports")
+          .select("user_id")
+          .eq("id", drop.winner_run_id)
+          .maybeSingle();
+        if (cancelled || !winnerRun || !winnerRun.user_id) return;
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("id, full_name, handle, avatar_url")
+          .eq("id", winnerRun.user_id)
+          .maybeSingle();
+        if (!cancelled && prof) setWinnerProfile(prof);
+      } catch (_) { /* non-fatal */ }
+    })();
+    return () => { cancelled = true; };
+  }, [drop && drop.winner_run_id]);
+
+  const winnerLabel = winnerProfile
+    ? (winnerProfile.handle ? `@${winnerProfile.handle}` : (winnerProfile.full_name || "A racer"))
+    : "Someone";
+
+  const afterpartyTime = (() => {
+    if (!drop || !drop.afterparty_starts_at) return null;
+    try {
+      const d = new Date(drop.afterparty_starts_at);
+      return d.toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    } catch (_) { return null; }
+  })();
+
+  const afterpartyLabel = drop && drop.afterparty_label ? drop.afterparty_label
+    : drop && drop.afterparty_address ? drop.afterparty_address
+    : "the afterparty";
+
+  return (
+    <div
+      onClick={onClose}
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ width: "100%", maxWidth: 380, background: T.darkCard, border: `2px solid ${T.copper}`, borderRadius: 16, padding: 22, boxShadow: `0 0 40px ${T.copper}40` }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+          <Trophy size={16} color={T.copper} />
+          <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 800, letterSpacing: 1.2 }}>WINNER DECLARED</span>
+          <button onClick={onClose} style={{ marginLeft: "auto", background: "none", border: "none", padding: 4, cursor: "pointer" }}>
+            <X size={16} color={T.white} />
+          </button>
+        </div>
+
+        {/* Winner identity row */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0 14px" }}>
+          <div style={{ width: 44, height: 44, borderRadius: "50%", background: T.charcoal, overflow: "hidden", flexShrink: 0, border: `2px solid ${T.copper}` }}>
+            {winnerProfile && winnerProfile.avatar_url && (
+              <img src={winnerProfile.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            )}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: sans, fontSize: 15, color: T.white, fontWeight: 700, lineHeight: 1.2 }}>{winnerLabel} won</div>
+            <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, marginTop: 2, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{drop.title || "the gear drop"}</div>
+          </div>
+        </div>
+
+        {/* Afterparty preview when configured */}
+        {hasAfterparty && (
+          <div style={{ padding: 12, background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 10, marginBottom: 14, display: "flex", alignItems: "flex-start", gap: 10 }}>
+            <MapPin size={14} color={T.copper} style={{ marginTop: 2 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 700, letterSpacing: 0.8 }}>AFTERPARTY</div>
+              <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, marginTop: 2, lineHeight: 1.3 }}>{afterpartyLabel}</div>
+              {afterpartyTime && (
+                <div style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 6, fontFamily: sans, fontSize: 10, color: T.tertiary }}>
+                  <Clock size={10} color={T.tertiary} /> {afterpartyTime}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Body copy varies by user finish state */}
+        <p style={{ margin: "0 0 14px", fontFamily: serif, fontSize: 13, color: T.white, opacity: 0.9, lineHeight: 1.45 }}>
+          {userFinished
+            ? "Your run's already wrapped. Head to the afterparty to celebrate the finish line — or check out the recap."
+            : "The race is over for the prize, but you can still finish your run. The afterparty's open whenever you're ready to wrap."}
+        </p>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {hasAfterparty && (
+            <button
+              onClick={() => onRouteToAfterparty(drop.afterparty_lat, drop.afterparty_lng, afterpartyLabel)}
+              style={{ width: "100%", padding: "14px 16px", background: T.copper, border: "none", borderRadius: 10, color: T.white, fontFamily: sans, fontSize: 13, fontWeight: 800, letterSpacing: 0.8, cursor: "pointer" }}
+            >
+              ROUTE TO AFTERPARTY
+            </button>
+          )}
+          {!userFinished && (
+            <button
+              onClick={onContinueRace}
+              style={{ width: "100%", padding: hasAfterparty ? "12px 16px" : "14px 16px", background: hasAfterparty ? T.darkBg : T.green, border: hasAfterparty ? `1px solid ${T.green}` : "none", borderRadius: 10, color: hasAfterparty ? T.green : T.white, fontFamily: sans, fontSize: hasAfterparty ? 12 : 13, fontWeight: hasAfterparty ? 700 : 800, letterSpacing: hasAfterparty ? 0.6 : 0.8, cursor: "pointer" }}
+            >
+              CONTINUE RACE
+            </button>
+          )}
+          <button
+            onClick={() => onViewDrop(drop.id)}
+            style={{ width: "100%", padding: "10px 16px", background: "none", border: "none", color: T.tertiary, fontFamily: sans, fontSize: 11, fontWeight: 600, letterSpacing: 0.4, cursor: "pointer" }}
+          >
+            VIEW EVENT DETAILS
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Dedicated detail screen for kind='gear_drop_run' rows — the per-racer
 // memento. Renders the race recap: full route map showing planned vs
 // actual path, per-checkpoint cards (photo + note + relative timestamp),
@@ -38184,6 +38317,12 @@ export default function Trailhead() {
   // Track dismissed dropIds in a ref so a duplicate UPDATE event (e.g.
   // the host editing the drop right after going live) doesn't re-popup.
   const goLiveAlertDismissedRef = useRef(new Set());
+  // "Someone else won" popup — fires when a drop the user has joined
+  // gets winner_run_id set AND the user is NOT the winner. Gives the
+  // racer the choice to keep racing (if not yet finished) or head
+  // straight to the afterparty. Modal renders at root.
+  const [winnerAlertDrop, setWinnerAlertDrop] = useState(null);
+  const winnerAlertDismissedRef = useRef(new Set());
   // Master gear drops list — declared up here (not next to its helpers
   // further down) so the slug-resolver + pushState useEffects can read
   // from it without a TDZ. The helpers (loadGearDrops, createGearDrop,
@@ -41268,17 +41407,26 @@ export default function Trailhead() {
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "gear_drops" }, async (payload) => {
         const oldRow = payload.old || {};
         const newRow = payload.new || {};
-        if (newRow.status !== "live") return;
-        if (oldRow.status === "live") return; // status didn't change to live
         if (!newRow.id) return;
-        // Must have a joined run for this drop AND not yet finished.
         const myRun = myGearDropRuns[newRow.id];
-        if (!myRun || myRun.finished_at) return;
-        // Don't re-popup if dismissed this session.
-        if (goLiveAlertDismissedRef.current.has(newRow.id)) return;
-        // Don't show if the racer is already mid-race on this exact run.
-        if (runScreenRunId && runScreenRunId === myRun.id) return;
-        setGoLiveAlertDrop(newRow);
+        if (!myRun) return;
+
+        // ── A) Race went live ─────────────────────────────────────────
+        if (newRow.status === "live"
+            && oldRow.status !== "live"
+            && !myRun.finished_at
+            && !goLiveAlertDismissedRef.current.has(newRow.id)
+            && !(runScreenRunId && runScreenRunId === myRun.id)) {
+          setGoLiveAlertDrop(newRow);
+        }
+
+        // ── B) A winner was declared (and it's not us) ────────────────
+        if (oldRow.winner_run_id == null
+            && newRow.winner_run_id != null
+            && myRun.id !== newRow.winner_run_id
+            && !winnerAlertDismissedRef.current.has(newRow.id)) {
+          setWinnerAlertDrop(newRow);
+        }
       })
       .subscribe();
     return () => { try { supabase.removeChannel(ch); } catch (_) {} };
@@ -46707,6 +46855,38 @@ export default function Trailhead() {
           onClose={() => {
             goLiveAlertDismissedRef.current.add(goLiveAlertDrop.id);
             setGoLiveAlertDrop(null);
+          }}
+        />
+      )}
+
+      {/* Winner-declared popup — triggered when a drop the racer joined
+          gets a winner set AND the racer is NOT the winner. Winners hit
+          their own YOU WON overlay inside GearDropRunScreen instead. */}
+      {winnerAlertDrop && GEAR_DROPS_ENABLED && (
+        <GearDropWinnerAlert
+          drop={winnerAlertDrop}
+          run={myGearDropRuns[winnerAlertDrop.id] || null}
+          onContinueRace={() => {
+            // CONTINUE RACE just dismisses the popup — the racer was
+            // already mid-race somewhere; we don't yank them onto a
+            // different screen. If they happened to NOT be on the run
+            // screen, they can re-open via the drop detail.
+            winnerAlertDismissedRef.current.add(winnerAlertDrop.id);
+            setWinnerAlertDrop(null);
+          }}
+          onRouteToAfterparty={(lat, lng, label) => {
+            winnerAlertDismissedRef.current.add(winnerAlertDrop.id);
+            setWinnerAlertDrop(null);
+            startDirectionsTo(lat, lng, label);
+          }}
+          onViewDrop={(dropId) => {
+            winnerAlertDismissedRef.current.add(winnerAlertDrop.id);
+            setWinnerAlertDrop(null);
+            setViewingGearDropId(dropId);
+          }}
+          onClose={() => {
+            winnerAlertDismissedRef.current.add(winnerAlertDrop.id);
+            setWinnerAlertDrop(null);
           }}
         />
       )}
