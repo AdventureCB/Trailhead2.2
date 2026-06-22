@@ -25221,7 +25221,7 @@ function GearDropMementoScreen({ trip: tripProp, currentUserId, onClose, onOpenD
   );
 }
 
-function GearDropDetailScreen({ dropId, currentUserId, isAdmin, onClose, onLoad, onJoin, onLeave, myRun, onOpenRun, onLoadComments, onAddComment, onDeleteComment, onLoadParticipants, onViewUser, onStartDirections, onOpenTrip, onBroadcastAnnouncement, onTransitionStatus }) {
+function GearDropDetailScreen({ dropId, currentUserId, isAdmin, isGuest, onGuestTap, onClose, onLoad, onJoin, onLeave, myRun, onOpenRun, onLoadComments, onAddComment, onDeleteComment, onLoadParticipants, onViewUser, onStartDirections, onOpenTrip, onBroadcastAnnouncement, onTransitionStatus }) {
   const [drop, setDrop] = useState(null);
   const [participantCount, setParticipantCount] = useState(null);
   const [joining, setJoining] = useState(false);
@@ -25370,6 +25370,7 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, onClose, onLoad,
 
   const handlePostComment = async () => {
     if (postingComment || !commentDraft.trim() || !onAddComment) return;
+    if (isGuest && onGuestTap) { onGuestTap(); return; }
     setPostingComment(true);
     try {
       const res = await onAddComment(dropId, commentDraft);
@@ -25394,6 +25395,10 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, onClose, onLoad,
 
   const handleJoin = async () => {
     if (joining || !drop) return;
+    // Guests need to sign up before they can be a racer — surface the
+    // standard sign-in prompt instead of letting the RPC bounce them
+    // with a generic 'not authenticated' alert.
+    if (isGuest && onGuestTap) { onGuestTap(); return; }
     setJoining(true);
     try {
       const res = await onJoin(dropId);
@@ -26070,17 +26075,18 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, onClose, onLoad,
               </div>
             );
           })}
-          {currentUserId && (
+          {(currentUserId || isGuest) && (
             <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 12, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10 }}>
               <textarea
                 value={commentDraft}
                 onChange={(e) => setCommentDraft(e.target.value)}
-                placeholder="Share something with the group…"
+                onFocus={isGuest && onGuestTap ? (e) => { try { e.target.blur(); } catch (_) {} onGuestTap(); } : undefined}
+                placeholder={isGuest ? "Sign in to comment…" : "Share something with the group…"}
                 rows={3}
                 style={{ width: "100%", padding: 10, background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 8, color: T.white, fontFamily: serif, fontSize: 13, boxSizing: "border-box", resize: "vertical" }}
               />
-              <button onClick={handlePostComment} disabled={postingComment || !commentDraft.trim()} style={{ alignSelf: "flex-end", padding: "8px 16px", background: postingComment || !commentDraft.trim() ? T.charcoal : T.green, border: "none", borderRadius: 8, color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.6, cursor: postingComment || !commentDraft.trim() ? "default" : "pointer" }}>
-                {postingComment ? "POSTING…" : "POST COMMENT"}
+              <button onClick={handlePostComment} disabled={postingComment || (!isGuest && !commentDraft.trim())} style={{ alignSelf: "flex-end", padding: "8px 16px", background: postingComment || (!isGuest && !commentDraft.trim()) ? T.charcoal : T.green, border: "none", borderRadius: 8, color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.6, cursor: postingComment || (!isGuest && !commentDraft.trim()) ? "default" : "pointer" }}>
+                {postingComment ? "POSTING…" : isGuest ? "SIGN IN TO COMMENT" : "POST COMMENT"}
               </button>
             </div>
           )}
@@ -26171,7 +26177,7 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, onClose, onLoad,
           </div>
         ) : signupOpen ? (
           <button onClick={handleJoin} disabled={joining} style={{ width: "100%", padding: "14px", background: joining ? T.charcoal : T.green, border: "none", borderRadius: 10, color: T.white, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 1, cursor: joining ? "default" : "pointer" }}>
-            {joining ? "JOINING…" : "JOIN GEAR DROP"}
+            {joining ? "JOINING…" : isGuest ? "SIGN IN TO JOIN" : "JOIN GEAR DROP"}
           </button>
         ) : (
           <div style={{ width: "100%", padding: "14px", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10, color: T.tertiary, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 1, textAlign: "center" }}>
@@ -47190,6 +47196,8 @@ export default function Trailhead() {
           dropId={viewingGearDropId}
           currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id}
           isAdmin={isAdmin}
+          isGuest={isGuest}
+          onGuestTap={() => setShowGuestPrompt(true)}
           onClose={() => setViewingGearDropId(null)}
           onLoad={loadGearDropById}
           onJoin={joinGearDrop}
