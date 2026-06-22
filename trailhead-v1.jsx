@@ -41621,8 +41621,13 @@ export default function Trailhead() {
   // can open the editor on it.
   const duplicateGearDropAsDraft = async (id) => {
     if (!isAdmin || !id) return { error: "Not authorized" };
-    const source = (gearDrops || []).find(g => g.id === id) || null;
-    if (!source) return { error: "Drop not found in cache" };
+    // Re-fetch the full source row — loadGearDrops is a slim list
+    // query that omits route_data, about, prize_photos, prize_description,
+    // arrival_radius_m, etc. Reading from the cache leaves them
+    // undefined and the duplicate ships with empty pins. loadGearDropById
+    // pulls select("*") so every field is present.
+    const source = await loadGearDropById(id);
+    if (!source) return { error: "Drop not found" };
     const payload = {
       title: (source.title || "Untitled Drop") + " (copy)",
       brand_partner_name: source.brand_partner_name || null,
