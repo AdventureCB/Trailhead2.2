@@ -24376,6 +24376,341 @@ const GD_RB_CSS = `<style>
 .gd-rb img{max-width:100%;border-radius:8px;display:block;margin:8px 0}
 </style>`;
 
+// Dedicated detail screen for kind='gear_drop_run' rows — the per-racer
+// memento. Renders the race recap: full route map showing planned vs
+// actual path, per-checkpoint cards (photo + note + relative timestamp),
+// and the racer's finish position (WINNER / 2nd / 3rd / #N).
+//
+// Why a separate component vs reusing TripReportDetail: a memento's
+// content lives in `progress.submissions`, not `route_data.pins` — and
+// the recap needs drop-scoped context (parent drop title, brand, all
+// finishers for ranking) that a generic trip_reports row doesn't carry.
+// Fetches the parent drop + ranking data once on mount.
+function GearDropMementoScreen({ trip, currentUserId, onClose, onOpenDrop, onShareIntent, onViewUser }) {
+  const [drop, setDrop] = useState(null);
+  const [finishers, setFinishers] = useState([]);
+  const [author, setAuthor] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+
+  // Submissions sorted by waypointIdx so the recap renders start → finish
+  // even if the JSONB array was appended out of order (defensive — the
+  // RPC writes them in order, but data integrity here is cheap).
+  const submissions = useMemo(() => {
+    const list = (trip && trip.progress && Array.isArray(trip.progress.submissions))
+      ? trip.progress.submissions
+      : [];
+    return list.slice().sort((a, b) => (Number(a.waypointIdx) || 0) - (Number(b.waypointIdx) || 0));
+  }, [trip]);
+
+  const pins = useMemo(() => {
+    return (drop && drop.route_data && Array.isArray(drop.route_data.pins)) ? drop.route_data.pins : [];
+  }, [drop]);
+
+  const position = useMemo(() => {
+    const idx = (finishers || []).findIndex(f => f.id === (trip && trip.id));
+    return idx >= 0 ? idx + 1 : null;
+  }, [finishers, trip]);
+
+  const isWinner = drop && trip && drop.winner_run_id === trip.id;
+
+  const elapsedMs = useMemo(() => {
+    if (submissions.length < 2) return 0;
+    const first = new Date(submissions[0].submittedAt).getTime();
+    const last = new Date(submissions[submissions.length - 1].submittedAt).getTime();
+    return Math.max(0, last - first);
+  }, [submissions]);
+
+  const totalDistance = useMemo(() => {
+    if (submissions.length < 2) return 0;
+    let total = 0;
+    for (let i = 1; i < submissions.length; i++) {
+      const a = submissions[i - 1];
+      const b = submissions[i];
+      const lat1 = Number(a.lat), lng1 = Number(a.lng);
+      const lat2 = Number(b.lat), lng2 = Number(b.lng);
+      if (Number.isFinite(lat1) && Number.isFinite(lng1) && Number.isFinite(lat2) && Number.isFinite(lng2)) {
+        total += haversine(lat1, lng1, lat2, lng2);
+      }
+    }
+    return total;
+  }, [submissions]);
+
+  useEffect(() => {
+    if (!trip || !trip.gear_drop_id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: dropRow, error: dropErr } = await supabase
+          .from("gear_drops")
+          .select("id, slug, title, hero_img, brand_partner_name, brand_logo_url, route_data, winner_run_id, winner_announced_at, ends_at")
+          .eq("id", trip.gear_drop_id)
+          .maybeSingle();
+        if (cancelled) return;
+        if (dropErr || !dropRow) { setLoadError("Drop not found"); return; }
+        setDrop(dropRow);
+
+        const { data: finishRows } = await supabase
+          .from("trip_reports")
+          .select("id, user_id, name, slug, finished_at, hero_img")
+          .eq("gear_drop_id", trip.gear_drop_id)
+          .eq("kind", "gear_drop_run")
+          .not("finished_at", "is", null)
+          .order("finished_at", { ascending: true });
+        if (cancelled) return;
+        setFinishers(finishRows || []);
+
+        if (trip.user_id) {
+          const { data: prof } = await supabase
+            .from("profiles")
+            .select("id, full_name, handle, avatar_url")
+            .eq("id", trip.user_id)
+            .maybeSingle();
+          if (!cancelled && prof) setAuthor(prof);
+        }
+      } catch (e) {
+        if (!cancelled) setLoadError("Network error");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [trip && trip.id, trip && trip.gear_drop_id, trip && trip.user_id]);
+
+  // Map: planned route (dashed copper, straight lines between pins) +
+  // actual path (solid red, racer's GPS submissions in order) + numbered
+  // pin markers + submission dots. Read-only; not interactive beyond pan/zoom.
+  const mapElRef = useRef(null);
+  const mapRef = useRef(null);
+  useEffect(() => {
+    if (!drop || !mapElRef.current || mapRef.current) return;
+    let cancelled = false;
+    (async () => {
+      const mapboxgl = await loadMapbox();
+      if (cancelled || !mapElRef.current) return;
+      const center = pins.length > 0
+        ? [Number(pins[0].lng), Number(pins[0].lat)]
+        : (submissions.length > 0 ? [Number(submissions[0].lng), Number(submissions[0].lat)] : [-100, 40]);
+      const map = new mapboxgl.Map({
+        container: mapElRef.current,
+        style: "mapbox://styles/mapbox/outdoors-v12",
+        center,
+        zoom: 12,
+        interactive: true,
+      });
+      mapRef.current = map;
+      map.on("load", () => {
+        if (cancelled) return;
+        if (pins.length >= 2) {
+          map.addSource("memento-planned", {
+            type: "geojson",
+            data: { type: "Feature", geometry: { type: "LineString", coordinates: pins.map(p => [Number(p.lng), Number(p.lat)]) } }
+          });
+          map.addLayer({
+            id: "memento-planned-line",
+            type: "line",
+            source: "memento-planned",
+            paint: { "line-color": T.copper, "line-width": 3, "line-dasharray": [2, 2], "line-opacity": 0.7 }
+          });
+        }
+        if (submissions.length >= 2) {
+          map.addSource("memento-actual", {
+            type: "geojson",
+            data: { type: "Feature", geometry: { type: "LineString", coordinates: submissions.map(s => [Number(s.lng), Number(s.lat)]) } }
+          });
+          map.addLayer({
+            id: "memento-actual-line",
+            type: "line",
+            source: "memento-actual",
+            paint: { "line-color": T.red, "line-width": 4, "line-opacity": 0.9 }
+          });
+        }
+        pins.forEach((p, idx) => {
+          const isStartPin = idx === 0;
+          const isEndPin = idx === pins.length - 1;
+          const color = isStartPin ? T.green : isEndPin ? T.red : T.copper;
+          const label = isStartPin ? "S" : isEndPin ? "F" : String(idx);
+          const el = document.createElement("div");
+          el.style.cssText = `display:flex;align-items:center;justify-content:center;width:30px;height:30px;background:${color};border:2px solid #fff;border-radius:50%;font-family:${sans};font-size:11px;color:#fff;font-weight:800;box-shadow:0 2px 6px rgba(0,0,0,0.4);`;
+          el.innerText = label;
+          new mapboxgl.Marker({ element: el, anchor: "center" })
+            .setLngLat([Number(p.lng), Number(p.lat)])
+            .addTo(map);
+        });
+        submissions.forEach((s) => {
+          const el = document.createElement("div");
+          el.style.cssText = `width:10px;height:10px;background:${T.red};border:2px solid #fff;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,0.4);`;
+          new mapboxgl.Marker({ element: el, anchor: "center" })
+            .setLngLat([Number(s.lng), Number(s.lat)])
+            .addTo(map);
+        });
+        const allCoords = [
+          ...pins.map(p => [Number(p.lng), Number(p.lat)]),
+          ...submissions.map(s => [Number(s.lng), Number(s.lat)])
+        ].filter(c => Number.isFinite(c[0]) && Number.isFinite(c[1]));
+        if (allCoords.length >= 2) {
+          const bounds = allCoords.reduce((b, c) => b.extend(c), new mapboxgl.LngLatBounds(allCoords[0], allCoords[0]));
+          map.fitBounds(bounds, { padding: 50, maxZoom: 15, duration: 0 });
+        }
+      });
+    })();
+    return () => {
+      cancelled = true;
+      if (mapRef.current) { try { mapRef.current.remove(); } catch (_) {} mapRef.current = null; }
+    };
+  }, [drop, pins.length, submissions.length]);
+
+  const fmtElapsed = (ms) => {
+    const totalSec = Math.floor(ms / 1000);
+    const hours = Math.floor(totalSec / 3600);
+    const mins = Math.floor((totalSec - hours * 3600) / 60);
+    const secs = totalSec - hours * 3600 - mins * 60;
+    if (hours > 0) return `${hours}h ${mins}m`;
+    if (mins > 0) return `${mins}m ${secs}s`;
+    return `${secs}s`;
+  };
+  const fmtDistance = (m) => {
+    const mi = (m / 1000) * 0.621371;
+    if (mi >= 1) return `${mi.toFixed(1)} mi`;
+    return `${Math.round(m)} m`;
+  };
+
+  const positionBadge = (() => {
+    if (isWinner) return { label: "WINNER", color: T.copper, showTrophy: true };
+    if (position === 2) return { label: "2ND PLACE", color: "#8E8E93", showTrophy: false };
+    if (position === 3) return { label: "3RD PLACE", color: "#A87248", showTrophy: false };
+    if (position != null) return { label: `#${position}`, color: T.tertiary, showTrophy: false };
+    return null;
+  })();
+
+  return (
+    <div style={{ position: "fixed", top: 0, bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 430, zIndex: 1000, background: T.darkBg, overflowY: "auto" }}>
+      <div style={{ position: "sticky", top: 0, padding: "14px 16px", background: T.darkBg, borderBottom: `1px solid ${T.charcoal}`, display: "flex", alignItems: "center", gap: 8, zIndex: 4 }}>
+        <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+          <ChevronLeft size={20} color={T.white} />
+        </button>
+        <Trophy size={16} color={T.copper} />
+        <span style={{ flex: 1, fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.8 }}>RACER RECAP</span>
+        {onShareIntent && drop && trip && trip.slug && (
+          <button onClick={() => onShareIntent({ trip, drop })} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+            <Share2 size={18} color={T.white} />
+          </button>
+        )}
+      </div>
+
+      {loadError && (
+        <div style={{ padding: 30, textAlign: "center", fontFamily: serif, fontSize: 13, color: T.red }}>{loadError}</div>
+      )}
+
+      {!drop && !loadError && (
+        <div style={{ padding: 30, textAlign: "center", fontFamily: serif, fontSize: 13, color: T.tertiary }}>Loading recap…</div>
+      )}
+
+      {drop && (
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          {trip.hero_img && (
+            <div style={{ aspectRatio: "16/9", background: `url(${trip.hero_img}) center/cover`, position: "relative" }}>
+              <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, transparent 50%, rgba(0,0,0,0.6) 100%)" }} />
+            </div>
+          )}
+
+          <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+            <button onClick={() => onOpenDrop && drop.slug && onOpenDrop(drop.slug)} disabled={!onOpenDrop || !drop.slug} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "none", border: "none", padding: 0, cursor: onOpenDrop && drop.slug ? "pointer" : "default", textAlign: "left" }}>
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 1 }}>{(drop.brand_partner_name || "LONE PEAK OVERLAND").toUpperCase()}</span>
+              {drop.slug && onOpenDrop && <ChevronRight size={11} color={T.copper} />}
+            </button>
+            <h1 style={{ margin: 0, fontFamily: sans, fontSize: 22, color: T.white, fontWeight: 800, lineHeight: 1.2 }}>{drop.title}</h1>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4 }}>
+              <button onClick={() => onViewUser && author && onViewUser(author.id)} disabled={!onViewUser || !author} style={{ display: "flex", alignItems: "center", gap: 10, background: "none", border: "none", padding: 0, cursor: onViewUser && author ? "pointer" : "default", flex: 1, minWidth: 0, textAlign: "left" }}>
+                <div style={{ width: 38, height: 38, borderRadius: "50%", background: T.charcoal, overflow: "hidden", flexShrink: 0 }}>
+                  {author && author.avatar_url && <img src={author.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700 }}>{author ? (author.full_name || author.handle || "Racer") : "Racer"}</div>
+                  {author && author.handle && <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>@{author.handle}</div>}
+                </div>
+              </button>
+              {positionBadge && (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 11px", background: positionBadge.color, color: T.white, borderRadius: 10, fontFamily: sans, fontSize: 11, fontWeight: 800, letterSpacing: 0.5, flexShrink: 0 }}>
+                  {positionBadge.showTrophy && <Trophy size={12} color={T.white} />}
+                  {positionBadge.label}
+                </span>
+              )}
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginTop: 6 }}>
+              <div style={{ padding: 10, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8 }}>
+                <div style={{ fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 0.8, fontWeight: 700 }}>FINISHED</div>
+                <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, marginTop: 2 }}>{new Date(trip.finished_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</div>
+              </div>
+              <div style={{ padding: 10, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8 }}>
+                <div style={{ fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 0.8, fontWeight: 700 }}>ELAPSED</div>
+                <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, marginTop: 2 }}>{fmtElapsed(elapsedMs)}</div>
+              </div>
+              <div style={{ padding: 10, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8 }}>
+                <div style={{ fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 0.8, fontWeight: 700 }}>DISTANCE</div>
+                <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, marginTop: 2 }}>{fmtDistance(totalDistance)}</div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ padding: "0 16px 16px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 14, fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 0.6, fontWeight: 700, marginBottom: 6 }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                <span style={{ display: "inline-block", width: 18, height: 0, borderTop: `2px dashed ${T.copper}` }} />
+                PLANNED ROUTE
+              </span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                <span style={{ display: "inline-block", width: 18, height: 2, background: T.red }} />
+                ACTUAL PATH
+              </span>
+            </div>
+            <div ref={mapElRef} style={{ width: "100%", height: 280, borderRadius: 10, overflow: "hidden", background: T.charcoal }} />
+          </div>
+
+          <div style={{ padding: "0 16px 32px" }}>
+            <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700, marginBottom: 10 }}>CHECKPOINTS · {submissions.length}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {submissions.length === 0 && (
+                <div style={{ padding: 20, fontFamily: serif, fontSize: 13, color: T.tertiary, textAlign: "center", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10 }}>No checkpoint data captured.</div>
+              )}
+              {submissions.map((s, idx) => {
+                const pinIdx = Number(s.waypointIdx);
+                const pin = Number.isFinite(pinIdx) && pins[pinIdx] ? pins[pinIdx] : (pins[idx] || {});
+                const isStartCard = idx === 0;
+                const isFinalCard = idx === submissions.length - 1;
+                const accentColor = isStartCard ? T.green : isFinalCard ? T.red : T.copper;
+                const accentLabel = isStartCard ? "START" : isFinalCard ? "FINISH" : `STOP ${idx}`;
+                const elapsedFromStart = idx > 0
+                  ? new Date(s.submittedAt).getTime() - new Date(submissions[0].submittedAt).getTime()
+                  : 0;
+                return (
+                  <div key={idx} style={{ background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 12, overflow: "hidden" }}>
+                    {s.photoUrl && (
+                      <div style={{ aspectRatio: "4/3", background: `url(${s.photoUrl}) center/cover` }} />
+                    )}
+                    <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: accentColor, padding: "2px 7px", borderRadius: 6, fontWeight: 800, letterSpacing: 0.4 }}>{accentLabel}</span>
+                        {pin && pin.label && <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pin.label}</span>}
+                        <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: 9, color: T.tertiary }}>{idx === 0 ? "kickoff" : `+${fmtElapsed(elapsedFromStart)}`}</span>
+                      </div>
+                      {s.note && (
+                        <p style={{ margin: 0, fontFamily: serif, fontSize: 13, color: T.white, lineHeight: 1.4 }}>{s.note}</p>
+                      )}
+                      <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>
+                        {new Date(s.submittedAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function GearDropDetailScreen({ dropId, currentUserId, isAdmin, onClose, onLoad, onJoin, onLeave, myRun, onOpenRun, onLoadComments, onAddComment, onDeleteComment, onLoadParticipants, onViewUser, onStartDirections, onOpenTrip, onBroadcastAnnouncement, onTransitionStatus }) {
   const [drop, setDrop] = useState(null);
   const [participantCount, setParticipantCount] = useState(null);
@@ -45342,6 +45677,21 @@ export default function Trailhead() {
                   || (allTripPlans || []).find(t => t.id === detailTripId)
                   || (tripReports || []).find(t => t.id === detailTripId);
         if (!trip) { setTimeout(() => setDetailTripId(null), 0); return null; }
+        // Mementos render with their own dedicated screen — the
+        // submissions / pins / position UI doesn't map onto the generic
+        // trip-report surface.
+        if (trip.kind === "gear_drop_run") {
+          return (
+            <GearDropMementoScreen
+              trip={trip}
+              currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id}
+              onClose={() => { setDetailTripId(null); setDetailTripInitialEdit(false); }}
+              onOpenDrop={(slug) => { setDetailTripId(null); setPendingGearDropSlug(slug); }}
+              onViewUser={openUserProfile}
+              onShareIntent={(payload) => openShareIntent({ kind: "trip", data: { id: trip.id, name: trip.name, slug: trip.slug, description: (payload && payload.drop && payload.drop.title) || trip.name, hero_img: trip.hero_img } })}
+            />
+          );
+        }
         const author = (tripAuthors && tripAuthors[trip.user_id]) || null;
         const myUid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
         return (
