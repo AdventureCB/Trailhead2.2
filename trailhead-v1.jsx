@@ -24233,7 +24233,7 @@ function GearDropEditor({ dropId, currentUserId, onClose, onLoad, onUpdate, onDe
         <GDSection title="PRIZE">
           <GDInput label="Prize title" value={drop.prize_title || ""} onSave={(v) => patch({ prize_title: v })} />
           <GDRichEditor label="Prize description" value={drop.prize_description || ""} onSave={(v) => patch({ prize_description: v })} placeholder="Describe the prize. Spec list, condition, retail value, brand-supplied story, etc." />
-          <GDInput type="number" label="Prize value (USD)" value={drop.prize_value_cents != null ? (drop.prize_value_cents / 100).toString() : ""} onSave={(v) => patch({ prize_value_cents: v === "" ? null : Math.round(parseFloat(v) * 100) })} />
+          <GDInput type="number" label="Approximate value of prize package (USD)" value={drop.prize_value_cents != null ? (drop.prize_value_cents / 100).toString() : ""} onSave={(v) => patch({ prize_value_cents: v === "" ? null : Math.round(parseFloat(v) * 100) })} />
           <GDMultiImagePicker label="Prize photos · carousel on the public page" value={drop.prize_photos || []} onSave={(v) => patch({ prize_photos: v })} currentUserId={currentUserId} max={8} />
         </GDSection>
 
@@ -25068,7 +25068,14 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, onClose, onLoad,
   const waypointCount = (drop.route_data && drop.route_data.pins && drop.route_data.pins.length) || 0;
   const startMapUrl = gearDropStaticMapUrl(drop.start_lat, drop.start_lng, { width: 900, height: 320, zoom: 11 });
   const heroSrc = drop.hero_img || startMapUrl;
-  const prizeValueLabel = drop.prize_value_cents != null ? `$${(drop.prize_value_cents / 100).toFixed(2)}` : null;
+  // Display as approx. since the editor labels it as such — drop the
+  // decimals on whole-dollar amounts (a $5,000 prize shouldn't read $5,000.00).
+  const prizeValueLabel = (() => {
+    if (drop.prize_value_cents == null) return null;
+    const dollars = drop.prize_value_cents / 100;
+    const whole = dollars % 1 === 0;
+    return `~$${whole ? dollars.toLocaleString() : dollars.toFixed(2)}`;
+  })();
 
   return (
     <div style={{ position: "fixed", inset: 0, background: T.darkBg, zIndex: 200, overflowY: "auto", paddingBottom: 110 }}>
@@ -25117,6 +25124,15 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, onClose, onLoad,
             ? <a href={drop.brand_partner_url} target="_blank" rel="noopener noreferrer" style={style}>{inner}</a>
             : <div style={style}>{inner}</div>;
         })()}
+
+        {/* How it works — lifted above ABOUT so first-time viewers see
+            the gameplay rules before the marketing copy. */}
+        <div style={{ padding: 14, background: `${T.charcoal}80`, border: `1px solid ${T.charcoal}`, borderRadius: 10 }}>
+          <div style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 0.8, marginBottom: 6 }}>HOW IT WORKS</div>
+          <p style={{ fontFamily: serif, fontSize: 12, color: T.white, opacity: 0.8, lineHeight: 1.5, margin: 0 }}>
+            Show up at the start point. Each waypoint reveals only after you've reached the previous one and submitted a photo + note. First to reach the endpoint wins the prize.
+          </p>
+        </div>
 
         {/* About this event (host-written rich text) */}
         {drop.about && drop.about.trim().length > 0 && (
@@ -25421,14 +25437,6 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, onClose, onLoad,
             </div>
           </div>
         )}
-
-        {/* How it works hint (collapsed copy for now) */}
-        <div style={{ padding: 14, background: `${T.charcoal}80`, border: `1px solid ${T.charcoal}`, borderRadius: 10 }}>
-          <div style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 0.8, marginBottom: 6 }}>HOW IT WORKS</div>
-          <p style={{ fontFamily: serif, fontSize: 12, color: T.white, opacity: 0.8, lineHeight: 1.5, margin: 0 }}>
-            Show up at the start point. Each waypoint reveals only after you've reached the previous one and submitted a photo + note. First to reach the endpoint wins the prize.
-          </p>
-        </div>
 
         {/* Comments section — bottom-of-page thread. Auth required to post. */}
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
