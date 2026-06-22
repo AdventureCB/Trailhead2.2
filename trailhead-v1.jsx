@@ -24386,7 +24386,13 @@ const GD_RB_CSS = `<style>
 // the recap needs drop-scoped context (parent drop title, brand, all
 // finishers for ranking) that a generic trip_reports row doesn't carry.
 // Fetches the parent drop + ranking data once on mount.
-function GearDropMementoScreen({ trip, currentUserId, onClose, onOpenDrop, onShareIntent, onViewUser }) {
+function GearDropMementoScreen({ trip: tripProp, currentUserId, onClose, onOpenDrop, onShareIntent, onViewUser }) {
+  // Internal trip state — kicks off from the prop, but if that prop came
+  // from a loader that only pulled the generic trip-report column set
+  // (no gear_drop_id / progress / finished_at), the load effect below
+  // re-fetches the full row so the recap can render. Defensive against
+  // every existing trip_reports SELECT in the codebase.
+  const [trip, setTripState] = useState(tripProp);
   const [drop, setDrop] = useState(null);
   const [finishers, setFinishers] = useState([]);
   const [author, setAuthor] = useState(null);
@@ -24436,14 +24442,36 @@ function GearDropMementoScreen({ trip, currentUserId, onClose, onOpenDrop, onSha
   }, [submissions]);
 
   useEffect(() => {
-    if (!trip || !trip.gear_drop_id) return;
+    if (!trip || !trip.id) return;
     let cancelled = false;
     (async () => {
       try {
+        // Defensive re-fetch — if the upstream loader didn't pull
+        // gear_drop_id / progress / finished_at (every existing
+        // trip_reports SELECT was missing them until we patched it),
+        // grab the full row by id now. Idempotent.
+        let workingTrip = trip;
+        if (!workingTrip.gear_drop_id || !workingTrip.progress) {
+          const { data: fullRow, error: fullErr } = await supabase
+            .from("trip_reports")
+            .select("id, user_id, slug, name, hero_img, kind, status, visibility, gear_drop_id, progress, finished_at, last_unlocked_at, published_at, created_at")
+            .eq("id", trip.id)
+            .maybeSingle();
+          if (cancelled) return;
+          if (fullErr || !fullRow) { setLoadError("Recap row not found"); return; }
+          workingTrip = { ...trip, ...fullRow };
+          setTripState(workingTrip);
+        }
+
+        if (!workingTrip.gear_drop_id) {
+          setLoadError("This trip isn't a gear drop run");
+          return;
+        }
+
         const { data: dropRow, error: dropErr } = await supabase
           .from("gear_drops")
           .select("id, slug, title, hero_img, brand_partner_name, brand_logo_url, route_data, winner_run_id, winner_announced_at, ends_at")
-          .eq("id", trip.gear_drop_id)
+          .eq("id", workingTrip.gear_drop_id)
           .maybeSingle();
         if (cancelled) return;
         if (dropErr || !dropRow) { setLoadError("Drop not found"); return; }
@@ -24452,27 +24480,28 @@ function GearDropMementoScreen({ trip, currentUserId, onClose, onOpenDrop, onSha
         const { data: finishRows } = await supabase
           .from("trip_reports")
           .select("id, user_id, name, slug, finished_at, hero_img")
-          .eq("gear_drop_id", trip.gear_drop_id)
+          .eq("gear_drop_id", workingTrip.gear_drop_id)
           .eq("kind", "gear_drop_run")
           .not("finished_at", "is", null)
           .order("finished_at", { ascending: true });
         if (cancelled) return;
         setFinishers(finishRows || []);
 
-        if (trip.user_id) {
+        if (workingTrip.user_id) {
           const { data: prof } = await supabase
             .from("profiles")
             .select("id, full_name, handle, avatar_url")
-            .eq("id", trip.user_id)
+            .eq("id", workingTrip.user_id)
             .maybeSingle();
           if (!cancelled && prof) setAuthor(prof);
         }
       } catch (e) {
+        console.error("[memento] load failed", e);
         if (!cancelled) setLoadError("Network error");
       }
     })();
     return () => { cancelled = true; };
-  }, [trip && trip.id, trip && trip.gear_drop_id, trip && trip.user_id]);
+  }, [trip && trip.id]);
 
   // Map: planned route (dashed copper, straight lines between pins) +
   // actual path (solid red, racer's GPS submissions in order) + numbered
@@ -36589,7 +36618,7 @@ export default function Trailhead() {
 
     // Trip reports + per-trip like counts.
     supabase.from("trip_reports")
-      .select("id, user_id, slug, name, description, status, kind, visibility, planned_start, planned_end, party_size, checklist, promoted_to_trip_id, start_lat, start_lng, start_label, end_lat, end_lng, route_geom, hero_img, distance_mi, duration_min, elev_gain_ft, max_elev_ft, difficulty, region, state_code, build_id, terrains, tags, view_count, like_count, comment_count, published_at, created_at, updated_at")
+      .select("id, user_id, slug, name, description, status, kind, visibility, planned_start, planned_end, party_size, checklist, promoted_to_trip_id, start_lat, start_lng, start_label, end_lat, end_lng, route_geom, hero_img, distance_mi, duration_min, elev_gain_ft, max_elev_ft, difficulty, region, state_code, build_id, terrains, tags, view_count, like_count, comment_count, published_at, created_at, updated_at, gear_drop_id, progress, finished_at, last_unlocked_at")
       .order("created_at", { ascending: false }).limit(500)
       .then(({ data: trRows, error: trErr }) => {
         if (trErr) { console.error("[hydrate] trip_reports fetch error", trErr); return; }
