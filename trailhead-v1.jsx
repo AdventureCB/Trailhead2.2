@@ -24485,6 +24485,126 @@ const GD_RB_CSS = `<style>
 .gd-rb img{max-width:100%;border-radius:8px;display:block;margin:8px 0}
 </style>`;
 
+// "Your race just went live!" popup — fires for joined racers anywhere
+// in the app when the host flips status to 'live'. Reads the user's
+// current GPS once on mount; if they're inside the drop's
+// arrival_radius_m, the primary action is START RACE (opens the run
+// screen directly). Otherwise, primary action is GET DIRECTIONS (uses
+// the app's in-app turn-by-turn nav to route them to start_lat/lng).
+// Both buttons always show so the racer can pick either, plus a VIEW
+// EVENT secondary that just opens the drop detail.
+function GearDropRaceStartedAlert({ drop, run, onStartRace, onGetDirections, onViewDrop, onClose }) {
+  const [distance, setDistance] = useState(null);
+  const [locating, setLocating] = useState(true);
+  const arrivalRadius = drop && drop.arrival_radius_m ? Number(drop.arrival_radius_m) : 100;
+
+  useEffect(() => {
+    if (!drop || drop.start_lat == null || drop.start_lng == null) {
+      setLocating(false);
+      return;
+    }
+    if (!navigator.geolocation) { setLocating(false); return; }
+    let cancelled = false;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        if (cancelled) return;
+        const d = haversine(pos.coords.latitude, pos.coords.longitude, drop.start_lat, drop.start_lng);
+        setDistance(d);
+        setLocating(false);
+      },
+      () => { if (!cancelled) setLocating(false); },
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 8000 }
+    );
+    return () => { cancelled = true; };
+  }, [drop]);
+
+  const inRange = distance != null && distance <= arrivalRadius;
+  const startLabel = drop && drop.title ? `${drop.title} · Start` : "Start point";
+  const canStartRace = !!(run && run.id);
+  const canDirections = drop && drop.start_lat != null && drop.start_lng != null;
+
+  return (
+    <div
+      onClick={onClose}
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.82)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ width: "100%", maxWidth: 380, background: T.darkCard, border: `2px solid ${T.red}`, borderRadius: 16, padding: 22, boxShadow: `0 0 40px ${T.red}40` }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+          <Gift size={16} color={T.red} />
+          <span style={{ fontFamily: sans, fontSize: 10, color: T.red, fontWeight: 800, letterSpacing: 1.2 }}>RACE STARTED · LIVE NOW</span>
+          <button onClick={onClose} style={{ marginLeft: "auto", background: "none", border: "none", padding: 4, cursor: "pointer" }}>
+            <X size={16} color={T.white} />
+          </button>
+        </div>
+        <h2 style={{ margin: "4px 0 8px", fontFamily: sans, fontSize: 22, color: T.white, fontWeight: 800, lineHeight: 1.15 }}>{drop.title || "Gear drop"}</h2>
+        <p style={{ margin: "0 0 16px", fontFamily: serif, fontSize: 13, color: T.white, opacity: 0.9, lineHeight: 1.45 }}>
+          The host just flipped this event to live. {locating
+            ? "Checking your location…"
+            : distance == null
+              ? "Get to the start point to begin your run."
+              : inRange
+                ? `You're at the start (${Math.round(distance)}m away). Tap START RACE to kick off your run.`
+                : `You're about ${distance >= 1000 ? `${(distance / 1000).toFixed(1)}km` : `${Math.round(distance)}m`} from the start. Tap GET DIRECTIONS to head over.`
+          }
+        </p>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {/* When in range, START RACE leads; when out, GET DIRECTIONS
+              leads. Both render so the racer can override either way. */}
+          {inRange ? (
+            <>
+              {canStartRace && (
+                <button
+                  onClick={() => onStartRace(run.id)}
+                  style={{ width: "100%", padding: "14px 16px", background: T.green, border: "none", borderRadius: 10, color: T.white, fontFamily: sans, fontSize: 13, fontWeight: 800, letterSpacing: 0.8, cursor: "pointer" }}
+                >
+                  START RACE
+                </button>
+              )}
+              {canDirections && (
+                <button
+                  onClick={() => onGetDirections(drop.start_lat, drop.start_lng, startLabel)}
+                  style={{ width: "100%", padding: "12px 16px", background: T.darkBg, border: `1px solid ${T.copper}`, borderRadius: 10, color: T.copper, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.6, cursor: "pointer" }}
+                >
+                  GET DIRECTIONS
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              {canDirections && (
+                <button
+                  onClick={() => onGetDirections(drop.start_lat, drop.start_lng, startLabel)}
+                  style={{ width: "100%", padding: "14px 16px", background: T.red, border: "none", borderRadius: 10, color: T.white, fontFamily: sans, fontSize: 13, fontWeight: 800, letterSpacing: 0.8, cursor: "pointer" }}
+                >
+                  GET DIRECTIONS TO START
+                </button>
+              )}
+              {canStartRace && (
+                <button
+                  onClick={() => onStartRace(run.id)}
+                  style={{ width: "100%", padding: "12px 16px", background: T.darkBg, border: `1px solid ${T.green}`, borderRadius: 10, color: T.green, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.6, cursor: "pointer" }}
+                >
+                  START ANYWAY
+                </button>
+              )}
+            </>
+          )}
+          <button
+            onClick={() => onViewDrop(drop.id)}
+            style={{ width: "100%", padding: "10px 16px", background: "none", border: "none", color: T.tertiary, fontFamily: sans, fontSize: 11, fontWeight: 600, letterSpacing: 0.4, cursor: "pointer" }}
+          >
+            VIEW EVENT DETAILS
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Dedicated detail screen for kind='gear_drop_run' rows — the per-racer
 // memento. Renders the race recap: full route map showing planned vs
 // actual path, per-checkpoint cards (photo + note + relative timestamp),
@@ -38056,6 +38176,14 @@ export default function Trailhead() {
   // Current run-screen target. Set when a joined user taps VIEW YOUR RUN
   // on a live gear drop. Cleared by GearDropRunScreen.onClose.
   const [runScreenRunId, setRunScreenRunId] = useState(null);
+  // "Race just started" popup — fires when a drop the user has joined
+  // transitions from scheduled (or draft) to live via the host's GO LIVE
+  // button. Modal renders at root so it surfaces no matter what screen
+  // the racer is on. Cleared on dismiss or after they tap an action.
+  const [goLiveAlertDrop, setGoLiveAlertDrop] = useState(null);
+  // Track dismissed dropIds in a ref so a duplicate UPDATE event (e.g.
+  // the host editing the drop right after going live) doesn't re-popup.
+  const goLiveAlertDismissedRef = useRef(new Set());
   // Master gear drops list — declared up here (not next to its helpers
   // further down) so the slug-resolver + pushState useEffects can read
   // from it without a TDZ. The helpers (loadGearDrops, createGearDrop,
@@ -41122,6 +41250,39 @@ export default function Trailhead() {
     if (!GEAR_DROPS_ENABLED) { setMyGearDropRuns({}); return; }
     loadMyGearDropRuns();
   }, [loadMyGearDropRuns]);
+
+  // ── Race-just-started popup listener ─────────────────────────────────
+  // Subscribes to gear_drops UPDATE events at root so a status flip to
+  // 'live' triggers a popup for every joined racer who has the app open
+  // — regardless of which screen they're on. The popup gives them an
+  // immediate START RACE shortcut (when they're inside the drop's
+  // arrival_radius_m) or a GET DIRECTIONS shortcut (when they're not).
+  // Gated on the kill switch + the racer having an active (non-finished)
+  // run for the drop.
+  useEffect(() => {
+    if (!GEAR_DROPS_ENABLED) return;
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) return;
+    const ch = supabase
+      .channel("gd_user_live_alert_" + uid)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "gear_drops" }, async (payload) => {
+        const oldRow = payload.old || {};
+        const newRow = payload.new || {};
+        if (newRow.status !== "live") return;
+        if (oldRow.status === "live") return; // status didn't change to live
+        if (!newRow.id) return;
+        // Must have a joined run for this drop AND not yet finished.
+        const myRun = myGearDropRuns[newRow.id];
+        if (!myRun || myRun.finished_at) return;
+        // Don't re-popup if dismissed this session.
+        if (goLiveAlertDismissedRef.current.has(newRow.id)) return;
+        // Don't show if the racer is already mid-race on this exact run.
+        if (runScreenRunId && runScreenRunId === myRun.id) return;
+        setGoLiveAlertDrop(newRow);
+      })
+      .subscribe();
+    return () => { try { supabase.removeChannel(ch); } catch (_) {} };
+  }, [supabaseSession, myGearDropRuns, runScreenRunId]);
 
   // Atomically transitions a draft to scheduled AND auto-spawns the linked
   // convoy post. Reuses the existing convoy post if one is already attached
@@ -46519,6 +46680,34 @@ export default function Trailhead() {
           onShowToast={showErrorToast}
           onLoadParticipants={loadGearDropParticipants}
           onViewUser={openUserProfile}
+        />
+      )}
+
+      {/* Race-just-started popup — triggered at root by the realtime
+          UPDATE listener when a drop the racer joined flips to live. */}
+      {goLiveAlertDrop && GEAR_DROPS_ENABLED && (
+        <GearDropRaceStartedAlert
+          drop={goLiveAlertDrop}
+          run={myGearDropRuns[goLiveAlertDrop.id] || null}
+          onStartRace={(runId) => {
+            goLiveAlertDismissedRef.current.add(goLiveAlertDrop.id);
+            setGoLiveAlertDrop(null);
+            setRunScreenRunId(runId);
+          }}
+          onGetDirections={(lat, lng, label) => {
+            goLiveAlertDismissedRef.current.add(goLiveAlertDrop.id);
+            setGoLiveAlertDrop(null);
+            startDirectionsTo(lat, lng, label);
+          }}
+          onViewDrop={(dropId) => {
+            goLiveAlertDismissedRef.current.add(goLiveAlertDrop.id);
+            setGoLiveAlertDrop(null);
+            setViewingGearDropId(dropId);
+          }}
+          onClose={() => {
+            goLiveAlertDismissedRef.current.add(goLiveAlertDrop.id);
+            setGoLiveAlertDrop(null);
+          }}
         />
       )}
 
