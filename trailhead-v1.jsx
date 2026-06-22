@@ -26638,6 +26638,11 @@ function GearDropRunScreen({ runId, currentUserId, onClose, onLoadRun, onLoadDro
   const mapContainerRef = useRef(null);
   const mapInst = useRef(null);
   const targetMarkerRef = useRef(null);
+  // Submitted-waypoint markers (one per unlocked pin). Stored as an
+  // array so the cleanup effect can detach each before re-rendering.
+  // Pins beyond `unlockedCount` are NOT drawn — racers shouldn't see
+  // upcoming waypoints until they reveal in order.
+  const submittedMarkersRef = useRef([]);
   const [mapReady, setMapReady] = useState(false);
   // Leaderboard panel — collapsed by default; opens to show every
   // participant ranked by progress + finish time.
@@ -26806,6 +26811,40 @@ function GearDropRunScreen({ runId, currentUserId, onClose, onLoadRun, onLoadDro
     // it sits at GPS regardless of the camera.
     try { map.flyTo({ center: [nextPin.lng, nextPin.lat], zoom: 14, essential: true }); } catch (e) {}
   }, [nextPin && nextPin.lat, nextPin && nextPin.lng, radius, isStart, isLast, mapReady]);
+
+  // Already-submitted waypoint markers — small grey discs at every
+  // pin the racer has already unlocked. Lets them keep visual context
+  // of where they've been alongside the bright next-target marker.
+  // Future / not-yet-unlocked pins stay HIDDEN (the progressive-
+  // reveal format is the whole point).
+  useEffect(() => {
+    const map = mapInst.current;
+    if (!map || !mapReady || !window.mapboxgl) return;
+    // Always clear before re-rendering so removed unlocks (shouldn't
+    // happen but defensive) + color swaps on the active marker don't
+    // leave ghost grey markers behind.
+    submittedMarkersRef.current.forEach(m => { try { m.remove(); } catch (_) {} });
+    submittedMarkersRef.current = [];
+    if (unlockedCount === 0 || pins.length === 0) return;
+    for (let i = 0; i < unlockedCount && i < pins.length; i++) {
+      const pin = pins[i];
+      if (!pin || pin.lat == null || pin.lng == null) continue;
+      try {
+        const el = document.createElement("div");
+        el.style.cssText = `width:22px;height:22px;border-radius:50%;background:${T.tertiary};border:2px solid #fff;display:flex;align-items:center;justify-content:center;color:#fff;font-family:${sans};font-size:10px;font-weight:700;box-shadow:0 2px 5px rgba(0,0,0,0.5);opacity:0.85`;
+        el.textContent = i === 0 ? "S" : String(i);
+        el.title = pin.label ? `Stop ${i + 1}: ${pin.label}` : `Stop ${i + 1}`;
+        const marker = new window.mapboxgl.Marker({ element: el, anchor: "center" })
+          .setLngLat([pin.lng, pin.lat])
+          .addTo(map);
+        submittedMarkersRef.current.push(marker);
+      } catch (_) { /* non-fatal */ }
+    }
+    return () => {
+      submittedMarkersRef.current.forEach(m => { try { m.remove(); } catch (_) {} });
+      submittedMarkersRef.current = [];
+    };
+  }, [drop && drop.id, unlockedCount, mapReady]);
 
   // Leaderboard load + realtime subscription. INSERT (new joiner), UPDATE
   // (someone advances), DELETE (someone cancels attendance) all schedule
