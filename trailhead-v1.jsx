@@ -2309,7 +2309,15 @@ function useGearDropPinBuilderLayer(mapRef, ready, pins, active, mode) {
     // 25m comfortably separates "intentionally identical" from "near but
     // distinct". When detected, render the start as a split S/E badge
     // and skip the duplicate endpoint marker.
-    const isLoopCourse = valid.length > 1 && haversine(valid[0].lat, valid[0].lng, valid[valid.length - 1].lat, valid[valid.length - 1].lng) < 25;
+    // Loop course detection (start and last pin within 25m). Host can
+    // override the split-pin rendering by setting end pin's
+    // loop_marker_mode='separate' — useful when the start/end are
+    // intentionally co-located but the host wants both markers visible
+    // for clarity. Missing / "split" = current default behavior.
+    const lastPin = valid.length > 0 ? valid[valid.length - 1] : null;
+    const loopWithinThreshold = valid.length > 1 && haversine(valid[0].lat, valid[0].lng, valid[valid.length - 1].lat, valid[valid.length - 1].lng) < 25;
+    const loopMode = (lastPin && lastPin.loop_marker_mode) || "split";
+    const isLoopCourse = loopWithinThreshold && loopMode !== "separate";
     valid.forEach((pin, i) => {
       // Skip the endpoint marker on a loop course — it's drawn as part
       // of the combined S/E badge at the start.
@@ -14903,6 +14911,19 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
           const subText = isAfterparty
             ? (gearDropPinBuilder.pins.length === 0 ? "Tap the map to set the afterparty location" : "Tap again to fine-tune the location")
             : (gearDropPinBuilder.pins.length === 0 ? "Tap the map to set the start point" : `${gearDropPinBuilder.pins.length} pin${gearDropPinBuilder.pins.length === 1 ? "" : "s"} · tap to add more`);
+          // Loop-course detection — surface when first + last pin within
+          // 25m and we have 2+ pins. Editor toggle is mirrored here so
+          // the host doesn't have to bounce back to the form to pick a
+          // mode after dropping the closing pin.
+          const allPins = (gearDropPinBuilder.pins || []);
+          const firstPin = allPins[0];
+          const lastPin = allPins.length > 1 ? allPins[allPins.length - 1] : null;
+          const isLoopCandidate = !isAfterparty
+            && firstPin && lastPin
+            && firstPin.lat != null && firstPin.lng != null
+            && lastPin.lat != null && lastPin.lng != null
+            && haversine(firstPin.lat, firstPin.lng, lastPin.lat, lastPin.lng) < 25;
+          const loopMode = (lastPin && lastPin.loop_marker_mode) || "split";
           return (<>
             <div style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 12, background: accent, color: T.white, padding: "10px 14px", boxShadow: "0 4px 14px rgba(0,0,0,0.4)", display: "flex", alignItems: "center", gap: 10 }}>
               <Gift size={16} color={T.white} strokeWidth={2} />
@@ -14920,6 +14941,35 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
                 {gearDropPinBuilder.saving ? "SAVING…" : "SAVE"}
               </button>
             </div>
+            {/* Loop-course choose-popup — surfaces immediately when the
+                user drops a closing pin within 25m of the start. Default
+                is split S/E so changing the mode here OR ignoring it
+                won't break anything. */}
+            {!isAfterparty && isLoopCandidate && gearDropPinBuilder.updatePin && (
+              <div style={{ position: "absolute", left: 12, right: 12, top: 60, zIndex: 13, padding: "12px 14px", background: T.darkBg, border: `1px solid ${T.copper}`, borderRadius: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.55)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                  <Disc size={12} color={T.copper} />
+                  <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 800, letterSpacing: 1 }}>LOOP COURSE DETECTED</span>
+                </div>
+                <p style={{ margin: "0 0 10px", fontFamily: serif, fontSize: 11, color: T.white, opacity: 0.9, lineHeight: 1.4 }}>
+                  Start and endpoint are within 25m. Pick how the markers render on the map.
+                </p>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button
+                    onClick={() => gearDropPinBuilder.updatePin(lastPin.id, { loop_marker_mode: "split" })}
+                    style={{ flex: 1, padding: "8px 10px", background: loopMode === "split" ? T.copper : T.darkCard, color: loopMode === "split" ? T.white : T.tertiary, border: `1px solid ${loopMode === "split" ? T.copper : T.charcoal}`, borderRadius: 6, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}
+                  >
+                    SPLIT S/E PIN
+                  </button>
+                  <button
+                    onClick={() => gearDropPinBuilder.updatePin(lastPin.id, { loop_marker_mode: "separate" })}
+                    style={{ flex: 1, padding: "8px 10px", background: loopMode === "separate" ? T.copper : T.darkCard, color: loopMode === "separate" ? T.white : T.tertiary, border: `1px solid ${loopMode === "separate" ? T.copper : T.charcoal}`, borderRadius: 6, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}
+                  >
+                    SEPARATE PINS
+                  </button>
+                </div>
+              </div>
+            )}
             {!isAfterparty && (
             <div style={{ position: "absolute", left: 12, right: 12, bottom: 12, zIndex: 11, background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 12, padding: "10px 12px", maxHeight: 220, overflowY: "auto", boxShadow: "0 8px 24px rgba(0,0,0,0.5)" }}>
               <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, fontWeight: 700, letterSpacing: 0.8, marginBottom: 6 }}>PINS · IN ORDER</div>
@@ -23931,10 +23981,18 @@ function GDImagePicker({ label, value, onSave, currentUserId, aspectRatio = "1/1
   );
 }
 
-function GDPinRow({ idx, pin, isFirst, isLast, onUpdate, onRemove, currentUserId }) {
+function GDPinRow({ idx, pin, isFirst, isLast, startPin, onUpdate, onRemove, currentUserId }) {
   const isEndpoint = isLast && !isFirst;
   const labelHint = isFirst ? "START · publicly visible" : isEndpoint ? "ENDPOINT" : "WAYPOINT";
   const accent = isFirst ? T.copper : isEndpoint ? T.red : T.green;
+  // Loop-course detection — only meaningful on the endpoint row when
+  // there's a start pin to compare against. Within 25m and the host
+  // can pick how the start/end markers should render.
+  const isLoopCandidate = isEndpoint && startPin
+    && pin.lat != null && pin.lng != null
+    && startPin.lat != null && startPin.lng != null
+    && haversine(startPin.lat, startPin.lng, pin.lat, pin.lng) < 25;
+  const loopMode = pin.loop_marker_mode || "split";
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 12, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10, marginBottom: 8 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -23943,6 +24001,28 @@ function GDPinRow({ idx, pin, isFirst, isLast, onUpdate, onRemove, currentUserId
           <Trash2 size={12} color={T.tertiary} />
         </button>
       </div>
+      {isLoopCandidate && (
+        <div style={{ padding: "10px 12px", background: T.darkBg, border: `1px solid ${T.copper}`, borderRadius: 8 }}>
+          <div style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 700, letterSpacing: 0.8, marginBottom: 6 }}>LOOP COURSE DETECTED</div>
+          <div style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, marginBottom: 8, lineHeight: 1.4 }}>
+            Start and endpoint are within 25m of each other. Choose how the markers render on every map:
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button
+              onClick={() => onUpdate({ loop_marker_mode: "split" })}
+              style={{ flex: 1, padding: "8px 10px", background: loopMode === "split" ? T.copper : T.darkCard, color: loopMode === "split" ? T.white : T.tertiary, border: `1px solid ${loopMode === "split" ? T.copper : T.charcoal}`, borderRadius: 6, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}
+            >
+              SPLIT S/E PIN
+            </button>
+            <button
+              onClick={() => onUpdate({ loop_marker_mode: "separate" })}
+              style={{ flex: 1, padding: "8px 10px", background: loopMode === "separate" ? T.copper : T.darkCard, color: loopMode === "separate" ? T.white : T.tertiary, border: `1px solid ${loopMode === "separate" ? T.copper : T.charcoal}`, borderRadius: 6, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}
+            >
+              SEPARATE PINS
+            </button>
+          </div>
+        </div>
+      )}
       <GDInput label="Label" value={pin.label || ""} onSave={(v) => onUpdate({ label: v })} />
       <div style={{ display: "flex", gap: 8 }}>
         <div style={{ flex: 1 }}>
@@ -24379,7 +24459,7 @@ function GearDropEditor({ dropId, currentUserId, onClose, onLoad, onUpdate, onDe
           )}
           {pins.length === 0 && <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, textAlign: "center", padding: 16 }}>No pins yet. Tap + ADD to seed the start point, then keep adding waypoints in order.</p>}
           {pins.map((pin, i) => (
-            <GDPinRow key={i} idx={i} pin={pin} isFirst={i === 0} isLast={i === pins.length - 1} onUpdate={(p) => updatePin(i, p)} onRemove={() => removePin(i)} currentUserId={currentUserId} />
+            <GDPinRow key={i} idx={i} pin={pin} isFirst={i === 0} isLast={i === pins.length - 1} startPin={pins[0] || null} onUpdate={(p) => updatePin(i, p)} onRemove={() => removePin(i)} currentUserId={currentUserId} />
           ))}
         </GDSection>
 
@@ -38863,6 +38943,13 @@ export default function Trailhead() {
     setGearDropPinBuilderPins(prev => prev.filter(p => p.id !== id));
   };
 
+  // Patch a single pin in place — used by the loop-marker toggle on
+  // the endpoint pin (route_data.pins[last].loop_marker_mode), per-pin
+  // radius edits, etc. Keep the merge shallow.
+  const updateGearDropPin = (id, patch) => {
+    setGearDropPinBuilderPins(prev => prev.map(p => p.id === id ? { ...p, ...patch } : p));
+  };
+
   const moveGearDropPin = (id, direction) => {
     setGearDropPinBuilderPins(prev => {
       const idx = prev.findIndex(p => p.id === id);
@@ -46041,7 +46128,7 @@ export default function Trailhead() {
             {isGuest && screen !== "routes" && <GuestBanner onSignIn={() => setShowGuestPrompt(true)} />}
             {screen === "feed" && renderFeedScopedTo({ hideFilters: false })}
             {screen === "forum" && <ForumScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} isAdmin={isAdmin} isModerator={isModerator} isAmbassador={isAmbassador} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentUserName={(currentProfile && currentProfile.full_name) || "You"} currentUserHandle={(currentProfile && currentProfile.handle) || ""} currentUserAvatar={profilePic || (currentProfile && currentProfile.avatar_url) || null} pendingThread={pendingThread} onPendingHandled={() => setPendingThread(null)} pendingForumSubNav={pendingForumSubNav} onConsumePendingForumSubNav={() => setPendingForumSubNav(null)} pendingForumCatNav={pendingForumCatNav} onConsumePendingForumCatNav={() => setPendingForumCatNav(null)} onAddNotification={requireAuth(addNotification)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onOpenShareCompose={openShareCompose} onOpenShareIntent={openShareIntent} onAddFeedPost={requireAuth((post) => addPost(post))} threadsBySub={forumThreadsBySub} repliesByThread={forumReplies} onAddForumThread={requireAuth(addForumThread)} onUpdateForumThread={requireAuth(updateForumThread)} onDeleteForumThread={requireAuth(deleteForumThreadRouted)} onAddForumReply={requireAuth(addForumReply)} onDeleteForumReply={requireAuth(deleteForumReplyRouted)} onLoadForumReplies={loadForumReplies} likedForumThreadIds={likedForumThreadIds} forumThreadLikeCounts={forumThreadLikeCounts} onToggleForumThreadLike={requireAuth(toggleForumThreadLike)} likedForumReplyIds={likedForumReplyIds} forumReplyLikeCounts={forumReplyLikeCounts} onToggleForumReplyLike={requireAuth(toggleForumReplyLike)} onBumpForumThreadView={bumpForumThreadView} onAwardPoints={awardPoints} categoriesList={forumCategoriesList} onAddCategory={requireAuth(addForumCategory)} onUpdateCategory={requireAuth(updateForumCategory)} onDeleteCategory={requireAuth(deleteForumCategory)} onAddSubcategory={requireAuth(addForumSubcategory)} onUpdateSubcategory={requireAuth(updateForumSubcategory)} onDeleteSubcategory={requireAuth(deleteForumSubcategory)} onReportContent={requireAuth(openContentReport)} onViewUser={openUserProfile} />}
-            {screen === "routes" && <RoutesScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} campingSpots={campingSpots} showCampingSpots={showCampingSpots} setShowCampingSpots={setShowCampingSpots} showPublicLands={showPublicLands} setShowPublicLands={setShowPublicLands} showSatellite={showSatellite} setShowSatellite={setShowSatellite} onOpenShareIntent={openShareIntent} tripAuthors={tripAuthors} onLoadRouteData={loadTripRouteData} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} tripReports={allTripReports} showTripReports={showTripReports} setShowTripReports={setShowTripReports} tripPlans={allTripPlans} showTripPlans={showTripPlans} setShowTripPlans={setShowTripPlans} onMapViewportChange={onMapViewportChange} onAddCampingSpot={requireAuth(addCampingSpot)} onUpdateCampingSpot={requireAuth(updateCampingSpot)} onDeleteCampingSpot={requireAuth(deleteCampingSpot)} onAddPhotoToSpot={requireAuth(addPhotoToSpot)} onDeletePhotoFromSpot={requireAuth(deletePhotoFromSpot)} onLoadCampingSpotPhotos={loadCampingSpotPhotos} onLoadCampingSpotElevation={loadCampingSpotElevation} spotAuthors={spotAuthors} onViewUser={openUserProfile} onStartNav={(route) => setActiveNavRoute(route)} onOpenTripDetail={(slug) => setPendingTripNav(slug)} onOpenTripPlanDraft={(id) => setDetailTripId(id)} onNewTripReport={() => setTripCreatorMode("report")} onNewTripPlan={() => requireAuth(() => enterPlanBuilder())()} pendingSpotNav={pendingSpotNav} onConsumePendingSpotNav={() => setPendingSpotNav(null)} pendingHQOpen={pendingHQOpen} onConsumePendingHQOpen={() => setPendingHQOpen(false)} pendingPlanNav={pendingPlanNav} onConsumePendingPlanNav={() => setPendingPlanNav(null)} onShareCampingSpotToFeed={requireAuth(shareCampingSpotToFeed)} onShareHQToFeed={requireAuth(shareHQToFeed)} onShareTripToFeed={requireAuth(shareTripToFeed)} onShareTripPlanToFeed={requireAuth(shareTripPlanToFeed)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onShowToast={showErrorToast} onOpenShareCompose={openShareCompose} savedTripIds={savedTripIds} onToggleSaveTrip={requireAuth(toggleSaveTrip)} planBuilder={{ active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, editingId: planBuilderEditingId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen, accent: (planBuilderEditingId && (tripReports || []).find(t => t.id === planBuilderEditingId && t.kind === "report")) ? T.purple : T.copper }} gearDropPinBuilder={{ active: gearDropPinBuilderActive, dropId: gearDropPinBuilderDropId, pins: gearDropPinBuilderPins, saving: gearDropPinBuilderSaving, mode: gearDropPinBuilderMode, addPin: addGearDropPin, removePin: removeGearDropPin, movePin: moveGearDropPin, commit: commitGearDropPinBuilder, exit: exitGearDropPinBuilder }} />}
+            {screen === "routes" && <RoutesScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} campingSpots={campingSpots} showCampingSpots={showCampingSpots} setShowCampingSpots={setShowCampingSpots} showPublicLands={showPublicLands} setShowPublicLands={setShowPublicLands} showSatellite={showSatellite} setShowSatellite={setShowSatellite} onOpenShareIntent={openShareIntent} tripAuthors={tripAuthors} onLoadRouteData={loadTripRouteData} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} tripReports={allTripReports} showTripReports={showTripReports} setShowTripReports={setShowTripReports} tripPlans={allTripPlans} showTripPlans={showTripPlans} setShowTripPlans={setShowTripPlans} onMapViewportChange={onMapViewportChange} onAddCampingSpot={requireAuth(addCampingSpot)} onUpdateCampingSpot={requireAuth(updateCampingSpot)} onDeleteCampingSpot={requireAuth(deleteCampingSpot)} onAddPhotoToSpot={requireAuth(addPhotoToSpot)} onDeletePhotoFromSpot={requireAuth(deletePhotoFromSpot)} onLoadCampingSpotPhotos={loadCampingSpotPhotos} onLoadCampingSpotElevation={loadCampingSpotElevation} spotAuthors={spotAuthors} onViewUser={openUserProfile} onStartNav={(route) => setActiveNavRoute(route)} onOpenTripDetail={(slug) => setPendingTripNav(slug)} onOpenTripPlanDraft={(id) => setDetailTripId(id)} onNewTripReport={() => setTripCreatorMode("report")} onNewTripPlan={() => requireAuth(() => enterPlanBuilder())()} pendingSpotNav={pendingSpotNav} onConsumePendingSpotNav={() => setPendingSpotNav(null)} pendingHQOpen={pendingHQOpen} onConsumePendingHQOpen={() => setPendingHQOpen(false)} pendingPlanNav={pendingPlanNav} onConsumePendingPlanNav={() => setPendingPlanNav(null)} onShareCampingSpotToFeed={requireAuth(shareCampingSpotToFeed)} onShareHQToFeed={requireAuth(shareHQToFeed)} onShareTripToFeed={requireAuth(shareTripToFeed)} onShareTripPlanToFeed={requireAuth(shareTripPlanToFeed)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onShowToast={showErrorToast} onOpenShareCompose={openShareCompose} savedTripIds={savedTripIds} onToggleSaveTrip={requireAuth(toggleSaveTrip)} planBuilder={{ active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, editingId: planBuilderEditingId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen, accent: (planBuilderEditingId && (tripReports || []).find(t => t.id === planBuilderEditingId && t.kind === "report")) ? T.purple : T.copper }} gearDropPinBuilder={{ active: gearDropPinBuilderActive, dropId: gearDropPinBuilderDropId, pins: gearDropPinBuilderPins, saving: gearDropPinBuilderSaving, mode: gearDropPinBuilderMode, addPin: addGearDropPin, removePin: removeGearDropPin, movePin: moveGearDropPin, updatePin: updateGearDropPin, commit: commitGearDropPinBuilder, exit: exitGearDropPinBuilder }} />}
             {screen === "builds" && <BuildsScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onViewUser={openUserProfile} userBuilds={userBuilds} allBuilds={allBuilds} onLoadAllBuilds={loadAllBuildsOnce} onLoadBuildById={loadBuildById} allBuildsLoaded={allBuildsLoaded} buildSaving={buildSaving} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} followingIds={followingIds} pendingBuildNav={pendingBuildNav} onConsumePendingBuildNav={() => setPendingBuildNav(null)} onAddBuild={requireAuth(addBuild)} userRoutes={userRoutes} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onOpenShareCompose={openShareCompose} onOpenShareIntent={openShareIntent} onUpdateBuild={requireAuth(updateBuild)} likedBuildIds={likedBuildIds} buildLikeCounts={buildLikeCounts} onToggleBuildLike={requireAuth(toggleBuildLike)} onDeleteBuild={requireAuth(deleteBuild)} onPostBuildToFeed={requireAuth((b, opts) => { const rawBd = b.buildData; const bd = scrubLocalPhotosFromBuildData(rawBd); const isLocalUrl = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:")); const rawHero = b.image || (rawBd && rawBd.mainPhotos && rawBd.mainPhotos[0] && rawBd.mainPhotos[0].url) || null; const cleanHero = isLocalUrl(rawHero) ? ((bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url) || null) : rawHero; const heroImg = isLocalUrl(cleanHero) ? null : cleanHero; const meName = (currentProfile && currentProfile.full_name) || "You"; const myUid = supabaseSession && supabaseSession.user && supabaseSession.user.id; const isReshare = b.userId && myUid && b.userId !== myUid; const ownerHandle = isReshare ? (b.handle || "").replace(/^@/, "") : null; const ownerName = isReshare ? (b.owner || null) : null; addPost({ id: "feedbuild_" + Date.now(), type: "BUILDS", user: meName, initial: meName.charAt(0).toUpperCase(), time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, subtitle: isReshare ? `Shared @${ownerHandle}'s build` : "Added a new build", vehicle: `${b.year} ${b.make} ${b.model}`, photoUrls: heroImg ? [heroImg] : undefined, image: heroImg, likes: 0, comments: 0, buildData: bd, buildRawId: b.rawId != null ? b.rawId : null, sharedFromOwnerHandle: ownerHandle, sharedFromOwnerName: ownerName, _skipBuildIdCol: isReshare }); awardPoints(POINTS.feedPost, "Build Shared"); })} buildComments={buildComments} onLoadBuildComments={loadBuildComments} onAddBuildComment={requireAuth(addBuildComment)} onDeleteBuildComment={deleteBuildComment} likedBuildCommentIds={likedBuildCommentIds} buildCommentLikeCounts={buildCommentLikeCounts} onToggleBuildCommentLike={requireAuth(toggleBuildCommentLike)} currentUserName={(currentProfile && currentProfile.full_name) || ""} currentUserHandle={(currentProfile && currentProfile.handle) ? "@" + currentProfile.handle : ""} currentUserAvatar={(currentProfile && currentProfile.avatar_url) || null} allTripReports={allTripReports} />}
             {screen === "ambassador" && (isGuest
               ? <GuestGateScreen title="AMBASSADOR DASHBOARD REQUIRES AN ACCOUNT" subtitle="Sign in to view your ambassador code, commissions, and payouts." onSignIn={goToLoginFromGuest} />
