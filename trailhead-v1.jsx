@@ -584,6 +584,12 @@ if (!document.querySelector('style[data-trailhead-mapbox]')) {
       background-size: 200% 100%;
       animation: th-shimmer 1.4s ease-in-out infinite;
     }
+    /* Gear drops — pulsing dot on the IN PROGRESS chip overlaid on a
+       live event's hero. Subtle but obvious enough to read as 'live now'. */
+    @keyframes gd-pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%      { opacity: 0.45; transform: scale(0.78); }
+    }
   `;
   document.head.appendChild(mbStyle);
 }
@@ -23413,6 +23419,32 @@ function slugifyGearDropTitle(title) {
   return cleaned || "gear-drop";
 }
 
+// Elapsed-time helpers shared by GearDropDetailScreen, GearDropRunScreen,
+// and GearDropMementoScreen. Elapsed = first submission timestamp →
+// finished_at (the only durations we can compute deterministically
+// server-side — race-clock-vs-individual-start doesn't apply to the
+// progressive-reveal format). Returns null when the row hasn't
+// finished or progress is empty.
+function elapsedMsForGearDropRun(row) {
+  if (!row || !row.finished_at) return null;
+  const subs = row.progress && Array.isArray(row.progress.submissions) ? row.progress.submissions : [];
+  if (subs.length === 0) return null;
+  const start = new Date(subs[0].submittedAt).getTime();
+  const end = new Date(row.finished_at).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+  return Math.max(0, end - start);
+}
+function fmtGearDropElapsed(ms) {
+  if (ms == null) return "—";
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec - h * 3600) / 60);
+  const s = totalSec - h * 3600 - m * 60;
+  if (h > 0) return `${h}h ${m}m ${s}s`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
 function GDInput({ label, value, onSave, type = "text", placeholder }) {
   const [local, setLocal] = useState(value);
   useEffect(() => { setLocal(value); }, [value]);
@@ -25342,6 +25374,15 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, onClose, onLoad,
       .sort((a, b) => new Date(a.finished_at).getTime() - new Date(b.finished_at).getTime());
   }, [racers]);
 
+  // Winner card overlay (hero) — derive from racers so we get the
+  // attached profile snippet + their elapsed time without a second
+  // fetch. Falls back to null when racers haven't hydrated yet.
+  const winnerRacer = useMemo(() => {
+    if (!drop || !drop.winner_run_id) return null;
+    return (racers || []).find(r => r.id === drop.winner_run_id) || null;
+  }, [drop && drop.winner_run_id, racers]);
+  const winnerElapsedMs = useMemo(() => elapsedMsForGearDropRun(winnerRacer), [winnerRacer]);
+
   if (!drop) {
     return (
       <div style={{ position: "fixed", inset: 0, background: T.darkBg, zIndex: 200, display: "flex", flexDirection: "column" }}>
@@ -25440,10 +25481,55 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, onClose, onLoad,
       </div>
 
       {heroSrc && (
-        <div style={{ width: "100%", aspectRatio: "16/9", background: `linear-gradient(180deg, transparent 35%, rgba(17,17,17,0.9) 100%), url(${heroSrc}) center/cover`, display: "flex", alignItems: "flex-end", padding: "20px 18px" }}>
-          <div style={{ maxWidth: "100%" }}>
-            <h1 style={{ fontFamily: sans, fontSize: 24, color: T.white, fontWeight: 800, lineHeight: 1.15, margin: 0, textShadow: "0 2px 12px rgba(0,0,0,0.6)" }}>{drop.title}</h1>
+        <div style={{ position: "relative", width: "100%" }}>
+          {/* Red glow + outline while live — fades to nothing on
+              scheduled / ended. The outline lives on the wrapper so the
+              overlays sit ABOVE it. */}
+          <div style={{ width: "100%", aspectRatio: "16/9", background: `linear-gradient(180deg, transparent 35%, rgba(17,17,17,0.9) 100%), url(${heroSrc}) center/cover`, display: "flex", alignItems: "flex-end", padding: "20px 18px", border: isLive ? `3px solid ${T.red}` : "none", boxShadow: isLive ? `0 0 24px ${T.red}55, inset 0 0 0 1px ${T.red}40` : "none", boxSizing: "border-box" }}>
+            <div style={{ maxWidth: "100%" }}>
+              <h1 style={{ fontFamily: sans, fontSize: 24, color: T.white, fontWeight: 800, lineHeight: 1.15, margin: 0, textShadow: "0 2px 12px rgba(0,0,0,0.6)" }}>{drop.title}</h1>
+            </div>
           </div>
+
+          {/* IN PROGRESS chip — live, no winner yet. Pulsing dot gives
+              it the "live event" cue at a glance. */}
+          {isLive && !hasWinner && (
+            <div style={{ position: "absolute", top: 14, right: 14, display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 11px", background: T.red, borderRadius: 999, boxShadow: `0 4px 16px ${T.red}80` }}>
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: T.white, animation: "gd-pulse 1.2s ease-in-out infinite" }} />
+              <span style={{ fontFamily: sans, fontSize: 9, color: T.white, fontWeight: 800, letterSpacing: 1 }}>IN PROGRESS</span>
+            </div>
+          )}
+
+          {/* Winner card overlay — covers the hero with a celebratory
+              card once winner_run_id is set. Pulled from the racers
+              list so the avatar + handle + elapsed all match the
+              leaderboard's source of truth. */}
+          {hasWinner && (
+            <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.74)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+              <div style={{ width: "100%", maxWidth: 320, padding: "18px 18px 20px", background: T.darkCard, border: `2px solid ${T.copper}`, borderRadius: 16, boxShadow: `0 0 32px ${T.copper}55`, textAlign: "center" }}>
+                <Trophy size={30} color={T.copper} style={{ marginBottom: 6 }} />
+                <div style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 800, letterSpacing: 1.4, marginBottom: 12 }}>WINNER</div>
+                <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 }}>
+                  <div style={{ width: 56, height: 56, borderRadius: "50%", background: T.charcoal, overflow: "hidden", border: `2px solid ${T.copper}` }}>
+                    {winnerRacer && winnerRacer.author && winnerRacer.author.avatar_url && (
+                      <img src={winnerRacer.author.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    )}
+                  </div>
+                </div>
+                <div style={{ fontFamily: sans, fontSize: 17, color: T.white, fontWeight: 800, lineHeight: 1.2 }}>
+                  {(winnerRacer && winnerRacer.author && (winnerRacer.author.full_name || winnerRacer.author.handle)) || "A racer"}
+                </div>
+                {winnerRacer && winnerRacer.author && winnerRacer.author.handle && (
+                  <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 2 }}>@{winnerRacer.author.handle}</div>
+                )}
+                {winnerElapsedMs != null && (
+                  <div style={{ marginTop: 10, fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 0.6 }}>
+                    FINISHED IN {fmtGearDropElapsed(winnerElapsedMs)}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -25751,9 +25837,15 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, onClose, onLoad,
                         <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>@{(author && author.handle) || "racer"}</div>
                       </div>
                       <div style={{ textAlign: "right", flexShrink: 0 }}>
-                        {row.finished_at ? (
-                          <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 700, letterSpacing: 0.6 }}>FINISHED</span>
-                        ) : (
+                        {row.finished_at ? (() => {
+                          const ms = elapsedMsForGearDropRun(row);
+                          return (
+                            <>
+                              <div style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700 }}>{fmtGearDropElapsed(ms)}</div>
+                              <div style={{ fontFamily: sans, fontSize: 8, color: T.copper, fontWeight: 700, letterSpacing: 0.6, marginTop: 1 }}>FINAL TIME</div>
+                            </>
+                          );
+                        })() : (
                           <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, fontWeight: 700 }}>{progress}/{waypointCount}</span>
                         )}
                       </div>
@@ -26950,9 +27042,15 @@ function GearDropRunScreen({ runId, currentUserId, onClose, onLoadRun, onLoadDro
                         <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>@{(author && author.handle) || "racer"}</div>
                       </div>
                       <div style={{ textAlign: "right", flexShrink: 0 }}>
-                        {row.finished_at ? (
-                          <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 700, letterSpacing: 0.6 }}>FINISHED</span>
-                        ) : (
+                        {row.finished_at ? (() => {
+                          const ms = elapsedMsForGearDropRun(row);
+                          return (
+                            <>
+                              <div style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700 }}>{fmtGearDropElapsed(ms)}</div>
+                              <div style={{ fontFamily: sans, fontSize: 8, color: T.copper, fontWeight: 700, letterSpacing: 0.6, marginTop: 1 }}>FINAL TIME</div>
+                            </>
+                          );
+                        })() : (
                           <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, fontWeight: 700 }}>{progress}/{totalStops}</span>
                         )}
                       </div>
