@@ -45332,8 +45332,15 @@ export default function Trailhead() {
           /trips/<slug> deep link, explore map pin tap). */}
       {detailTripId && !editingTripId && !showTripPinFullscreen && !showRecorder && (() => {
         // Look across both kinds — plans and reports share the detail surface.
+        // Gear-drop mementos (kind='gear_drop_run') are intentionally
+        // excluded from `allTripReports` / `allTripPlans` (per the design —
+        // they don't surface in the listing or explore map), so also scan
+        // raw `tripReports` to catch them. Without this, a recap-card tap
+        // sets detailTripId, the lookup misses, the timeout clears it,
+        // and the user bounces back to the screen underneath.
         const trip = (allTripReports || []).find(t => t.id === detailTripId)
-                  || (allTripPlans || []).find(t => t.id === detailTripId);
+                  || (allTripPlans || []).find(t => t.id === detailTripId)
+                  || (tripReports || []).find(t => t.id === detailTripId);
         if (!trip) { setTimeout(() => setDetailTripId(null), 0); return null; }
         const author = (tripAuthors && tripAuthors[trip.user_id]) || null;
         const myUid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
