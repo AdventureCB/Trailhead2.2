@@ -18008,8 +18008,43 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose }) {
 }
 
 /* ─── RANKS / LEADERBOARD SCREEN ─── */
-function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp }) {
+function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, currentUserId, currentProfile, onLoadLeaderboard, onViewUser }) {
   const [tab, setTab] = useState("overview"); // overview | leaderboard | bounty | badges
+  // Leaderboard state. lbScope = global | following | weekly; lbData[scope]
+  // caches rows so switching tabs is instant after the first fetch. Refresh
+  // button forces a re-fetch.
+  const [lbScope, setLbScope] = useState("global");
+  const [lbData, setLbData] = useState({ global: null, following: null, weekly: null });
+  const [lbLoading, setLbLoading] = useState(false);
+  const lbListRef = useRef(null);
+  const lbYouRowRef = useRef(null);
+  const fetchLeaderboard = async (scope, force) => {
+    if (!onLoadLeaderboard) return;
+    if (!force && lbData[scope]) return; // cached
+    setLbLoading(true);
+    try {
+      const rows = await onLoadLeaderboard(scope, 100);
+      setLbData(prev => ({ ...prev, [scope]: rows }));
+    } catch (e) { console.error("[leaderboard] fetch failed", e); }
+    finally { setLbLoading(false); }
+  };
+  // Auto-fetch on tab change. Only fires when leaderboard tab is active
+  // so we don't waste a round trip while user is on OVERVIEW/BOUNTIES/BADGES.
+  useEffect(() => {
+    if (tab !== "leaderboard") return;
+    fetchLeaderboard(lbScope, false);
+  }, [tab, lbScope]);
+  // Auto-scroll YOU into view shortly after the scope's rows render. 200ms
+  // gives the list paint + initial render time to settle.
+  useEffect(() => {
+    if (tab !== "leaderboard") return;
+    const t = setTimeout(() => {
+      if (lbYouRowRef.current && lbYouRowRef.current.scrollIntoView) {
+        try { lbYouRowRef.current.scrollIntoView({ behavior: "smooth", block: "center" }); } catch {}
+      }
+    }, 250);
+    return () => clearTimeout(t);
+  }, [tab, lbScope, lbData]);
 
   // Use global RANK_TIERS
   const rankTiers = RANK_TIERS.map(r => ({ ...r, icon: RANK_ICON_MAP[r.icon] || Star }));
@@ -18046,24 +18081,46 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp })
   const bd = breakdownProp || {};
   const myPointsBreakdown = Object.entries(bd).filter(([, pts]) => pts > 0).map(([label, pts]) => ({ label, pts, icon: breakdownIcons[label] || Star })).sort((a, b) => b.pts - a.pts);
 
-  // ── Leaderboard ──
-  const lbOthers = [
-    { name: "Sierra_Tactical", initial: "S", points: 48900, streak: 47 },
-    { name: "Nomad_Queen", initial: "N", points: 32100, streak: 31 },
-    { name: "Peak_Finder", initial: "P", points: 28750, streak: 22 },
-    { name: "TrailBoss_88", initial: "T", points: 26200, streak: 18 },
-    { name: "DirtRoadDave", initial: "D", points: 22800, streak: 15 },
-    { name: "MountainGoat", initial: "M", points: 19400, streak: 12 },
-    { name: "FoxFanatic", initial: "F", points: 17600, streak: 9 },
-    { name: "BajaBound", initial: "B", points: 14200, streak: 6 },
-    { name: "StockHero", initial: "S", points: 13100, streak: 11 },
-    { name: "LiftKing", initial: "L", points: 12800, streak: 8 },
-    { name: "Nomad_Mike", initial: "N", points: 11200, streak: 3 },
-  ];
-  // Insert user and sort by points to compute dynamic rank
-  const lbAll = [...lbOthers, { name: "KyleLPO", initial: "K", points: myPoints, isYou: true, streak: 5 }].sort((a, b) => b.points - a.points);
-  const leaderboardData = lbAll.map((u, i) => ({ ...u, rank: i + 1, badge: (rankTiers.find(r => u.points >= r.min && u.points <= r.max) || rankTiers[0]).name }));
-  const myLeaderboardRank = leaderboardData.find(u => u.isYou)?.rank || "—";
+  // ── Leaderboard data ──
+  // Decorate raw RPC rows with rank index + isYou flag. Ensures the caller
+  // shows up even if their points = 0 (they wouldn't be in the global RPC
+  // result — that filters by points > 0). For weekly, no decoration needed
+  // since weekly rows come from points_log so the user only appears if they
+  // earned points this week.
+  const decorateLb = (rows, scope) => {
+    if (!Array.isArray(rows)) return [];
+    const me = (currentProfile && currentUserId) ? {
+      user_id: currentUserId,
+      handle: currentProfile.handle || "",
+      full_name: currentProfile.full_name || "You",
+      avatar_url: currentProfile.avatar_url || null,
+      points: myPoints,
+      login_streak: currentProfile.login_streak || 0,
+    } : null;
+    let list = rows.slice();
+    if (me && scope !== "weekly" && !list.some(r => r.user_id === currentUserId)) {
+      list.push(me);
+      list.sort((a, b) => (b.points || 0) - (a.points || 0));
+    }
+    return list.map((r, i) => ({
+      ...r,
+      rank: i + 1,
+      isYou: r.user_id === currentUserId,
+      initial: (r.full_name || r.handle || "?").charAt(0).toUpperCase(),
+      badge: (rankTiers.find(t => (r.points || 0) >= t.min && (r.points || 0) <= t.max) || rankTiers[0]).name,
+    }));
+  };
+  const leaderboardData = decorateLb(lbData[lbScope], lbScope);
+  // Compute my GLOBAL rank for OVERVIEW tab. Falls back to "—" until the
+  // global RPC has resolved.
+  const globalDecorated = decorateLb(lbData.global, "global");
+  const myLeaderboardRank = globalDecorated.find(u => u.isYou)?.rank || "—";
+  // Pre-fetch global on mount so the overview rank renders without
+  // requiring the user to tap LEADERBOARD first.
+  useEffect(() => {
+    if (!onLoadLeaderboard) return;
+    fetchLeaderboard("global", false);
+  }, []);
 
 
   // ── Bounty Board (admin-set, monetary value) ──
@@ -18263,63 +18320,111 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp })
       {/* ═══════════ LEADERBOARD TAB ═══════════ */}
       {tab === "leaderboard" && (
         <div>
-          {/* Header: All Time + live indicator */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px 10px" }}>
-            <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 1 }}>ALL TIME</span>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: T.green, display: "inline-block", boxShadow: `0 0 6px ${T.green}` }} />
-              <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.5 }}>LIVE · UPDATES HOURLY</span>
-            </div>
-          </div>
-
-          {/* Top 3 Podium */}
-          <div style={{ display: "flex", justifyContent: "center", alignItems: "flex-end", gap: 8, padding: "8px 16px 20px" }}>
-            {[leaderboardData[1], leaderboardData[0], leaderboardData[2]].map((u, i) => {
-              const podiumOrder = [2, 1, 3];
-              const heights = [90, 110, 75];
-              const medalColors = ["#C0C0C0", "#FFD700", "#CD7F32"];
+          {/* Scope tabs — GLOBAL / FOLLOWING / WEEKLY */}
+          <div style={{ display: "flex", gap: 6, padding: "12px 16px 8px" }}>
+            {[
+              { key: "global", label: "GLOBAL" },
+              { key: "following", label: "FOLLOWING" },
+              { key: "weekly", label: "THIS WEEK" },
+            ].map(s => {
+              const active = lbScope === s.key;
               return (
-                <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center" }}>
-                  <div style={{ width: i === 1 ? 52 : 44, height: i === 1 ? 52 : 44, borderRadius: "50%", background: T.charcoal, border: `2px solid ${medalColors[i]}`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 6 }}>
-                    <span style={{ fontFamily: sans, fontSize: i === 1 ? 16 : 14, fontWeight: 700, color: T.white }}>{u.initial}</span>
-                  </div>
-                  <span style={{ fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 600, marginBottom: 2, textAlign: "center" }}>{u.name.length > 12 ? u.name.slice(0, 11) + "…" : u.name}</span>
-                  <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600, marginBottom: 6 }}>{u.points.toLocaleString()}</span>
-                  <div style={{ width: "100%", height: heights[i], borderRadius: "10px 10px 0 0", background: `linear-gradient(180deg, ${medalColors[i]}30, ${medalColors[i]}08)`, display: "flex", alignItems: "center", justifyContent: "center", border: `1px solid ${medalColors[i]}30`, borderBottom: "none" }}>
-                    <span style={{ fontFamily: sans, fontSize: 22, fontWeight: 700, color: medalColors[i] }}>#{podiumOrder[i]}</span>
-                  </div>
-                </div>
+                <button key={s.key} onClick={() => setLbScope(s.key)} style={{ flex: 1, padding: "8px 0", borderRadius: 8, border: active ? `1px solid ${T.red}` : `1px solid ${T.charcoal}`, background: active ? `${T.red}18` : T.darkCard, cursor: "pointer", fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.8, color: active ? T.red : T.tertiary }}>
+                  {s.label}
+                </button>
               );
             })}
           </div>
 
-          {/* Full List */}
-          <div style={{ padding: "0 16px" }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              {leaderboardData.map((r, i) => {
-                const userRank = rankTiers.find(t => r.points >= t.min && r.points <= t.max) || rankTiers[0];
+          {/* Sub-header: scope label + refresh */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 16px 10px" }}>
+            <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 1 }}>
+              {lbScope === "weekly" ? "LAST 7 DAYS" : lbScope === "following" ? "PEOPLE YOU FOLLOW" : "ALL TIME"}
+            </span>
+            <button onClick={() => fetchLeaderboard(lbScope, true)} disabled={lbLoading} style={{ background: "none", border: "none", cursor: lbLoading ? "wait" : "pointer", display: "flex", alignItems: "center", gap: 6, opacity: lbLoading ? 0.5 : 1 }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: T.green, display: "inline-block", boxShadow: `0 0 6px ${T.green}` }} />
+              <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.5 }}>{lbLoading ? "REFRESHING…" : "TAP TO REFRESH"}</span>
+            </button>
+          </div>
+
+          {/* Loading / empty states */}
+          {lbData[lbScope] === null && lbLoading && (
+            <div style={{ padding: "40px 16px", textAlign: "center" }}>
+              <span style={{ fontFamily: serif, fontSize: 12, color: T.tertiary }}>Loading leaderboard…</span>
+            </div>
+          )}
+          {lbData[lbScope] !== null && leaderboardData.length === 0 && (
+            <div style={{ padding: "40px 16px", textAlign: "center" }}>
+              <span style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, lineHeight: 1.6, display: "block" }}>
+                {lbScope === "following"
+                  ? "Follow other overlanders to populate your circle leaderboard."
+                  : lbScope === "weekly"
+                    ? "No points awarded yet this week. Be the first."
+                    : "No one has earned points yet. Be the first."}
+              </span>
+            </div>
+          )}
+
+          {/* Top 3 Podium — only when we have at least 3 rows */}
+          {leaderboardData.length >= 3 && (
+            <div style={{ display: "flex", justifyContent: "center", alignItems: "flex-end", gap: 8, padding: "8px 16px 20px" }}>
+              {[leaderboardData[1], leaderboardData[0], leaderboardData[2]].map((u, i) => {
+                const podiumOrder = [2, 1, 3];
+                const heights = [90, 110, 75];
+                const medalColors = ["#C0C0C0", "#FFD700", "#CD7F32"];
                 return (
-                  <div key={i} style={{ background: r.isYou ? `${T.red}12` : T.darkCard, borderRadius: 10, padding: "11px 14px", display: "flex", alignItems: "center", gap: 12, border: r.isYou ? `1px solid ${T.red}25` : "1px solid transparent" }}>
-                    <span style={{ fontFamily: sans, fontSize: 14, color: r.rank <= 3 ? "#FFD700" : r.isYou ? T.red : T.tertiary, fontWeight: 700, width: 26, textAlign: "center" }}>{r.rank}</span>
-                    <div style={{ width: 34, height: 34, borderRadius: "50%", background: r.isYou ? T.red : T.charcoal, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      <span style={{ fontFamily: sans, fontSize: 12, fontWeight: 700, color: T.white }}>{r.initial}</span>
+                  <div key={u.user_id || i} onClick={() => { if (!u.isYou && onViewUser && u.user_id) onViewUser(u.user_id); }} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", cursor: !u.isYou && onViewUser ? "pointer" : "default" }}>
+                    <div style={{ width: i === 1 ? 52 : 44, height: i === 1 ? 52 : 44, borderRadius: "50%", background: T.charcoal, border: `2px solid ${medalColors[i]}`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 6, overflow: "hidden" }}>
+                      {u.avatar_url
+                        ? <img src={u.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        : <span style={{ fontFamily: sans, fontSize: i === 1 ? 16 : 14, fontWeight: 700, color: T.white }}>{u.initial}</span>}
                     </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <span style={{ fontFamily: sans, fontSize: 13, color: r.isYou ? T.red : T.white, fontWeight: 600, display: "block" }}>{r.isYou ? "You" : r.name}</span>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <span style={{ fontFamily: sans, fontSize: 10, color: userRank.color }}>{userRank.name}</span>
-                        {r.streak >= 7 && <span style={{ display: "flex", alignItems: "center", gap: 2 }}><Flame size={9} color={T.red} /><span style={{ fontFamily: sans, fontSize: 9, color: T.red }}>{r.streak}d</span></span>}
-                      </div>
-                    </div>
-                    <div style={{ textAlign: "right" }}>
-                      <span style={{ fontFamily: sans, fontSize: 14, color: T.copper, fontWeight: 600, display: "block" }}>{r.points.toLocaleString()}</span>
-                      <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>pts</span>
+                    <span style={{ fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 600, marginBottom: 2, textAlign: "center" }}>
+                      {(() => { const n = u.isYou ? "You" : (u.handle || u.full_name || "—"); return n.length > 12 ? n.slice(0, 11) + "…" : n; })()}
+                    </span>
+                    <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600, marginBottom: 6 }}>{(u.points || 0).toLocaleString()}</span>
+                    <div style={{ width: "100%", height: heights[i], borderRadius: "10px 10px 0 0", background: `linear-gradient(180deg, ${medalColors[i]}30, ${medalColors[i]}08)`, display: "flex", alignItems: "center", justifyContent: "center", border: `1px solid ${medalColors[i]}30`, borderBottom: "none" }}>
+                      <span style={{ fontFamily: sans, fontSize: 22, fontWeight: 700, color: medalColors[i] }}>#{podiumOrder[i]}</span>
                     </div>
                   </div>
                 );
               })}
             </div>
-          </div>
+          )}
+
+          {/* Full List */}
+          {leaderboardData.length > 0 && (
+            <div ref={lbListRef} style={{ padding: "0 16px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {leaderboardData.map((r) => {
+                  const userRank = rankTiers.find(t => (r.points || 0) >= t.min && (r.points || 0) <= t.max) || rankTiers[0];
+                  return (
+                    <div key={r.user_id || r.rank} ref={r.isYou ? lbYouRowRef : null} onClick={() => { if (!r.isYou && onViewUser && r.user_id) onViewUser(r.user_id); }} style={{ background: r.isYou ? `${T.red}12` : T.darkCard, borderRadius: 10, padding: "11px 14px", display: "flex", alignItems: "center", gap: 12, border: r.isYou ? `1px solid ${T.red}25` : "1px solid transparent", cursor: !r.isYou && onViewUser ? "pointer" : "default" }}>
+                      <span style={{ fontFamily: sans, fontSize: 14, color: r.rank <= 3 ? "#FFD700" : r.isYou ? T.red : T.tertiary, fontWeight: 700, width: 26, textAlign: "center" }}>{r.rank}</span>
+                      <div style={{ width: 34, height: 34, borderRadius: "50%", background: r.isYou ? T.red : T.charcoal, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" }}>
+                        {r.avatar_url
+                          ? <img src={r.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          : <span style={{ fontFamily: sans, fontSize: 12, fontWeight: 700, color: T.white }}>{r.initial}</span>}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ fontFamily: sans, fontSize: 13, color: r.isYou ? T.red : T.white, fontWeight: 600, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {r.isYou ? "You" : (r.handle ? `@${r.handle}` : (r.full_name || "—"))}
+                        </span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ fontFamily: sans, fontSize: 10, color: userRank.color }}>{userRank.name}</span>
+                          {(r.login_streak || 0) >= 7 && <span style={{ display: "flex", alignItems: "center", gap: 2 }}><Flame size={9} color={T.red} /><span style={{ fontFamily: sans, fontSize: 9, color: T.red }}>{r.login_streak}d</span></span>}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <span style={{ fontFamily: sans, fontSize: 14, color: T.copper, fontWeight: 600, display: "block" }}>{(r.points || 0).toLocaleString()}</span>
+                        <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>{lbScope === "weekly" ? "pts (7d)" : "pts"}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -43310,6 +43415,18 @@ export default function Trailhead() {
     return out;
   }, [currentProfile && currentProfile.points_breakdown]);
   const myTotalPoints = (currentProfile && currentProfile.points) || 0;
+  // Leaderboard fetch — single helper, switches RPC by scope. Returns rows
+  // shaped as { user_id, handle, full_name, avatar_url, points, login_streak }.
+  // Scopes: "global" | "following" | "weekly". Caller is responsible for any
+  // caching / loading state.
+  const loadLeaderboard = async (scope, limit = 100) => {
+    const fn = scope === "weekly" ? "leaderboard_weekly"
+             : scope === "following" ? "leaderboard_following"
+             : "leaderboard_global";
+    const { data, error } = await supabase.rpc(fn, { p_limit: limit });
+    if (error) { console.error(`[leaderboard] ${fn} error`, error); return []; }
+    return Array.isArray(data) ? data : [];
+  };
   // Keep the module-level rank-visibility flag in sync with viewer role.
   // Set during render (NOT in a useEffect) so the same render pass that
   // flips isAdmin also shows/hides every RankBadge child component. An
@@ -46490,7 +46607,7 @@ export default function Trailhead() {
             {screen === "ranks" && (isGuest
               ? <GuestGateScreen title="RANKS REQUIRE AN ACCOUNT" subtitle="Sign in to see the leaderboard and start earning points from your posts, routes and builds." onSignIn={goToLoginFromGuest} />
               : isAdmin
-                ? <RanksScreen myPoints={myTotalPoints} pointsBreakdown={friendlyPointsBreakdown} />
+                ? <RanksScreen myPoints={myTotalPoints} pointsBreakdown={friendlyPointsBreakdown} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentProfile={currentProfile} onLoadLeaderboard={loadLeaderboard} onViewUser={openUserProfile} />
                 : <div style={{ padding: 32, textAlign: "center", fontFamily: serif, fontSize: 14, color: T.tertiary, lineHeight: 1.6 }}>Ranks is coming in a future release.</div>
             )}
             {screen === "admin" && (isAdmin
