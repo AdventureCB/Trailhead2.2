@@ -226,45 +226,66 @@ const SEED_MY_BUILDS = [
 
 // ── Badge System (tier colors per level within each category) ──
 const BADGE_TIER_COLORS = ["#8B7D6B", "#C49A6C", "#C0A060", "#FFD700", "#BD472A"]; // grey → bronze → gold → gold-bright → red
+// Phase 3 restructure: every category measures ONE canonical signal (the
+// old "Community" tiered through posts→threads→likes which made the badge
+// ladder unreadable). Slug must match the recompute_badges + get_badge_progress
+// RPCs in supabase/migrations/20260623_ranks_phase_3_badges.sql.
 const BADGE_CATEGORIES = [
-  { name: "Trail Mastery", icon: MapPin, tiers: [
-    { name: "First Trail", desc: "Log your first route", goal: 1 },
-    { name: "Trail Runner", desc: "Log 5 routes", goal: 5 },
-    { name: "Pathmaker", desc: "Log 15 routes", goal: 15 },
-    { name: "Trail Legend", desc: "Log 50 routes", goal: 50 },
+  { name: "Trail Mastery", slug: "trail_mastery", icon: MapPin, metricLabel: "trip reports published", tiers: [
+    { name: "First Trail", desc: "Publish your first trip report", goal: 1 },
+    { name: "Trail Runner", desc: "Publish 5 trip reports", goal: 5 },
+    { name: "Pathmaker", desc: "Publish 15 trip reports", goal: 15 },
+    { name: "Trail Legend", desc: "Publish 50 trip reports", goal: 50 },
   ]},
-  { name: "Community", icon: MessageCircle, tiers: [
-    { name: "First Post", desc: "Create your first feed post", goal: 1 },
-    { name: "Storyteller", desc: "Create 10 forum threads", goal: 10 },
-    { name: "Helpful Hand", desc: "Get 50 likes on your posts", goal: 50 },
-    { name: "Community Pillar", desc: "Get 500 likes on your posts", goal: 500 },
+  { name: "Community", slug: "community", icon: MessageCircle, metricLabel: "forum threads", tiers: [
+    { name: "First Voice", desc: "Start your first forum thread", goal: 1 },
+    { name: "Storyteller", desc: "Start 10 forum threads", goal: 10 },
+    { name: "Conversation Starter", desc: "Start 50 forum threads", goal: 50 },
+    { name: "Community Pillar", desc: "Start 250 forum threads", goal: 250 },
   ]},
-  { name: "Builder", icon: Wrench, tiers: [
+  { name: "Builder", slug: "builder", icon: Wrench, metricLabel: "builds added", tiers: [
     { name: "Garage Started", desc: "Add your first build", goal: 1 },
-    { name: "Master Builder", desc: "Add 3 complete builds", goal: 3 },
-    { name: "Mod Guru", desc: "Log 20 modifications", goal: 20 },
+    { name: "Master Builder", desc: "Add 3 builds", goal: 3 },
+    { name: "Mod Guru", desc: "Add 5 builds", goal: 5 },
+    { name: "Garage Legend", desc: "Add 10 builds", goal: 10 },
   ]},
-  { name: "Explorer", icon: Compass, tiers: [
-    { name: "Daily Driver", desc: "Log in 7 days in a row", goal: 7 },
-    { name: "Dedicated", desc: "Log in 30 days in a row", goal: 30 },
-    { name: "Shutterbug", desc: "Upload 50 photos", goal: 50 },
-    { name: "First Responder", desc: "Respond to 5 recovery requests", goal: 5 },
+  { name: "Explorer", slug: "explorer", icon: Compass, metricLabel: "day login streak", tiers: [
+    { name: "Daily Driver", desc: "7-day login streak", goal: 7 },
+    { name: "Dedicated", desc: "30-day login streak", goal: 30 },
+    { name: "Devoted", desc: "100-day login streak", goal: 100 },
+    { name: "Year-Rounder", desc: "365-day login streak", goal: 365 },
   ]},
-  { name: "Bounty Hunter", icon: Target, tiers: [
+  { name: "Shutterbug", slug: "shutterbug", icon: Camera, metricLabel: "photos uploaded", tiers: [
+    { name: "Snapshot", desc: "Upload 5 photos", goal: 5 },
+    { name: "Lens", desc: "Upload 25 photos", goal: 25 },
+    { name: "Photographer", desc: "Upload 100 photos", goal: 100 },
+    { name: "Photo Pro", desc: "Upload 500 photos", goal: 500 },
+  ]},
+  { name: "First Responder", slug: "first_responder", icon: AlertTriangle, metricLabel: "recovery responses", tiers: [
+    { name: "Lifesaver", desc: "Respond to your first recovery", goal: 1 },
+    { name: "Trail Angel", desc: "Respond to 5 recoveries", goal: 5 },
+    { name: "Recovery Pro", desc: "Respond to 25 recoveries", goal: 25 },
+    { name: "Trail Guardian", desc: "Respond to 100 recoveries", goal: 100 },
+  ]},
+  { name: "Bounty Hunter", slug: "bounty_hunter", icon: Target, metricLabel: "bounties completed", tiers: [
     { name: "First Bounty", desc: "Complete your first bounty", goal: 1 },
     { name: "Bounty Pro", desc: "Complete 5 bounties", goal: 5 },
-    { name: "Top Contributor", desc: "Earn $500 in bounties", goal: 500 },
+    { name: "Bounty Champion", desc: "Complete 25 bounties", goal: 25 },
+    { name: "Bounty Legend", desc: "Complete 100 bounties", goal: 100 },
   ]},
 ];
-// User badge progress. Currently zero across the board until the backend
-// surfaces real progress per category — getBadgeTierForCategory returns
-// tier=-1 for any category at 0, and ProfileScreen filters those out so
-// no "earned" badges render for unearned categories.
+// MY_BADGE_PROGRESS used to be a static const here. Now it's hydrated at
+// runtime by Trailhead root from get_badge_progress RPC + mutated in
+// place so the existing getBadgeTierForCategory() callsites in
+// ProfileScreen + RanksScreen keep working without prop drilling.
+// Object reference is stable; only the inner numbers update.
 const MY_BADGE_PROGRESS = {
   "Trail Mastery": 0,
   "Community": 0,
   "Builder": 0,
   "Explorer": 0,
+  "Shutterbug": 0,
+  "First Responder": 0,
   "Bounty Hunter": 0,
 };
 function getBadgeTierForCategory(catName) {
@@ -43427,6 +43448,71 @@ export default function Trailhead() {
     if (error) { console.error(`[leaderboard] ${fn} error`, error); return []; }
     return Array.isArray(data) ? data : [];
   };
+  // ── Badges (Phase 3) ──
+  // myBadgeProgress is an object keyed by slug:
+  // { trail_mastery: {progress, highest_tier_index}, community: {...}, ... }
+  // Mirrored into the MY_BADGE_PROGRESS const (keyed by display name) so the
+  // existing module-scope getBadgeTierForCategory() function keeps working
+  // without prop drilling. Slug-to-name mapping comes from BADGE_CATEGORIES.
+  const [myBadgeProgress, setMyBadgeProgress] = useState({});
+  const [badgeToasts, setBadgeToasts] = useState([]);
+  const badgeSlugByName = useMemo(() => {
+    const m = {};
+    BADGE_CATEGORIES.forEach(c => { m[c.name] = c.slug; });
+    return m;
+  }, []);
+  const badgeCategoryBySlug = useMemo(() => {
+    const m = {};
+    BADGE_CATEGORIES.forEach(c => { m[c.slug] = c; });
+    return m;
+  }, []);
+  // Side-effect sync: keep the MY_BADGE_PROGRESS const in sync with state
+  // so existing call sites that read it (ProfileScreen badge grid,
+  // RanksScreen BADGES tab) see live values on next render. Direct
+  // mutation is intentional — the const is the shared lookup the
+  // module-scope getBadgeTierForCategory() reads. We don't trigger a
+  // re-render off it (state already does that).
+  BADGE_CATEGORIES.forEach(cat => {
+    const row = myBadgeProgress[cat.slug];
+    MY_BADGE_PROGRESS[cat.name] = (row && typeof row.progress === "number") ? row.progress : 0;
+  });
+  const refreshBadgeProgress = async (uid) => {
+    const targetUid = uid || (supabaseSession && supabaseSession.user && supabaseSession.user.id);
+    if (!targetUid) return;
+    const { data, error } = await supabase.rpc("get_badge_progress", { p_user_id: targetUid });
+    if (error) { console.error("[get_badge_progress] error", error); return; }
+    if (!Array.isArray(data)) return;
+    const next = {};
+    data.forEach(row => { if (row && row.category) next[row.category] = { progress: row.progress || 0, highest_tier_index: row.highest_tier_index ?? -1 }; });
+    setMyBadgeProgress(next);
+  };
+  // Hydrate once on app boot + refresh on auth changes.
+  useEffect(() => {
+    if (authState !== "app" || isGuest) return;
+    refreshBadgeProgress();
+  }, [authState, isGuest, supabaseSession && supabaseSession.user && supabaseSession.user.id]);
+  // Realtime sub: new badge_unlocks rows for this user → BADGE UNLOCKED toast.
+  // The realtime fire is the source of truth; we also refresh progress in
+  // case the unlock came from a side path (e.g. admin-issued).
+  useEffect(() => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid || isGuest) return;
+    const ch = supabase.channel(`badge_unlocks_${uid}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "badge_unlocks", filter: `user_id=eq.${uid}` }, (payload) => {
+        const row = payload && payload.new;
+        if (!row) return;
+        const cat = badgeCategoryBySlug[row.category];
+        if (!cat) return;
+        const tier = cat.tiers[row.tier_index];
+        if (!tier) return;
+        const toastId = Date.now() + Math.random();
+        setBadgeToasts(prev => [...prev, { id: toastId, categoryName: cat.name, tierName: tier.name, tierIndex: row.tier_index, color: BADGE_TIER_COLORS[Math.min(row.tier_index, BADGE_TIER_COLORS.length - 1)], iconKey: cat.name }]);
+        setTimeout(() => setBadgeToasts(prev => prev.filter(t => t.id !== toastId)), 4500);
+        refreshBadgeProgress(uid);
+      })
+      .subscribe();
+    return () => { try { supabase.removeChannel(ch); } catch {} };
+  }, [supabaseSession && supabaseSession.user && supabaseSession.user.id, isGuest]);
   // Keep the module-level rank-visibility flag in sync with viewer role.
   // Set during render (NOT in a useEffect) so the same render pass that
   // flips isAdmin also shows/hides every RankBadge child component. An
@@ -47560,6 +47646,29 @@ export default function Trailhead() {
               <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{toast.reason}</span>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Badge Unlock Toast — bigger / longer than points toast since this is
+          a meaningful milestone, not an everyday +5 ping */}
+      {badgeToasts.length > 0 && (
+        <div style={{ position: "fixed", top: 100, left: "50%", transform: "translateX(-50%)", zIndex: 9999, display: "flex", flexDirection: "column", gap: 8, alignItems: "center", pointerEvents: "none", maxWidth: 380 }}>
+          {badgeToasts.map(toast => {
+            const cat = BADGE_CATEGORIES.find(c => c.name === toast.iconKey);
+            const Icon = (cat && cat.icon) || Award;
+            return (
+              <div key={toast.id} style={{ background: `linear-gradient(135deg, ${T.charcoal}, ${toast.color}20)`, border: `1px solid ${toast.color}`, borderRadius: 12, padding: "12px 18px", display: "flex", alignItems: "center", gap: 12, animation: "fadeInUp 0.4s ease", boxShadow: `0 6px 30px ${toast.color}40` }}>
+                <div style={{ width: 38, height: 38, borderRadius: "50%", background: `${toast.color}25`, border: `1px solid ${toast.color}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Icon size={20} color={toast.color} strokeWidth={1.5} />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column" }}>
+                  <span style={{ fontFamily: sans, fontSize: 9, color: toast.color, letterSpacing: 2, fontWeight: 700 }}>BADGE UNLOCKED</span>
+                  <span style={{ fontFamily: sans, fontSize: 15, color: T.white, fontWeight: 700, marginTop: 2 }}>{toast.tierName}</span>
+                  <span style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, marginTop: 2 }}>{toast.categoryName}</span>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
