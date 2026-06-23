@@ -17270,7 +17270,14 @@ const BOUNTY_FORM_TEMPLATES = {
 
 /* ─── BOUNTY RESPONSE FORM ─── */
 function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUploadPhotos, currentUserId }) {
-  const template = BOUNTY_FORM_TEMPLATES[bounty.category] || BOUNTY_FORM_TEMPLATES["Content Creation"];
+  // Phase 6 polish: prefer bounty.form_config (admin-customized prompts) over
+  // the module-level BOUNTY_FORM_TEMPLATES. Falls back to the template
+  // referenced by form_template_key, then to the bounty's category, then to
+  // the catch-all "Content Creation" template.
+  const template = (bounty && bounty.form_config && Array.isArray(bounty.form_config.sections) && bounty.form_config)
+    || BOUNTY_FORM_TEMPLATES[bounty.form_template_key]
+    || BOUNTY_FORM_TEMPLATES[bounty.category]
+    || BOUNTY_FORM_TEMPLATES["Content Creation"];
   const [fields, setFields] = useState(() => {
     if (draft) return draft;
     const init = {};
@@ -29777,7 +29784,12 @@ function GearDropListRow({ drop, onOpen, onDelete }) {
        to show the admin what the user submitted. Phase 8 will reuse it
        for the published feed/forum/trip-report attribution. ─── */
 function BountyDraftRenderer({ bounty, draft }) {
-  const tpl = BOUNTY_FORM_TEMPLATES[bounty && (bounty.form_template_key || bounty.category)] || BOUNTY_FORM_TEMPLATES["Content Creation"];
+  // Same lookup precedence as the response form so admin review sees the
+  // sections the user actually filled out.
+  const tpl = (bounty && bounty.form_config && Array.isArray(bounty.form_config.sections) && bounty.form_config)
+    || BOUNTY_FORM_TEMPLATES[bounty && bounty.form_template_key]
+    || BOUNTY_FORM_TEMPLATES[bounty && bounty.category]
+    || BOUNTY_FORM_TEMPLATES["Content Creation"];
   if (!draft || typeof draft !== "object") {
     return <div style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, padding: 20, textAlign: "center" }}>Empty draft.</div>;
   }
@@ -30204,7 +30216,7 @@ function BountiesAdminScreen({ bounties, reviewQueue, onLoadReviewQueue, onBack,
 /* ─── BOUNTY EDITOR — admin create + edit (Phase 4) ─── */
 // Used for both new (bountyId="") and existing (bountyId=uuid). Loads
 // from DB on mount; auto-prefills via category template on new.
-function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete }) {
+function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, onUploadPhoto }) {
   const isNew = !bountyId;
   const [bounty, setBounty] = useState(null);
   const [loading, setLoading] = useState(!isNew);
@@ -30249,6 +30261,70 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete }
   }, [bountyId]);
   const patch = (partial) => {
     setBounty(prev => prev ? { ...prev, ...partial } : prev);
+    setHasUnsaved(true);
+  };
+  // Hero image uploader — same pipeline as bounty response form photos
+  // (uploadPostPhotoList → storage + AI alt + moderation). Stores the
+  // resulting public URL onto bounty.hero_img.
+  const heroInputRef = useRef(null);
+  const [uploadingHero, setUploadingHero] = useState(false);
+  const handleHeroUpload = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (e.target) e.target.value = "";
+    if (!file || !onUploadPhoto) return;
+    setUploadingHero(true);
+    try {
+      const out = await onUploadPhoto([file]);
+      const u = Array.isArray(out) && out[0];
+      if (u && u.url) patch({ hero_img: u.url });
+    } catch (err) {
+      console.error("[BountyEditor] hero upload failed", err);
+      setError(err && err.message ? err.message : "Hero upload failed");
+    } finally {
+      setUploadingHero(false);
+    }
+  };
+  // Deep-clone a template's sections into form_config so the admin can
+  // edit prompts per-bounty without mutating the module-level template.
+  const cloneTemplateSections = (templateKey) => {
+    const tpl = BOUNTY_FORM_TEMPLATES[templateKey];
+    if (!tpl || !Array.isArray(tpl.sections)) return null;
+    return {
+      description: tpl.description || "",
+      publishTo: tpl.publishTo || null,
+      sections: tpl.sections.map(s => ({ ...s, options: Array.isArray(s.options) ? s.options.slice() : s.options })),
+    };
+  };
+  // When picking a new template key, hydrate form_config from defaults so
+  // the editor below populates and the admin can tweak. Skip if there's
+  // already a custom config — admin would expect existing edits to stick.
+  const handleTemplateKeyChange = (key) => {
+    setBounty(prev => {
+      if (!prev) return prev;
+      const nextConfig = prev.form_config || cloneTemplateSections(key);
+      return { ...prev, form_template_key: key, form_config: nextConfig };
+    });
+    setHasUnsaved(true);
+  };
+  const resetFormConfigToTemplate = () => {
+    if (!bounty) return;
+    if (!confirm("Reset form prompts to template defaults? Any edits will be lost.")) return;
+    patch({ form_config: cloneTemplateSections(bounty.form_template_key || bounty.category) });
+  };
+  // Lazy-clone form_config on first edit so the admin doesn't need to
+  // pre-click "customize" — first prompt edit auto-promotes the bounty
+  // from template-default to custom.
+  const updateSection = (sectionId, partial) => {
+    setBounty(prev => {
+      if (!prev) return prev;
+      const baseConfig = prev.form_config || cloneTemplateSections(prev.form_template_key || prev.category);
+      if (!baseConfig) return prev;
+      const next = {
+        ...baseConfig,
+        sections: baseConfig.sections.map(s => s.id === sectionId ? { ...s, ...partial } : s),
+      };
+      return { ...prev, form_config: next };
+    });
     setHasUnsaved(true);
   };
   const handleSave = async (nextStatus) => {
@@ -30363,8 +30439,26 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete }
           <textarea value={bounty.description || ""} onChange={(e) => patch({ description: e.target.value })} rows={5} placeholder="Describe what the bounty is asking for. Be specific about deliverables." style={{ ...inputStyle, resize: "vertical", lineHeight: 1.5 }} />
         </div>
         <div>
-          <FieldLabel>Hero Image URL (optional)</FieldLabel>
-          <input value={bounty.hero_img || ""} onChange={(e) => patch({ hero_img: e.target.value || null })} placeholder="https://…" style={inputStyle} />
+          <FieldLabel>Hero image (optional)</FieldLabel>
+          <input ref={heroInputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={handleHeroUpload} style={{ display: "none" }} />
+          {bounty.hero_img ? (
+            <div style={{ position: "relative", borderRadius: 8, overflow: "hidden", background: T.charcoal }}>
+              <img src={bounty.hero_img} alt="" style={{ width: "100%", display: "block", maxHeight: 220, objectFit: "cover" }} />
+              <div style={{ position: "absolute", top: 8, right: 8, display: "flex", gap: 6 }}>
+                <button onClick={() => heroInputRef.current && heroInputRef.current.click()} disabled={uploadingHero} style={{ background: "rgba(0,0,0,0.7)", color: T.white, border: "none", borderRadius: 4, padding: "6px 10px", fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, cursor: uploadingHero ? "wait" : "pointer", opacity: uploadingHero ? 0.6 : 1 }}>
+                  {uploadingHero ? "UPLOADING…" : "REPLACE"}
+                </button>
+                <button onClick={() => patch({ hero_img: null })} disabled={uploadingHero} style={{ background: "rgba(0,0,0,0.7)", color: T.red, border: "none", borderRadius: 4, padding: "6px 10px", fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}>
+                  REMOVE
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => heroInputRef.current && heroInputRef.current.click()} disabled={uploadingHero} style={{ width: "100%", padding: "24px 16px", borderRadius: 8, border: `2px dashed ${T.charcoal}`, background: T.darkCard, color: uploadingHero ? T.tertiary : T.copper, fontFamily: sans, fontSize: 12, fontWeight: 600, letterSpacing: 0.5, cursor: uploadingHero ? "wait" : "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+              <Camera size={20} color={uploadingHero ? T.tertiary : T.copper} />
+              {uploadingHero ? "UPLOADING…" : "UPLOAD HERO IMAGE"}
+            </button>
+          )}
         </div>
       </div>
 
@@ -30416,17 +30510,111 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete }
         )}
       </div>
 
-      {/* FORM TEMPLATE */}
+      {/* FORM TEMPLATE — picker + per-section prompt editor */}
       <SectionLabel>RESPONSE FORM TEMPLATE</SectionLabel>
       <div style={{ padding: "0 16px" }}>
         <FieldLabel>Template (defines fields participants fill out)</FieldLabel>
-        <select value={bounty.form_template_key || bounty.category} onChange={(e) => patch({ form_template_key: e.target.value })} style={inputStyle}>
+        <select value={bounty.form_template_key || bounty.category} onChange={(e) => handleTemplateKeyChange(e.target.value)} style={inputStyle}>
           {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
         <div style={{ marginTop: 10, padding: 12, background: T.darkCard, borderRadius: 8, fontFamily: serif, fontSize: 11, color: T.tertiary, lineHeight: 1.5 }}>
-          {(BOUNTY_FORM_TEMPLATES[bounty.form_template_key || bounty.category] || {}).description || "—"}
+          {((bounty.form_config && bounty.form_config.description) || (BOUNTY_FORM_TEMPLATES[bounty.form_template_key || bounty.category] || {}).description) || "—"}
         </div>
       </div>
+
+      {/* PROMPT EDITOR — every section in the template/config exposes its
+          editable bits so the admin can tailor labels + placeholders + required
+          flags + photo minimums + heading text per-bounty. Edits lazy-promote
+          form_config from null → custom. */}
+      {(() => {
+        const sections = (bounty.form_config && bounty.form_config.sections)
+          || ((BOUNTY_FORM_TEMPLATES[bounty.form_template_key || bounty.category] || {}).sections)
+          || [];
+        const isCustom = !!bounty.form_config;
+        return (
+          <>
+            <div style={{ padding: "16px 16px 6px", display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700 }}>PROMPT EDITOR · {sections.length} FIELDS</span>
+              {isCustom && (
+                <button onClick={resetFormConfigToTemplate} style={{ marginLeft: "auto", background: "none", border: `1px solid ${T.charcoal}`, color: T.tertiary, fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, padding: "4px 8px", borderRadius: 4, cursor: "pointer" }}>RESET TO TEMPLATE</button>
+              )}
+            </div>
+            <div style={{ padding: "0 16px 6px", fontFamily: serif, fontSize: 11, color: T.tertiary, lineHeight: 1.5 }}>
+              Tweak prompts so participants fill out exactly what this bounty needs. First edit auto-promotes to custom; RESET drops back to template defaults.
+            </div>
+            <div style={{ padding: "0 16px", display: "flex", flexDirection: "column", gap: 8 }}>
+              {sections.map((s, i) => {
+                const typeColor = s.type === "h1" ? T.red
+                  : s.type === "h2" ? T.copper
+                  : s.type === "h3" ? "#C0A060"
+                  : s.type === "photos" ? T.green
+                  : s.type === "hero_image" ? T.copper
+                  : s.type === "route_builder" ? T.purple || "#8B6FAF"
+                  : T.tertiary;
+                const showPlaceholder = ["p", "short", "h1"].includes(s.type) || s.type === "photos" || s.type === "hero_image" || s.type === "bullet_list";
+                const showRequired = !s.fixed && (s.type !== "h2" && s.type !== "h3");
+                const showMin = s.type === "photos";
+                const showFixedValue = s.fixed && (s.type === "h2" || s.type === "h3");
+                const showOptions = s.type === "tag_select" || s.type === "select";
+                const showMax = s.type === "rating";
+                return (
+                  <div key={s.id || i} style={{ background: T.darkCard, borderRadius: 8, padding: 12, border: `1px solid ${T.charcoal}` }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                      <span style={{ fontFamily: sans, fontSize: 8, color: T.white, background: typeColor, padding: "2px 6px", borderRadius: 3, letterSpacing: 0.5, fontWeight: 700 }}>{(s.type || "").toUpperCase()}</span>
+                      <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, letterSpacing: 0.5 }}>#{i + 1}</span>
+                      {s.fixed && <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 1 }}>FIXED HEADING</span>}
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      <div>
+                        <FieldLabel>Label (admin-side; not shown to participant)</FieldLabel>
+                        <input value={s.label || ""} onChange={(e) => updateSection(s.id, { label: e.target.value })} style={{ ...inputStyle, padding: "8px 10px", fontSize: 12 }} />
+                      </div>
+                      {showFixedValue && (
+                        <div>
+                          <FieldLabel>Heading text (shown to participant)</FieldLabel>
+                          <input value={s.value || ""} onChange={(e) => updateSection(s.id, { value: e.target.value })} style={{ ...inputStyle, padding: "8px 10px", fontSize: 12 }} />
+                        </div>
+                      )}
+                      {showPlaceholder && (
+                        <div>
+                          <FieldLabel>Placeholder / prompt (shown inside the input)</FieldLabel>
+                          <textarea value={s.placeholder || ""} onChange={(e) => updateSection(s.id, { placeholder: e.target.value })} rows={2} style={{ ...inputStyle, padding: "8px 10px", fontSize: 12, resize: "vertical", lineHeight: 1.4 }} />
+                        </div>
+                      )}
+                      {showOptions && (
+                        <div>
+                          <FieldLabel>Options (comma-separated)</FieldLabel>
+                          <input value={(s.options || []).join(", ")} onChange={(e) => updateSection(s.id, { options: e.target.value.split(",").map(o => o.trim()).filter(Boolean) })} placeholder="Option A, Option B, Option C" style={{ ...inputStyle, padding: "8px 10px", fontSize: 12 }} />
+                        </div>
+                      )}
+                      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+                        {showRequired && (
+                          <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white }}>
+                            <input type="checkbox" checked={!!s.required} onChange={(e) => updateSection(s.id, { required: e.target.checked })} />
+                            Required
+                          </label>
+                        )}
+                        {showMin && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>Min photos:</span>
+                            <input type="number" min="0" step="1" value={s.min || 0} onChange={(e) => updateSection(s.id, { min: Math.max(0, Number(e.target.value)) })} style={{ ...inputStyle, width: 64, padding: "6px 8px", fontSize: 12 }} />
+                          </div>
+                        )}
+                        {showMax && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>Max rating:</span>
+                            <input type="number" min="2" max="10" step="1" value={s.max || 5} onChange={(e) => updateSection(s.id, { max: Math.max(2, Math.min(10, Number(e.target.value))) })} style={{ ...inputStyle, width: 64, padding: "6px 8px", fontSize: 12 }} />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        );
+      })()}
 
       {/* LIFECYCLE */}
       <SectionLabel>LIFECYCLE</SectionLabel>
@@ -47993,6 +48181,7 @@ export default function Trailhead() {
                       onCreate={createBounty}
                       onUpdate={updateBounty}
                       onDelete={deleteBounty}
+                      onUploadPhoto={uploadBountyPhotoFiles}
                     />
                   : <BountiesAdminScreen
                       bounties={bounties}
