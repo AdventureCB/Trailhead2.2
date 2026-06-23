@@ -17287,12 +17287,23 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
     const init = {};
     template.sections.forEach(s => {
       if (s.fixed) { init[s.id] = s.value; }
-      else if (s.type === "photos") { init[s.id] = Array.isArray(s.default_photos) ? s.default_photos.map(p => ({ ...p, id: Date.now() + Math.random() })) : []; }
+      else if (s.type === "photos") {
+        // Mark admin-prefilled photos with _locked so the renderer hides the
+        // remove + caption-edit affordances. User can still add more photos
+        // alongside them.
+        init[s.id] = Array.isArray(s.default_photos)
+          ? s.default_photos.map(p => ({ ...p, id: Date.now() + Math.random(), _locked: true }))
+          : [];
+      }
       else if (s.type === "bullet_list") { init[s.id] = Array.isArray(s.default_value) && s.default_value.length ? s.default_value.slice() : [""]; }
       else if (s.type === "tag_select") { init[s.id] = Array.isArray(s.default_value) ? s.default_value.slice() : []; }
       else if (s.type === "map_embed") { init[s.id] = ""; }
       else if (s.type === "route_builder") { init[s.id] = s.default_value || null; }
-      else if (s.type === "hero_image") { init[s.id] = s.default_value || null; }
+      else if (s.type === "hero_image") {
+        // Mark admin-prefilled hero with _locked so the renderer hides
+        // replace + remove buttons. The hero stays as-is for submission.
+        init[s.id] = s.default_value ? { ...s.default_value, _locked: true } : null;
+      }
       else if (s.type === "rating") { init[s.id] = Number(s.default_value) || 0; }
       else { init[s.id] = s.default_value || ""; }
     });
@@ -17767,20 +17778,30 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
                         ) : (
                           <img src={txImg(p.url, 480)} alt="" style={{ width: "100%", height: 220, objectFit: "cover", display: "block" }} />
                         )}
-                        <button onClick={() => removePhoto(section.id, p.id)} style={{ position: "absolute", top: 8, right: 8, width: 28, height: 28, borderRadius: "50%", background: "rgba(0,0,0,0.6)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2 }}>
-                          <X size={14} color={T.white} />
-                        </button>
+                        {/* Admin-prefilled media: locked badge, no remove button */}
+                        {p._locked ? (
+                          <div style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,0.7)", borderRadius: 4, padding: "3px 8px", display: "flex", alignItems: "center", gap: 4 }}>
+                            <Lock size={10} color={T.copper} />
+                            <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 700, letterSpacing: 0.5 }}>PREFILLED</span>
+                          </div>
+                        ) : (
+                          <button onClick={() => removePhoto(section.id, p.id)} style={{ position: "absolute", top: 8, right: 8, width: 28, height: 28, borderRadius: "50%", background: "rgba(0,0,0,0.6)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2 }}>
+                            <X size={14} color={T.white} />
+                          </button>
+                        )}
                       </div>
-                      <div style={{ padding: "8px 10px" }}>
-                        <input
-                          value={p.caption || ""}
-                          onChange={e => updateCaption(p.id, e.target.value)}
-                          placeholder="Add a caption..."
-                          style={{ width: "100%", padding: "8px 10px", borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.warmStone, fontFamily: serif, fontSize: 12, outline: "none", boxSizing: "border-box" }}
-                          onFocus={e => e.target.style.borderColor = T.copper + "60"}
-                          onBlur={e => e.target.style.borderColor = T.charcoal}
-                        />
-                      </div>
+                      {!p._locked && (
+                        <div style={{ padding: "8px 10px" }}>
+                          <input
+                            value={p.caption || ""}
+                            onChange={e => updateCaption(p.id, e.target.value)}
+                            placeholder="Add a caption..."
+                            style={{ width: "100%", padding: "8px 10px", borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.warmStone, fontFamily: serif, fontSize: 12, outline: "none", boxSizing: "border-box" }}
+                            onFocus={e => e.target.style.borderColor = T.copper + "60"}
+                            onBlur={e => e.target.style.borderColor = T.charcoal}
+                          />
+                        </div>
+                      )}
                     </div>
                   ))}
                   <button onClick={() => {
@@ -17837,14 +17858,21 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
                     <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(transparent, rgba(0,0,0,0.7))", padding: "24px 14px 12px" }}>
                       <span style={{ fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 }}>{fields["title"] || "Your Title Here"}</span>
                     </div>
-                    <div style={{ position: "absolute", top: 8, right: 8, display: "flex", gap: 6 }}>
-                      <button onClick={() => { setActivePhotoField(section.id); setTimeout(() => heroRef.current && heroRef.current.click(), 50); }} style={{ width: 30, height: 30, borderRadius: "50%", background: "rgba(0,0,0,0.6)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <Edit3 size={12} color={T.white} />
-                      </button>
-                      <button onClick={() => updateField(section.id, null)} style={{ width: 30, height: 30, borderRadius: "50%", background: "rgba(0,0,0,0.6)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <X size={12} color={T.white} />
-                      </button>
-                    </div>
+                    {hero._locked ? (
+                      <div style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,0.7)", borderRadius: 4, padding: "3px 8px", display: "flex", alignItems: "center", gap: 4 }}>
+                        <Lock size={10} color={T.copper} />
+                        <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 700, letterSpacing: 0.5 }}>PREFILLED</span>
+                      </div>
+                    ) : (
+                      <div style={{ position: "absolute", top: 8, right: 8, display: "flex", gap: 6 }}>
+                        <button onClick={() => { setActivePhotoField(section.id); setTimeout(() => heroRef.current && heroRef.current.click(), 50); }} style={{ width: 30, height: 30, borderRadius: "50%", background: "rgba(0,0,0,0.6)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <Edit3 size={12} color={T.white} />
+                        </button>
+                        <button onClick={() => updateField(section.id, null)} style={{ width: 30, height: 30, borderRadius: "50%", background: "rgba(0,0,0,0.6)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <X size={12} color={T.white} />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <button onClick={() => { setActivePhotoField(section.id); setTimeout(() => heroRef.current && heroRef.current.click(), 50); }} style={{ width: "100%", height: 180, borderRadius: 12, background: T.darkCard, border: `1px dashed ${T.copper}40`, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8 }}>
@@ -17861,12 +17889,16 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
 
           if (section.type === "rating") {
             const val = fields[section.id] || 0;
+            const locked = Number(section.default_value) > 0;
             return (
               <div key={section.id} style={{ margin: "16px 0" }}>
-                <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, display: "block", marginBottom: 8 }}>{section.label}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>{section.label}</span>
+                  {locked && <span style={{ display: "flex", alignItems: "center", gap: 4 }}><Lock size={10} color={T.copper} /><span style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 700, letterSpacing: 0.5 }}>PREFILLED</span></span>}
+                </div>
                 <div style={{ display: "flex", gap: 8 }}>
                   {[1,2,3,4,5].map(i => (
-                    <button key={i} onClick={() => updateField(section.id, i)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+                    <button key={i} onClick={locked ? undefined : (() => updateField(section.id, i))} disabled={locked} style={{ background: "none", border: "none", cursor: locked ? "default" : "pointer", padding: 4 }}>
                       <Star size={28} color={i <= val ? "#FFD700" : T.charcoal} fill={i <= val ? "#FFD700" : "none"} />
                     </button>
                   ))}
@@ -17892,19 +17924,28 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
 
           if (section.type === "tag_select") {
             const selected = fields[section.id] || [];
+            // Prefilled tags are locked-selected; user can add other tags
+            // but can't unselect admin-pinned ones.
+            const lockedTags = Array.isArray(section.default_value) ? section.default_value : [];
             const toggle = (tag) => {
+              if (lockedTags.includes(tag)) return;
               if (selected.includes(tag)) updateField(section.id, selected.filter(t => t !== tag));
               else updateField(section.id, [...selected, tag]);
             };
             return (
               <div key={section.id} style={{ margin: "12px 0" }}>
-                <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, display: "block", marginBottom: 8 }}>{section.label}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>{section.label}</span>
+                  {lockedTags.length > 0 && <span style={{ display: "flex", alignItems: "center", gap: 4 }}><Lock size={9} color={T.copper} /><span style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 700, letterSpacing: 0.5 }}>{lockedTags.length} PREFILLED</span></span>}
+                </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                   {section.options.map(tag => {
                     const active = selected.includes(tag);
+                    const isLocked = lockedTags.includes(tag);
                     return (
-                      <button key={tag} onClick={() => toggle(tag)} style={{ padding: "6px 12px", borderRadius: 16, background: active ? `${T.copper}20` : T.darkCard, border: active ? `1px solid ${T.copper}50` : `1px solid ${T.charcoal}`, cursor: "pointer", fontFamily: sans, fontSize: 11, color: active ? T.copper : T.tertiary, fontWeight: active ? 600 : 400, transition: "all 0.15s" }}>
+                      <button key={tag} onClick={() => toggle(tag)} disabled={isLocked} style={{ padding: "6px 12px", borderRadius: 16, background: active ? `${T.copper}20` : T.darkCard, border: active ? `1px solid ${T.copper}${isLocked ? '80' : '50'}` : `1px solid ${T.charcoal}`, cursor: isLocked ? "default" : "pointer", fontFamily: sans, fontSize: 11, color: active ? T.copper : T.tertiary, fontWeight: active ? 600 : 400, transition: "all 0.15s", display: "inline-flex", alignItems: "center", gap: 4 }}>
                         {tag}
+                        {isLocked && <Lock size={9} color={T.copper} />}
                       </button>
                     );
                   })}
@@ -18044,39 +18085,53 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
           if (section.type === "bullet_list") {
             const items = fields[section.id] || [""];
             const listColor = section.color || T.white;
+            // First N bullets are admin-prefilled and locked. User can edit
+            // and remove only items at index >= prefillCount.
+            const prefillCount = Array.isArray(section.default_value) ? section.default_value.filter(x => x && String(x).trim()).length : 0;
             const updateItem = (idx, val) => {
+              if (idx < prefillCount) return; // locked
               const next = [...items];
               next[idx] = val;
               updateField(section.id, next);
             };
             const addItem = () => updateField(section.id, [...items, ""]);
-            const removeItem = (idx) => { if (items.length > 1) updateField(section.id, items.filter((_, i) => i !== idx)); };
+            const removeItem = (idx) => {
+              if (idx < prefillCount) return; // locked
+              if (items.length > 1) updateField(section.id, items.filter((_, i) => i !== idx));
+            };
             return (
               <div key={section.id} style={{ margin: "12px 0" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                   {section.icon === "check" ? <CheckCircle size={14} color={listColor} /> : <X size={14} color={listColor} />}
                   <span style={{ fontFamily: sans, fontSize: 12, color: listColor, fontWeight: 700 }}>{section.label}</span>
+                  {prefillCount > 0 && <span style={{ display: "flex", alignItems: "center", gap: 4 }}><Lock size={9} color={T.copper} /><span style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 700, letterSpacing: 0.5 }}>{prefillCount} PREFILLED</span></span>}
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {items.map((item, idx) => (
-                    <div key={idx} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ color: listColor, fontSize: 18, lineHeight: 1, flexShrink: 0 }}>•</span>
-                      <input
-                        value={item}
-                        onChange={e => updateItem(idx, e.target.value)}
-                        placeholder={section.placeholder}
-                        onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addItem(); } }}
-                        style={{ flex: 1, padding: "9px 12px", borderRadius: 6, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", boxSizing: "border-box" }}
-                        onFocus={e => e.target.style.borderColor = listColor + "60"}
-                        onBlur={e => e.target.style.borderColor = T.charcoal}
-                      />
-                      {items.length > 1 && (
-                        <button onClick={() => removeItem(idx)} style={{ background: "none", border: "none", cursor: "pointer", padding: 2, flexShrink: 0, opacity: 0.5 }}>
-                          <Trash2 size={12} color={T.tertiary} />
-                        </button>
-                      )}
-                    </div>
-                  ))}
+                  {items.map((item, idx) => {
+                    const isLocked = idx < prefillCount;
+                    return (
+                      <div key={idx} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ color: listColor, fontSize: 18, lineHeight: 1, flexShrink: 0 }}>•</span>
+                        <input
+                          value={item}
+                          onChange={e => updateItem(idx, e.target.value)}
+                          placeholder={section.placeholder}
+                          readOnly={isLocked}
+                          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addItem(); } }}
+                          style={{ flex: 1, padding: "9px 12px", borderRadius: 6, background: isLocked ? `${T.copper}10` : T.darkCard, border: `1px solid ${isLocked ? T.copper + "30" : T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", boxSizing: "border-box", cursor: isLocked ? "default" : "text" }}
+                          onFocus={e => { if (!isLocked) e.target.style.borderColor = listColor + "60"; }}
+                          onBlur={e => { if (!isLocked) e.target.style.borderColor = T.charcoal; }}
+                        />
+                        {isLocked ? (
+                          <Lock size={11} color={T.copper} />
+                        ) : (items.length > 1 && (
+                          <button onClick={() => removeItem(idx)} style={{ background: "none", border: "none", cursor: "pointer", padding: 2, flexShrink: 0, opacity: 0.5 }}>
+                            <Trash2 size={12} color={T.tertiary} />
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })}
                 </div>
                 <button onClick={addItem} style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 0" }}>
                   <Plus size={12} color={listColor} />
@@ -18091,14 +18146,21 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
           const isHeading = isH1 || section.type === "h3";
           const isShort = section.type === "short";
           const isLong = section.type === "p";
+          // Prefilled text is locked — admin's content can't be edited.
+          const textLocked = !!(section.default_value && String(section.default_value).trim());
           return (
             <div key={section.id} style={{ margin: "12px 0" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                 <span style={{ fontFamily: sans, fontSize: 8, color: T.white, background: blockLabelColor(section.type), padding: "2px 5px", borderRadius: 3, fontWeight: 700, letterSpacing: 0.5 }}>{blockLabel(section.type)}</span>
                 <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>{section.label}</span>
                 {section.required && <span style={{ fontFamily: sans, fontSize: 9, color: T.red }}>REQUIRED</span>}
+                {textLocked && <span style={{ display: "flex", alignItems: "center", gap: 4 }}><Lock size={9} color={T.copper} /><span style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 700, letterSpacing: 0.5 }}>PREFILLED</span></span>}
               </div>
-              {isLong ? (
+              {textLocked ? (
+                <div style={{ padding: "12px 14px", borderRadius: 8, background: `${T.copper}10`, border: `1px solid ${T.copper}30`, color: isH1 ? T.red : T.white, fontFamily: isHeading ? sans : serif, fontSize: isH1 ? 18 : isHeading ? 16 : 14, fontWeight: isHeading ? 700 : 400, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+                  {fields[section.id] || section.default_value}
+                </div>
+              ) : isLong ? (
                 <textarea
                   value={fields[section.id] || ""}
                   onChange={e => updateField(section.id, e.target.value)}
