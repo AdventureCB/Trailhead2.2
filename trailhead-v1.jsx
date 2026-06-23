@@ -17269,7 +17269,7 @@ const BOUNTY_FORM_TEMPLATES = {
 };
 
 /* ─── BOUNTY RESPONSE FORM ─── */
-function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose }) {
+function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUploadPhotos, currentUserId }) {
   const template = BOUNTY_FORM_TEMPLATES[bounty.category] || BOUNTY_FORM_TEMPLATES["Content Creation"];
   const [fields, setFields] = useState(() => {
     if (draft) return draft;
@@ -17294,6 +17294,14 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose }) {
   const [activePhotoField, setActivePhotoField] = useState(null);
   // Route builder overlay: { fieldId, mode: "record" | "manual", editData? }
   const [routeBuilderOverlay, setRouteBuilderOverlay] = useState(null);
+  // Auto-save: 1.5s debounce after the user stops typing. Skips the initial
+  // render so we don't fire a no-op save on mount. autoSavedAt is shown in
+  // the header so the user trusts the form is persisting.
+  const initialMount = useRef(true);
+  const [autoSavedAt, setAutoSavedAt] = useState(null);
+  // Track in-flight photo uploads so the user sees a loading state on
+  // each placeholder thumb while we hit the upload edge function.
+  const [uploadingFields, setUploadingFields] = useState({}); // fieldId → count
 
   const saveRouteToField = (fieldId, routeData) => {
     // Normalize route data from RouteRecorder/RouteDetailsForm into a route object for this field
@@ -17324,37 +17332,90 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose }) {
 
   const updateField = (id, val) => setFields(prev => ({ ...prev, [id]: val }));
 
-  const handlePhotoUpload = (fieldId, e) => {
+  // Auto-save: 1.5s after the user stops editing, persist the current
+  // `fields` to the server-side draft. Skips the initial mount.
+  useEffect(() => {
+    if (initialMount.current) { initialMount.current = false; return; }
+    if (!onSave || !bounty || !bounty.id) return;
+    const t = setTimeout(() => {
+      onSave(bounty.id, fields);
+      setAutoSavedAt(new Date());
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [fields]);
+
+  const handlePhotoUpload = async (fieldId, e) => {
     const files = Array.from(e.target.files || []);
-    files.forEach(file => {
-      const isVideo = file.type.startsWith("video/");
-      if (isVideo) {
-        const blobUrl = URL.createObjectURL(file);
-        setFields(prev => ({ ...prev, [fieldId]: [...(prev[fieldId] || []), { id: Date.now() + Math.random(), url: blobUrl, name: file.name, type: "video", caption: "" }] }));
-      } else {
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-          setFields(prev => ({ ...prev, [fieldId]: [...(prev[fieldId] || []), { id: Date.now() + Math.random(), url: ev.target.result, name: file.name, type: "image", caption: "" }] }));
-        };
-        reader.readAsDataURL(file);
-      }
-    });
     if (e.target) e.target.value = "";
+    if (files.length === 0) return;
+
+    // Default placeholders so the UI shows something immediately while
+    // the upload edge function runs. We swap each placeholder for the
+    // real { url, alt } object once uploadPostPhotoList resolves.
+    const placeholders = files.map(f => ({
+      id: Date.now() + Math.random(),
+      url: URL.createObjectURL(f),
+      name: f.name,
+      type: f.type.startsWith("video/") ? "video" : "image",
+      caption: "",
+      _uploading: true,
+    }));
+    setFields(prev => ({ ...prev, [fieldId]: [...(prev[fieldId] || []), ...placeholders] }));
+
+    if (!onUploadPhotos) {
+      // No uploader supplied — drop the _uploading flag so the form
+      // doesn't render forever-spinning thumbs. Caller will keep blob URLs;
+      // this path is exercised by legacy callsites + dev only.
+      setFields(prev => ({ ...prev, [fieldId]: (prev[fieldId] || []).map(p => placeholders.some(ph => ph.id === p.id) ? { ...p, _uploading: false } : p) }));
+      return;
+    }
+
+    setUploadingFields(prev => ({ ...prev, [fieldId]: (prev[fieldId] || 0) + files.length }));
+    try {
+      const uploaded = await onUploadPhotos(files);
+      // uploaded shape: [{ url, alt? }]. Map back into placeholder positions.
+      setFields(prev => {
+        const list = prev[fieldId] || [];
+        const next = list.map(p => {
+          const idx = placeholders.findIndex(ph => ph.id === p.id);
+          if (idx === -1 || !uploaded[idx]) return p;
+          const u = uploaded[idx];
+          return { ...p, url: u.url || p.url, alt: u.alt || "", _uploading: false };
+        });
+        return { ...prev, [fieldId]: next };
+      });
+    } catch (err) {
+      console.error("[BountyResponseForm] photo upload failed", err);
+      // Drop the placeholders that failed so the user can retry.
+      setFields(prev => ({ ...prev, [fieldId]: (prev[fieldId] || []).filter(p => !placeholders.some(ph => ph.id === p.id)) }));
+    } finally {
+      setUploadingFields(prev => ({ ...prev, [fieldId]: Math.max(0, (prev[fieldId] || 0) - files.length) }));
+    }
   };
 
   const removePhoto = (fieldId, photoId) => {
     setFields(prev => ({ ...prev, [fieldId]: (prev[fieldId] || []).filter(p => p.id !== photoId) }));
   };
 
-  const handleHeroUpload = (fieldId, e) => {
+  const handleHeroUpload = async (fieldId, e) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      updateField(fieldId, { url: ev.target.result, name: file.name });
-    };
-    reader.readAsDataURL(file);
     if (e.target) e.target.value = "";
+    if (!file) return;
+    const blobUrl = URL.createObjectURL(file);
+    updateField(fieldId, { url: blobUrl, name: file.name, _uploading: !!onUploadPhotos });
+    if (!onUploadPhotos) return;
+    setUploadingFields(prev => ({ ...prev, [fieldId]: (prev[fieldId] || 0) + 1 }));
+    try {
+      const uploaded = await onUploadPhotos([file]);
+      if (uploaded && uploaded[0] && uploaded[0].url) {
+        updateField(fieldId, { url: uploaded[0].url, alt: uploaded[0].alt || "", name: file.name });
+      }
+    } catch (err) {
+      console.error("[BountyResponseForm] hero upload failed", err);
+      updateField(fieldId, null);
+    } finally {
+      setUploadingFields(prev => ({ ...prev, [fieldId]: Math.max(0, (prev[fieldId] || 0) - 1) }));
+    }
   };
 
   const handleSave = () => {
@@ -17373,8 +17434,10 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose }) {
     });
   };
 
+  const isUploading = Object.values(uploadingFields).some(n => n > 0);
   const handleSubmit = () => {
     if (!isComplete()) return;
+    if (isUploading) { alert("Photos still uploading — give them a sec."); return; }
     onSubmit && onSubmit(bounty.id, fields);
   };
 
@@ -18029,7 +18092,7 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose }) {
 }
 
 /* ─── RANKS / LEADERBOARD SCREEN ─── */
-function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, currentUserId, currentProfile, onLoadLeaderboard, onViewUser, bounties: bountiesFromDB }) {
+function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, currentUserId, currentProfile, onLoadLeaderboard, onViewUser, bounties: bountiesFromDB, mySubmissions, isGuest, onGuestTap, onClaimBounty, onSaveBountyDraft, onSubmitBountyRPC, onWithdrawBounty, onUploadBountyPhotos }) {
   const [tab, setTab] = useState("overview"); // overview | leaderboard | bounty | badges
   // Leaderboard state. lbScope = global | following | weekly; lbData[scope]
   // caches rows so switching tabs is instant after the first fetch. Refresh
@@ -18152,26 +18215,66 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
     if (!iso) return "—";
     try { return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); } catch { return "—"; }
   };
+  // Phase 5: per-user submission lookup keyed by bounty_id.
+  const mySubsByBountyId = useMemo(() => {
+    const m = {};
+    (Array.isArray(mySubmissions) ? mySubmissions : []).forEach(s => {
+      // For a re-claimed bounty after a prior rejection/withdrawal, keep the
+      // ACTIVE submission (not the historical one). Active = anything other
+      // than rejected/withdrawn.
+      const existing = m[s.bounty_id];
+      const isActive = (st) => st !== "rejected" && st !== "withdrawn";
+      if (!existing || (isActive(s.status) && !isActive(existing.status))) m[s.bounty_id] = s;
+    });
+    return m;
+  }, [mySubmissions]);
   const bounties = useMemo(() => {
     const rows = Array.isArray(bountiesFromDB) ? bountiesFromDB : [];
     return rows
       .filter(b => b.status !== "draft" && b.status !== "archived")
-      .map(b => ({
-        id: b.id,
-        title: b.title,
-        desc: b.description || "",
-        reward: b.reward_cents || 0,
-        rewardPts: b.reward_points || 0,
-        category: b.category || "Content Creation",
-        difficulty: b.difficulty || "Medium",
-        deadline: formatDeadline(b.deadline_at),
-        slots: b.total_slots || 1,
-        claimed: b.claimed_slots || 0,
-        // Map DB status → mock status the renderer expects.
-        // Phase 5 will replace this with per-user submission status.
-        status: b.status === "closed" ? "completed" : "open",
-      }));
-  }, [bountiesFromDB]);
+      .map(b => {
+        const sub = mySubsByBountyId[b.id];
+        // Derive the user-facing status the renderer keys off:
+        //   bounty closed → "completed"
+        //   user has approved sub → "approved"  (post-Phase 6)
+        //   user has submitted sub → "submitted"
+        //   user has rejected sub but slots open → "open" (re-claim possible)
+        //   user has claimed/in_progress/changes_requested sub → "in_progress"
+        //   no sub or rejected/withdrawn → "open"
+        let derivedStatus;
+        if (b.status === "closed") derivedStatus = "completed";
+        else if (sub) {
+          if (sub.status === "approved") derivedStatus = "approved";
+          else if (sub.status === "submitted") derivedStatus = "submitted";
+          else if (sub.status === "changes_requested") derivedStatus = "changes_requested";
+          else if (sub.status === "claimed" || sub.status === "in_progress") derivedStatus = "in_progress";
+          else if (sub.status === "rejected") derivedStatus = "rejected";
+          else derivedStatus = "open";
+        } else {
+          derivedStatus = "open";
+        }
+        return {
+          id: b.id,
+          title: b.title,
+          desc: b.description || "",
+          reward: b.reward_cents || 0,
+          rewardPts: b.reward_points || 0,
+          category: b.category || "Content Creation",
+          difficulty: b.difficulty || "Medium",
+          deadline: formatDeadline(b.deadline_at),
+          deadlineAt: b.deadline_at,
+          slots: b.total_slots || 1,
+          claimed: b.claimed_slots || 0,
+          status: derivedStatus,
+          submissionId: sub ? sub.id : null,
+          submissionStatus: sub ? sub.status : null,
+          submissionDraft: sub && sub.draft ? sub.draft : null,
+          reviewerNotes: sub ? sub.reviewer_notes : null,
+          form_template_key: b.form_template_key || b.category || "Content Creation",
+          form_config: b.form_config || null,
+        };
+      });
+  }, [bountiesFromDB, mySubsByBountyId]);
   // setBounties is a no-op shim for the legacy in-render mutation
   // calls (startBounty / submitBounty / etc.) until Phase 5 rewires
   // them through RPCs. They currently optimistically mutate local
@@ -18181,24 +18284,47 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
 
   const [bountyFilter, setBountyFilter] = useState("OPEN");
   const [expandedBounty, setExpandedBounty] = useState(null);
-  const [bountyDrafts, setBountyDrafts] = useState({}); // { bountyId: { ...fieldValues } }
   const [activeBountyForm, setActiveBountyForm] = useState(null); // bounty object or null
+  const [claimingId, setClaimingId] = useState(null);
 
-  const startBounty = (bountyId) => {
-    setBounties(prev => prev.map(b => b.id === bountyId ? { ...b, status: "in_progress", claimed: b.claimed + 1 } : b));
-    setActiveBountyForm(bounties.find(b => b.id === bountyId));
+  // Phase 5 wiring: actions route through the parent-supplied RPC callbacks.
+  // The form's local field state mirrors the submission's `draft` jsonb on
+  // open; subsequent edits debounce-save back via onSaveBountyDraft.
+  const startBounty = async (bountyId) => {
+    if (isGuest && onGuestTap) { onGuestTap(); return; }
+    if (!onClaimBounty) return;
+    setClaimingId(bountyId);
+    const res = await onClaimBounty(bountyId);
+    setClaimingId(null);
+    if (res && res.error) { console.error("[claim_bounty]", res.error); return; }
+    // Open the form so user can start editing. We don't pass a draft —
+    // submission was just created so it's empty.
+    const b = bounties.find(x => x.id === bountyId);
+    if (b) setActiveBountyForm(b);
     setExpandedBounty(null);
   };
   const resumeBounty = (bountyId) => {
-    setActiveBountyForm(bounties.find(b => b.id === bountyId));
+    const b = bounties.find(x => x.id === bountyId);
+    if (b) setActiveBountyForm(b);
   };
-  const saveBountyDraft = (bountyId, fields) => {
-    setBountyDrafts(prev => ({ ...prev, [bountyId]: fields }));
+  const saveDraftFromForm = async (bountyId, fields) => {
+    const sub = mySubsByBountyId[bountyId];
+    if (!sub || !sub.id || !onSaveBountyDraft) return;
+    await onSaveBountyDraft(sub.id, fields);
   };
-  const submitBounty = (bountyId, fields) => {
-    setBountyDrafts(prev => ({ ...prev, [bountyId]: fields }));
-    setBounties(prev => prev.map(b => b.id === bountyId ? { ...b, status: "submitted" } : b));
+  const submitFromForm = async (bountyId, fields) => {
+    const sub = mySubsByBountyId[bountyId];
+    if (!sub || !sub.id || !onSubmitBountyRPC) return;
+    const res = await onSubmitBountyRPC(sub.id, fields);
+    if (res && res.error) { console.error("[submit_bounty]", res.error); alert(res.error); return; }
     setActiveBountyForm(null);
+  };
+  const withdrawFromCard = async (bountyId) => {
+    const sub = mySubsByBountyId[bountyId];
+    if (!sub || !sub.id || !onWithdrawBounty) return;
+    if (!confirm("Withdraw your bounty claim? Your draft will be deleted.")) return;
+    const res = await onWithdrawBounty(sub.id);
+    if (res && res.error) { console.error("[withdraw_bounty]", res.error); return; }
   };
 
   // ── Activity Badges ──
@@ -18488,15 +18614,23 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
           </div>
 
           {/* Filter */}
-          <div style={{ display: "flex", gap: 6, padding: "10px 16px" }}>
-            {["OPEN", "IN PROGRESS", "SUBMITTED", "COMPLETED", "ALL"].map(f => (
-              <button key={f} onClick={() => setBountyFilter(f)} style={{ padding: "6px 12px", borderRadius: 14, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 10, fontWeight: 600, letterSpacing: 0.5, background: bountyFilter === f ? T.red : T.darkCard, color: bountyFilter === f ? T.white : T.tertiary }}>{f}</button>
+          <div style={{ display: "flex", gap: 6, padding: "10px 16px", overflowX: "auto" }}>
+            {["OPEN", "MINE", "REVIEW", "DONE", "ALL"].map(f => (
+              <button key={f} onClick={() => setBountyFilter(f)} style={{ padding: "6px 12px", borderRadius: 14, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 10, fontWeight: 600, letterSpacing: 0.5, background: bountyFilter === f ? T.red : T.darkCard, color: bountyFilter === f ? T.white : T.tertiary, whiteSpace: "nowrap" }}>{f}</button>
             ))}
           </div>
 
           {/* Bounty Cards */}
           <div style={{ padding: "0 16px", display: "flex", flexDirection: "column", gap: 8 }}>
-            {bounties.filter(b => bountyFilter === "ALL" ? true : bountyFilter === "OPEN" ? b.status === "open" : bountyFilter === "IN PROGRESS" ? b.status === "in_progress" : bountyFilter === "SUBMITTED" ? b.status === "submitted" : b.status === "completed").map(b => {
+            {bounties.filter(b => {
+              if (bountyFilter === "ALL") return true;
+              if (bountyFilter === "OPEN") return b.status === "open";
+              // MINE = anything with an active user submission (drafts + changes requested)
+              if (bountyFilter === "MINE") return b.status === "in_progress" || b.status === "changes_requested";
+              if (bountyFilter === "REVIEW") return b.status === "submitted";
+              // DONE = approved by admin or bounty closed
+              return b.status === "approved" || b.status === "completed";
+            }).map(b => {
               const expanded = expandedBounty === b.id;
               const slotsLeft = b.slots - b.claimed;
               return (
@@ -18510,7 +18644,22 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
                       {b.status === "completed" ? (
                         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                           <CheckCircle size={12} color={T.green} />
-                          <span style={{ fontFamily: sans, fontSize: 9, color: T.green, fontWeight: 600 }}>COMPLETED</span>
+                          <span style={{ fontFamily: sans, fontSize: 9, color: T.green, fontWeight: 600 }}>CLOSED</span>
+                        </div>
+                      ) : b.status === "approved" ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <CheckCircle size={12} color={T.green} />
+                          <span style={{ fontFamily: sans, fontSize: 9, color: T.green, fontWeight: 600 }}>APPROVED</span>
+                        </div>
+                      ) : b.status === "rejected" ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <X size={11} color={T.red} />
+                          <span style={{ fontFamily: sans, fontSize: 9, color: T.red, fontWeight: 600 }}>REJECTED</span>
+                        </div>
+                      ) : b.status === "changes_requested" ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <AlertTriangle size={11} color={T.copper} />
+                          <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 600 }}>CHANGES REQUESTED</span>
                         </div>
                       ) : b.status === "in_progress" ? (
                         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
@@ -18554,21 +18703,69 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
                         </div>
                       </div>
                       {b.status === "open" && slotsLeft > 0 && (
-                        <button onClick={(e) => { e.stopPropagation(); startBounty(b.id); }} style={{ width: "100%", padding: "12px", background: T.red, color: T.white, fontFamily: sans, fontSize: 12, fontWeight: 700, borderRadius: 8, border: "none", cursor: "pointer", letterSpacing: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                        <button onClick={(e) => { e.stopPropagation(); startBounty(b.id); }} disabled={claimingId === b.id} style={{ width: "100%", padding: "12px", background: T.red, color: T.white, fontFamily: sans, fontSize: 12, fontWeight: 700, borderRadius: 8, border: "none", cursor: claimingId === b.id ? "wait" : "pointer", letterSpacing: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: claimingId === b.id ? 0.6 : 1 }}>
                           <Target size={14} color={T.white} />
-                          START BOUNTY
+                          {claimingId === b.id ? "CLAIMING…" : "CLAIM BOUNTY"}
                         </button>
                       )}
+                      {b.status === "open" && slotsLeft <= 0 && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0 0" }}>
+                          <Lock size={14} color={T.tertiary} />
+                          <span style={{ fontFamily: serif, fontSize: 12, color: T.tertiary }}>All slots are claimed. Check back if someone withdraws.</span>
+                        </div>
+                      )}
                       {b.status === "in_progress" && (
-                        <button onClick={(e) => { e.stopPropagation(); resumeBounty(b.id); }} style={{ width: "100%", padding: "12px", background: T.copper, color: T.white, fontFamily: sans, fontSize: 12, fontWeight: 700, borderRadius: 8, border: "none", cursor: "pointer", letterSpacing: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                          <Edit3 size={14} color={T.white} />
-                          RESUME BOUNTY
-                        </button>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <button onClick={(e) => { e.stopPropagation(); resumeBounty(b.id); }} style={{ flex: 1, padding: "12px", background: T.copper, color: T.white, fontFamily: sans, fontSize: 12, fontWeight: 700, borderRadius: 8, border: "none", cursor: "pointer", letterSpacing: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                            <Edit3 size={14} color={T.white} />
+                            RESUME
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); withdrawFromCard(b.id); }} style={{ padding: "12px 14px", background: "none", color: T.tertiary, fontFamily: sans, fontSize: 11, fontWeight: 700, borderRadius: 8, border: `1px solid ${T.charcoal}`, cursor: "pointer", letterSpacing: 0.5 }}>
+                            WITHDRAW
+                          </button>
+                        </div>
+                      )}
+                      {b.status === "changes_requested" && (
+                        <div>
+                          {b.reviewerNotes && (
+                            <div style={{ background: `${T.copper}10`, border: `1px solid ${T.copper}30`, borderRadius: 8, padding: "10px 12px", marginBottom: 8 }}>
+                              <div style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 700, letterSpacing: 1, marginBottom: 4 }}>REVIEWER NOTES</div>
+                              <div style={{ fontFamily: serif, fontSize: 12, color: T.white, lineHeight: 1.5 }}>{b.reviewerNotes}</div>
+                            </div>
+                          )}
+                          <button onClick={(e) => { e.stopPropagation(); resumeBounty(b.id); }} style={{ width: "100%", padding: "12px", background: T.copper, color: T.white, fontFamily: sans, fontSize: 12, fontWeight: 700, borderRadius: 8, border: "none", cursor: "pointer", letterSpacing: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                            <Edit3 size={14} color={T.white} />
+                            REVIEW FEEDBACK
+                          </button>
+                        </div>
                       )}
                       {b.status === "submitted" && (
                         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0 0" }}>
                           <Clock size={14} color="#C0A060" />
                           <span style={{ fontFamily: serif, fontSize: 12, color: T.tertiary }}>Awaiting admin review — you'll be notified when approved or if edits are needed.</span>
+                        </div>
+                      )}
+                      {b.status === "approved" && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0 0" }}>
+                          <CheckCircle size={14} color={T.green} />
+                          <span style={{ fontFamily: serif, fontSize: 12, color: T.green }}>Approved! Your reward will appear in your earnings.</span>
+                        </div>
+                      )}
+                      {b.status === "rejected" && (
+                        <div>
+                          {b.reviewerNotes && (
+                            <div style={{ background: `${T.red}10`, border: `1px solid ${T.red}30`, borderRadius: 8, padding: "10px 12px", marginBottom: 8 }}>
+                              <div style={{ fontFamily: sans, fontSize: 9, color: T.red, fontWeight: 700, letterSpacing: 1, marginBottom: 4 }}>REJECTION REASON</div>
+                              <div style={{ fontFamily: serif, fontSize: 12, color: T.white, lineHeight: 1.5 }}>{b.reviewerNotes}</div>
+                            </div>
+                          )}
+                          {slotsLeft > 0 ? (
+                            <button onClick={(e) => { e.stopPropagation(); startBounty(b.id); }} disabled={claimingId === b.id} style={{ width: "100%", padding: "12px", background: T.darkCard, color: T.copper, fontFamily: sans, fontSize: 12, fontWeight: 700, borderRadius: 8, border: `1px solid ${T.copper}40`, cursor: claimingId === b.id ? "wait" : "pointer", letterSpacing: 1 }}>
+                              CLAIM AGAIN
+                            </button>
+                          ) : (
+                            <div style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, padding: "8px 0 0" }}>No slots remaining.</div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -18651,9 +18848,14 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
       {activeBountyForm && (
         <BountyResponseForm
           bounty={activeBountyForm}
-          draft={bountyDrafts[activeBountyForm.id] || null}
-          onSave={saveBountyDraft}
-          onSubmit={submitBounty}
+          // Hydrate the form from the server's draft jsonb when the user
+          // has an active submission. Falls back to null (form initializes
+          // from the category template defaults) when no draft yet.
+          draft={activeBountyForm.submissionDraft || null}
+          onSave={saveDraftFromForm}
+          onSubmit={submitFromForm}
+          onUploadPhotos={onUploadBountyPhotos}
+          currentUserId={currentUserId}
           onClose={() => setActiveBountyForm(null)}
         />
       )}
@@ -37842,6 +38044,7 @@ export default function Trailhead() {
     try { hydrateForumCategories(); } catch (e) { /* non-fatal */ }
     try { hydrateSavedTrips(); } catch (e) { /* non-fatal */ }
     try { hydrateBounties(); } catch (e) { /* non-fatal */ }
+    try { hydrateMyBountySubmissions(); } catch (e) { /* non-fatal */ }
 
     // ─── Tier 1 — critical for first paint ───
     // Profile (header avatar/name) + posts (feed list). Both run in
@@ -38559,6 +38762,22 @@ export default function Trailhead() {
         const row = payload.old;
         if (!row || !row.id) return;
         setTripReports(prev => prev.filter(t => t.id !== row.id));
+      })
+      // Bounty submissions — own rows only. Reconciles status flips from
+      // server (e.g. admin approve/reject when Phase 6 ships) + dedupes
+      // optimistic local inserts from claim_bounty.
+      .on("postgres_changes", { event: "*", schema: "public", table: "bounty_submissions", filter: `user_id=eq.${uid}` }, (payload) => {
+        const row = payload.new || payload.old;
+        if (!row || !row.id) return;
+        if (payload.eventType === "DELETE") {
+          setMyBountySubmissions(prev => prev.filter(s => s.id !== row.id));
+          return;
+        }
+        setMyBountySubmissions(prev => {
+          const i = prev.findIndex(s => s.id === row.id);
+          if (i === -1) return [row, ...prev];
+          const next = prev.slice(); next[i] = { ...next[i], ...row }; return next;
+        });
       })
       // Bounties — admin edits propagate live to the user-facing board.
       // INSERT and UPDATE replace the row; DELETE removes it. We don't
@@ -41525,6 +41744,94 @@ export default function Trailhead() {
       setBounties(prev => prev.filter(b => b.id !== id));
       return { ok: true };
     } catch (e) { console.error("[deleteBounty] failed", e); return { error: "Network error" }; }
+  };
+
+  // ── Bounty submissions — user-facing claim flow (Phase 5) ──
+  // myBountySubmissions is the current user's full set of submissions
+  // (any status), keyed by bounty_id at consumption time. Hydrated on
+  // app boot + kept fresh via realtime sub. Status drives the action
+  // button on each bounty card (START → RESUME → "awaiting review" → etc.).
+  const [myBountySubmissions, setMyBountySubmissions] = useState([]);
+  const hydrateMyBountySubmissions = async () => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) return;
+    try {
+      const { data, error } = await supabase
+        .from("bounty_submissions")
+        .select("*")
+        .eq("user_id", uid)
+        .order("updated_at", { ascending: false });
+      if (error) { console.error("[hydrateMyBountySubmissions] error", error); return; }
+      setMyBountySubmissions(Array.isArray(data) ? data : []);
+    } catch (e) { console.error("[hydrateMyBountySubmissions] failed", e); }
+  };
+  const claimBounty = async (bountyId) => {
+    if (isGuest) return { error: "Not authenticated" };
+    if (!bountyId) return { error: "Missing bounty id" };
+    try {
+      const { data, error } = await supabase.rpc("claim_bounty", { p_bounty_id: bountyId });
+      if (error) { console.error("[claim_bounty] error", error); return { error: error.message }; }
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row || !row.submission_id) return { error: "Claim failed" };
+      // Optimistic local insert; realtime sub will reconcile.
+      const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+      setMyBountySubmissions(prev => {
+        if (prev.some(s => s.id === row.submission_id)) return prev;
+        return [{ id: row.submission_id, bounty_id: bountyId, user_id: uid, status: row.status || "claimed", draft: {}, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }, ...prev];
+      });
+      // Bump claimed_slots in the local bounties cache so the card shows the
+      // new count immediately; realtime on bounties will sync the canonical value.
+      setBounties(prev => prev.map(b => b.id === bountyId ? { ...b, claimed_slots: (b.claimed_slots || 0) + 1 } : b));
+      return { ok: true, data: row };
+    } catch (e) { console.error("[claim_bounty] failed", e); return { error: "Network error" }; }
+  };
+  const saveBountyDraft = async (submissionId, draft) => {
+    if (!submissionId) return { error: "Missing submission id" };
+    try {
+      const { data, error } = await supabase.rpc("save_bounty_draft", { p_submission_id: submissionId, p_draft: draft || {} });
+      if (error) { console.error("[save_bounty_draft] error", error); return { error: error.message }; }
+      const row = Array.isArray(data) ? data[0] : data;
+      setMyBountySubmissions(prev => prev.map(s => s.id === submissionId ? { ...s, draft: draft || {}, status: (row && row.status) || s.status, updated_at: new Date().toISOString() } : s));
+      return { ok: true, data: row };
+    } catch (e) { console.error("[save_bounty_draft] failed", e); return { error: "Network error" }; }
+  };
+  const submitBountySubmission = async (submissionId, draft) => {
+    if (!submissionId) return { error: "Missing submission id" };
+    try {
+      const { data, error } = await supabase.rpc("submit_bounty", { p_submission_id: submissionId, p_draft: draft || null });
+      if (error) { console.error("[submit_bounty] error", error); return { error: error.message }; }
+      const row = Array.isArray(data) ? data[0] : data;
+      setMyBountySubmissions(prev => prev.map(s => s.id === submissionId ? { ...s, draft: draft || s.draft, status: "submitted", submitted_at: (row && row.submitted_at) || new Date().toISOString(), updated_at: new Date().toISOString() } : s));
+      return { ok: true, data: row };
+    } catch (e) { console.error("[submit_bounty] failed", e); return { error: "Network error" }; }
+  };
+  // Adapter for BountyResponseForm — converts raw File objects to the
+  // entry-shape uploadPostPhotoList expects, then returns the entries
+  // back with storage URLs + alt text. Moderation is enforced inside
+  // uploadPostPhotoList; this wrapper just routes the input/output.
+  const uploadBountyPhotoFiles = async (files) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid || !Array.isArray(files) || files.length === 0) return [];
+    const entries = files.map(f => ({
+      url: URL.createObjectURL(f),
+      type: f.type && f.type.startsWith("video/") ? "video" : "image",
+      name: f.name,
+    }));
+    return await uploadPostPhotoList(entries, uid);
+  };
+  const withdrawBountySubmission = async (submissionId) => {
+    if (!submissionId) return { error: "Missing submission id" };
+    try {
+      const { data, error } = await supabase.rpc("withdraw_bounty", { p_submission_id: submissionId });
+      if (error) { console.error("[withdraw_bounty] error", error); return { error: error.message }; }
+      // Find the bounty_id before we drop the row so we can decrement the slot.
+      const removed = myBountySubmissions.find(s => s.id === submissionId);
+      setMyBountySubmissions(prev => prev.filter(s => s.id !== submissionId));
+      if (removed && removed.bounty_id) {
+        setBounties(prev => prev.map(b => b.id === removed.bounty_id ? { ...b, claimed_slots: Math.max(0, (b.claimed_slots || 0) - 1) } : b));
+      }
+      return { ok: true, data };
+    } catch (e) { console.error("[withdraw_bounty] failed", e); return { error: "Network error" }; }
   };
 
   const loadAllContentPartners = async () => {
@@ -47192,7 +47499,7 @@ export default function Trailhead() {
             {screen === "ranks" && (isGuest
               ? <GuestGateScreen title="RANKS REQUIRE AN ACCOUNT" subtitle="Sign in to see the leaderboard and start earning points from your posts, routes and builds." onSignIn={goToLoginFromGuest} />
               : isAdmin
-                ? <RanksScreen myPoints={myTotalPoints} pointsBreakdown={friendlyPointsBreakdown} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentProfile={currentProfile} onLoadLeaderboard={loadLeaderboard} onViewUser={openUserProfile} bounties={bounties} />
+                ? <RanksScreen myPoints={myTotalPoints} pointsBreakdown={friendlyPointsBreakdown} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentProfile={currentProfile} onLoadLeaderboard={loadLeaderboard} onViewUser={openUserProfile} bounties={bounties} mySubmissions={myBountySubmissions} isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onClaimBounty={claimBounty} onSaveBountyDraft={saveBountyDraft} onSubmitBountyRPC={submitBountySubmission} onWithdrawBounty={withdrawBountySubmission} onUploadBountyPhotos={uploadBountyPhotoFiles} />
                 : <div style={{ padding: 32, textAlign: "center", fontFamily: serif, fontSize: 14, color: T.tertiary, lineHeight: 1.6 }}>Ranks is coming in a future release.</div>
             )}
             {screen === "admin" && (isAdmin
