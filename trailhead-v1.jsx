@@ -17266,7 +17266,334 @@ const BOUNTY_FORM_TEMPLATES = {
       { id: "gear_body", label: "Gear Details", type: "p", placeholder: "List all gear mentioned with brands, models, and links where possible." },
     ],
   },
+  "Demo Request": {
+    // Marker template — DemoRequestFlow handles the actual UX. No sections
+    // are filled out by the user through the standard form; instead, the
+    // claim → schedule → proof flow lives in DemoRequestFlow and writes
+    // draft.scheduled_at / draft.scheduled_location / draft.proof_photo.
+    kind: "demo_request",
+    description: "Multi-step demo coordination: claim, message the customer, schedule the meeting, then submit proof photo.",
+    sections: [],
+  },
 };
+
+/* ─── DemoRequestFlow — user-side multi-stage flow for Demo Request bounties.
+       Replaces BountyResponseForm when bounty.category === "Demo Request".
+       Stages flow off the submission's draft jsonb:
+         1. ACCEPT      → claim + draft.accepted_at + open DM
+         2. SCHEDULE    → draft.scheduled_at + scheduled_location (48hr UI clock)
+         3. AWAITING    → countdown to scheduled meeting
+         4. PROOF       → upload selfie with customer → draft.proof_photo
+         5. SUBMITTED   → status='submitted', awaiting admin review
+       Each stage commits its data through onSaveDraft (save_bounty_draft RPC).
+─── */
+function DemoRequestFlow({ bounty, submission, currentUserId, isGuest, onGuestTap, onClaim, onSaveDraft, onSubmit, onWithdraw, onOpenDM, onUploadPhoto, onLoadProfileById, onClose }) {
+  const draft = (submission && submission.draft) || {};
+  const status = submission && submission.status;
+  const [customer, setCustomer] = useState(null);
+  useEffect(() => {
+    if (!bounty || !bounty.demo_customer_user_id || !onLoadProfileById) return;
+    let mounted = true;
+    (async () => {
+      const p = await onLoadProfileById(bounty.demo_customer_user_id);
+      if (mounted) setCustomer(p || null);
+    })();
+    return () => { mounted = false; };
+  }, [bounty && bounty.demo_customer_user_id]);
+
+  // Local-form state — kept here so the schedule form / proof can be filled
+  // out before save without round-tripping the server on every keystroke.
+  const [scheduledAt, setScheduledAt] = useState(draft.scheduled_at || "");
+  const [scheduledLocation, setScheduledLocation] = useState(draft.scheduled_location || "");
+  const [proofUploading, setProofUploading] = useState(false);
+  const [proofPreview, setProofPreview] = useState(draft.proof_photo || null);
+  const [proofCaption, setProofCaption] = useState(draft.proof_caption || "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const proofInputRef = useRef(null);
+
+  const stage = (() => {
+    if (!submission) return "accept";
+    if (status === "approved") return "approved";
+    if (status === "rejected") return "rejected";
+    if (status === "submitted") return "submitted";
+    if (!draft.accepted_at) return "accept";
+    if (!draft.scheduled_at) return "schedule";
+    if (!draft.proof_photo) return "demo"; // awaiting / proof upload
+    return "review"; // proof uploaded, not yet submitted
+  })();
+
+  const handleAccept = async () => {
+    if (isGuest) { onGuestTap && onGuestTap(); return; }
+    setBusy(true); setError("");
+    try {
+      // Reuse existing submission id, or claim now.
+      let subId = submission && submission.id;
+      if (!subId) {
+        const res = await onClaim(bounty.id);
+        if (!res || res.error) throw new Error((res && res.error) || "Claim failed");
+        subId = res.data && res.data.submission_id;
+      }
+      if (!subId) throw new Error("Claim succeeded but no submission id");
+      // Mark accepted_at + bump status claimed → in_progress server-side.
+      const nextDraft = { ...(draft || {}), accepted_at: new Date().toISOString() };
+      await onSaveDraft(subId, nextDraft);
+      // Open DM with the customer.
+      if (customer && onOpenDM) {
+        onOpenDM(customer, `Hi @${customer.handle || "there"}! I'd love to set up the demo you requested. When works for you?`);
+      }
+    } catch (e) {
+      setError(e && e.message ? e.message : "Couldn't accept right now.");
+    } finally { setBusy(false); }
+  };
+
+  const handleSaveSchedule = async () => {
+    if (!scheduledAt) { setError("Pick a meeting time."); return; }
+    if (!scheduledLocation.trim()) { setError("Where will you meet?"); return; }
+    setError(""); setBusy(true);
+    try {
+      const next = { ...(draft || {}), scheduled_at: new Date(scheduledAt).toISOString(), scheduled_location: scheduledLocation.trim() };
+      const res = await onSaveDraft(submission.id, next);
+      if (res && res.error) throw new Error(res.error);
+    } catch (e) { setError(e && e.message ? e.message : "Save failed."); }
+    finally { setBusy(false); }
+  };
+
+  const handleProofUpload = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (e.target) e.target.value = "";
+    if (!file || !onUploadPhoto) return;
+    setProofUploading(true); setError("");
+    try {
+      const out = await onUploadPhoto([file]);
+      const u = Array.isArray(out) && out[0];
+      if (u && u.url) {
+        setProofPreview(u);
+        const next = { ...(draft || {}), proof_photo: { url: u.url, alt: u.alt || "" } };
+        await onSaveDraft(submission.id, next);
+      }
+    } catch (err) {
+      console.error("[demo proof upload]", err);
+      setError(err && err.message ? err.message : "Upload failed.");
+    } finally { setProofUploading(false); }
+  };
+
+  const handleSubmitFinal = async () => {
+    setBusy(true); setError("");
+    try {
+      const next = { ...(draft || {}), proof_caption: proofCaption };
+      const res = await onSubmit(submission.id, next);
+      if (res && res.error) throw new Error(res.error);
+    } catch (e) { setError(e && e.message ? e.message : "Submit failed."); }
+    finally { setBusy(false); }
+  };
+
+  const handleWithdrawAction = async () => {
+    if (!confirm("Withdraw this demo claim? The slot will release.")) return;
+    setBusy(true); setError("");
+    try {
+      const res = await onWithdraw(submission.id);
+      if (res && res.error) throw new Error(res.error);
+      onClose && onClose();
+    } catch (e) { setError(e && e.message ? e.message : "Withdraw failed."); }
+    finally { setBusy(false); }
+  };
+
+  // 48hr scheduling countdown — purely cosmetic (no auto-withdraw yet).
+  const acceptedAt = draft.accepted_at ? new Date(draft.accepted_at).getTime() : null;
+  const scheduleDeadlineMs = acceptedAt ? acceptedAt + 48 * 3600 * 1000 : null;
+  const fmtCountdown = (target) => {
+    if (!target) return "";
+    const left = target - Date.now();
+    if (left <= 0) return "Past deadline";
+    const h = Math.floor(left / 3600000);
+    const m = Math.floor((left % 3600000) / 60000);
+    return `${h}h ${m}m left`;
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: T.darkBg, zIndex: 1000, display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 16px", borderBottom: `1px solid ${T.charcoal}`, background: T.darkBg, position: "sticky", top: 0 }}>
+        <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><X size={20} color={T.white} /></button>
+        <Users size={14} color={T.red} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: sans, fontSize: 9, color: T.red, letterSpacing: 1.5, fontWeight: 700 }}>DEMO REQUEST</div>
+          <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{bounty.title || "(bounty)"}</div>
+        </div>
+      </div>
+
+      <div className="th-scroll" style={{ flex: 1, overflowY: "auto", padding: "12px 16px 24px" }}>
+        {/* Customer summary card — always visible */}
+        {customer && (
+          <div style={{ background: T.darkCard, borderRadius: 10, padding: "12px 14px", border: `1px solid ${T.charcoal}`, display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+            <div style={{ width: 44, height: 44, borderRadius: "50%", background: T.charcoal, overflow: "hidden" }}>
+              {customer.avatar_url
+                ? <img src={customer.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: sans, fontSize: 16, fontWeight: 700, color: T.white }}>{((customer.full_name || customer.handle || "?").charAt(0) || "?").toUpperCase()}</div>}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600 }}>{customer.full_name || "(customer)"}</div>
+              <div style={{ fontFamily: serif, fontSize: 11, color: T.tertiary }}>@{customer.handle || "—"}</div>
+            </div>
+            {customer && stage !== "accept" && onOpenDM && (
+              <button onClick={() => onOpenDM(customer, null)} style={{ background: T.copper, color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 700, padding: "6px 10px", borderRadius: 4, border: "none", cursor: "pointer", letterSpacing: 0.5, display: "flex", alignItems: "center", gap: 4 }}>
+                <Send size={11} color={T.white} /> DM
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Location card */}
+        <div style={{ background: T.darkCard, borderRadius: 10, padding: "12px 14px", border: `1px solid ${T.charcoal}`, marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+            <MapPin size={12} color={T.copper} />
+            <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 700 }}>DEMO LOCATION</span>
+          </div>
+          <div style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 600 }}>{bounty.demo_location_label || "—"}</div>
+          {typeof bounty.demo_radius_m === "number" && (
+            <div style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, marginTop: 2 }}>within ~{Math.round((bounty.demo_radius_m || 80467) / 1609.34)} mi of pin</div>
+          )}
+        </div>
+
+        {/* Rewards */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+          {(bounty.reward_cents || 0) > 0 && (
+            <div style={{ flex: 1, background: T.darkCard, borderRadius: 10, padding: "10px 14px", border: `1px solid ${T.green}30`, textAlign: "center" }}>
+              <div style={{ fontFamily: sans, fontSize: 18, color: T.green, fontWeight: 700 }}>${((bounty.reward_cents || 0) / 100).toFixed(0)}</div>
+              <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1 }}>CASH</div>
+            </div>
+          )}
+          {(bounty.reward_points || 0) > 0 && (
+            <div style={{ flex: 1, background: T.darkCard, borderRadius: 10, padding: "10px 14px", border: `1px solid ${T.copper}30`, textAlign: "center" }}>
+              <div style={{ fontFamily: sans, fontSize: 18, color: T.copper, fontWeight: 700 }}>+{bounty.reward_points}</div>
+              <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1 }}>POINTS</div>
+            </div>
+          )}
+        </div>
+
+        {/* Stage-specific UI */}
+        {stage === "accept" && (
+          <div style={{ background: `${T.red}10`, border: `1px solid ${T.red}30`, borderRadius: 10, padding: "14px 16px" }}>
+            <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, marginBottom: 8 }}>Accept this demo?</div>
+            <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.5, margin: "0 0 12px" }}>
+              When you accept, a DM opens with the customer. You'll have <strong style={{ color: T.white }}>48 hours</strong> to schedule a meeting time and location with them. After the demo, upload a photo together as proof to claim the reward.
+            </p>
+            <button onClick={handleAccept} disabled={busy} style={{ width: "100%", padding: "12px", background: T.red, color: T.white, border: "none", borderRadius: 8, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 1, cursor: busy ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+              {busy ? "ACCEPTING…" : "ACCEPT & MESSAGE CUSTOMER"}
+            </button>
+          </div>
+        )}
+
+        {stage === "schedule" && (
+          <div style={{ background: T.darkCard, borderRadius: 10, padding: "14px 16px", border: `1px solid ${T.copper}40` }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <Clock size={14} color={T.copper} />
+              <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>SCHEDULE THE DEMO</span>
+              {scheduleDeadlineMs && <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: 10, color: T.red, fontWeight: 700 }}>{fmtCountdown(scheduleDeadlineMs)}</span>}
+            </div>
+            <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.5, margin: "0 0 12px" }}>
+              Coordinate via DM, then lock the time + location below. The customer sees this on their side once you save.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div>
+                <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.5, marginBottom: 4 }}>Meeting time</div>
+                <input type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} style={{ width: "100%", padding: "10px 12px", borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, boxSizing: "border-box" }} />
+              </div>
+              <div>
+                <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.5, marginBottom: 4 }}>Meeting location</div>
+                <input value={scheduledLocation} onChange={(e) => setScheduledLocation(e.target.value)} placeholder="e.g. Starbucks @ Main + 4th, Lakewood CO" style={{ width: "100%", padding: "10px 12px", borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, boxSizing: "border-box" }} />
+              </div>
+              {error && <div style={{ color: T.red, fontFamily: sans, fontSize: 11 }}>{error}</div>}
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={handleSaveSchedule} disabled={busy} style={{ flex: 1, padding: "11px", background: T.green, color: T.white, border: "none", borderRadius: 6, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.8, cursor: busy ? "wait" : "pointer" }}>
+                  {busy ? "SAVING…" : "LOCK IN SCHEDULE"}
+                </button>
+                <button onClick={handleWithdrawAction} disabled={busy} style={{ padding: "11px 14px", background: "none", color: T.tertiary, border: `1px solid ${T.charcoal}`, borderRadius: 6, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, cursor: busy ? "wait" : "pointer" }}>
+                  WITHDRAW
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {(stage === "demo" || stage === "review") && (
+          <>
+            {draft.scheduled_at && (
+              <div style={{ background: T.darkCard, borderRadius: 10, padding: "12px 14px", border: `1px solid ${T.charcoal}`, marginBottom: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                  <Clock size={11} color={T.green} />
+                  <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 700 }}>SCHEDULED FOR</span>
+                </div>
+                <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600 }}>
+                  {new Date(draft.scheduled_at).toLocaleString()}
+                </div>
+                <div style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, marginTop: 2 }}>{draft.scheduled_location}</div>
+              </div>
+            )}
+            <div style={{ background: T.darkCard, borderRadius: 10, padding: "14px 16px", border: `1px solid ${stage === "review" ? T.green : T.copper}40` }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <Camera size={14} color={stage === "review" ? T.green : T.copper} />
+                <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>UPLOAD PROOF PHOTO</span>
+              </div>
+              <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.5, margin: "0 0 12px" }}>
+                After the demo, take a photo with the customer (selfie or group shot) to confirm the meeting happened. Admin reviews + releases the reward.
+              </p>
+              <input ref={proofInputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={handleProofUpload} style={{ display: "none" }} />
+              {proofPreview && proofPreview.url ? (
+                <div style={{ position: "relative", borderRadius: 8, overflow: "hidden", background: T.charcoal, marginBottom: 10 }}>
+                  <img src={proofPreview.url} alt="" style={{ width: "100%", display: "block", maxHeight: 280, objectFit: "contain" }} />
+                  <button onClick={() => proofInputRef.current && proofInputRef.current.click()} disabled={proofUploading} style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,0.7)", color: T.white, border: "none", borderRadius: 4, padding: "5px 10px", fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, cursor: proofUploading ? "wait" : "pointer" }}>{proofUploading ? "UPLOADING…" : "REPLACE"}</button>
+                </div>
+              ) : (
+                <button onClick={() => proofInputRef.current && proofInputRef.current.click()} disabled={proofUploading} style={{ width: "100%", padding: "24px 16px", borderRadius: 8, border: `2px dashed ${T.copper}40`, background: T.darkBg, color: T.copper, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.5, cursor: proofUploading ? "wait" : "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 6, marginBottom: 10 }}>
+                  <Camera size={22} color={T.copper} />
+                  {proofUploading ? "UPLOADING…" : "TAP TO UPLOAD PROOF"}
+                </button>
+              )}
+              {proofPreview && (
+                <textarea value={proofCaption} onChange={(e) => setProofCaption(e.target.value)} placeholder="Optional notes for the admin (how did it go?)" rows={3} style={{ width: "100%", padding: "10px 12px", borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, boxSizing: "border-box", resize: "vertical", lineHeight: 1.4, marginBottom: 10 }} />
+              )}
+              {error && <div style={{ color: T.red, fontFamily: sans, fontSize: 11, marginBottom: 6 }}>{error}</div>}
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={handleSubmitFinal} disabled={busy || !proofPreview} style={{ flex: 1, padding: "12px", background: T.green, color: T.white, border: "none", borderRadius: 6, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 1, cursor: busy || !proofPreview ? "not-allowed" : "pointer", opacity: busy || !proofPreview ? 0.5 : 1 }}>
+                  {busy ? "SUBMITTING…" : "SUBMIT FOR REVIEW"}
+                </button>
+                <button onClick={handleWithdrawAction} disabled={busy} style={{ padding: "12px 14px", background: "none", color: T.tertiary, border: `1px solid ${T.charcoal}`, borderRadius: 6, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, cursor: busy ? "wait" : "pointer" }}>
+                  WITHDRAW
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
+        {stage === "submitted" && (
+          <div style={{ background: T.darkCard, borderRadius: 10, padding: "16px", border: `1px solid #C0A06040`, textAlign: "center" }}>
+            <Clock size={20} color="#C0A060" />
+            <div style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, marginTop: 8 }}>Awaiting admin review</div>
+            <div style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, marginTop: 4 }}>You'll be notified when the reward is released.</div>
+          </div>
+        )}
+
+        {stage === "approved" && (
+          <div style={{ background: T.darkCard, borderRadius: 10, padding: "16px", border: `1px solid ${T.green}40`, textAlign: "center" }}>
+            <CheckCircle size={20} color={T.green} />
+            <div style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, marginTop: 8 }}>Demo approved · reward released</div>
+          </div>
+        )}
+
+        {stage === "rejected" && (
+          <div style={{ background: T.darkCard, borderRadius: 10, padding: "16px", border: `1px solid ${T.red}40` }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+              <X size={14} color={T.red} />
+              <span style={{ fontFamily: sans, fontSize: 11, color: T.red, fontWeight: 700, letterSpacing: 0.5 }}>REJECTED</span>
+            </div>
+            {submission.reviewer_notes && <div style={{ fontFamily: serif, fontSize: 12, color: T.white, lineHeight: 1.5 }}>{submission.reviewer_notes}</div>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 /* ─── BOUNTY RESPONSE FORM ─── */
 function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUploadPhotos, currentUserId }) {
@@ -18201,7 +18528,7 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
 }
 
 /* ─── RANKS / LEADERBOARD SCREEN ─── */
-function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, currentUserId, currentProfile, onLoadLeaderboard, onViewUser, bounties: bountiesFromDB, mySubmissions, isGuest, onGuestTap, onClaimBounty, onSaveBountyDraft, onSubmitBountyRPC, onWithdrawBounty, onUploadBountyPhotos, earnings }) {
+function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, currentUserId, currentProfile, onLoadLeaderboard, onViewUser, bounties: bountiesFromDB, mySubmissions, isGuest, onGuestTap, onClaimBounty, onSaveBountyDraft, onSubmitBountyRPC, onWithdrawBounty, onUploadBountyPhotos, earnings, onOpenDM, onLoadProfileById }) {
   const [tab, setTab] = useState("overview"); // overview | leaderboard | bounty | badges
   // Leaderboard state. lbScope = global | following | weekly; lbData[scope]
   // caches rows so switching tabs is instant after the first fetch. Refresh
@@ -18371,7 +18698,9 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
           title: b.title,
           desc: b.description || "",
           reward: b.reward_cents || 0,
+          reward_cents: b.reward_cents || 0,
           rewardPts: b.reward_points || 0,
+          reward_points: b.reward_points || 0,
           category: b.category || "Content Creation",
           difficulty: b.difficulty || "Medium",
           deadline: formatDeadline(b.deadline_at),
@@ -18379,12 +18708,20 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
           slots: b.total_slots || 1,
           claimed: b.claimed_slots || 0,
           status: derivedStatus,
+          submission: sub || null,
           submissionId: sub ? sub.id : null,
           submissionStatus: sub ? sub.status : null,
           submissionDraft: sub && sub.draft ? sub.draft : null,
           reviewerNotes: sub ? sub.reviewer_notes : null,
           form_template_key: b.form_template_key || b.category || "Content Creation",
           form_config: b.form_config || null,
+          // Demo Request fields — propagate so DemoRequestFlow can render
+          // location + customer + rewards.
+          demo_lat: typeof b.demo_lat === "number" ? b.demo_lat : null,
+          demo_lng: typeof b.demo_lng === "number" ? b.demo_lng : null,
+          demo_radius_m: b.demo_radius_m || null,
+          demo_customer_user_id: b.demo_customer_user_id || null,
+          demo_location_label: b.demo_location_label || null,
         };
       });
   }, [bountiesFromDB, mySubsByBountyId]);
@@ -18798,6 +19135,12 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
                       )}
                     </div>
                     <h3 style={{ fontFamily: sans, fontSize: 15, color: T.white, margin: "0 0 6px", fontWeight: 600 }}>{b.title}</h3>
+                    {b.category === "Demo Request" && b.demo_location_label && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 6 }}>
+                        <MapPin size={11} color={T.copper} />
+                        <span style={{ fontFamily: serif, fontSize: 12, color: T.copper }}>{b.demo_location_label}</span>
+                      </div>
+                    )}
                     <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                         <DollarSign size={13} color={T.green} />
@@ -18966,20 +19309,36 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
         </div>
       )}
 
-      {/* ═══════════ BOUNTY RESPONSE FORM OVERLAY ═══════════ */}
+      {/* ═══════════ BOUNTY RESPONSE FORM / DEMO FLOW OVERLAY ═══════════ */}
       {activeBountyForm && (
-        <BountyResponseForm
-          bounty={activeBountyForm}
-          // Hydrate the form from the server's draft jsonb when the user
-          // has an active submission. Falls back to null (form initializes
-          // from the category template defaults) when no draft yet.
-          draft={activeBountyForm.submissionDraft || null}
-          onSave={saveDraftFromForm}
-          onSubmit={submitFromForm}
-          onUploadPhotos={onUploadBountyPhotos}
-          currentUserId={currentUserId}
-          onClose={() => setActiveBountyForm(null)}
-        />
+        activeBountyForm.category === "Demo Request"
+          ? <DemoRequestFlow
+              bounty={activeBountyForm}
+              submission={activeBountyForm.submission}
+              onClaim={onClaimBounty}
+              onSaveDraft={onSaveBountyDraft}
+              onSubmit={onSubmitBountyRPC}
+              onWithdraw={onWithdrawBounty}
+              onOpenDM={onOpenDM}
+              onUploadPhoto={onUploadBountyPhotos}
+              onLoadProfileById={onLoadProfileById}
+              currentUserId={currentUserId}
+              isGuest={isGuest}
+              onGuestTap={onGuestTap}
+              onClose={() => setActiveBountyForm(null)}
+            />
+          : <BountyResponseForm
+              bounty={activeBountyForm}
+              // Hydrate the form from the server's draft jsonb when the user
+              // has an active submission. Falls back to null (form initializes
+              // from the category template defaults) when no draft yet.
+              draft={activeBountyForm.submissionDraft || null}
+              onSave={saveDraftFromForm}
+              onSubmit={submitFromForm}
+              onUploadPhotos={onUploadBountyPhotos}
+              currentUserId={currentUserId}
+              onClose={() => setActiveBountyForm(null)}
+            />
       )}
     </div>
   );
@@ -29929,6 +30288,50 @@ function BountyDraftMediaCarousel({ items }) {
        to show the admin what the user submitted. Phase 8 will reuse it
        for the published feed/forum/trip-report attribution. ─── */
 function BountyDraftRenderer({ bounty, draft }) {
+  // Demo Request bounties have a custom render path — the draft is shaped
+  // like { accepted_at, scheduled_at, scheduled_location, proof_photo, proof_caption }
+  // instead of the section-id-keyed form draft.
+  if (bounty && bounty.category === "Demo Request") {
+    const d = draft || {};
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ background: T.darkCard, borderRadius: 8, padding: "10px 12px", border: `1px solid ${T.charcoal}` }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+            <MapPin size={11} color={T.copper} />
+            <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 700 }}>DEMO LOCATION</span>
+          </div>
+          <div style={{ fontFamily: sans, fontSize: 13, color: T.white }}>{bounty.demo_location_label || "—"}</div>
+        </div>
+        {d.scheduled_at && (
+          <div style={{ background: T.darkCard, borderRadius: 8, padding: "10px 12px", border: `1px solid ${T.charcoal}` }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+              <Clock size={11} color={T.green} />
+              <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 700 }}>SCHEDULED</span>
+            </div>
+            <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600 }}>{new Date(d.scheduled_at).toLocaleString()}</div>
+            <div style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, marginTop: 2 }}>{d.scheduled_location || "—"}</div>
+          </div>
+        )}
+        {d.proof_photo && d.proof_photo.url && (
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+              <Camera size={12} color={T.green} />
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 700 }}>PROOF PHOTO</span>
+            </div>
+            <div style={{ background: T.charcoal, borderRadius: 8, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <img src={d.proof_photo.url} alt={d.proof_photo.alt || ""} style={{ width: "100%", display: "block", maxHeight: 380, objectFit: "contain" }} />
+            </div>
+            {d.proof_caption && (
+              <div style={{ marginTop: 8, padding: "10px 12px", background: T.darkCard, borderRadius: 8, border: `1px solid ${T.charcoal}`, fontFamily: serif, fontSize: 13, color: T.white, lineHeight: 1.5 }}>
+                <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 700, display: "block", marginBottom: 4 }}>PARTICIPANT NOTES</span>
+                {d.proof_caption}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
   // Same lookup precedence as the response form so admin review sees the
   // sections the user actually filled out.
   const tpl = (bounty && bounty.form_config && Array.isArray(bounty.form_config.sections) && bounty.form_config)
@@ -30361,18 +30764,165 @@ function BountiesAdminScreen({ bounties, reviewQueue, onLoadReviewQueue, onBack,
   );
 }
 
+/* ─── BountyDemoMapPicker — small Mapbox-backed pin picker w/ radius
+       circle for Demo Request bounty setup. Tap-to-place; calls onChange
+       with {lat, lng, label} where label comes from reverse geocode. ─── */
+function BountyDemoMapPicker({ lat, lng, radiusM, onChange }) {
+  const mapDivRef = useRef(null);
+  const mapInstRef = useRef(null);
+  const markerRef = useRef(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const gl = await loadMapbox();
+      if (cancelled || !mapDivRef.current) return;
+      const initialCenter = (typeof lng === "number" && typeof lat === "number") ? [lng, lat] : [-98.5, 39.5];
+      const initialZoom = (typeof lng === "number" && typeof lat === "number") ? 8 : 3.5;
+      const map = new gl.Map({
+        container: mapDivRef.current,
+        style: MAPBOX_STYLE,
+        center: initialCenter,
+        zoom: initialZoom,
+        attributionControl: false,
+      });
+      mapInstRef.current = map;
+      map.on("load", () => {
+        // Place initial marker if we have coords.
+        if (typeof lng === "number" && typeof lat === "number") {
+          placeMarker(gl, map, lng, lat);
+          drawRadius(map, lng, lat, radiusM);
+        }
+      });
+      map.on("click", async (e) => {
+        const { lng: clickLng, lat: clickLat } = e.lngLat;
+        placeMarker(gl, map, clickLng, clickLat);
+        drawRadius(map, clickLng, clickLat, radiusM);
+        setBusy(true);
+        try {
+          const info = await mapboxReverseGeocode(clickLng, clickLat);
+          onChange && onChange({ lat: clickLat, lng: clickLng, label: (info && info.place) || (info && info.text) || null });
+        } catch (err) {
+          console.error("[demo picker] geocode failed", err);
+          onChange && onChange({ lat: clickLat, lng: clickLng, label: null });
+        } finally {
+          setBusy(false);
+        }
+      });
+    })();
+    return () => { cancelled = true; if (mapInstRef.current) { try { mapInstRef.current.remove(); } catch {} mapInstRef.current = null; } };
+  }, []);
+  // Re-draw radius when radius changes (and coords exist).
+  useEffect(() => {
+    if (!mapInstRef.current || typeof lat !== "number" || typeof lng !== "number") return;
+    drawRadius(mapInstRef.current, lng, lat, radiusM);
+  }, [radiusM]);
+  const placeMarker = (gl, map, lng, lat) => {
+    if (markerRef.current) { try { markerRef.current.remove(); } catch {} }
+    const el = document.createElement("div");
+    el.style.cssText = `width: 22px; height: 22px; border-radius: 50%; background: ${T.red}; border: 3px solid ${T.white}; box-shadow: 0 2px 8px rgba(0,0,0,0.4);`;
+    markerRef.current = new gl.Marker({ element: el, anchor: "center" }).setLngLat([lng, lat]).addTo(map);
+  };
+  // Render a simple polygon-approximation of the radius circle.
+  const drawRadius = (map, lng, lat, radiusM) => {
+    const id = "demo-radius";
+    if (!map || !map.isStyleLoaded()) { map.once("idle", () => drawRadius(map, lng, lat, radiusM)); return; }
+    const geo = makeCircleGeoJSON(lat, lng, radiusM);
+    const data = { type: "FeatureCollection", features: [{ type: "Feature", geometry: geo, properties: {} }] };
+    if (map.getSource(id)) { map.getSource(id).setData(data); }
+    else {
+      map.addSource(id, { type: "geojson", data });
+      map.addLayer({ id: `${id}-fill`, type: "fill", source: id, paint: { "fill-color": T.red, "fill-opacity": 0.12 } });
+      map.addLayer({ id: `${id}-line`, type: "line", source: id, paint: { "line-color": T.red, "line-width": 2, "line-opacity": 0.6 } });
+    }
+  };
+  return (
+    <div style={{ position: "relative" }}>
+      <div ref={mapDivRef} style={{ width: "100%", height: 260, borderRadius: 8, overflow: "hidden", background: T.charcoal }} />
+      {busy && <div style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,0.7)", color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 700, padding: "4px 8px", borderRadius: 4 }}>RESOLVING…</div>}
+      <div style={{ position: "absolute", bottom: 8, left: 8, background: "rgba(0,0,0,0.6)", color: T.white, fontFamily: sans, fontSize: 10, padding: "4px 8px", borderRadius: 4 }}>
+        Tap map to place / move the demo pin
+      </div>
+    </div>
+  );
+}
+
+/* ─── BountyCustomerPicker — search profiles by handle/name; lock in
+       a single user_id as the customer for this Demo Request bounty. ─── */
+function BountyCustomerPicker({ valueId, valueProfile, onChange, onSearchUsers }) {
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const debounceRef = useRef(null);
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!q || q.length < 2) { setResults([]); return; }
+    debounceRef.current = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const rows = await (onSearchUsers ? onSearchUsers(q, 8) : Promise.resolve([]));
+        setResults(Array.isArray(rows) ? rows : []);
+      } catch (err) {
+        console.error("[demo customer search] failed", err);
+        setResults([]);
+      } finally { setSearching(false); }
+    }, 250);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [q]);
+  if (valueId) {
+    const p = valueProfile || {};
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: T.darkCard, borderRadius: 8, border: `1px solid ${T.copper}40` }}>
+        <div style={{ width: 36, height: 36, borderRadius: "50%", background: T.charcoal, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {p.avatar_url
+            ? <img src={p.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            : <span style={{ fontFamily: sans, fontSize: 13, fontWeight: 700, color: T.white }}>{((p.full_name || p.handle || "?").charAt(0) || "?").toUpperCase()}</span>}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600 }}>{p.full_name || "(name)"}</div>
+          <div style={{ fontFamily: serif, fontSize: 11, color: T.tertiary }}>@{p.handle || "—"}</div>
+        </div>
+        <button onClick={() => onChange(null, null)} style={{ background: "none", border: `1px solid ${T.red}30`, color: T.red, fontFamily: sans, fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 4, cursor: "pointer" }}>CHANGE</button>
+      </div>
+    );
+  }
+  return (
+    <div>
+      <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search customer by handle or name…" style={{ width: "100%", padding: "10px 12px", borderRadius: 6, border: `1px solid ${T.charcoal}`, background: T.darkBg, color: T.white, fontFamily: sans, fontSize: 13, boxSizing: "border-box" }} />
+      {searching && <div style={{ marginTop: 6, fontFamily: serif, fontSize: 11, color: T.tertiary }}>Searching…</div>}
+      {results.length > 0 && (
+        <div style={{ marginTop: 6, background: T.darkCard, borderRadius: 8, border: `1px solid ${T.charcoal}`, maxHeight: 220, overflowY: "auto" }}>
+          {results.map(r => (
+            <button key={r.id} onClick={() => onChange(r.id, r)} style={{ width: "100%", textAlign: "left", padding: "8px 10px", background: "none", border: "none", borderBottom: `1px solid ${T.charcoal}40`, cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ width: 28, height: 28, borderRadius: "50%", background: T.charcoal, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                {r.avatar_url ? <img src={r.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700 }}>{((r.full_name || r.handle || "?").charAt(0) || "?").toUpperCase()}</span>}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>{r.full_name || "(name)"}</div>
+                <div style={{ fontFamily: serif, fontSize: 10, color: T.tertiary }}>@{r.handle || "—"}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── BOUNTY EDITOR — admin create + edit (Phase 4) ─── */
 // Used for both new (bountyId="") and existing (bountyId=uuid). Loads
 // from DB on mount; auto-prefills via category template on new.
-function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, onUploadPhoto }) {
+function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, onUploadPhoto, onSearchUsers, onLoadProfileById }) {
   const isNew = !bountyId;
   const [bounty, setBounty] = useState(null);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [hasUnsaved, setHasUnsaved] = useState(false);
+  const [customerProfile, setCustomerProfile] = useState(null);
   const CATEGORIES = Object.keys(BOUNTY_FORM_TEMPLATES);
   const DIFFICULTIES = ["Easy", "Medium", "Hard"];
+  const isDemo = bounty && bounty.category === "Demo Request";
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -30407,6 +30957,17 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
     })();
     return () => { mounted = false; };
   }, [bountyId]);
+  // Hydrate the customer profile when the bounty has a demo_customer_user_id.
+  useEffect(() => {
+    if (!bounty || !bounty.demo_customer_user_id || !onLoadProfileById) { setCustomerProfile(null); return; }
+    if (customerProfile && customerProfile.id === bounty.demo_customer_user_id) return;
+    (async () => {
+      try {
+        const p = await onLoadProfileById(bounty.demo_customer_user_id);
+        setCustomerProfile(p || null);
+      } catch (e) { console.error("[BountyEditor] customer load failed", e); }
+    })();
+  }, [bounty && bounty.demo_customer_user_id]);
   const patch = (partial) => {
     setBounty(prev => prev ? { ...prev, ...partial } : prev);
     setHasUnsaved(true);
@@ -30756,7 +31317,56 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
         )}
       </div>
 
-      {/* FORM TEMPLATE — picker + per-section prompt editor */}
+      {/* DEMO SETUP — only for Demo Request bounties. Replaces the form
+          template + prompt editor since the user-side flow is fully custom
+          (DemoRequestFlow handles claim/schedule/proof). */}
+      {isDemo && (
+        <>
+          <SectionLabel>DEMO SETUP</SectionLabel>
+          <div style={{ padding: "0 16px", display: "flex", flexDirection: "column", gap: 14 }}>
+            <div>
+              <FieldLabel>Customer (the person requesting the demo) *</FieldLabel>
+              <BountyCustomerPicker
+                valueId={bounty.demo_customer_user_id}
+                valueProfile={customerProfile}
+                onSearchUsers={onSearchUsers}
+                onChange={(id, prof) => { patch({ demo_customer_user_id: id }); setCustomerProfile(prof || null); }}
+              />
+            </div>
+            <div>
+              <FieldLabel>Demo location *</FieldLabel>
+              <BountyDemoMapPicker
+                lat={bounty.demo_lat}
+                lng={bounty.demo_lng}
+                radiusM={bounty.demo_radius_m || 80467}
+                onChange={({ lat, lng, label }) => patch({ demo_lat: lat, demo_lng: lng, demo_location_label: label })}
+              />
+              <div style={{ marginTop: 6, fontFamily: sans, fontSize: 11, color: T.tertiary, letterSpacing: 0.5 }}>
+                {bounty.demo_location_label ? (
+                  <>📍 {bounty.demo_location_label}{typeof bounty.demo_lat === "number" ? ` (${bounty.demo_lat.toFixed(4)}, ${bounty.demo_lng.toFixed(4)})` : ""}</>
+                ) : (
+                  "Tap the map to drop a pin. Location label is reverse-geocoded; you can override it."
+                )}
+              </div>
+              {bounty.demo_location_label && (
+                <input value={bounty.demo_location_label} onChange={(e) => patch({ demo_location_label: e.target.value })} placeholder="Location label (used in push body)" style={{ ...inputStyle, marginTop: 8, padding: "8px 10px", fontSize: 12 }} />
+              )}
+            </div>
+            <div>
+              <FieldLabel>Search radius for nearby-user push (miles)</FieldLabel>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <input type="range" min="5" max="200" step="5" value={Math.round((bounty.demo_radius_m || 80467) / 1609.34)} onChange={(e) => patch({ demo_radius_m: Math.round(Number(e.target.value) * 1609.34) })} style={{ flex: 1 }} />
+                <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, minWidth: 56, textAlign: "right" }}>{Math.round((bounty.demo_radius_m || 80467) / 1609.34)} mi</span>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* FORM TEMPLATE — picker + per-section prompt editor. Skipped for
+          Demo Request (above) since the response form is hardcoded. */}
+      {!isDemo && (
+      <>
       <SectionLabel>RESPONSE FORM TEMPLATE</SectionLabel>
       <div style={{ padding: "0 16px" }}>
         <FieldLabel>Template (defines fields participants fill out)</FieldLabel>
@@ -30987,6 +31597,8 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
           </>
         );
       })()}
+      </>
+      )}
 
       {/* LIFECYCLE */}
       <SectionLabel>LIFECYCLE</SectionLabel>
@@ -30995,7 +31607,7 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
           {saving ? "SAVING…" : (hasUnsaved ? "SAVE CHANGES" : "SAVED")}
         </button>
         {bounty.status === "draft" && (
-          <button onClick={() => handleSave("open")} disabled={saving || !bounty.title || !bounty.deadline_at} style={{ padding: "12px", background: T.green, color: T.white, border: "none", borderRadius: 6, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.8, cursor: saving ? "wait" : "pointer", opacity: saving ? 0.5 : 1 }}>
+          <button onClick={() => handleSave("open")} disabled={saving || !bounty.title || !bounty.deadline_at || (isDemo && (!bounty.demo_customer_user_id || typeof bounty.demo_lat !== "number"))} style={{ padding: "12px", background: T.green, color: T.white, border: "none", borderRadius: 6, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.8, cursor: saving ? "wait" : "pointer", opacity: saving ? 0.5 : 1 }}>
             PUBLISH (OPEN TO USERS)
           </button>
         )}
@@ -42625,6 +43237,12 @@ export default function Trailhead() {
       form_template_key: (patch && patch.form_template_key) || (patch && patch.category) || "Content Creation",
       form_config: (patch && patch.form_config) || null,
       created_by: uid,
+      // Demo Request fields — null unless category=Demo Request.
+      demo_lat: patch && typeof patch.demo_lat === "number" ? patch.demo_lat : null,
+      demo_lng: patch && typeof patch.demo_lng === "number" ? patch.demo_lng : null,
+      demo_radius_m: patch && patch.demo_radius_m ? Number(patch.demo_radius_m) : 80467,
+      demo_customer_user_id: (patch && patch.demo_customer_user_id) || null,
+      demo_location_label: (patch && patch.demo_location_label) || null,
     };
     try {
       const { data, error } = await supabase.from("bounties").insert(payload).select("*").single();
@@ -42635,7 +43253,7 @@ export default function Trailhead() {
   };
   const updateBounty = async (id, patch) => {
     if (!isAdmin || !id) return { error: "Not authorized" };
-    const allowedKeys = ["title", "description", "category", "difficulty", "hero_img", "reward_cents", "reward_points", "multiple_winners", "total_slots", "starts_at", "deadline_at", "status", "form_template_key", "form_config"];
+    const allowedKeys = ["title", "description", "category", "difficulty", "hero_img", "reward_cents", "reward_points", "multiple_winners", "total_slots", "starts_at", "deadline_at", "status", "form_template_key", "form_config", "demo_lat", "demo_lng", "demo_radius_m", "demo_customer_user_id", "demo_location_label"];
     const payload = {};
     allowedKeys.forEach(k => { if (patch && k in patch) payload[k] = patch[k]; });
     if (Object.keys(payload).length === 0) return { ok: true };
@@ -42738,7 +43356,7 @@ export default function Trailhead() {
       const userIds = Array.from(new Set(rows.map(r => r.user_id).filter(Boolean)));
       const [bRes, pRes] = await Promise.all([
         bountyIds.length
-          ? supabase.from("bounties").select("id, title, category, difficulty, reward_cents, reward_points, form_template_key, form_config").in("id", bountyIds)
+          ? supabase.from("bounties").select("id, title, category, difficulty, reward_cents, reward_points, form_template_key, form_config, demo_lat, demo_lng, demo_radius_m, demo_customer_user_id, demo_location_label").in("id", bountyIds)
           : Promise.resolve({ data: [] }),
         userIds.length
           ? supabase.from("profiles").select("id, full_name, handle, avatar_url").in("id", userIds)
@@ -42813,6 +43431,16 @@ export default function Trailhead() {
       if (error) { console.error("[refreshBountyEarnings] error", error); return; }
       setBountyEarnings(data || { total_earned_cents: 0, total_pending_cents: 0, total_paid_cents: 0 });
     } catch (e) { console.error("[refreshBountyEarnings] failed", e); }
+  };
+  // Helper for fetching a single profile by id — used by Demo Request
+  // bounty UI to show the customer's avatar/name + their handle.
+  const loadProfileById = async (id) => {
+    if (!id) return null;
+    try {
+      const { data, error } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").eq("id", id).maybeSingle();
+      if (error) { console.error("[loadProfileById] error", error); return null; }
+      return data || null;
+    } catch (e) { console.error("[loadProfileById] failed", e); return null; }
   };
   // Adapter for BountyResponseForm — converts raw File objects to the
   // entry-shape uploadPostPhotoList expects, then returns the entries
@@ -48508,7 +49136,7 @@ export default function Trailhead() {
             {screen === "ranks" && (isGuest
               ? <GuestGateScreen title="RANKS REQUIRE AN ACCOUNT" subtitle="Sign in to see the leaderboard and start earning points from your posts, routes and builds." onSignIn={goToLoginFromGuest} />
               : isAdmin
-                ? <RanksScreen myPoints={myTotalPoints} pointsBreakdown={friendlyPointsBreakdown} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentProfile={currentProfile} onLoadLeaderboard={loadLeaderboard} onViewUser={openUserProfile} bounties={bounties} mySubmissions={myBountySubmissions} isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onClaimBounty={claimBounty} onSaveBountyDraft={saveBountyDraft} onSubmitBountyRPC={submitBountySubmission} onWithdrawBounty={withdrawBountySubmission} onUploadBountyPhotos={uploadBountyPhotoFiles} earnings={bountyEarnings} />
+                ? <RanksScreen myPoints={myTotalPoints} pointsBreakdown={friendlyPointsBreakdown} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentProfile={currentProfile} onLoadLeaderboard={loadLeaderboard} onViewUser={openUserProfile} bounties={bounties} mySubmissions={myBountySubmissions} isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onClaimBounty={claimBounty} onSaveBountyDraft={saveBountyDraft} onSubmitBountyRPC={submitBountySubmission} onWithdrawBounty={withdrawBountySubmission} onUploadBountyPhotos={uploadBountyPhotoFiles} earnings={bountyEarnings} onOpenDM={openDM} onLoadProfileById={loadProfileById} />
                 : <div style={{ padding: 32, textAlign: "center", fontFamily: serif, fontSize: 14, color: T.tertiary, lineHeight: 1.6 }}>Ranks is coming in a future release.</div>
             )}
             {screen === "admin" && (isAdmin
@@ -48554,6 +49182,8 @@ export default function Trailhead() {
                       onUpdate={updateBounty}
                       onDelete={deleteBounty}
                       onUploadPhoto={uploadBountyPhotoFiles}
+                      onSearchUsers={searchUsers}
+                      onLoadProfileById={loadProfileById}
                     />
                   : <BountiesAdminScreen
                       bounties={bounties}
