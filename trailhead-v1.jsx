@@ -147,6 +147,53 @@ function RankBadgeWithName({ points, size = 10 }) {
   );
 }
 
+// ── Points System — kind mappings ──
+// REASON_TO_KIND normalizes human-readable awardPoints reasons to the
+// snake_case kinds stored in points_log + profiles.points_breakdown.
+// Keep in sync with award_points RPC + RanksScreen breakdown render.
+// Any reason not found here falls through to "other".
+const REASON_TO_KIND = {
+  "Daily Login": "daily_login",
+  "Feed Post": "feed_post",
+  "Forum Thread": "forum_thread",
+  "Forum Reply": "forum_reply",
+  "Route Logged": "route_logged",
+  "Build Added": "build_added",
+  "Profile Complete": "profile_complete",
+  "Recovery Response": "recovery_respond",
+  "Recovery Responded": "recovery_respond",
+  "Photos Uploaded": "photos_uploaded",
+  "Comment Posted": "comment_posted",
+  "Trip Shared": "trip_shared",
+  "Plan Shared": "plan_shared",
+  "Spot Shared": "spot_shared",
+  "HQ Shared": "hq_shared",
+  "Build Shared": "build_shared",
+  "Forum Shared": "forum_shared",
+  "Convoy Joined": "convoy_joined",
+};
+// Collapses snake_case kinds into the friendly labels RanksScreen
+// breakdown renders. Anything missing here lands in "Other".
+const KIND_TO_BREAKDOWN_LABEL = {
+  forum_thread: "Forum Threads",
+  forum_reply: "Forum Threads",
+  forum_shared: "Forum Threads",
+  route_logged: "Routes Logged",
+  build_added: "Builds Added",
+  build_shared: "Builds Added",
+  feed_post: "Feed Posts",
+  trip_shared: "Feed Posts",
+  plan_shared: "Feed Posts",
+  spot_shared: "Feed Posts",
+  hq_shared: "Feed Posts",
+  comment_posted: "Feed Posts",
+  photos_uploaded: "Feed Posts",
+  daily_login: "Daily Logins",
+  recovery_respond: "Recovery",
+  convoy_joined: "Other",
+  profile_complete: "Other",
+};
+
 // Simulated user points lookup
 const USER_POINTS = {
   "Sierra_Tactical": 48900, "Nomad_Queen": 32100, "Peak_Finder": 28750, "TrailBoss_88": 26200,
@@ -17984,16 +18031,19 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp })
     photoUploaded: 5,
   };
 
-  // ── Current user stats (simulated) ──
-  const myPoints = myPointsProp || 12450;
-  const myBountyEarnings = 124000; // cents
+  // ── Current user stats ──
+  // myPointsProp is the real persisted total from currentProfile.points.
+  // Explicit undefined-check so a brand-new user at 0 doesn't fall back
+  // to a mock value.
+  const myPoints = typeof myPointsProp === "number" ? myPointsProp : 0;
+  const myBountyEarnings = 124000; // cents — still mocked; replaced in Phase 7
   const myRank = rankTiers.find(r => myPoints >= r.min && myPoints <= r.max) || rankTiers[0];
   const nextRank = rankTiers[rankTiers.indexOf(myRank) + 1] || null;
   const rankProgress = nextRank ? ((myPoints - myRank.min) / (nextRank.min - myRank.min)) * 100 : 100;
   const RankIcon = myRank.icon;
 
   const breakdownIcons = { "Forum Threads": MessageCircle, "Routes Logged": Map, "Builds Added": Wrench, "Likes Received": Heart, "Feed Posts": Edit3, "Daily Logins": Zap, "Recovery": AlertTriangle, "Other": Star };
-  const bd = breakdownProp || { "Forum Threads": 3750, "Routes Logged": 2700, "Builds Added": 2000, "Likes Received": 1840, "Feed Posts": 1200, "Daily Logins": 560, "Other": 400 };
+  const bd = breakdownProp || {};
   const myPointsBreakdown = Object.entries(bd).filter(([, pts]) => pts > 0).map(([label, pts]) => ({ label, pts, icon: breakdownIcons[label] || Star })).sort((a, b) => b.pts - a.pts);
 
   // ── Leaderboard ──
@@ -43199,33 +43249,67 @@ export default function Trailhead() {
     } catch (e) { console.error("[follows] count fetch failed", e); return null; }
   };
 
-  // ── Points System ──
+  // ── Points System (Phase 1: server-truth via award_points RPC) ──
+  // POINTS const drives per-action amounts client-side; the RPC just
+  // persists what we hand it. Reasons are friendly strings used for the
+  // toast; REASON_TO_KIND normalizes them to snake_case for the ledger
+  // + profiles.points_breakdown bucket. Each new awardPoints callsite
+  // should pass a reason already covered here OR fall through to "other".
   const POINTS = { dailyLogin: 5, feedPost: 10, forumThread: 25, forumReply: 10, routeLogged: 30, buildAdded: 40, profileComplete: 100, receiveLike: 2, receiveComment: 3, receiveBookmark: 5, convoyJoined: 20, recoveryRespond: 50, photoUploaded: 5 };
-  // Points seeded to zero — real totals will come once we persist points
-  // to the profiles table. awardPoints(...) increments locally per session
-  // until then; the value resets on reload.
-  const [myTotalPoints, setMyTotalPoints] = useState(0);
   const [pointsToasts, setPointsToasts] = useState([]);
-  const REASON_TO_BREAKDOWN = { "Forum Thread": "Forum Threads", "Forum Reply": "Forum Threads", "Route Logged": "Routes Logged", "Build Added": "Builds Added", "Feed Post": "Feed Posts", "Daily Login": "Daily Logins", "Photos Uploaded": "Feed Posts", "Comment Posted": "Feed Posts", "Recovery Response": "Recovery" };
-  const [pointsBreakdown, setPointsBreakdown] = useState({
-    "Forum Threads": 0, "Routes Logged": 0, "Builds Added": 0, "Likes Received": 0, "Feed Posts": 0, "Daily Logins": 0, "Other": 0,
-  });
   const awardPoints = (amount, reason) => {
     if (!amount || !reason) return;
     if (isGuest) return; // guests don't earn points
-    setMyTotalPoints(prev => prev + amount);
-    // Update global lookup so rank badges refresh
-    USER_POINTS["KyleLPO"] = (USER_POINTS["KyleLPO"] || 12450) + amount;
-    // Update breakdown
-    const cat = REASON_TO_BREAKDOWN[reason] || "Other";
-    setPointsBreakdown(prev => ({ ...prev, [cat]: (prev[cat] || 0) + amount }));
-    // Toast is gated to admin while Ranks is a v2 feature — points still
-    // accumulate silently so the data is there when Ranks ships for all.
-    if (!isAdmin) return;
-    const toastId = Date.now() + Math.random();
-    setPointsToasts(prev => [...prev, { id: toastId, amount, reason }]);
-    setTimeout(() => setPointsToasts(prev => prev.filter(t => t.id !== toastId)), 2500);
+    // Daily login is handled by record_login RPC (server enforces
+    // once-per-UTC-day idempotency + streak math). Skip the client call
+    // so calling awardPoints("Daily Login") becomes a no-op — keeps
+    // existing legacy callsite from double-awarding.
+    if (reason === "Daily Login") return;
+    const kind = REASON_TO_KIND[reason] || "other";
+    // Toast fires immediately (gated to admin while Ranks is pre-launch
+    // — points still accrue silently for non-admins so the data's ready
+    // when Ranks ships for everyone).
+    if (isAdmin) {
+      const toastId = Date.now() + Math.random();
+      setPointsToasts(prev => [...prev, { id: toastId, amount, reason }]);
+      setTimeout(() => setPointsToasts(prev => prev.filter(t => t.id !== toastId)), 2500);
+    }
+    // Persist server-side. Server is source of truth — reconcile the
+    // local profile snapshot from the RPC's new_total. crossed_threshold
+    // fires a window event for the future rank-up celebration overlay.
+    supabase.rpc("award_points", { p_kind: kind, p_amount: amount, p_ref_id: null, p_ref_type: null })
+      .then(({ data, error }) => {
+        if (error) { console.error("[award_points] rpc error", error, { kind, amount }); return; }
+        const row = Array.isArray(data) ? data[0] : data;
+        if (!row) return;
+        setCurrentProfile(prev => {
+          if (!prev) return prev;
+          const breakdownPrev = prev.points_breakdown || {};
+          const bucketPrev = Number(breakdownPrev[kind] || 0);
+          return {
+            ...prev,
+            points: row.new_total,
+            points_breakdown: { ...breakdownPrev, [kind]: bucketPrev + amount },
+          };
+        });
+        if (row.crossed_threshold) {
+          try { window.dispatchEvent(new CustomEvent("trailhead:rank_up", { detail: { newRankIndex: row.new_rank_index, total: row.new_total } })); } catch {}
+        }
+      });
   };
+  // Friendly-label view of the per-kind breakdown — collapses related
+  // kinds into the buckets RanksScreen wants to render. "Other" catches
+  // any kind we haven't categorized.
+  const friendlyPointsBreakdown = useMemo(() => {
+    const raw = (currentProfile && currentProfile.points_breakdown) || {};
+    const out = { "Forum Threads": 0, "Routes Logged": 0, "Builds Added": 0, "Feed Posts": 0, "Daily Logins": 0, "Recovery": 0, "Other": 0 };
+    Object.entries(raw).forEach(([kind, pts]) => {
+      const label = KIND_TO_BREAKDOWN_LABEL[kind] || "Other";
+      out[label] = (out[label] || 0) + Number(pts || 0);
+    });
+    return out;
+  }, [currentProfile && currentProfile.points_breakdown]);
+  const myTotalPoints = (currentProfile && currentProfile.points) || 0;
   // Keep the module-level rank-visibility flag in sync with viewer role.
   // Set during render (NOT in a useEffect) so the same render pass that
   // flips isAdmin also shows/hides every RankBadge child component. An
@@ -43237,14 +43321,45 @@ export default function Trailhead() {
   // error (removeChild NotFoundError) that occurred when we swapped LoginScreen for
   // the app tree inside a useEffect.
 
-  // Daily login points (once per session)
+  // Daily login points + streak (server-enforced once-per-UTC-day).
+  // Calls record_login which: bumps last_login_at, manages login_streak,
+  // and awards daily_login points through the same award_points RPC so
+  // the ledger entry + breakdown bucket + crossed_threshold all fire
+  // through one path. Safe to call on every session boot — the RPC
+  // returns awarded=false + zero side effects if today's already counted.
   const loginPointsAwarded = useRef(false);
   useEffect(() => {
-    if (!loginPointsAwarded.current && authState === "app") {
-      loginPointsAwarded.current = true;
-      setTimeout(() => awardPoints(POINTS.dailyLogin, "Daily Login"), 1500);
-    }
-  }, [authState]);
+    if (loginPointsAwarded.current || authState !== "app" || isGuest) return;
+    loginPointsAwarded.current = true;
+    const t = setTimeout(() => {
+      supabase.rpc("record_login", { p_daily_login_points: POINTS.dailyLogin })
+        .then(({ data, error }) => {
+          if (error) { console.error("[record_login] rpc error", error); return; }
+          const row = Array.isArray(data) ? data[0] : data;
+          if (!row || !row.awarded) return;
+          setCurrentProfile(prev => {
+            if (!prev) return prev;
+            const breakdownPrev = prev.points_breakdown || {};
+            const bucketPrev = Number(breakdownPrev.daily_login || 0);
+            return {
+              ...prev,
+              points: row.new_total,
+              login_streak: row.streak,
+              points_breakdown: { ...breakdownPrev, daily_login: bucketPrev + POINTS.dailyLogin },
+            };
+          });
+          if (isAdmin) {
+            const toastId = Date.now() + Math.random();
+            setPointsToasts(prev => [...prev, { id: toastId, amount: POINTS.dailyLogin, reason: row.streak > 1 ? `Daily Login · ${row.streak}d streak` : "Daily Login" }]);
+            setTimeout(() => setPointsToasts(prev => prev.filter(t2 => t2.id !== toastId)), 2500);
+          }
+          if (row.crossed_threshold) {
+            try { window.dispatchEvent(new CustomEvent("trailhead:rank_up", { detail: { total: row.new_total } })); } catch {}
+          }
+        });
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [authState, isGuest]);
 
   // addRecoveryAlert removed — recoveryAlerts is now derived from
   // feedItems (see useMemo above). Recovery posts going through addPost
@@ -46375,7 +46490,7 @@ export default function Trailhead() {
             {screen === "ranks" && (isGuest
               ? <GuestGateScreen title="RANKS REQUIRE AN ACCOUNT" subtitle="Sign in to see the leaderboard and start earning points from your posts, routes and builds." onSignIn={goToLoginFromGuest} />
               : isAdmin
-                ? <RanksScreen myPoints={myTotalPoints} pointsBreakdown={pointsBreakdown} />
+                ? <RanksScreen myPoints={myTotalPoints} pointsBreakdown={friendlyPointsBreakdown} />
                 : <div style={{ padding: 32, textAlign: "center", fontFamily: serif, fontSize: 14, color: T.tertiary, lineHeight: 1.6 }}>Ranks is coming in a future release.</div>
             )}
             {screen === "admin" && (isAdmin
