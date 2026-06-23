@@ -18092,7 +18092,7 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
 }
 
 /* ─── RANKS / LEADERBOARD SCREEN ─── */
-function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, currentUserId, currentProfile, onLoadLeaderboard, onViewUser, bounties: bountiesFromDB, mySubmissions, isGuest, onGuestTap, onClaimBounty, onSaveBountyDraft, onSubmitBountyRPC, onWithdrawBounty, onUploadBountyPhotos }) {
+function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, currentUserId, currentProfile, onLoadLeaderboard, onViewUser, bounties: bountiesFromDB, mySubmissions, isGuest, onGuestTap, onClaimBounty, onSaveBountyDraft, onSubmitBountyRPC, onWithdrawBounty, onUploadBountyPhotos, earnings }) {
   const [tab, setTab] = useState("overview"); // overview | leaderboard | bounty | badges
   // Leaderboard state. lbScope = global | following | weekly; lbData[scope]
   // caches rows so switching tabs is instant after the first fetch. Refresh
@@ -18155,7 +18155,11 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
   // Explicit undefined-check so a brand-new user at 0 doesn't fall back
   // to a mock value.
   const myPoints = typeof myPointsProp === "number" ? myPointsProp : 0;
-  const myBountyEarnings = 124000; // cents — still mocked; replaced in Phase 7
+  // Phase 6: real earnings from bounty_earnings denorm. Falls back to 0 when
+  // the user has never had an approved submission (no row in the table).
+  const myBountyEarnings = (earnings && earnings.total_earned_cents) || 0;
+  const myBountyPending = (earnings && earnings.total_pending_cents) || 0;
+  const myBountyPaid = (earnings && earnings.total_paid_cents) || 0;
   const myRank = rankTiers.find(r => myPoints >= r.min && myPoints <= r.max) || rankTiers[0];
   const nextRank = rankTiers[rankTiers.indexOf(myRank) + 1] || null;
   const rankProgress = nextRank ? ((myPoints - myRank.min) / (nextRank.min - myRank.min)) * 100 : 100;
@@ -18416,10 +18420,19 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
               </div>
               <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginBottom: 4 }}>
                 <span style={{ fontFamily: sans, fontSize: 28, color: T.white, fontWeight: 700 }}>${(myBountyEarnings / 100).toFixed(2)}</span>
-                <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>available</span>
+                <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>lifetime earned</span>
               </div>
-              <span style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, display: "block", marginBottom: 14 }}>Earned from completed bounty board tasks</span>
-              <button style={{ background: T.copper, color: T.charcoal, fontFamily: sans, fontSize: 11, fontWeight: 700, padding: "10px 24px", borderRadius: 6, border: "none", cursor: "pointer", letterSpacing: 1 }}>REDEEM CREDIT</button>
+              <div style={{ display: "flex", gap: 16, marginBottom: 14, marginTop: 8 }}>
+                <div>
+                  <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600 }}>PENDING</div>
+                  <div style={{ fontFamily: sans, fontSize: 14, color: T.green, fontWeight: 700 }}>${(myBountyPending / 100).toFixed(2)}</div>
+                </div>
+                <div>
+                  <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600 }}>PAID OUT</div>
+                  <div style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700 }}>${(myBountyPaid / 100).toFixed(2)}</div>
+                </div>
+              </div>
+              <button disabled style={{ background: T.copper, color: T.charcoal, fontFamily: sans, fontSize: 11, fontWeight: 700, padding: "10px 24px", borderRadius: 6, border: "none", cursor: "not-allowed", letterSpacing: 1, opacity: 0.45 }}>REDEEM CREDIT (PHASE 7)</button>
             </div>
           </div>
 
@@ -29759,11 +29772,280 @@ function GearDropListRow({ drop, onOpen, onDelete }) {
 // `adminSubScreen` at root which mounts AdminDashboardScreen with the
 // matching initialTab + hideTabBar=true. Back from the dashboard lands
 // here, not on the feed.
+/* ─── BountyDraftRenderer — read-only render of a submission's draft
+       per the bounty's form template. Phase 6 review surface uses this
+       to show the admin what the user submitted. Phase 8 will reuse it
+       for the published feed/forum/trip-report attribution. ─── */
+function BountyDraftRenderer({ bounty, draft }) {
+  const tpl = BOUNTY_FORM_TEMPLATES[bounty && (bounty.form_template_key || bounty.category)] || BOUNTY_FORM_TEMPLATES["Content Creation"];
+  if (!draft || typeof draft !== "object") {
+    return <div style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, padding: 20, textAlign: "center" }}>Empty draft.</div>;
+  }
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "0 4px" }}>
+      {tpl.sections.map(section => {
+        const val = draft[section.id];
+        // h1/h2/h3 — fixed sections render their value; user-input headings render input text
+        if (section.type === "h1") {
+          const text = section.fixed ? section.value : val;
+          if (!text) return null;
+          return <h1 key={section.id} style={{ fontFamily: sans, fontSize: 22, color: T.white, margin: "10px 0 4px", fontWeight: 700, lineHeight: 1.3 }}>{text}</h1>;
+        }
+        if (section.type === "h2") {
+          const text = section.fixed ? section.value : val;
+          if (!text) return null;
+          return <h2 key={section.id} style={{ fontFamily: sans, fontSize: 16, color: T.copper, margin: "14px 0 2px", fontWeight: 700, letterSpacing: 0.5 }}>{text}</h2>;
+        }
+        if (section.type === "h3") {
+          const text = section.fixed ? section.value : val;
+          if (!text) return null;
+          return <h3 key={section.id} style={{ fontFamily: sans, fontSize: 14, color: T.copper, margin: "10px 0 2px", fontWeight: 600 }}>{text}</h3>;
+        }
+        if (section.type === "p" || section.type === "short") {
+          if (!val) return <div key={section.id} style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, fontStyle: "italic", padding: "4px 0" }}>{section.label}: (empty)</div>;
+          return <p key={section.id} style={{ fontFamily: serif, fontSize: 14, color: T.white, margin: "4px 0", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{val}</p>;
+        }
+        if (section.type === "select") {
+          if (!val) return null;
+          return (
+            <div key={section.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600 }}>{section.label.toUpperCase()}</span>
+              <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>{val}</span>
+            </div>
+          );
+        }
+        if (section.type === "tag_select") {
+          if (!val || !val.length) return null;
+          return (
+            <div key={section.id} style={{ padding: "4px 0" }}>
+              <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, marginBottom: 6 }}>{section.label.toUpperCase()}</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {val.map((t, i) => <span key={i} style={{ fontFamily: sans, fontSize: 11, color: T.copper, background: `${T.copper}18`, padding: "3px 9px", borderRadius: 12, fontWeight: 600 }}>{t}</span>)}
+              </div>
+            </div>
+          );
+        }
+        if (section.type === "bullet_list") {
+          if (!val || !val.length || !val.some(s => s && s.trim())) return null;
+          return (
+            <div key={section.id} style={{ padding: "4px 0" }}>
+              <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, marginBottom: 6 }}>{section.label.toUpperCase()}</div>
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {val.filter(b => b && b.trim()).map((b, i) => <li key={i} style={{ fontFamily: serif, fontSize: 13, color: T.white, lineHeight: 1.5, marginBottom: 2 }}>{b}</li>)}
+              </ul>
+            </div>
+          );
+        }
+        if (section.type === "rating") {
+          if (!val) return null;
+          return (
+            <div key={section.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600 }}>{section.label.toUpperCase()}</span>
+              <div style={{ display: "flex", gap: 2 }}>
+                {Array.from({ length: section.max || 5 }).map((_, i) => (
+                  <Star key={i} size={14} color={i < val ? "#FFD700" : T.charcoal} fill={i < val ? "#FFD700" : "none"} />
+                ))}
+              </div>
+              <span style={{ fontFamily: sans, fontSize: 12, color: T.tertiary }}>{val}/{section.max || 5}</span>
+            </div>
+          );
+        }
+        if (section.type === "hero_image") {
+          const url = val && val.url;
+          if (!url || url.startsWith("blob:")) return null;
+          return (
+            <div key={section.id} style={{ padding: "8px 0" }}>
+              <img src={url} alt={(val && val.alt) || ""} style={{ width: "100%", borderRadius: 8, display: "block" }} />
+            </div>
+          );
+        }
+        if (section.type === "photos") {
+          const photos = (val || []).filter(p => p && p.url && !p.url.startsWith("blob:"));
+          if (photos.length === 0) return null;
+          return (
+            <div key={section.id} style={{ padding: "8px 0" }}>
+              <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, marginBottom: 6 }}>{section.label.toUpperCase()} · {photos.length}</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6 }}>
+                {photos.map((p, i) => (
+                  <div key={i} style={{ background: T.charcoal, borderRadius: 6, overflow: "hidden", aspectRatio: "4/3", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {p.type === "video"
+                      ? <video src={p.url} controls style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      : <img src={p.url} alt={p.alt || ""} style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        }
+        if (section.type === "route_builder") {
+          if (!val) return null;
+          // Quick summary card — Phase 8 can render the full map.
+          return (
+            <div key={section.id} style={{ background: T.darkCard, borderRadius: 8, padding: "10px 12px", margin: "6px 0", border: `1px solid ${T.charcoal}` }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                <Route size={12} color={T.copper} />
+                <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 0.5 }}>ROUTE ATTACHED</span>
+              </div>
+              {val.name && <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600 }}>{val.name}</div>}
+              <div style={{ display: "flex", gap: 10, marginTop: 4, fontFamily: sans, fontSize: 11, color: T.tertiary }}>
+                {val.distance && <span>{val.distance}</span>}
+                {val.duration && <span>{val.duration}</span>}
+                {val.elevGain && <span>{val.elevGain}</span>}
+              </div>
+            </div>
+          );
+        }
+        // Anything else — skip silently.
+        return null;
+      })}
+    </div>
+  );
+}
+
+/* ─── BountySubmissionReviewScreen — admin review surface (Phase 6) ─── */
+function BountySubmissionReviewScreen({ submission, onBack, onApprove, onRequestChanges, onReject }) {
+  const [reviewerNotes, setReviewerNotes] = useState("");
+  const [action, setAction] = useState(null); // "approve" | "changes" | "reject" | null
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  // Publish options stub — Phase 8 wires the actual feed/forum/trip create.
+  // For Phase 6 we just record the admin's intent in the submission's draft.
+  const [publishAs, setPublishAs] = useState("user"); // "user" | "lpo"
+  const [publishKind, setPublishKind] = useState("none"); // "none" | "feed" | "forum" | "trip"
+  if (!submission) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 16px", borderBottom: `1px solid ${T.charcoal}` }}>
+          <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><ChevronLeft size={20} color={T.white} /></button>
+          <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700 }}>SUBMISSION NOT FOUND</span>
+        </div>
+        <div style={{ padding: 24, textAlign: "center", color: T.tertiary, fontFamily: serif }}>The queue may have been refreshed. Tap back and reopen.</div>
+      </div>
+    );
+  }
+  const bounty = submission.bounty || {};
+  const submitter = submission.submitter || {};
+  const daysInReview = submission.submitted_at
+    ? Math.floor((Date.now() - new Date(submission.submitted_at).getTime()) / 86400000)
+    : 0;
+  const handleAction = async () => {
+    setBusy(true); setError("");
+    let res;
+    if (action === "approve") {
+      const publishOpts = publishKind !== "none" ? { publish_as: publishAs, publish_kind: publishKind } : null;
+      res = await onApprove(submission.id, reviewerNotes.trim() || null, publishOpts);
+    } else if (action === "changes") {
+      if (!reviewerNotes.trim()) { setError("Reviewer notes required when requesting changes."); setBusy(false); return; }
+      res = await onRequestChanges(submission.id, reviewerNotes.trim());
+    } else if (action === "reject") {
+      if (!reviewerNotes.trim()) { setError("Reviewer notes required when rejecting."); setBusy(false); return; }
+      res = await onReject(submission.id, reviewerNotes.trim());
+    }
+    setBusy(false);
+    if (res && res.error) { setError(res.error); return; }
+    onBack();
+  };
+  return (
+    <div style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 16px", borderBottom: `1px solid ${T.charcoal}`, position: "sticky", top: 0, background: T.darkBg, zIndex: 10 }}>
+        <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><ChevronLeft size={20} color={T.white} /></button>
+        <Target size={14} color={T.green} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>REVIEW BOUNTY SUBMISSION</div>
+          <div style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{bounty.title || "(bounty title)"}</div>
+        </div>
+        {daysInReview > 0 && (
+          <span style={{ fontFamily: sans, fontSize: 9, color: daysInReview >= 3 ? T.red : T.copper, background: `${(daysInReview >= 3 ? T.red : T.copper)}18`, padding: "3px 7px", borderRadius: 4, fontWeight: 700, letterSpacing: 0.5 }}>{daysInReview}d in queue</span>
+        )}
+      </div>
+
+      {/* Submitter card */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: `1px solid ${T.charcoal}40` }}>
+        <div style={{ width: 36, height: 36, borderRadius: "50%", background: T.charcoal, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          {submitter.avatar_url
+            ? <img src={submitter.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            : <span style={{ fontFamily: sans, fontSize: 13, fontWeight: 700, color: T.white }}>{((submitter.full_name || submitter.handle || "?").charAt(0) || "?").toUpperCase()}</span>}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600 }}>{submitter.full_name || "(name)"}</div>
+          <div style={{ fontFamily: serif, fontSize: 11, color: T.tertiary }}>@{submitter.handle || "—"} · submitted {submission.submitted_at ? new Date(submission.submitted_at).toLocaleString() : "—"}</div>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          {(bounty.reward_cents || 0) > 0 && <div style={{ fontFamily: sans, fontSize: 14, color: T.green, fontWeight: 700 }}>${((bounty.reward_cents || 0) / 100).toFixed(0)}</div>}
+          {(bounty.reward_points || 0) > 0 && <div style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600 }}>+{bounty.reward_points} pts</div>}
+        </div>
+      </div>
+
+      {/* Rendered draft */}
+      <div style={{ padding: "12px 16px 24px", borderBottom: `1px solid ${T.charcoal}40` }}>
+        <BountyDraftRenderer bounty={bounty} draft={submission.draft || {}} />
+      </div>
+
+      {/* Action panel */}
+      <div style={{ padding: "16px", display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700 }}>REVIEWER ACTION</div>
+        <div style={{ display: "flex", gap: 6 }}>
+          {[
+            { key: "approve", label: "APPROVE", color: T.green },
+            { key: "changes", label: "REQUEST CHANGES", color: T.copper },
+            { key: "reject", label: "REJECT", color: T.red },
+          ].map(a => {
+            const active = action === a.key;
+            return (
+              <button key={a.key} onClick={() => setAction(a.key)} style={{ flex: 1, padding: "10px 8px", borderRadius: 6, border: active ? `1px solid ${a.color}` : `1px solid ${T.charcoal}`, background: active ? `${a.color}25` : T.darkCard, color: active ? a.color : T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}>
+                {a.label}
+              </button>
+            );
+          })}
+        </div>
+        {action && (
+          <>
+            <textarea value={reviewerNotes} onChange={(e) => setReviewerNotes(e.target.value)} placeholder={action === "approve" ? "Reviewer notes (optional, sent in approval notification)" : "Reviewer notes (required — explain what needs to change OR why rejected)"} rows={4} style={{ width: "100%", padding: "10px 12px", borderRadius: 6, border: `1px solid ${T.charcoal}`, background: T.darkBg, color: T.white, fontFamily: serif, fontSize: 13, boxSizing: "border-box", resize: "vertical", lineHeight: 1.5 }} />
+            {action === "approve" && (
+              <div style={{ background: T.darkCard, borderRadius: 8, padding: 12, border: `1px solid ${T.charcoal}` }}>
+                <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 700, marginBottom: 8 }}>PUBLISH OPTIONS (PHASE 8)</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div>
+                    <label style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, display: "block", marginBottom: 4 }}>Publish as</label>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      {["user", "lpo"].map(p => (
+                        <button key={p} onClick={() => setPublishAs(p)} style={{ flex: 1, padding: "6px", borderRadius: 4, border: publishAs === p ? `1px solid ${T.copper}` : `1px solid ${T.charcoal}`, background: publishAs === p ? `${T.copper}18` : "none", color: publishAs === p ? T.copper : T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}>{p === "lpo" ? "LPO" : "USER"}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, display: "block", marginBottom: 4 }}>Publish to</label>
+                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                      {[
+                        { k: "none", label: "DON'T PUBLISH" },
+                        { k: "feed", label: "FEED" },
+                        { k: "forum", label: "FORUM" },
+                        { k: "trip", label: "TRIP REPORT" },
+                      ].map(p => (
+                        <button key={p.k} onClick={() => setPublishKind(p.k)} style={{ flex: "1 0 auto", padding: "6px 8px", borderRadius: 4, border: publishKind === p.k ? `1px solid ${T.copper}` : `1px solid ${T.charcoal}`, background: publishKind === p.k ? `${T.copper}18` : "none", color: publishKind === p.k ? T.copper : T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}>{p.label}</button>
+                      ))}
+                    </div>
+                    <div style={{ fontFamily: serif, fontSize: 10, color: T.tertiary, marginTop: 6, lineHeight: 1.5 }}>Phase 8 will act on this — for now it's stored as intent and the approval still records reward + fires the user notif.</div>
+                  </div>
+                </div>
+              </div>
+            )}
+            {error && <div style={{ color: T.red, fontFamily: sans, fontSize: 11, padding: "4px 0" }}>{error}</div>}
+            <button onClick={handleAction} disabled={busy} style={{ padding: "12px", background: action === "approve" ? T.green : action === "reject" ? T.red : T.copper, color: T.white, border: "none", borderRadius: 6, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 1, cursor: busy ? "wait" : "pointer", opacity: busy ? 0.6 : 1 }}>
+              {busy ? "WORKING…" : (action === "approve" ? "CONFIRM APPROVAL" : action === "reject" ? "CONFIRM REJECTION" : "SEND CHANGE REQUEST")}
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ─── BOUNTIES ADMIN — list w/ tabs + NEW button (Phase 4) ─── */
-function BountiesAdminScreen({ bounties, onBack, onOpenEditor, onNewBounty }) {
-  const [tab, setTab] = useState("draft"); // draft | open | review | completed | archived
+function BountiesAdminScreen({ bounties, reviewQueue, onLoadReviewQueue, onBack, onOpenEditor, onNewBounty, onOpenReview }) {
+  const [tab, setTab] = useState("review"); // review | draft | open | completed | archived
   const counts = useMemo(() => {
-    const c = { draft: 0, open: 0, review: 0, completed: 0, archived: 0 };
+    const c = { draft: 0, open: 0, review: (reviewQueue || []).length, completed: 0, archived: 0 };
     (bounties || []).forEach(b => {
       if (b.status === "draft") c.draft += 1;
       else if (b.status === "open") c.open += 1;
@@ -29771,7 +30053,15 @@ function BountiesAdminScreen({ bounties, onBack, onOpenEditor, onNewBounty }) {
       else if (b.status === "archived") c.archived += 1;
     });
     return c;
-  }, [bounties]);
+  }, [bounties, reviewQueue]);
+  // Refresh the review queue on mount + on tab switch INTO review. Cheap
+  // because the queue is small (admins clear it FIFO).
+  useEffect(() => {
+    if (onLoadReviewQueue) onLoadReviewQueue();
+  }, []);
+  useEffect(() => {
+    if (tab === "review" && onLoadReviewQueue) onLoadReviewQueue();
+  }, [tab]);
   const filtered = useMemo(() => {
     const all = bounties || [];
     if (tab === "draft") return all.filter(b => b.status === "draft");
@@ -29781,6 +30071,7 @@ function BountiesAdminScreen({ bounties, onBack, onOpenEditor, onNewBounty }) {
     return [];
   }, [bounties, tab]);
   const TABS = [
+    { key: "review", label: "REVIEW", count: counts.review, urgent: true },
     { key: "draft", label: "DRAFTS", count: counts.draft },
     { key: "open", label: "OPEN", count: counts.open },
     { key: "completed", label: "COMPLETED", count: counts.completed },
@@ -29813,15 +30104,57 @@ function BountiesAdminScreen({ bounties, onBack, onOpenEditor, onNewBounty }) {
       <div style={{ display: "flex", gap: 4, padding: "10px 12px", borderBottom: `1px solid ${T.charcoal}`, overflowX: "auto" }}>
         {TABS.map(t => {
           const active = tab === t.key;
+          // REVIEW tab gets a red urgent badge when the count > 0 so the
+          // admin can see backlog from anywhere in the bounty admin space.
+          const showUrgent = t.urgent && t.count > 0;
           return (
-            <button key={t.key} onClick={() => setTab(t.key)} style={{ padding: "8px 14px", borderRadius: 6, border: active ? `1px solid ${T.red}` : `1px solid ${T.charcoal}`, background: active ? `${T.red}18` : T.darkCard, cursor: "pointer", fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, color: active ? T.red : T.tertiary, whiteSpace: "nowrap" }}>
+            <button key={t.key} onClick={() => setTab(t.key)} style={{ padding: "8px 14px", borderRadius: 6, border: active ? `1px solid ${showUrgent ? T.red : T.red}` : `1px solid ${T.charcoal}`, background: active ? `${T.red}18` : (showUrgent ? `${T.red}10` : T.darkCard), cursor: "pointer", fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, color: active ? T.red : (showUrgent ? T.red : T.tertiary), whiteSpace: "nowrap" }}>
               {t.label}{t.count > 0 ? ` · ${t.count}` : ""}
             </button>
           );
         })}
       </div>
       <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 10, flex: 1 }}>
-        {filtered.length === 0 && (
+        {/* Review queue list (Phase 6) */}
+        {tab === "review" && (
+          <>
+            {(reviewQueue || []).length === 0 && (
+              <div style={{ padding: "40px 16px", textAlign: "center" }}>
+                <span style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, lineHeight: 1.6, display: "block" }}>No bounty submissions waiting for review. Inbox zero.</span>
+              </div>
+            )}
+            {(reviewQueue || []).map(s => {
+              const submittedAt = s.submitted_at ? new Date(s.submitted_at) : null;
+              const daysInQueue = submittedAt ? Math.floor((Date.now() - submittedAt.getTime()) / 86400000) : 0;
+              const danger = daysInQueue >= 3;
+              return (
+                <button key={s.id} onClick={() => onOpenReview && onOpenReview(s.id)} style={{ background: T.darkCard, border: danger ? `1px solid ${T.red}40` : `1px solid ${T.charcoal}`, borderRadius: 12, padding: 14, cursor: "pointer", textAlign: "left", display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, background: T.charcoal, padding: "2px 7px", borderRadius: 3, letterSpacing: 0.5 }}>{((s.bounty && s.bounty.category) || "—").toUpperCase()}</span>
+                    {daysInQueue > 0 && <span style={{ fontFamily: sans, fontSize: 9, color: danger ? T.red : T.copper, fontWeight: 700, letterSpacing: 0.5 }}>{daysInQueue}d in queue</span>}
+                    <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.5 }}>{submittedAt ? submittedAt.toLocaleDateString() : "—"}</span>
+                  </div>
+                  <div style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 600 }}>{(s.bounty && s.bounty.title) || "(bounty)"}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ width: 24, height: 24, borderRadius: "50%", background: T.charcoal, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      {s.submitter && s.submitter.avatar_url
+                        ? <img src={s.submitter.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        : <span style={{ fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.white }}>{(((s.submitter && s.submitter.full_name) || (s.submitter && s.submitter.handle) || "?").charAt(0) || "?").toUpperCase()}</span>}
+                    </div>
+                    <span style={{ fontFamily: sans, fontSize: 12, color: T.tertiary }}>
+                      @{(s.submitter && s.submitter.handle) || "—"}
+                    </span>
+                    <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+                      {(s.bounty && s.bounty.reward_cents) > 0 && <span style={{ fontFamily: sans, fontSize: 11, color: T.green, fontWeight: 700 }}>${(s.bounty.reward_cents / 100).toFixed(0)}</span>}
+                      {(s.bounty && s.bounty.reward_points) > 0 && <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600 }}>+{s.bounty.reward_points} pts</span>}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </>
+        )}
+        {tab !== "review" && filtered.length === 0 && (
           <div style={{ padding: "40px 16px", textAlign: "center" }}>
             <span style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, lineHeight: 1.6, display: "block" }}>
               {tab === "draft" ? "No drafts. Tap NEW to start one." :
@@ -29831,7 +30164,7 @@ function BountiesAdminScreen({ bounties, onBack, onOpenEditor, onNewBounty }) {
             </span>
           </div>
         )}
-        {filtered.map(b => {
+        {tab !== "review" && filtered.map(b => {
           const diffColor = b.difficulty === "Hard" ? T.red : b.difficulty === "Easy" ? T.green : T.copper;
           const slotsLeft = (b.total_slots || 1) - (b.claimed_slots || 0);
           return (
@@ -38045,6 +38378,7 @@ export default function Trailhead() {
     try { hydrateSavedTrips(); } catch (e) { /* non-fatal */ }
     try { hydrateBounties(); } catch (e) { /* non-fatal */ }
     try { hydrateMyBountySubmissions(); } catch (e) { /* non-fatal */ }
+    try { refreshBountyEarnings(); } catch (e) { /* non-fatal */ }
 
     // ─── Tier 1 — critical for first paint ───
     // Profile (header avatar/name) + posts (feed list). Both run in
@@ -38763,6 +39097,18 @@ export default function Trailhead() {
         if (!row || !row.id) return;
         setTripReports(prev => prev.filter(t => t.id !== row.id));
       })
+      // Bounty earnings — own row only. Reconciles on every approval +
+      // every payout (Phase 7). Drives the RanksScreen earnings card.
+      .on("postgres_changes", { event: "*", schema: "public", table: "bounty_earnings", filter: `user_id=eq.${uid}` }, (payload) => {
+        const row = payload.new || payload.old;
+        if (!row) return;
+        if (payload.eventType === "DELETE") { setBountyEarnings(null); return; }
+        setBountyEarnings({
+          total_earned_cents: row.total_earned_cents || 0,
+          total_pending_cents: row.total_pending_cents || 0,
+          total_paid_cents: row.total_paid_cents || 0,
+        });
+      })
       // Bounty submissions — own rows only. Reconciles status flips from
       // server (e.g. admin approve/reject when Phase 6 ships) + dedupes
       // optimistic local inserts from claim_bounty.
@@ -39448,6 +39794,10 @@ export default function Trailhead() {
   // board. Replaces the local component-state seed array that lived inside
   // RanksScreen for the v0 mock.
   const [bounties, setBounties] = useState([]);
+  // Phase 6: which submission the admin has open in the review screen.
+  // `null` keeps BountiesAdminScreen rendered; setting to a uuid mounts
+  // BountySubmissionReviewScreen as a sub-route.
+  const [reviewingSubmissionId, setReviewingSubmissionId] = useState(null);
   // Partner-facing dashboard overlay — toggled from the user's own profile
   // when isContentPartner is true.
   const [showContentPartnerDashboard, setShowContentPartnerDashboard] = useState(false);
@@ -41804,6 +42154,105 @@ export default function Trailhead() {
       setMyBountySubmissions(prev => prev.map(s => s.id === submissionId ? { ...s, draft: draft || s.draft, status: "submitted", submitted_at: (row && row.submitted_at) || new Date().toISOString(), updated_at: new Date().toISOString() } : s));
       return { ok: true, data: row };
     } catch (e) { console.error("[submit_bounty] failed", e); return { error: "Network error" }; }
+  };
+  // ── Admin bounty review queue (Phase 6) ──
+  // Admin-only fetch of all submitted submissions w/ bounty + submitter
+  // snapshot. Triggered when admin opens the REVIEW tab; refreshed on
+  // every action so the count badge stays accurate.
+  const [bountyReviewQueue, setBountyReviewQueue] = useState([]);
+  const [bountyEarnings, setBountyEarnings] = useState(null); // {total_earned_cents, total_pending_cents, total_paid_cents}
+  const loadBountyReviewQueue = async () => {
+    if (!isAdmin) return { error: "Not authorized" };
+    try {
+      // Pull pending submissions oldest-first so the admin works the queue
+      // FIFO. We join bounty title + category and submitter handle/name in
+      // a second roundtrip to keep the SELECT lean.
+      const { data: subs, error } = await supabase
+        .from("bounty_submissions")
+        .select("id, bounty_id, user_id, status, draft, submitted_at, created_at, reviewer_notes, reward_cents, reward_points")
+        .eq("status", "submitted")
+        .order("submitted_at", { ascending: true });
+      if (error) { console.error("[loadBountyReviewQueue] subs error", error); return { error: error.message }; }
+      const rows = subs || [];
+      const bountyIds = Array.from(new Set(rows.map(r => r.bounty_id).filter(Boolean)));
+      const userIds = Array.from(new Set(rows.map(r => r.user_id).filter(Boolean)));
+      const [bRes, pRes] = await Promise.all([
+        bountyIds.length
+          ? supabase.from("bounties").select("id, title, category, difficulty, reward_cents, reward_points, form_template_key, form_config").in("id", bountyIds)
+          : Promise.resolve({ data: [] }),
+        userIds.length
+          ? supabase.from("profiles").select("id, full_name, handle, avatar_url").in("id", userIds)
+          : Promise.resolve({ data: [] }),
+      ]);
+      const bById = {}; (bRes.data || []).forEach(b => { bById[b.id] = b; });
+      const pById = {}; (pRes.data || []).forEach(p => { pById[p.id] = p; });
+      const decorated = rows.map(r => ({
+        ...r,
+        bounty: bById[r.bounty_id] || null,
+        submitter: pById[r.user_id] || null,
+      }));
+      setBountyReviewQueue(decorated);
+      return { ok: true, data: decorated };
+    } catch (e) { console.error("[loadBountyReviewQueue] failed", e); return { error: "Network error" }; }
+  };
+  const adminRequestChangesOnBounty = async (submissionId, reviewerNotes) => {
+    if (!isAdmin || !submissionId) return { error: "Not authorized" };
+    if (!reviewerNotes || !reviewerNotes.trim()) return { error: "Reviewer notes required" };
+    try {
+      const { data, error } = await supabase.rpc("admin_request_changes", { p_submission_id: submissionId, p_reviewer_notes: reviewerNotes });
+      if (error) { console.error("[admin_request_changes] error", error); return { error: error.message }; }
+      setBountyReviewQueue(prev => prev.filter(s => s.id !== submissionId));
+      return { ok: true, data: Array.isArray(data) ? data[0] : data };
+    } catch (e) { console.error("[admin_request_changes] failed", e); return { error: "Network error" }; }
+  };
+  const adminRejectBountyAction = async (submissionId, reviewerNotes) => {
+    if (!isAdmin || !submissionId) return { error: "Not authorized" };
+    if (!reviewerNotes || !reviewerNotes.trim()) return { error: "Reviewer notes required" };
+    try {
+      const { data, error } = await supabase.rpc("admin_reject_bounty", { p_submission_id: submissionId, p_reviewer_notes: reviewerNotes });
+      if (error) { console.error("[admin_reject_bounty] error", error); return { error: error.message }; }
+      // Slot was released — bump local bounties cache so the count shows up.
+      const removed = bountyReviewQueue.find(s => s.id === submissionId);
+      if (removed && removed.bounty_id) {
+        setBounties(prev => prev.map(b => b.id === removed.bounty_id ? { ...b, claimed_slots: Math.max(0, (b.claimed_slots || 0) - 1) } : b));
+      }
+      setBountyReviewQueue(prev => prev.filter(s => s.id !== submissionId));
+      return { ok: true, data: Array.isArray(data) ? data[0] : data };
+    } catch (e) { console.error("[admin_reject_bounty] failed", e); return { error: "Network error" }; }
+  };
+  const adminApproveBountyAction = async (submissionId, reviewerNotes, publishOptions) => {
+    if (!isAdmin || !submissionId) return { error: "Not authorized" };
+    try {
+      const { data, error } = await supabase.rpc("admin_approve_bounty", {
+        p_submission_id: submissionId,
+        p_reviewer_notes: reviewerNotes || null,
+        p_publish_options: publishOptions || null,
+      });
+      if (error) { console.error("[admin_approve_bounty] error", error); return { error: error.message }; }
+      const row = Array.isArray(data) ? data[0] : data;
+      // Bump approved_slots local cache.
+      const approved = bountyReviewQueue.find(s => s.id === submissionId);
+      if (approved && approved.bounty_id) {
+        setBounties(prev => prev.map(b => b.id === approved.bounty_id ? { ...b, approved_slots: (b.approved_slots || 0) + 1 } : b));
+      }
+      setBountyReviewQueue(prev => prev.filter(s => s.id !== submissionId));
+      return { ok: true, data: row };
+    } catch (e) { console.error("[admin_approve_bounty] failed", e); return { error: "Network error" }; }
+  };
+  // Earnings hydration — own row from bounty_earnings; refreshed via realtime
+  // sub below and re-fetched on app boot.
+  const refreshBountyEarnings = async () => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) return;
+    try {
+      const { data, error } = await supabase
+        .from("bounty_earnings")
+        .select("total_earned_cents, total_pending_cents, total_paid_cents, updated_at")
+        .eq("user_id", uid)
+        .maybeSingle();
+      if (error) { console.error("[refreshBountyEarnings] error", error); return; }
+      setBountyEarnings(data || { total_earned_cents: 0, total_pending_cents: 0, total_paid_cents: 0 });
+    } catch (e) { console.error("[refreshBountyEarnings] failed", e); }
   };
   // Adapter for BountyResponseForm — converts raw File objects to the
   // entry-shape uploadPostPhotoList expects, then returns the entries
@@ -47499,7 +47948,7 @@ export default function Trailhead() {
             {screen === "ranks" && (isGuest
               ? <GuestGateScreen title="RANKS REQUIRE AN ACCOUNT" subtitle="Sign in to see the leaderboard and start earning points from your posts, routes and builds." onSignIn={goToLoginFromGuest} />
               : isAdmin
-                ? <RanksScreen myPoints={myTotalPoints} pointsBreakdown={friendlyPointsBreakdown} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentProfile={currentProfile} onLoadLeaderboard={loadLeaderboard} onViewUser={openUserProfile} bounties={bounties} mySubmissions={myBountySubmissions} isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onClaimBounty={claimBounty} onSaveBountyDraft={saveBountyDraft} onSubmitBountyRPC={submitBountySubmission} onWithdrawBounty={withdrawBountySubmission} onUploadBountyPhotos={uploadBountyPhotoFiles} />
+                ? <RanksScreen myPoints={myTotalPoints} pointsBreakdown={friendlyPointsBreakdown} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentProfile={currentProfile} onLoadLeaderboard={loadLeaderboard} onViewUser={openUserProfile} bounties={bounties} mySubmissions={myBountySubmissions} isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onClaimBounty={claimBounty} onSaveBountyDraft={saveBountyDraft} onSubmitBountyRPC={submitBountySubmission} onWithdrawBounty={withdrawBountySubmission} onUploadBountyPhotos={uploadBountyPhotoFiles} earnings={bountyEarnings} />
                 : <div style={{ padding: 32, textAlign: "center", fontFamily: serif, fontSize: 14, color: T.tertiary, lineHeight: 1.6 }}>Ranks is coming in a future release.</div>
             )}
             {screen === "admin" && (isAdmin
@@ -47528,7 +47977,15 @@ export default function Trailhead() {
                       onDeleteGearDrop={(id) => deleteGearDrop(id)}
                     />)
                 : adminSubScreen === "bounties"
-                ? (editingBountyId !== null
+                ? (reviewingSubmissionId
+                  ? <BountySubmissionReviewScreen
+                      submission={bountyReviewQueue.find(s => s.id === reviewingSubmissionId)}
+                      onBack={() => { setReviewingSubmissionId(null); loadBountyReviewQueue(); }}
+                      onApprove={adminApproveBountyAction}
+                      onRequestChanges={adminRequestChangesOnBounty}
+                      onReject={adminRejectBountyAction}
+                    />
+                  : editingBountyId !== null
                   ? <BountyEditor
                       bountyId={editingBountyId || ""}
                       onBack={() => setEditingBountyId(null)}
@@ -47539,9 +47996,12 @@ export default function Trailhead() {
                     />
                   : <BountiesAdminScreen
                       bounties={bounties}
+                      reviewQueue={bountyReviewQueue}
+                      onLoadReviewQueue={loadBountyReviewQueue}
                       onBack={() => setAdminSubScreen(null)}
                       onOpenEditor={(id) => setEditingBountyId(id)}
                       onNewBounty={() => setEditingBountyId("")}
+                      onOpenReview={(id) => setReviewingSubmissionId(id)}
                     />)
                 : adminSubScreen === "partners"
                 ? (editingContentPartnerId !== null
