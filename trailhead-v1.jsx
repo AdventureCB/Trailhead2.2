@@ -30824,11 +30824,14 @@ function BountyDemoMapPicker({ lat, lng, radiusM, onChange }) {
     markerRef.current = new gl.Marker({ element: el, anchor: "center" }).setLngLat([lng, lat]).addTo(map);
   };
   // Render a simple polygon-approximation of the radius circle.
+  // makeCircleGeoJSON already returns a Feature — wrap as FeatureCollection.
   const drawRadius = (map, lng, lat, radiusM) => {
+    if (!map) return;
     const id = "demo-radius";
-    if (!map || !map.isStyleLoaded()) { map.once("idle", () => drawRadius(map, lng, lat, radiusM)); return; }
-    const geo = makeCircleGeoJSON(lat, lng, radiusM);
-    const data = { type: "FeatureCollection", features: [{ type: "Feature", geometry: geo, properties: {} }] };
+    if (!map.isStyleLoaded()) { map.once("idle", () => drawRadius(map, lng, lat, radiusM)); return; }
+    const feature = makeCircleGeoJSON(lat, lng, radiusM);
+    if (!feature) return; // null when args missing
+    const data = { type: "FeatureCollection", features: [feature] };
     if (map.getSource(id)) { map.getSource(id).setData(data); }
     else {
       map.addSource(id, { type: "geojson", data });
