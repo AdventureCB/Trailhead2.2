@@ -17280,17 +17280,21 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
     || BOUNTY_FORM_TEMPLATES["Content Creation"];
   const [fields, setFields] = useState(() => {
     if (draft) return draft;
+    // Hydrate from per-section prefilled values (admin-set in the prompt
+    // editor). When admin uploads default_photos, those copy in as if the
+    // user already attached them — they can keep, remove, or add more.
+    // Bullet_list / tag_select / rating prefills come through default_value.
     const init = {};
     template.sections.forEach(s => {
       if (s.fixed) { init[s.id] = s.value; }
-      else if (s.type === "photos") { init[s.id] = []; }
-      else if (s.type === "bullet_list") { init[s.id] = [""]; }
-      else if (s.type === "tag_select") { init[s.id] = []; }
+      else if (s.type === "photos") { init[s.id] = Array.isArray(s.default_photos) ? s.default_photos.map(p => ({ ...p, id: Date.now() + Math.random() })) : []; }
+      else if (s.type === "bullet_list") { init[s.id] = Array.isArray(s.default_value) && s.default_value.length ? s.default_value.slice() : [""]; }
+      else if (s.type === "tag_select") { init[s.id] = Array.isArray(s.default_value) ? s.default_value.slice() : []; }
       else if (s.type === "map_embed") { init[s.id] = ""; }
-      else if (s.type === "route_builder") { init[s.id] = null; }
-      else if (s.type === "hero_image") { init[s.id] = null; }
-      else if (s.type === "rating") { init[s.id] = 0; }
-      else { init[s.id] = ""; }
+      else if (s.type === "route_builder") { init[s.id] = s.default_value || null; }
+      else if (s.type === "hero_image") { init[s.id] = s.default_value || null; }
+      else if (s.type === "rating") { init[s.id] = Number(s.default_value) || 0; }
+      else { init[s.id] = s.default_value || ""; }
     });
     return init;
   });
@@ -17712,6 +17716,19 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
         <input ref={photoRef} type="file" accept="image/*,video/*" multiple onChange={(e) => { if (activePhotoField) handlePhotoUpload(activePhotoField, e); }} style={{ display: "none" }} />
         <input ref={heroRef} type="file" accept="image/*" onChange={(e) => { if (activePhotoField) handleHeroUpload(activePhotoField, e); }} style={{ display: "none" }} />
 
+        {/* Brief from the admin — shown for reference only, NOT part of the
+            submission. Renders bounty.description (HTML allowed; sanitized). */}
+        {bounty.desc && bounty.desc.trim() && (
+          <div style={{ background: `${T.copper}10`, border: `1px solid ${T.copper}35`, borderRadius: 10, padding: "12px 14px", marginBottom: 18 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+              <FileText size={12} color={T.copper} />
+              <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 1.5, fontWeight: 700 }}>BRIEF FROM ADMIN</span>
+              <span style={{ fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 0.5 }}>· reference only, not submitted</span>
+            </div>
+            <div className="th-rb" style={{ fontFamily: serif, fontSize: 13, color: T.white, lineHeight: 1.6 }} dangerouslySetInnerHTML={{ __html: sanitizeForumHtml(bounty.desc) }} />
+          </div>
+        )}
+
         {template.sections.map((section) => {
           if (section.fixed) {
             return (
@@ -17766,16 +17783,39 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
                       </div>
                     </div>
                   ))}
-                  <button onClick={() => { setActivePhotoField(section.id); setTimeout(() => photoRef.current && photoRef.current.click(), 50); }} style={{ width: "100%", padding: "18px 16px", borderRadius: 12, background: T.darkCard, border: `1px dashed ${T.copper}40`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <Camera size={16} color={T.copper} />
-                      <span style={{ fontFamily: sans, fontSize: 12, color: T.copper, fontWeight: 600 }}>Add Photo</span>
-                    </div>
-                    <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>or</span>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <Video size={16} color={T.copper} />
-                      <span style={{ fontFamily: sans, fontSize: 12, color: T.copper, fontWeight: 600 }}>Add Video</span>
-                    </div>
+                  <button onClick={() => {
+                    setActivePhotoField(section.id);
+                    // Apply per-section accept filter so the OS picker only
+                    // surfaces photos / videos / both per the admin's choice.
+                    if (photoRef.current) {
+                      const ac = section.accept || "photo+video";
+                      photoRef.current.accept = ac === "photo" ? "image/*" : ac === "video" ? "video/*" : "image/*,video/*";
+                    }
+                    setTimeout(() => photoRef.current && photoRef.current.click(), 50);
+                  }} style={{ width: "100%", padding: "18px 16px", borderRadius: 12, background: T.darkCard, border: `1px dashed ${T.copper}40`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+                    {section.accept === "video" ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <Video size={16} color={T.copper} />
+                        <span style={{ fontFamily: sans, fontSize: 12, color: T.copper, fontWeight: 600 }}>Add Video</span>
+                      </div>
+                    ) : section.accept === "photo" ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <Camera size={16} color={T.copper} />
+                        <span style={{ fontFamily: sans, fontSize: 12, color: T.copper, fontWeight: 600 }}>Add Photo</span>
+                      </div>
+                    ) : (
+                      <>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <Camera size={16} color={T.copper} />
+                          <span style={{ fontFamily: sans, fontSize: 12, color: T.copper, fontWeight: 600 }}>Add Photo</span>
+                        </div>
+                        <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>or</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <Video size={16} color={T.copper} />
+                          <span style={{ fontFamily: sans, fontSize: 12, color: T.copper, fontWeight: 600 }}>Add Video</span>
+                        </div>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
@@ -29779,6 +29819,49 @@ function GearDropListRow({ drop, onOpen, onDelete }) {
 // `adminSubScreen` at root which mounts AdminDashboardScreen with the
 // matching initialTab + hideTabBar=true. Back from the dashboard lands
 // here, not on the feed.
+/* ─── BountyDraftMediaCarousel — swipe-snap carousel for multi-media review.
+       Used by BountyDraftRenderer when a photos field has > 1 attachment.
+       Each slide is full-width; dot indicators show position. ─── */
+function BountyDraftMediaCarousel({ items }) {
+  const [active, setActive] = useState(0);
+  const trackRef = useRef(null);
+  const handleScroll = (e) => {
+    const w = e.currentTarget.clientWidth;
+    const idx = Math.round(e.currentTarget.scrollLeft / w);
+    if (idx !== active) setActive(idx);
+  };
+  const goTo = (idx) => {
+    if (!trackRef.current) return;
+    const w = trackRef.current.clientWidth;
+    trackRef.current.scrollTo({ left: idx * w, behavior: "smooth" });
+  };
+  return (
+    <div style={{ position: "relative" }}>
+      <div ref={trackRef} onScroll={handleScroll} style={{ display: "flex", overflowX: "auto", scrollSnapType: "x mandatory", WebkitOverflowScrolling: "touch", borderRadius: 8, background: T.charcoal }}>
+        {items.map((p, i) => (
+          <div key={i} style={{ flex: "0 0 100%", scrollSnapAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", maxHeight: 380 }}>
+            {p.type === "video"
+              ? <video src={p.url} controls style={{ width: "100%", maxHeight: 380, display: "block" }} />
+              : <img src={p.url} alt={p.alt || ""} style={{ width: "100%", maxHeight: 380, objectFit: "contain", display: "block" }} />}
+          </div>
+        ))}
+      </div>
+      {items.length > 1 && (
+        <>
+          <div style={{ display: "flex", justifyContent: "center", gap: 6, marginTop: 8 }}>
+            {items.map((_, i) => (
+              <button key={i} onClick={() => goTo(i)} style={{ width: i === active ? 18 : 6, height: 6, borderRadius: 3, background: i === active ? T.copper : `${T.tertiary}60`, border: "none", padding: 0, cursor: "pointer", transition: "width 0.15s" }} />
+            ))}
+          </div>
+          <div style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,0.6)", color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 4 }}>
+            {active + 1} / {items.length}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 /* ─── BountyDraftRenderer — read-only render of a submission's draft
        per the bounty's form template. Phase 6 review surface uses this
        to show the admin what the user submitted. Phase 8 will reuse it
@@ -29874,18 +29957,21 @@ function BountyDraftRenderer({ bounty, draft }) {
         if (section.type === "photos") {
           const photos = (val || []).filter(p => p && p.url && !p.url.startsWith("blob:"));
           if (photos.length === 0) return null;
+          // Carousel when > 1 — horizontal scroll-snap container so each
+          // item lands full-width on swipe. Single photo renders as a
+          // standard responsive card.
           return (
             <div key={section.id} style={{ padding: "8px 0" }}>
               <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, marginBottom: 6 }}>{section.label.toUpperCase()} · {photos.length}</div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6 }}>
-                {photos.map((p, i) => (
-                  <div key={i} style={{ background: T.charcoal, borderRadius: 6, overflow: "hidden", aspectRatio: "4/3", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    {p.type === "video"
-                      ? <video src={p.url} controls style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                      : <img src={p.url} alt={p.alt || ""} style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
-                  </div>
-                ))}
-              </div>
+              {photos.length === 1 ? (
+                <div style={{ background: T.charcoal, borderRadius: 8, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {photos[0].type === "video"
+                    ? <video src={photos[0].url} controls style={{ width: "100%", display: "block", maxHeight: 380 }} />
+                    : <img src={photos[0].url} alt={photos[0].alt || ""} style={{ width: "100%", display: "block", maxHeight: 380, objectFit: "contain" }} />}
+                </div>
+              ) : (
+                <BountyDraftMediaCarousel items={photos} />
+              )}
             </div>
           );
         }
@@ -30314,14 +30400,112 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
   // Lazy-clone form_config on first edit so the admin doesn't need to
   // pre-click "customize" — first prompt edit auto-promotes the bounty
   // from template-default to custom.
+  const ensureFormConfig = (prev) => {
+    if (prev.form_config) return prev.form_config;
+    return cloneTemplateSections(prev.form_template_key || prev.category);
+  };
   const updateSection = (sectionId, partial) => {
     setBounty(prev => {
       if (!prev) return prev;
-      const baseConfig = prev.form_config || cloneTemplateSections(prev.form_template_key || prev.category);
+      const baseConfig = ensureFormConfig(prev);
       if (!baseConfig) return prev;
       const next = {
         ...baseConfig,
         sections: baseConfig.sections.map(s => s.id === sectionId ? { ...s, ...partial } : s),
+      };
+      return { ...prev, form_config: next };
+    });
+    setHasUnsaved(true);
+  };
+  const removeSection = (sectionId) => {
+    if (!confirm("Remove this section? Participants will no longer see it.")) return;
+    setBounty(prev => {
+      if (!prev) return prev;
+      const baseConfig = ensureFormConfig(prev);
+      if (!baseConfig) return prev;
+      const next = { ...baseConfig, sections: baseConfig.sections.filter(s => s.id !== sectionId) };
+      return { ...prev, form_config: next };
+    });
+    setHasUnsaved(true);
+  };
+  const moveSection = (sectionId, dir) => {
+    setBounty(prev => {
+      if (!prev) return prev;
+      const baseConfig = ensureFormConfig(prev);
+      if (!baseConfig) return prev;
+      const list = baseConfig.sections.slice();
+      const i = list.findIndex(s => s.id === sectionId);
+      if (i === -1) return prev;
+      const j = i + dir;
+      if (j < 0 || j >= list.length) return prev;
+      [list[i], list[j]] = [list[j], list[i]];
+      return { ...prev, form_config: { ...baseConfig, sections: list } };
+    });
+    setHasUnsaved(true);
+  };
+  const addSection = (type) => {
+    const id = `custom_${Date.now()}_${Math.floor(Math.random() * 9999)}`;
+    const seed = { id, type, label: "New section", required: false };
+    if (type === "h2" || type === "h3") { seed.fixed = true; seed.value = "Heading"; delete seed.required; }
+    if (type === "h1") { seed.placeholder = "Title"; }
+    if (type === "p") { seed.placeholder = "Describe…"; }
+    if (type === "short") { seed.placeholder = "Short answer"; }
+    if (type === "photos") { seed.placeholder = "Upload media"; seed.min = 1; seed.accept = "photo+video"; }
+    if (type === "hero_image") { seed.placeholder = "Hero image"; }
+    if (type === "bullet_list") { seed.placeholder = "Add a bullet…"; }
+    if (type === "tag_select") { seed.options = ["Option A", "Option B"]; }
+    if (type === "select") { seed.options = ["Option A", "Option B"]; }
+    if (type === "rating") { seed.max = 5; }
+    setBounty(prev => {
+      if (!prev) return prev;
+      const baseConfig = ensureFormConfig(prev);
+      if (!baseConfig) return prev;
+      return { ...prev, form_config: { ...baseConfig, sections: [...baseConfig.sections, seed] } };
+    });
+    setHasUnsaved(true);
+  };
+  // Photo uploader for per-section default_photos. Uses same pipeline as
+  // hero (uploadPostPhotoList → storage + AI alt + moderation).
+  const handleSectionPhotoUpload = async (sectionId, fieldKey, e) => {
+    const files = Array.from(e.target.files || []);
+    if (e.target) e.target.value = "";
+    if (files.length === 0 || !onUploadPhoto) return;
+    try {
+      const uploaded = await onUploadPhoto(files);
+      const photos = (uploaded || []).filter(p => p && p.url);
+      if (photos.length === 0) return;
+      setBounty(prev => {
+        if (!prev) return prev;
+        const baseConfig = ensureFormConfig(prev);
+        if (!baseConfig) return prev;
+        const next = {
+          ...baseConfig,
+          sections: baseConfig.sections.map(s => {
+            if (s.id !== sectionId) return s;
+            const cur = Array.isArray(s[fieldKey]) ? s[fieldKey] : [];
+            return { ...s, [fieldKey]: [...cur, ...photos] };
+          }),
+        };
+        return { ...prev, form_config: next };
+      });
+      setHasUnsaved(true);
+    } catch (err) {
+      console.error("[BountyEditor] section photo upload failed", err);
+      setError(err && err.message ? err.message : "Upload failed");
+    }
+  };
+  const removeSectionPhoto = (sectionId, fieldKey, photoUrl) => {
+    setBounty(prev => {
+      if (!prev) return prev;
+      const baseConfig = ensureFormConfig(prev);
+      if (!baseConfig) return prev;
+      const next = {
+        ...baseConfig,
+        sections: baseConfig.sections.map(s => {
+          if (s.id !== sectionId) return s;
+          const cur = Array.isArray(s[fieldKey]) ? s[fieldKey] : [];
+          return { ...s, [fieldKey]: cur.filter(p => p.url !== photoUrl) };
+        }),
       };
       return { ...prev, form_config: next };
     });
@@ -30540,7 +30724,7 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
               )}
             </div>
             <div style={{ padding: "0 16px 6px", fontFamily: serif, fontSize: 11, color: T.tertiary, lineHeight: 1.5 }}>
-              Tweak prompts so participants fill out exactly what this bounty needs. First edit auto-promotes to custom; RESET drops back to template defaults.
+              Tweak prompts so participants fill out exactly what this bounty needs. First edit auto-promotes to custom; RESET drops back to template defaults. Reorder with ↑/↓, drop sections with the trash icon, or add new sections via the picker below.
             </div>
             <div style={{ padding: "0 16px", display: "flex", flexDirection: "column", gap: 8 }}>
               {sections.map((s, i) => {
@@ -30562,7 +30746,18 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
                       <span style={{ fontFamily: sans, fontSize: 8, color: T.white, background: typeColor, padding: "2px 6px", borderRadius: 3, letterSpacing: 0.5, fontWeight: 700 }}>{(s.type || "").toUpperCase()}</span>
                       <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, letterSpacing: 0.5 }}>#{i + 1}</span>
-                      {s.fixed && <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 1 }}>FIXED HEADING</span>}
+                      {s.fixed && <span style={{ fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 1 }}>FIXED HEADING</span>}
+                      <div style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
+                        <button onClick={() => moveSection(s.id, -1)} disabled={i === 0} title="Move up" style={{ background: "none", border: `1px solid ${T.charcoal}`, color: i === 0 ? T.charcoal : T.tertiary, borderRadius: 4, padding: "3px 6px", cursor: i === 0 ? "not-allowed" : "pointer", display: "flex", alignItems: "center" }}>
+                          <ChevronUp size={12} color={i === 0 ? T.charcoal : T.tertiary} />
+                        </button>
+                        <button onClick={() => moveSection(s.id, 1)} disabled={i === sections.length - 1} title="Move down" style={{ background: "none", border: `1px solid ${T.charcoal}`, color: i === sections.length - 1 ? T.charcoal : T.tertiary, borderRadius: 4, padding: "3px 6px", cursor: i === sections.length - 1 ? "not-allowed" : "pointer", display: "flex", alignItems: "center" }}>
+                          <ChevronDown size={12} color={i === sections.length - 1 ? T.charcoal : T.tertiary} />
+                        </button>
+                        <button onClick={() => removeSection(s.id)} title="Remove section" style={{ background: "none", border: `1px solid ${T.red}30`, color: T.red, borderRadius: 4, padding: "3px 6px", cursor: "pointer", display: "flex", alignItems: "center" }}>
+                          <Trash2 size={12} color={T.red} />
+                        </button>
+                      </div>
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                       <div>
@@ -30596,8 +30791,18 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
                         )}
                         {showMin && (
                           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>Min photos:</span>
+                            <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>Min items:</span>
                             <input type="number" min="0" step="1" value={s.min || 0} onChange={(e) => updateSection(s.id, { min: Math.max(0, Number(e.target.value)) })} style={{ ...inputStyle, width: 64, padding: "6px 8px", fontSize: 12 }} />
+                          </div>
+                        )}
+                        {s.type === "photos" && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>Accept:</span>
+                            <select value={s.accept || "photo+video"} onChange={(e) => updateSection(s.id, { accept: e.target.value })} style={{ ...inputStyle, width: 110, padding: "6px 8px", fontSize: 11 }}>
+                              <option value="photo+video">Photo + Video</option>
+                              <option value="photo">Photos only</option>
+                              <option value="video">Videos only</option>
+                            </select>
                           </div>
                         )}
                         {showMax && (
@@ -30607,10 +30812,115 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
                           </div>
                         )}
                       </div>
+
+                      {/* Prefilled value editor — admin can seed the field so the
+                          participant starts with content they can edit. Photos
+                          stay attached unless the participant deletes them. */}
+                      {(s.type === "p" || s.type === "short" || s.type === "h1") && (
+                        <div style={{ borderTop: `1px solid ${T.charcoal}`, paddingTop: 8 }}>
+                          <FieldLabel>Prefilled value (optional)</FieldLabel>
+                          <textarea value={s.default_value || ""} onChange={(e) => updateSection(s.id, { default_value: e.target.value })} rows={s.type === "p" ? 3 : 1} placeholder="Participants see this prefilled; they can edit." style={{ ...inputStyle, padding: "8px 10px", fontSize: 12, resize: "vertical", lineHeight: 1.4 }} />
+                        </div>
+                      )}
+                      {s.type === "tag_select" && (
+                        <div style={{ borderTop: `1px solid ${T.charcoal}`, paddingTop: 8 }}>
+                          <FieldLabel>Prefilled tags (comma-separated)</FieldLabel>
+                          <input value={(s.default_value || []).join(", ")} onChange={(e) => updateSection(s.id, { default_value: e.target.value.split(",").map(o => o.trim()).filter(Boolean) })} placeholder="Pre-selects these from the options list" style={{ ...inputStyle, padding: "8px 10px", fontSize: 12 }} />
+                        </div>
+                      )}
+                      {s.type === "bullet_list" && (
+                        <div style={{ borderTop: `1px solid ${T.charcoal}`, paddingTop: 8 }}>
+                          <FieldLabel>Prefilled bullets (one per line)</FieldLabel>
+                          <textarea value={(s.default_value || []).join("\n")} onChange={(e) => updateSection(s.id, { default_value: e.target.value.split("\n").map(o => o.trim()).filter(Boolean) })} rows={3} placeholder="Bullet 1&#10;Bullet 2" style={{ ...inputStyle, padding: "8px 10px", fontSize: 12, resize: "vertical", lineHeight: 1.4 }} />
+                        </div>
+                      )}
+                      {s.type === "rating" && (
+                        <div style={{ borderTop: `1px solid ${T.charcoal}`, paddingTop: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                          <FieldLabel>Prefilled rating:</FieldLabel>
+                          <input type="number" min="0" max={s.max || 5} step="1" value={s.default_value || 0} onChange={(e) => updateSection(s.id, { default_value: Math.max(0, Math.min(s.max || 5, Number(e.target.value))) })} style={{ ...inputStyle, width: 64, padding: "6px 8px", fontSize: 12 }} />
+                          <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>0 = no default</span>
+                        </div>
+                      )}
+                      {s.type === "photos" && (
+                        <div style={{ borderTop: `1px solid ${T.charcoal}`, paddingTop: 8 }}>
+                          <FieldLabel>Prefilled media (optional — admin-supplied starter)</FieldLabel>
+                          {(s.default_photos || []).length > 0 && (
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4, marginBottom: 6 }}>
+                              {s.default_photos.map((p, pi) => (
+                                <div key={pi} style={{ position: "relative", aspectRatio: "1/1", borderRadius: 4, overflow: "hidden", background: T.charcoal }}>
+                                  <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                  <button onClick={() => removeSectionPhoto(s.id, "default_photos", p.url)} style={{ position: "absolute", top: 2, right: 2, background: "rgba(0,0,0,0.7)", border: "none", borderRadius: 3, padding: "2px 4px", color: T.white, cursor: "pointer" }}>
+                                    <X size={10} color={T.white} />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <label style={{ display: "inline-block", background: T.darkBg, border: `1px dashed ${T.copper}40`, color: T.copper, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, padding: "6px 12px", borderRadius: 4, cursor: "pointer" }}>
+                            + ADD PREFILLED MEDIA
+                            <input type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime" multiple style={{ display: "none" }} onChange={(e) => handleSectionPhotoUpload(s.id, "default_photos", e)} />
+                          </label>
+                        </div>
+                      )}
+                      {s.type === "hero_image" && (
+                        <div style={{ borderTop: `1px solid ${T.charcoal}`, paddingTop: 8 }}>
+                          <FieldLabel>Prefilled hero (optional)</FieldLabel>
+                          {s.default_value && s.default_value.url ? (
+                            <div style={{ position: "relative", borderRadius: 6, overflow: "hidden", background: T.charcoal }}>
+                              <img src={s.default_value.url} alt="" style={{ width: "100%", display: "block", maxHeight: 140, objectFit: "cover" }} />
+                              <button onClick={() => updateSection(s.id, { default_value: null })} style={{ position: "absolute", top: 6, right: 6, background: "rgba(0,0,0,0.7)", border: "none", borderRadius: 4, padding: "4px 6px", color: T.red, cursor: "pointer", fontFamily: sans, fontSize: 9, fontWeight: 700 }}>REMOVE</button>
+                            </div>
+                          ) : (
+                            <label style={{ display: "inline-block", background: T.darkBg, border: `1px dashed ${T.copper}40`, color: T.copper, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, padding: "6px 12px", borderRadius: 4, cursor: "pointer" }}>
+                              + UPLOAD PREFILLED HERO
+                              <input type="file" accept="image/jpeg,image/png,image/webp" style={{ display: "none" }} onChange={async (e) => {
+                                const file = e.target.files && e.target.files[0];
+                                if (e.target) e.target.value = "";
+                                if (!file || !onUploadPhoto) return;
+                                try {
+                                  const out = await onUploadPhoto([file]);
+                                  const u = Array.isArray(out) && out[0];
+                                  if (u && u.url) updateSection(s.id, { default_value: { url: u.url, alt: u.alt || "", name: file.name } });
+                                } catch (err) { console.error("[BountyEditor] section hero upload failed", err); }
+                              }} />
+                            </label>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
               })}
+
+              {/* ADD SECTION — type picker */}
+              {(() => {
+                const ADD_TYPES = [
+                  { k: "h1", label: "Title (H1)" },
+                  { k: "h2", label: "Heading (H2)" },
+                  { k: "h3", label: "Subheading (H3)" },
+                  { k: "p", label: "Paragraph" },
+                  { k: "short", label: "Short answer" },
+                  { k: "photos", label: "Media (photo/video)" },
+                  { k: "hero_image", label: "Hero image" },
+                  { k: "bullet_list", label: "Bullet list" },
+                  { k: "tag_select", label: "Tag select" },
+                  { k: "select", label: "Dropdown" },
+                  { k: "rating", label: "Rating (stars)" },
+                  { k: "route_builder", label: "Route builder" },
+                ];
+                return (
+                  <div style={{ marginTop: 6, background: T.darkCard, borderRadius: 8, padding: 12, border: `1px dashed ${T.charcoal}` }}>
+                    <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 700, marginBottom: 8 }}>+ ADD SECTION</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {ADD_TYPES.map(t => (
+                        <button key={t.k} onClick={() => addSection(t.k)} style={{ background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 600, letterSpacing: 0.3, padding: "6px 10px", borderRadius: 14, cursor: "pointer" }}>
+                          + {t.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </>
         );
