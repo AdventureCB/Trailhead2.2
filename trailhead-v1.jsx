@@ -18029,7 +18029,7 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose }) {
 }
 
 /* ─── RANKS / LEADERBOARD SCREEN ─── */
-function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, currentUserId, currentProfile, onLoadLeaderboard, onViewUser }) {
+function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, currentUserId, currentProfile, onLoadLeaderboard, onViewUser, bounties: bountiesFromDB }) {
   const [tab, setTab] = useState("overview"); // overview | leaderboard | bounty | badges
   // Leaderboard state. lbScope = global | following | weekly; lbData[scope]
   // caches rows so switching tabs is instant after the first fetch. Refresh
@@ -18144,14 +18144,40 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
   }, []);
 
 
-  // ── Bounty Board (admin-set, monetary value) ──
-  const [bounties, setBounties] = useState([
-    { id: "b1", title: "Trail Report: Black Bear Pass", desc: "Complete a detailed route report with 10+ photos, GPS track, difficulty rating, and current trail conditions for Black Bear Pass.", reward: 7500, rewardPts: 500, category: "Route Report", difficulty: "Hard", deadline: "Apr 30, 2026", slots: 3, claimed: 1, status: "open" },
-    { id: "b2", title: "Gear Review: Recovery Boards", desc: "Write a detailed forum review comparing at least 3 recovery board brands with photos of real-world use.", reward: 5000, rewardPts: 300, category: "Gear Review", difficulty: "Medium", deadline: "May 15, 2026", slots: 5, claimed: 2, status: "open" },
-    { id: "b3", title: "Build Feature: Overland Tacoma", desc: "Create a complete build profile for your Tacoma build with full mod list, photos of each mod, and product links.", reward: 3500, rewardPts: 200, category: "Build Feature", difficulty: "Easy", deadline: "May 1, 2026", slots: 10, claimed: 7, status: "open" },
-    { id: "b4", title: "Video: Campsite Setup Walkthrough", desc: "Post a forum thread with video walkthrough of your camp setup process, including gear list and tips.", reward: 10000, rewardPts: 750, category: "Content Creation", difficulty: "Hard", deadline: "May 20, 2026", slots: 2, claimed: 0, status: "open" },
-    { id: "b5", title: "Trail Report: Rubicon Trail", desc: "Complete a detailed route report for the Rubicon Trail with obstacle descriptions and bypass info.", reward: 7500, rewardPts: 500, category: "Route Report", difficulty: "Hard", deadline: "Apr 15, 2026", slots: 3, claimed: 3, status: "completed" },
-  ]);
+  // ── Bounty Board ── Phase 4: hydrated from DB via prop. Adapt the row
+  // shape on the way in so the existing card renderer downstream keeps
+  // working without touching every render branch. Phase 5 will rework
+  // the renderer + add claim/submit RPCs.
+  const formatDeadline = (iso) => {
+    if (!iso) return "—";
+    try { return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); } catch { return "—"; }
+  };
+  const bounties = useMemo(() => {
+    const rows = Array.isArray(bountiesFromDB) ? bountiesFromDB : [];
+    return rows
+      .filter(b => b.status !== "draft" && b.status !== "archived")
+      .map(b => ({
+        id: b.id,
+        title: b.title,
+        desc: b.description || "",
+        reward: b.reward_cents || 0,
+        rewardPts: b.reward_points || 0,
+        category: b.category || "Content Creation",
+        difficulty: b.difficulty || "Medium",
+        deadline: formatDeadline(b.deadline_at),
+        slots: b.total_slots || 1,
+        claimed: b.claimed_slots || 0,
+        // Map DB status → mock status the renderer expects.
+        // Phase 5 will replace this with per-user submission status.
+        status: b.status === "closed" ? "completed" : "open",
+      }));
+  }, [bountiesFromDB]);
+  // setBounties is a no-op shim for the legacy in-render mutation
+  // calls (startBounty / submitBounty / etc.) until Phase 5 rewires
+  // them through RPCs. They currently optimistically mutate local
+  // state; with bounties now derived from props, those mutations are
+  // ignored. Phase 5 will replace them with claim_bounty etc.
+  const setBounties = () => {};
 
   const [bountyFilter, setBountyFilter] = useState("OPEN");
   const [expandedBounty, setExpandedBounty] = useState(null);
@@ -29531,6 +29557,373 @@ function GearDropListRow({ drop, onOpen, onDelete }) {
 // `adminSubScreen` at root which mounts AdminDashboardScreen with the
 // matching initialTab + hideTabBar=true. Back from the dashboard lands
 // here, not on the feed.
+/* ─── BOUNTIES ADMIN — list w/ tabs + NEW button (Phase 4) ─── */
+function BountiesAdminScreen({ bounties, onBack, onOpenEditor, onNewBounty }) {
+  const [tab, setTab] = useState("draft"); // draft | open | review | completed | archived
+  const counts = useMemo(() => {
+    const c = { draft: 0, open: 0, review: 0, completed: 0, archived: 0 };
+    (bounties || []).forEach(b => {
+      if (b.status === "draft") c.draft += 1;
+      else if (b.status === "open") c.open += 1;
+      else if (b.status === "closed") c.completed += 1;
+      else if (b.status === "archived") c.archived += 1;
+    });
+    return c;
+  }, [bounties]);
+  const filtered = useMemo(() => {
+    const all = bounties || [];
+    if (tab === "draft") return all.filter(b => b.status === "draft");
+    if (tab === "open") return all.filter(b => b.status === "open");
+    if (tab === "completed") return all.filter(b => b.status === "closed");
+    if (tab === "archived") return all.filter(b => b.status === "archived");
+    return [];
+  }, [bounties, tab]);
+  const TABS = [
+    { key: "draft", label: "DRAFTS", count: counts.draft },
+    { key: "open", label: "OPEN", count: counts.open },
+    { key: "completed", label: "COMPLETED", count: counts.completed },
+    { key: "archived", label: "ARCHIVED", count: counts.archived },
+  ];
+  const fmtRelative = (iso) => {
+    if (!iso) return "—";
+    const ms = new Date(iso).getTime() - Date.now();
+    const day = 86400000;
+    if (ms < 0) {
+      const d = Math.floor(-ms / day);
+      return d === 0 ? "ended today" : `ended ${d}d ago`;
+    }
+    const d = Math.floor(ms / day);
+    if (d === 0) return "ends today";
+    if (d < 7) return `${d}d left`;
+    if (d < 30) return `${Math.floor(d / 7)}w left`;
+    return `${Math.floor(d / 30)}mo left`;
+  };
+  return (
+    <div style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 16px", borderBottom: `1px solid ${T.charcoal}` }}>
+        <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+          <ChevronLeft size={20} color={T.white} />
+        </button>
+        <Target size={16} color={T.green} />
+        <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, letterSpacing: 0.8, flex: 1 }}>BOUNTIES</span>
+        <button onClick={onNewBounty} style={{ background: T.red, border: "none", color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.8, padding: "8px 14px", borderRadius: 6, cursor: "pointer" }}>+ NEW</button>
+      </div>
+      <div style={{ display: "flex", gap: 4, padding: "10px 12px", borderBottom: `1px solid ${T.charcoal}`, overflowX: "auto" }}>
+        {TABS.map(t => {
+          const active = tab === t.key;
+          return (
+            <button key={t.key} onClick={() => setTab(t.key)} style={{ padding: "8px 14px", borderRadius: 6, border: active ? `1px solid ${T.red}` : `1px solid ${T.charcoal}`, background: active ? `${T.red}18` : T.darkCard, cursor: "pointer", fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, color: active ? T.red : T.tertiary, whiteSpace: "nowrap" }}>
+              {t.label}{t.count > 0 ? ` · ${t.count}` : ""}
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 10, flex: 1 }}>
+        {filtered.length === 0 && (
+          <div style={{ padding: "40px 16px", textAlign: "center" }}>
+            <span style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, lineHeight: 1.6, display: "block" }}>
+              {tab === "draft" ? "No drafts. Tap NEW to start one." :
+               tab === "open" ? "No open bounties." :
+               tab === "completed" ? "No completed bounties yet." :
+               "Nothing archived."}
+            </span>
+          </div>
+        )}
+        {filtered.map(b => {
+          const diffColor = b.difficulty === "Hard" ? T.red : b.difficulty === "Easy" ? T.green : T.copper;
+          const slotsLeft = (b.total_slots || 1) - (b.claimed_slots || 0);
+          return (
+            <button key={b.id} onClick={() => onOpenEditor(b.id)} style={{ background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 12, padding: 14, cursor: "pointer", textAlign: "left", display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: diffColor, padding: "2px 7px", borderRadius: 3, letterSpacing: 0.5, fontWeight: 600 }}>{(b.difficulty || "Medium").toUpperCase()}</span>
+                <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, background: T.charcoal, padding: "2px 7px", borderRadius: 3, letterSpacing: 0.5 }}>{(b.category || "Content").toUpperCase()}</span>
+                {b.multiple_winners && <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, background: `${T.copper}18`, padding: "2px 7px", borderRadius: 3, letterSpacing: 0.5, fontWeight: 600 }}>MULTI-WINNER</span>}
+                <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.5 }}>{fmtRelative(b.deadline_at)}</span>
+              </div>
+              <div style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 600 }}>{b.title || "(untitled)"}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                {(b.reward_cents || 0) > 0 && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <DollarSign size={12} color={T.green} />
+                    <span style={{ fontFamily: sans, fontSize: 13, color: T.green, fontWeight: 700 }}>${((b.reward_cents || 0) / 100).toFixed(0)}</span>
+                  </div>
+                )}
+                {(b.reward_points || 0) > 0 && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <Zap size={11} color={T.copper} />
+                    <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600 }}>+{b.reward_points} pts</span>
+                  </div>
+                )}
+                <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: 10, color: slotsLeft <= 0 ? T.red : T.tertiary, fontWeight: 600 }}>
+                  {b.claimed_slots || 0}/{b.total_slots || 1} CLAIMED
+                </span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ─── BOUNTY EDITOR — admin create + edit (Phase 4) ─── */
+// Used for both new (bountyId="") and existing (bountyId=uuid). Loads
+// from DB on mount; auto-prefills via category template on new.
+function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete }) {
+  const isNew = !bountyId;
+  const [bounty, setBounty] = useState(null);
+  const [loading, setLoading] = useState(!isNew);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [hasUnsaved, setHasUnsaved] = useState(false);
+  const CATEGORIES = Object.keys(BOUNTY_FORM_TEMPLATES);
+  const DIFFICULTIES = ["Easy", "Medium", "Hard"];
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      if (isNew) {
+        // Sensible defaults — 30 days from now, draft, $0 + 0 pts, 1 slot.
+        const deadlineDefault = new Date(Date.now() + 30 * 86400000);
+        setBounty({
+          title: "",
+          description: "",
+          category: "Content Creation",
+          difficulty: "Medium",
+          hero_img: null,
+          reward_cents: 0,
+          reward_points: 0,
+          multiple_winners: false,
+          total_slots: 1,
+          claimed_slots: 0,
+          starts_at: null,
+          deadline_at: deadlineDefault.toISOString(),
+          status: "draft",
+          form_template_key: "Content Creation",
+          form_config: null,
+        });
+        setLoading(false);
+        return;
+      }
+      const row = await onLoad(bountyId);
+      if (mounted) {
+        setBounty(row || null);
+        setLoading(false);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [bountyId]);
+  const patch = (partial) => {
+    setBounty(prev => prev ? { ...prev, ...partial } : prev);
+    setHasUnsaved(true);
+  };
+  const handleSave = async (nextStatus) => {
+    if (!bounty) return;
+    setSaving(true); setError("");
+    const payload = { ...bounty };
+    if (nextStatus) payload.status = nextStatus;
+    // Coerce numeric inputs
+    payload.reward_cents = Math.max(0, Number(payload.reward_cents || 0));
+    payload.reward_points = Math.max(0, Number(payload.reward_points || 0));
+    payload.total_slots = Math.max(1, Number(payload.total_slots || 1));
+    // form_template_key defaults to category if blank
+    if (!payload.form_template_key) payload.form_template_key = payload.category;
+    let res;
+    if (isNew) res = await onCreate(payload);
+    else res = await onUpdate(bountyId, payload);
+    setSaving(false);
+    if (res && res.error) { setError(res.error); return; }
+    setHasUnsaved(false);
+    // After a new bounty saves, kick the editor back to list — the
+    // optimistic insert means the user sees the row in the list.
+    if (isNew && res && res.data) onBack();
+    else if (nextStatus === "archived") onBack();
+    else if (res && res.data) setBounty(res.data);
+  };
+  const handleDelete = async () => {
+    if (!confirm("Delete this bounty? This cannot be undone.")) return;
+    setSaving(true);
+    const res = await onDelete(bountyId);
+    setSaving(false);
+    if (res && res.error) { setError(res.error); return; }
+    onBack();
+  };
+  if (loading) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 16px", borderBottom: `1px solid ${T.charcoal}` }}>
+          <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><ChevronLeft size={20} color={T.white} /></button>
+          <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.8 }}>LOADING…</span>
+        </div>
+      </div>
+    );
+  }
+  if (!bounty) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 16px", borderBottom: `1px solid ${T.charcoal}` }}>
+          <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><ChevronLeft size={20} color={T.white} /></button>
+          <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.8 }}>BOUNTY NOT FOUND</span>
+        </div>
+      </div>
+    );
+  }
+  const statusLabel = {
+    draft: { label: "DRAFT", color: T.tertiary },
+    open: { label: "OPEN", color: T.green },
+    closed: { label: "CLOSED", color: T.copper },
+    archived: { label: "ARCHIVED", color: T.tertiary },
+  }[bounty.status] || { label: bounty.status, color: T.tertiary };
+  // Convert ISO → datetime-local input format (YYYY-MM-DDTHH:MM in local TZ).
+  const isoToLocal = (iso) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    const tzOff = d.getTimezoneOffset() * 60000;
+    return new Date(d.getTime() - tzOff).toISOString().slice(0, 16);
+  };
+  const localToIso = (local) => local ? new Date(local).toISOString() : null;
+  const SectionLabel = ({ children }) => (
+    <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700, padding: "16px 16px 6px" }}>{children}</div>
+  );
+  const FieldLabel = ({ children }) => (
+    <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, letterSpacing: 0.5, marginBottom: 6 }}>{children}</div>
+  );
+  const inputStyle = { width: "100%", padding: "10px 12px", borderRadius: 6, border: `1px solid ${T.charcoal}`, background: T.darkBg, color: T.white, fontFamily: sans, fontSize: 13, boxSizing: "border-box" };
+  return (
+    <div style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 16px", borderBottom: `1px solid ${T.charcoal}`, position: "sticky", top: 0, background: T.darkBg, zIndex: 10 }}>
+        <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><ChevronLeft size={20} color={T.white} /></button>
+        <Target size={14} color={T.green} />
+        <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.8 }}>{isNew ? "NEW BOUNTY" : "EDIT BOUNTY"}</span>
+        <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: 9, color: statusLabel.color, letterSpacing: 1, fontWeight: 700, padding: "3px 7px", border: `1px solid ${statusLabel.color}40`, borderRadius: 3 }}>{statusLabel.label}</span>
+      </div>
+
+      {error && (
+        <div style={{ padding: "10px 16px", background: `${T.red}20`, color: T.red, fontFamily: sans, fontSize: 12 }}>{error}</div>
+      )}
+
+      {/* BASIC INFO */}
+      <SectionLabel>BASIC INFO</SectionLabel>
+      <div style={{ padding: "0 16px", display: "flex", flexDirection: "column", gap: 12 }}>
+        <div>
+          <FieldLabel>Title *</FieldLabel>
+          <input value={bounty.title || ""} onChange={(e) => patch({ title: e.target.value })} placeholder="e.g. Trail Report: Black Bear Pass" style={inputStyle} />
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ flex: 1 }}>
+            <FieldLabel>Category</FieldLabel>
+            <select value={bounty.category} onChange={(e) => patch({ category: e.target.value, form_template_key: e.target.value })} style={inputStyle}>
+              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div style={{ flex: 1 }}>
+            <FieldLabel>Difficulty</FieldLabel>
+            <select value={bounty.difficulty} onChange={(e) => patch({ difficulty: e.target.value })} style={inputStyle}>
+              {DIFFICULTIES.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </div>
+        </div>
+        <div>
+          <FieldLabel>Brief (HTML allowed; rendered as-is to participants)</FieldLabel>
+          <textarea value={bounty.description || ""} onChange={(e) => patch({ description: e.target.value })} rows={5} placeholder="Describe what the bounty is asking for. Be specific about deliverables." style={{ ...inputStyle, resize: "vertical", lineHeight: 1.5 }} />
+        </div>
+        <div>
+          <FieldLabel>Hero Image URL (optional)</FieldLabel>
+          <input value={bounty.hero_img || ""} onChange={(e) => patch({ hero_img: e.target.value || null })} placeholder="https://…" style={inputStyle} />
+        </div>
+      </div>
+
+      {/* REWARDS */}
+      <SectionLabel>REWARDS</SectionLabel>
+      <div style={{ padding: "0 16px", display: "flex", gap: 8 }}>
+        <div style={{ flex: 1 }}>
+          <FieldLabel>Cash reward ($)</FieldLabel>
+          <input type="number" min="0" step="1" value={Math.floor((bounty.reward_cents || 0) / 100)} onChange={(e) => patch({ reward_cents: Math.max(0, Number(e.target.value) * 100) })} style={inputStyle} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <FieldLabel>Points reward</FieldLabel>
+          <input type="number" min="0" step="1" value={bounty.reward_points || 0} onChange={(e) => patch({ reward_points: Math.max(0, Number(e.target.value)) })} style={inputStyle} />
+        </div>
+      </div>
+      <div style={{ padding: "8px 16px 0", fontFamily: serif, fontSize: 11, color: T.tertiary, lineHeight: 1.5 }}>
+        Either reward can be 0 — points-only bounties or cash-only bounties are both fine.
+      </div>
+
+      {/* TIMING */}
+      <SectionLabel>TIMING + SLOTS</SectionLabel>
+      <div style={{ padding: "0 16px", display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ flex: 1 }}>
+            <FieldLabel>Starts at (optional)</FieldLabel>
+            <input type="datetime-local" value={isoToLocal(bounty.starts_at)} onChange={(e) => patch({ starts_at: localToIso(e.target.value) })} style={inputStyle} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <FieldLabel>Deadline *</FieldLabel>
+            <input type="datetime-local" value={isoToLocal(bounty.deadline_at)} onChange={(e) => patch({ deadline_at: localToIso(e.target.value) })} style={inputStyle} />
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontFamily: sans, fontSize: 12, color: T.white }}>
+            <input type="checkbox" checked={!!bounty.multiple_winners} onChange={(e) => patch({ multiple_winners: e.target.checked, total_slots: e.target.checked ? Math.max(2, bounty.total_slots || 1) : 1 })} />
+            Multiple winners
+          </label>
+          {bounty.multiple_winners && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>Total slots:</span>
+              <input type="number" min="2" step="1" value={bounty.total_slots || 1} onChange={(e) => patch({ total_slots: Math.max(2, Number(e.target.value)) })} style={{ ...inputStyle, width: 80 }} />
+            </div>
+          )}
+        </div>
+        {!isNew && (
+          <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, letterSpacing: 0.5 }}>
+            CLAIMED · {bounty.claimed_slots || 0} / {bounty.total_slots || 1} · APPROVED · {bounty.approved_slots || 0}
+          </div>
+        )}
+      </div>
+
+      {/* FORM TEMPLATE */}
+      <SectionLabel>RESPONSE FORM TEMPLATE</SectionLabel>
+      <div style={{ padding: "0 16px" }}>
+        <FieldLabel>Template (defines fields participants fill out)</FieldLabel>
+        <select value={bounty.form_template_key || bounty.category} onChange={(e) => patch({ form_template_key: e.target.value })} style={inputStyle}>
+          {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <div style={{ marginTop: 10, padding: 12, background: T.darkCard, borderRadius: 8, fontFamily: serif, fontSize: 11, color: T.tertiary, lineHeight: 1.5 }}>
+          {(BOUNTY_FORM_TEMPLATES[bounty.form_template_key || bounty.category] || {}).description || "—"}
+        </div>
+      </div>
+
+      {/* LIFECYCLE */}
+      <SectionLabel>LIFECYCLE</SectionLabel>
+      <div style={{ padding: "0 16px 24px", display: "flex", flexDirection: "column", gap: 8 }}>
+        <button onClick={() => handleSave()} disabled={saving} style={{ padding: "12px", background: T.charcoal, color: T.white, border: `1px solid ${T.copper}`, borderRadius: 6, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.8, cursor: saving ? "wait" : "pointer", opacity: saving ? 0.5 : 1 }}>
+          {saving ? "SAVING…" : (hasUnsaved ? "SAVE CHANGES" : "SAVED")}
+        </button>
+        {bounty.status === "draft" && (
+          <button onClick={() => handleSave("open")} disabled={saving || !bounty.title || !bounty.deadline_at} style={{ padding: "12px", background: T.green, color: T.white, border: "none", borderRadius: 6, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.8, cursor: saving ? "wait" : "pointer", opacity: saving ? 0.5 : 1 }}>
+            PUBLISH (OPEN TO USERS)
+          </button>
+        )}
+        {bounty.status === "open" && (
+          <button onClick={() => handleSave("closed")} disabled={saving} style={{ padding: "12px", background: T.copper, color: T.white, border: "none", borderRadius: 6, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.8, cursor: saving ? "wait" : "pointer", opacity: saving ? 0.5 : 1 }}>
+            CLOSE BOUNTY (no new claims)
+          </button>
+        )}
+        {(bounty.status === "closed" || bounty.status === "draft") && !isNew && (
+          <button onClick={() => handleSave("archived")} disabled={saving} style={{ padding: "12px", background: T.darkCard, color: T.tertiary, border: `1px solid ${T.charcoal}`, borderRadius: 6, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.8, cursor: saving ? "wait" : "pointer", opacity: saving ? 0.5 : 1 }}>
+            ARCHIVE
+          </button>
+        )}
+        {!isNew && (
+          <button onClick={handleDelete} disabled={saving} style={{ padding: "12px", background: "none", color: T.red, border: `1px solid ${T.red}30`, borderRadius: 6, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.8, cursor: saving ? "wait" : "pointer", marginTop: 8 }}>
+            DELETE BOUNTY
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AdminHubScreen({ onBack, onSelect, openReportCount, openBugCount }) {
   const cards = [
     { key: "reports",    label: "REPORTS",    desc: "User-submitted content reports awaiting review.",  icon: Flag,           badge: openReportCount, color: T.red },
@@ -29539,6 +29932,7 @@ function AdminHubScreen({ onBack, onSelect, openReportCount, openBugCount }) {
     { key: "discounts",  label: "AMBASSADORS",  desc: "Ambassador commission analytics, discount codes, bulk promo templates.", icon: Tag,           color: T.copper },
     { key: "partners",   label: "CONTENT PARTNERS", desc: "Influencer creator contracts, quotas, and delivery tracking.", icon: Camera, color: T.copper },
     GEAR_DROPS_ENABLED && { key: "geardrops", label: "GEAR DROPS", desc: "Sponsored events: route + prize + race mechanics.", icon: Gift, color: T.green },
+    { key: "bounties",   label: "BOUNTIES",   desc: "Quests, brief authoring, rewards, slot management.", icon: Target,        color: T.green },
     { key: "push",       label: "PUSH",       desc: "Broadcast push notifications and view history.",   icon: Bell,           color: T.copper },
     { key: "analytics",  label: "ANALYTICS",  desc: "Active users, signups, posts, engagement.",        icon: TrendingUp,     color: T.green },
   ].filter(Boolean);
@@ -37447,6 +37841,7 @@ export default function Trailhead() {
     try { hydrateForumLikes(); } catch (e) { /* non-fatal */ }
     try { hydrateForumCategories(); } catch (e) { /* non-fatal */ }
     try { hydrateSavedTrips(); } catch (e) { /* non-fatal */ }
+    try { hydrateBounties(); } catch (e) { /* non-fatal */ }
 
     // ─── Tier 1 — critical for first paint ───
     // Profile (header avatar/name) + posts (feed list). Both run in
@@ -38165,6 +38560,23 @@ export default function Trailhead() {
         if (!row || !row.id) return;
         setTripReports(prev => prev.filter(t => t.id !== row.id));
       })
+      // Bounties — admin edits propagate live to the user-facing board.
+      // INSERT and UPDATE replace the row; DELETE removes it. We don't
+      // skip own-author since the admin's hydrateBounties + setBounties on
+      // optimistic save already cover the local case.
+      .on("postgres_changes", { event: "*", schema: "public", table: "bounties" }, (payload) => {
+        const row = payload.new || payload.old;
+        if (!row || !row.id) return;
+        if (payload.eventType === "DELETE") {
+          setBounties(prev => prev.filter(b => b.id !== row.id));
+          return;
+        }
+        setBounties(prev => {
+          const i = prev.findIndex(b => b.id === row.id);
+          if (i === -1) return [row, ...prev];
+          const next = prev.slice(); next[i] = { ...next[i], ...row }; return next;
+        });
+      })
       // Forum threads — INSERT/UPDATE/DELETE. Skip own-INSERT (already
       // patched optimistically by addForumThread). Author profile fetched
       // on demand for new threads from other users.
@@ -38810,6 +39222,13 @@ export default function Trailhead() {
   // means edit an existing contract. null = show the list. Mirrors the
   // gear-drops editor routing pattern.
   const [editingContentPartnerId, setEditingContentPartnerId] = useState(null);
+  // Bounty admin editor target — same pattern as content-partner editor:
+  // `""` = new (no id yet); uuid = edit existing; null = list view.
+  const [editingBountyId, setEditingBountyId] = useState(null);
+  // Bounties hydrated from DB. Powers admin list + (Phase 5) user bounty
+  // board. Replaces the local component-state seed array that lived inside
+  // RanksScreen for the v0 mock.
+  const [bounties, setBounties] = useState([]);
   // Partner-facing dashboard overlay — toggled from the user's own profile
   // when isContentPartner is true.
   const [showContentPartnerDashboard, setShowContentPartnerDashboard] = useState(false);
@@ -41026,6 +41445,86 @@ export default function Trailhead() {
       console.error("[recomputeAllContentPartnerStandings] failed", e);
       return { error: "Network error" };
     }
+  };
+
+  // ── Bounties CRUD (Phase 4) ──
+  // hydrateBounties loads the full set (admin sees drafts; everyone else
+  // gets non-draft via RLS). Realtime sub below keeps it fresh as admin
+  // edits propagate. Phase 5 wires the user-facing claim flow.
+  const hydrateBounties = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("bounties")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error) { console.error("[hydrateBounties] error", error); return; }
+      setBounties(Array.isArray(data) ? data : []);
+    } catch (e) { console.error("[hydrateBounties] failed", e); }
+  };
+  const loadBountyById = async (id) => {
+    if (!id) return null;
+    try {
+      const { data, error } = await supabase.from("bounties").select("*").eq("id", id).maybeSingle();
+      if (error) { console.error("[loadBountyById] error", error); return null; }
+      // Merge into root list so the admin list reflects whatever the editor
+      // surfaces back (status flip, slot bump, etc.).
+      if (data) setBounties(prev => {
+        const i = prev.findIndex(b => b.id === data.id);
+        if (i === -1) return [data, ...prev];
+        const next = prev.slice(); next[i] = data; return next;
+      });
+      return data;
+    } catch (e) { console.error("[loadBountyById] failed", e); return null; }
+  };
+  const createBounty = async (patch) => {
+    if (!isAdmin) return { error: "Not authorized" };
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) return { error: "Not authenticated" };
+    const payload = {
+      title: (patch && patch.title) || "Untitled bounty",
+      description: (patch && patch.description) || null,
+      category: (patch && patch.category) || "Content Creation",
+      difficulty: (patch && patch.difficulty) || "Medium",
+      hero_img: (patch && patch.hero_img) || null,
+      reward_cents: Number((patch && patch.reward_cents) || 0),
+      reward_points: Number((patch && patch.reward_points) || 0),
+      multiple_winners: !!(patch && patch.multiple_winners),
+      total_slots: Math.max(1, Number((patch && patch.total_slots) || 1)),
+      starts_at: (patch && patch.starts_at) || null,
+      deadline_at: (patch && patch.deadline_at) || new Date(Date.now() + 30 * 86400000).toISOString(),
+      status: (patch && patch.status) || "draft",
+      form_template_key: (patch && patch.form_template_key) || (patch && patch.category) || "Content Creation",
+      form_config: (patch && patch.form_config) || null,
+      created_by: uid,
+    };
+    try {
+      const { data, error } = await supabase.from("bounties").insert(payload).select("*").single();
+      if (error) { console.error("[createBounty] error", error); return { error: error.message }; }
+      setBounties(prev => [data, ...prev]);
+      return { ok: true, data };
+    } catch (e) { console.error("[createBounty] failed", e); return { error: "Network error" }; }
+  };
+  const updateBounty = async (id, patch) => {
+    if (!isAdmin || !id) return { error: "Not authorized" };
+    const allowedKeys = ["title", "description", "category", "difficulty", "hero_img", "reward_cents", "reward_points", "multiple_winners", "total_slots", "starts_at", "deadline_at", "status", "form_template_key", "form_config"];
+    const payload = {};
+    allowedKeys.forEach(k => { if (patch && k in patch) payload[k] = patch[k]; });
+    if (Object.keys(payload).length === 0) return { ok: true };
+    try {
+      const { data, error } = await supabase.from("bounties").update(payload).eq("id", id).select("*").maybeSingle();
+      if (error) { console.error("[updateBounty] error", error); return { error: error.message }; }
+      if (data) setBounties(prev => prev.map(b => b.id === id ? data : b));
+      return { ok: true, data };
+    } catch (e) { console.error("[updateBounty] failed", e); return { error: "Network error" }; }
+  };
+  const deleteBounty = async (id) => {
+    if (!isAdmin || !id) return { error: "Not authorized" };
+    try {
+      const { error } = await supabase.from("bounties").delete().eq("id", id);
+      if (error) { console.error("[deleteBounty] error", error); return { error: error.message }; }
+      setBounties(prev => prev.filter(b => b.id !== id));
+      return { ok: true };
+    } catch (e) { console.error("[deleteBounty] failed", e); return { error: "Network error" }; }
   };
 
   const loadAllContentPartners = async () => {
@@ -46693,7 +47192,7 @@ export default function Trailhead() {
             {screen === "ranks" && (isGuest
               ? <GuestGateScreen title="RANKS REQUIRE AN ACCOUNT" subtitle="Sign in to see the leaderboard and start earning points from your posts, routes and builds." onSignIn={goToLoginFromGuest} />
               : isAdmin
-                ? <RanksScreen myPoints={myTotalPoints} pointsBreakdown={friendlyPointsBreakdown} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentProfile={currentProfile} onLoadLeaderboard={loadLeaderboard} onViewUser={openUserProfile} />
+                ? <RanksScreen myPoints={myTotalPoints} pointsBreakdown={friendlyPointsBreakdown} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentProfile={currentProfile} onLoadLeaderboard={loadLeaderboard} onViewUser={openUserProfile} bounties={bounties} />
                 : <div style={{ padding: 32, textAlign: "center", fontFamily: serif, fontSize: 14, color: T.tertiary, lineHeight: 1.6 }}>Ranks is coming in a future release.</div>
             )}
             {screen === "admin" && (isAdmin
@@ -46720,6 +47219,22 @@ export default function Trailhead() {
                       onCreateGearDrop={createGearDrop}
                       onOpenEditor={(id) => setEditingGearDropId(id)}
                       onDeleteGearDrop={(id) => deleteGearDrop(id)}
+                    />)
+                : adminSubScreen === "bounties"
+                ? (editingBountyId !== null
+                  ? <BountyEditor
+                      bountyId={editingBountyId || ""}
+                      onBack={() => setEditingBountyId(null)}
+                      onLoad={loadBountyById}
+                      onCreate={createBounty}
+                      onUpdate={updateBounty}
+                      onDelete={deleteBounty}
+                    />
+                  : <BountiesAdminScreen
+                      bounties={bounties}
+                      onBack={() => setAdminSubScreen(null)}
+                      onOpenEditor={(id) => setEditingBountyId(id)}
+                      onNewBounty={() => setEditingBountyId("")}
                     />)
                 : adminSubScreen === "partners"
                 ? (editingContentPartnerId !== null
