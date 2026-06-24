@@ -30800,8 +30800,13 @@ function BountyDemoMapPicker({ lat, lng, radiusM, onChange }) {
         drawRadius(map, clickLng, clickLat, radiusM);
         setBusy(true);
         try {
-          const info = await mapboxReverseGeocode(clickLng, clickLat);
-          onChange && onChange({ lat: clickLat, lng: clickLng, label: (info && info.place) || (info && info.text) || null });
+          // mapboxReverseGeocode returns the place_name string directly
+          // (or null on failure). Trim down to the first 2-3 commas so the
+          // label reads cleanly in pushes ("Lakewood, Colorado" not the
+          // full "1234 Main St, Lakewood, Colorado 80214, United States").
+          const placeName = await mapboxReverseGeocode(clickLng, clickLat);
+          const label = placeName ? placeName.split(",").slice(0, 3).join(",").trim() : null;
+          onChange && onChange({ lat: clickLat, lng: clickLng, label });
         } catch (err) {
           console.error("[demo picker] geocode failed", err);
           onChange && onChange({ lat: clickLat, lng: clickLng, label: null });
@@ -31345,14 +31350,14 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
                 onChange={({ lat, lng, label }) => patch({ demo_lat: lat, demo_lng: lng, demo_location_label: label })}
               />
               <div style={{ marginTop: 6, fontFamily: sans, fontSize: 11, color: T.tertiary, letterSpacing: 0.5 }}>
-                {bounty.demo_location_label ? (
-                  <>📍 {bounty.demo_location_label}{typeof bounty.demo_lat === "number" ? ` (${bounty.demo_lat.toFixed(4)}, ${bounty.demo_lng.toFixed(4)})` : ""}</>
+                {typeof bounty.demo_lat === "number" ? (
+                  <>📍 {bounty.demo_location_label || "(no label — type one below)"} ({bounty.demo_lat.toFixed(4)}, {bounty.demo_lng.toFixed(4)})</>
                 ) : (
                   "Tap the map to drop a pin. Location label is reverse-geocoded; you can override it."
                 )}
               </div>
-              {bounty.demo_location_label && (
-                <input value={bounty.demo_location_label} onChange={(e) => patch({ demo_location_label: e.target.value })} placeholder="Location label (used in push body)" style={{ ...inputStyle, marginTop: 8, padding: "8px 10px", fontSize: 12 }} />
+              {typeof bounty.demo_lat === "number" && (
+                <input value={bounty.demo_location_label || ""} onChange={(e) => patch({ demo_location_label: e.target.value })} placeholder="Location label (used in push body — e.g. 'Lakewood, CO')" style={{ ...inputStyle, marginTop: 8, padding: "8px 10px", fontSize: 12 }} />
               )}
             </div>
             <div>
