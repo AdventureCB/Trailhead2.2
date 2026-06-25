@@ -51331,9 +51331,7 @@ export default function Trailhead() {
           showing reference circle + meeting pin + (when present) counter pin. */}
       {demoMapViewer && (() => {
         const travel = demoMapViewer.travel;
-        const directionsUrl = (typeof demoMapViewer.meeting_lat === "number" && typeof demoMapViewer.meeting_lng === "number")
-          ? `https://www.google.com/maps/dir/?api=1&destination=${demoMapViewer.meeting_lat},${demoMapViewer.meeting_lng}&travelmode=driving`
-          : null;
+        const canRoute = typeof demoMapViewer.meeting_lat === "number" && typeof demoMapViewer.meeting_lng === "number";
         return (
           <div style={{ position: "fixed", inset: 0, background: T.darkBg, zIndex: 11500, display: "flex", flexDirection: "column" }}>
             {/* Header row 1: title + close */}
@@ -51361,11 +51359,19 @@ export default function Trailhead() {
                   {travel.distanceText && <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>· {travel.distanceText}</span>}
                 </>
               )}
-              {directionsUrl && (
-                <a href={directionsUrl} target="_blank" rel="noopener noreferrer" style={{ marginLeft: "auto", background: T.copper, color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, padding: "7px 12px", borderRadius: 4, textDecoration: "none", display: "flex", alignItems: "center", gap: 5 }}>
+              {canRoute && (
+                <button
+                  onClick={() => {
+                    // In-app turn-by-turn nav, NEVER Google Maps deep link
+                    // — uses the same RouteNavigation overlay every other
+                    // directions button in the app launches.
+                    setDemoMapViewer(null);
+                    startDirectionsTo(demoMapViewer.meeting_lat, demoMapViewer.meeting_lng, demoMapViewer.meeting_label || "Meeting spot");
+                  }}
+                  style={{ marginLeft: "auto", background: T.copper, color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, padding: "7px 12px", borderRadius: 4, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
                   <Navigation size={11} color={T.white} />
                   GET DIRECTIONS
-                </a>
+                </button>
               )}
             </div>
             <div style={{ flex: 1, minHeight: 0 }}>
