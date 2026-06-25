@@ -420,37 +420,104 @@ async function mapboxReverseGeocode(lng, lat) {
 //
 // Region = nearest "place" context (city/town); state code parsed from the
 // "region" context short_code (e.g. "us-co" → "CO").
+// Session-scoped UUID for Mapbox Search Box API (used for proper billing
+// and result coherence across suggest/retrieve calls). One per page load.
+const MAPBOX_SEARCH_SESSION = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : `mb_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
 // POI-preferring reverse geocode.
 //
-// Mapbox v5 reverse geocoding constraint: when limit > 1 you MUST pass a
-// single types value; mixing types only works at limit=1 (returns the most
-// relevant single feature). So we do two sequential limit=1 calls:
-//   1. types=poi   — returns the POI feature if the coord falls inside one
-//   2. types=address,place,locality,neighborhood — fallback for blank areas
-// This lands on a venue name ("Starbucks @ 4th + Main") when one exists
-// and a clean city/address label otherwise.
+// The v5 Geocoding API requires the click to be inside the POI polygon —
+// often too strict. The newer Search Box API's /reverse endpoint has wider
+// POI coverage AND tolerates near-clicks. Try it first; fall back to the
+// v5 address-level result for blank areas where Search Box has nothing.
 async function mapboxReverseGeocodePOI(lng, lat) {
-  const base = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${MAPBOX_TOKEN}&limit=1`;
-  const fromFeature = (f) => {
+  // ── Search Box API — primary path, returns POI features for venues ──
+  try {
+    const sbUrl = `https://api.mapbox.com/search/searchbox/v1/reverse?longitude=${lng}&latitude=${lat}&types=poi,address&limit=5&access_token=${MAPBOX_TOKEN}&session_token=${MAPBOX_SEARCH_SESSION}`;
+    const sbRes = await fetch(sbUrl);
+    if (sbRes.ok) {
+      const sbData = await sbRes.json();
+      const features = (sbData && Array.isArray(sbData.features)) ? sbData.features : [];
+      if (features.length > 0) {
+        // Prefer POI > address > everything else.
+        const ranked = features.slice().sort((a, b) => {
+          const fa = (a.properties && (a.properties.feature_type || a.properties.poi_category)) || "zzz";
+          const fb = (b.properties && (b.properties.feature_type || b.properties.poi_category)) || "zzz";
+          const score = (s) => /poi/i.test(s) ? 0 : /address/i.test(s) ? 1 : /place/i.test(s) ? 2 : 999;
+          return score(fa) - score(fb);
+        });
+        const choice = ranked[0];
+        const p = (choice && choice.properties) || {};
+        const name = p.name;
+        // place_formatted is the city+state context; full_address includes the street.
+        const ctx = p.place_formatted || p.full_address || "";
+        let label;
+        if (name && ctx && !ctx.toLowerCase().startsWith(String(name).toLowerCase())) {
+          label = `${name}, ${ctx}`;
+        } else {
+          label = name || p.full_address || ctx || null;
+        }
+        if (label) return { label, context: null };
+      }
+    }
+  } catch (e) { /* fall through */ }
+  // ── v5 Geocoding API — fallback for areas without Search Box coverage ──
+  try {
+    const v5Url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${MAPBOX_TOKEN}&limit=1&types=address,place,locality,neighborhood`;
+    const res = await fetch(v5Url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const f = (data.features || [])[0];
     if (!f) return null;
     const parts = (f.place_name || "").split(",").map(s => s.trim()).filter(Boolean);
     const trimmed = trimCountryTail(parts).slice(0, 3).join(", ");
     return { label: trimmed || f.text || null, context: null };
-  };
-  try {
-    const poiRes = await fetch(`${base}&types=poi`);
-    if (poiRes.ok) {
-      const poiData = await poiRes.json();
-      const poi = (poiData.features || [])[0];
-      if (poi) return fromFeature(poi);
-    }
-  } catch (e) { /* keep going to fallback */ }
-  try {
-    const addrRes = await fetch(`${base}&types=address,place,locality,neighborhood`);
-    if (!addrRes.ok) return null;
-    const addrData = await addrRes.json();
-    return fromFeature((addrData.features || [])[0]);
-  } catch (e) { console.error("[mapbox] POI reverse geocode fallback failed", e); return null; }
+  } catch (e) { console.error("[mapbox] reverse geocode fallback failed", e); return null; }
+}
+
+// POI-aware forward search with proximity bias. Returns at most `limit`
+// suggestions, each with {lat, lng, label}. Uses the Search Box API
+// /suggest endpoint when proximity coords are available (better POI
+// matching); falls back to the v5 places API otherwise.
+async function mapboxSearchPoiNear(query, proximityLng, proximityLat, limit = 6) {
+  const trimmed = (query || "").trim();
+  if (!trimmed) return [];
+  // Search Box /suggest needs a session token and returns suggestion
+  // mapbox_ids. Each suggestion has to be /retrieve'd to get coords, so
+  // it's a two-step. Worth it for the better POI hit rate.
+  if (typeof proximityLng === "number" && typeof proximityLat === "number") {
+    try {
+      const suggestUrl = `https://api.mapbox.com/search/searchbox/v1/suggest?q=${encodeURIComponent(trimmed)}&proximity=${proximityLng},${proximityLat}&types=poi,address,place,locality,neighborhood&limit=${limit}&access_token=${MAPBOX_TOKEN}&session_token=${MAPBOX_SEARCH_SESSION}`;
+      const sRes = await fetch(suggestUrl);
+      if (sRes.ok) {
+        const sData = await sRes.json();
+        const suggestions = (sData && Array.isArray(sData.suggestions)) ? sData.suggestions : [];
+        if (suggestions.length > 0) {
+          // Retrieve coords for each suggestion in parallel.
+          const retrieved = await Promise.all(suggestions.map(async (sug) => {
+            try {
+              const rUrl = `https://api.mapbox.com/search/searchbox/v1/retrieve/${encodeURIComponent(sug.mapbox_id)}?access_token=${MAPBOX_TOKEN}&session_token=${MAPBOX_SEARCH_SESSION}`;
+              const rRes = await fetch(rUrl);
+              if (!rRes.ok) return null;
+              const rData = await rRes.json();
+              const f = (rData.features || [])[0];
+              if (!f || !f.geometry || !Array.isArray(f.geometry.coordinates)) return null;
+              const [lng, lat] = f.geometry.coordinates;
+              const p = f.properties || {};
+              const ctx = p.place_formatted || p.full_address || "";
+              const label = p.name && ctx ? `${p.name}, ${ctx}` : (p.name || p.full_address || sug.name || ctx || trimmed);
+              return { lat, lng, label };
+            } catch { return null; }
+          }));
+          const filtered = retrieved.filter(Boolean);
+          if (filtered.length > 0) return filtered;
+        }
+      }
+    } catch (e) { /* fall through to v5 */ }
+  }
+  // Fallback: v5 forward geocoding (legacy path; weaker POI coverage but no
+  // session/retrieve dance).
+  return await mapboxGeocodeSearch(trimmed, limit);
 }
 function trimCountryTail(parts) {
   if (!parts || !parts.length) return parts || [];
@@ -17385,7 +17452,12 @@ function DemoMeetingMapPicker({ referenceLat, referenceLng, referenceRadiusM, me
       const initialCenter = (typeof meetingLng === "number" && typeof meetingLat === "number") ? [meetingLng, meetingLat]
         : (typeof referenceLng === "number" && typeof referenceLat === "number") ? [referenceLng, referenceLat]
         : [-98.5, 39.5];
-      const initialZoom = (typeof referenceLng === "number") ? 10 : 3.5;
+      // Zoom so the full reference circle (50mi default) fits the view —
+      // ~9 for a 50mi radius works in most viewports. If meeting pin is set,
+      // start tighter at zoom 13 so the venue context is visible.
+      const initialZoom = (typeof meetingLng === "number") ? 13
+        : (typeof referenceLng === "number") ? 8
+        : 3.5;
       const map = new gl.Map({
         container: mapDivRef.current,
         style: MAPBOX_STYLE,
@@ -17399,6 +17471,14 @@ function DemoMeetingMapPicker({ referenceLat, referenceLng, referenceRadiusM, me
         drawUserDot(gl, map, userPos);
         drawMeetingPin(gl, map, meetingLng, meetingLat);
         drawCounterPin(gl, map, counterLng, counterLat);
+        // Auto-fit the reference circle into the viewport so the user can
+        // see the boundary on open. fitBounds with padding.
+        if (typeof referenceLat === "number" && typeof referenceLng === "number" && typeof meetingLng !== "number") {
+          const radiusM = referenceRadiusM || 80467;
+          const dLat = radiusM / 111111;
+          const dLng = radiusM / (111111 * Math.cos(referenceLat * Math.PI / 180));
+          map.fitBounds([[referenceLng - dLng, referenceLat - dLat], [referenceLng + dLng, referenceLat + dLat]], { padding: 40, duration: 0 });
+        }
       });
       map.on("click", async (e) => {
         const { lng: clickLng, lat: clickLat } = e.lngLat;
@@ -17437,8 +17517,8 @@ function DemoMeetingMapPicker({ referenceLat, referenceLng, referenceRadiusM, me
     const feature = makeCircleGeoJSON(referenceLat, referenceLng, referenceRadiusM || 80467);
     if (feature && !map.getSource(id)) {
       map.addSource(id, { type: "geojson", data: { type: "FeatureCollection", features: [feature] } });
-      map.addLayer({ id: `${id}-fill`, type: "fill", source: id, paint: { "fill-color": T.copper, "fill-opacity": 0.07 } });
-      map.addLayer({ id: `${id}-line`, type: "line", source: id, paint: { "line-color": T.copper, "line-width": 2, "line-opacity": 0.5, "line-dasharray": [3, 3] } });
+      map.addLayer({ id: `${id}-fill`, type: "fill", source: id, paint: { "fill-color": T.copper, "fill-opacity": 0.18 } });
+      map.addLayer({ id: `${id}-line`, type: "line", source: id, paint: { "line-color": T.copper, "line-width": 3, "line-opacity": 0.9 } });
     }
     // Reference center dot (small + non-interactive)
     if (refMarkerRef.current) { try { refMarkerRef.current.remove(); } catch {} }
@@ -17486,17 +17566,24 @@ function DemoMeetingMapPicker({ referenceLat, referenceLng, referenceRadiusM, me
     } finally { setBusy(false); }
   };
 
-  // Forward search — debounced. Centers map + drops meeting pin on tap.
+  // Forward search — debounced. Uses Search Box API with proximity bias
+  // toward the reference center (or user's location, or current map center)
+  // so "Starbucks" returns the local ones first.
   useEffect(() => {
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
     if (!searchQ || searchQ.length < 2) { setSearchResults([]); return; }
     searchDebounceRef.current = setTimeout(async () => {
       setSearching(true);
       try {
-        const results = await mapboxGeocodeSearch(searchQ, 6);
+        // Proximity priority: reference center > user position > map center
+        let pLng = null, pLat = null;
+        if (typeof referenceLng === "number" && typeof referenceLat === "number") { pLng = referenceLng; pLat = referenceLat; }
+        else if (userPos) { pLng = userPos.lng; pLat = userPos.lat; }
+        else if (mapInstRef.current) { const c = mapInstRef.current.getCenter(); pLng = c.lng; pLat = c.lat; }
+        const results = await mapboxSearchPoiNear(searchQ, pLng, pLat, 6);
         setSearchResults(results);
       } finally { setSearching(false); }
-    }, 250);
+    }, 300);
     return () => { if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current); };
   }, [searchQ]);
 
