@@ -17277,6 +17277,223 @@ const BOUNTY_FORM_TEMPLATES = {
   },
 };
 
+/* ─── Date utility helpers for demo scheduling ─── */
+function fmtDateKey(d) {
+  // YYYY-MM-DD, always local timezone so day boundaries match the picker.
+  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, "0"), day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+function parseDateKey(k) {
+  if (!k) return null;
+  const parts = String(k).split("-");
+  if (parts.length !== 3) return null;
+  return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+}
+function fmtPrettyDate(k) {
+  const d = parseDateKey(k);
+  if (!d) return k;
+  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+}
+const DEMO_SLOTS = [
+  { value: "morning", label: "Morning" },
+  { value: "afternoon", label: "Afternoon" },
+  { value: "any", label: "Any time" },
+];
+
+/* ─── DemoProposalDmCard — renders a demo_proposal payload card inside a DM
+       thread. Intent-specific layout + action buttons. Actions fire via
+       the parent's onSelectSlot / onCounter / onLockIn callbacks. ─── */
+const DEMO_SLOT_LABEL = { morning: "Morning", afternoon: "Afternoon", any: "Any time" };
+const DEMO_SLOT_HOUR = { morning: 10, afternoon: 15, any: 12 };
+function buildScheduledAtIso(dateKey, slot) {
+  const d = parseDateKey(dateKey);
+  if (!d) return null;
+  d.setHours(DEMO_SLOT_HOUR[slot] || 12, 0, 0, 0);
+  return d.toISOString();
+}
+function DemoProposalDmCard({ sp, isMe, currentUserId, onSelectSlot, onCounter, onLockIn }) {
+  const intent = sp.intent || "propose";
+  const amProposer = sp.proposer_id === currentUserId;
+  const amRecipient = !amProposer;
+  // Color + label per intent.
+  const intentMeta = intent === "select"
+    ? { color: T.green, label: "PROPOSED SLOT SELECTED" }
+    : intent === "counter"
+    ? { color: "#C0A060", label: "COUNTER PROPOSAL" }
+    : intent === "final"
+    ? { color: T.green, label: "DEMO CONFIRMED" }
+    : { color: T.red, label: "DEMO SCHEDULING" };
+  const accent = intentMeta.color;
+  const days = Array.isArray(sp.days) ? sp.days : [];
+  return (
+    <div style={{ borderRadius: 10, overflow: "hidden", border: `1px solid ${accent}40`, marginBottom: 8, background: isMe ? "rgba(0,0,0,0.15)" : `${T.charcoal}80` }}>
+      <div style={{ padding: "10px 12px", borderBottom: days.length > 0 ? `1px solid ${accent}25` : "none" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <Users size={13} color={accent} />
+          <span style={{ fontFamily: sans, fontSize: 9, color: accent, letterSpacing: 1.2, fontWeight: 700 }}>{intentMeta.label}</span>
+        </div>
+      </div>
+
+      {/* Days summary */}
+      {days.length > 0 && (
+        <div style={{ padding: "10px 12px" }}>
+          <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 700, marginBottom: 6 }}>
+            {intent === "select" || intent === "final" ? "CHOSEN" : `${days.length} OPTION${days.length === 1 ? "" : "S"}`}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {days.map((d, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 8px", background: T.charcoal, borderRadius: 5 }}>
+                <Clock size={11} color={accent} />
+                <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>{fmtPrettyDate(d.date)}</span>
+                <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>· {DEMO_SLOT_LABEL[d.slot] || d.slot}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {(sp.meeting_label || typeof sp.meeting_lat === "number") && (
+        <div style={{ padding: "0 12px 10px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <MapPin size={11} color={accent} />
+            <span style={{ fontFamily: serif, fontSize: 12, color: T.white }}>{sp.meeting_label || "(unnamed location)"}</span>
+          </div>
+        </div>
+      )}
+
+      {sp.note && (
+        <div style={{ padding: "0 12px 10px", fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.4, fontStyle: "italic" }}>
+          "{sp.note}"
+        </div>
+      )}
+
+      {/* Actions — intent + role specific */}
+      {amRecipient && intent === "propose" && (
+        <div style={{ display: "flex", borderTop: `1px solid ${accent}25` }}>
+          <button onClick={() => onSelectSlot && onSelectSlot(sp)} style={{ flex: 1, fontFamily: sans, fontSize: 10, letterSpacing: 0.8, fontWeight: 700, padding: "11px 0", background: "transparent", color: T.green, border: "none", borderRight: `1px solid ${accent}25`, cursor: "pointer" }}>
+            SELECT A SLOT
+          </button>
+          <button onClick={() => onCounter && onCounter(sp)} style={{ flex: 1, fontFamily: sans, fontSize: 10, letterSpacing: 0.8, fontWeight: 700, padding: "11px 0", background: "transparent", color: T.copper, border: "none", cursor: "pointer" }}>
+            COUNTER
+          </button>
+        </div>
+      )}
+      {amRecipient && intent === "select" && (
+        <div style={{ display: "flex", borderTop: `1px solid ${accent}25` }}>
+          <button onClick={() => onLockIn && onLockIn(sp)} style={{ flex: 1, fontFamily: sans, fontSize: 10, letterSpacing: 0.8, fontWeight: 700, padding: "11px 0", background: "transparent", color: T.green, border: "none", borderRight: `1px solid ${accent}25`, cursor: "pointer" }}>
+            LOCK IT IN
+          </button>
+          <button onClick={() => onCounter && onCounter(sp)} style={{ flex: 1, fontFamily: sans, fontSize: 10, letterSpacing: 0.8, fontWeight: 700, padding: "11px 0", background: "transparent", color: T.copper, border: "none", cursor: "pointer" }}>
+            COUNTER
+          </button>
+        </div>
+      )}
+      {amRecipient && intent === "counter" && (
+        <div style={{ display: "flex", borderTop: `1px solid ${accent}25` }}>
+          <button onClick={() => onSelectSlot && onSelectSlot(sp)} style={{ flex: 1, fontFamily: sans, fontSize: 10, letterSpacing: 0.8, fontWeight: 700, padding: "11px 0", background: "transparent", color: T.green, border: "none", borderRight: `1px solid ${accent}25`, cursor: "pointer" }}>
+            PICK A SLOT
+          </button>
+          <button onClick={() => onCounter && onCounter(sp)} style={{ flex: 1, fontFamily: sans, fontSize: 10, letterSpacing: 0.8, fontWeight: 700, padding: "11px 0", background: "transparent", color: T.copper, border: "none", cursor: "pointer" }}>
+            COUNTER
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── DemoScheduleCalendar — compact month-view grid for picking 3+ available
+       days. Tap a day to toggle. Selected days carry through to the slot
+       picker. Past days are disabled. ─── */
+function DemoScheduleCalendar({ selectedDays, onToggleDay }) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const [cursor, setCursor] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
+  const monthLabel = cursor.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  const daysInMonth = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0).getDate();
+  const firstDow = new Date(cursor.getFullYear(), cursor.getMonth(), 1).getDay();
+  const grid = [];
+  for (let i = 0; i < firstDow; i++) grid.push(null);
+  for (let d = 1; d <= daysInMonth; d++) grid.push(new Date(cursor.getFullYear(), cursor.getMonth(), d));
+  // Pad to multiple of 7 so the grid stays rectangular
+  while (grid.length % 7 !== 0) grid.push(null);
+  const selectedSet = new Set(selectedDays || []);
+  const canGoBack = (cursor.getFullYear() > today.getFullYear()) || (cursor.getFullYear() === today.getFullYear() && cursor.getMonth() > today.getMonth());
+  return (
+    <div style={{ background: T.darkBg, borderRadius: 8, border: `1px solid ${T.charcoal}`, padding: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+        <button onClick={() => { if (canGoBack) setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1)); }} disabled={!canGoBack} style={{ background: "none", border: "none", cursor: canGoBack ? "pointer" : "not-allowed", padding: 4, color: canGoBack ? T.white : T.charcoal }}><ChevronLeft size={16} /></button>
+        <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>{monthLabel}</div>
+        <button onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: T.white }}><ChevronRight size={16} /></button>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 3 }}>
+        {["S","M","T","W","T","F","S"].map((d, i) => (
+          <div key={i} style={{ textAlign: "center", fontFamily: sans, fontSize: 9, color: T.tertiary, fontWeight: 700, letterSpacing: 0.5, paddingBottom: 4 }}>{d}</div>
+        ))}
+        {grid.map((d, i) => {
+          if (!d) return <div key={i} />;
+          const k = fmtDateKey(d);
+          const isPast = d < today;
+          const isSelected = selectedSet.has(k);
+          return (
+            <button
+              key={i}
+              onClick={() => !isPast && onToggleDay(k)}
+              disabled={isPast}
+              style={{
+                aspectRatio: "1/1",
+                background: isSelected ? T.red : "transparent",
+                color: isSelected ? T.white : isPast ? T.charcoal : T.white,
+                border: isSelected ? `1px solid ${T.red}` : `1px solid ${T.charcoal}40`,
+                borderRadius: 6,
+                fontFamily: sans,
+                fontSize: 12,
+                fontWeight: isSelected ? 700 : 500,
+                cursor: isPast ? "not-allowed" : "pointer",
+              }}
+            >
+              {d.getDate()}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ─── DemoSlotPicker — per-day morning / afternoon / any-time picker.
+       Renders one row per selected day. Tap a slot button to set, again
+       to clear. Used inside the proposal panel + the counter editor. ─── */
+function DemoSlotPicker({ days, slotsByDay, onSetSlot, onRemoveDay }) {
+  if (!days || days.length === 0) return null;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      {days.map(k => {
+        const cur = slotsByDay[k];
+        return (
+          <div key={k} style={{ display: "flex", alignItems: "center", gap: 6, background: T.darkCard, borderRadius: 6, padding: "8px 10px", border: `1px solid ${T.charcoal}` }}>
+            <div style={{ flex: "0 0 auto", minWidth: 96 }}>
+              <div style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>{fmtPrettyDate(k)}</div>
+            </div>
+            <div style={{ display: "flex", gap: 4, flex: 1, flexWrap: "wrap" }}>
+              {DEMO_SLOTS.map(s => {
+                const active = cur === s.value;
+                return (
+                  <button key={s.value} onClick={() => onSetSlot(k, active ? null : s.value)} style={{ padding: "4px 10px", borderRadius: 12, border: active ? `1px solid ${T.copper}` : `1px solid ${T.charcoal}`, background: active ? `${T.copper}25` : "transparent", color: active ? T.copper : T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.3, cursor: "pointer" }}>{s.label}</button>
+                );
+              })}
+            </div>
+            {onRemoveDay && (
+              <button onClick={() => onRemoveDay(k)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: T.tertiary, display: "flex" }} title="Remove day">
+                <X size={12} color={T.tertiary} />
+              </button>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /* ─── DemoRequestFlow — user-side multi-stage flow for Demo Request bounties.
        Replaces BountyResponseForm when bounty.category === "Demo Request".
        Stages flow off the submission's draft jsonb:
@@ -17287,7 +17504,7 @@ const BOUNTY_FORM_TEMPLATES = {
          5. SUBMITTED   → status='submitted', awaiting admin review
        Each stage commits its data through onSaveDraft (save_bounty_draft RPC).
 ─── */
-function DemoRequestFlow({ bounty, submission, currentUserId, isGuest, onGuestTap, onClaim, onSaveDraft, onSubmit, onWithdraw, onOpenDM, onUploadPhoto, onLoadProfileById, onClose }) {
+function DemoRequestFlow({ bounty, submission, currentUserId, isGuest, onGuestTap, onClaim, onSaveDraft, onSubmit, onWithdraw, onOpenDM, onUploadPhoto, onLoadProfileById, onSendDemoProposal, onClose }) {
   const draft = (submission && submission.draft) || {};
   const status = submission && submission.status;
   const [customer, setCustomer] = useState(null);
@@ -17301,10 +17518,23 @@ function DemoRequestFlow({ bounty, submission, currentUserId, isGuest, onGuestTa
     return () => { mounted = false; };
   }, [bounty && bounty.demo_customer_user_id]);
 
-  // Local-form state — kept here so the schedule form / proof can be filled
-  // out before save without round-tripping the server on every keystroke.
-  const [scheduledAt, setScheduledAt] = useState(draft.scheduled_at || "");
-  const [scheduledLocation, setScheduledLocation] = useState(draft.scheduled_location || "");
+  // Proposal-panel state — calendar days + per-day slots + map pin + note.
+  // Seeded from existing draft if user comes back mid-build.
+  const [proposalDays, setProposalDays] = useState(() => {
+    const seed = Array.isArray(draft.proposal_days) ? draft.proposal_days : [];
+    return seed.map(d => d.date);
+  });
+  const [proposalSlots, setProposalSlots] = useState(() => {
+    const seed = Array.isArray(draft.proposal_days) ? draft.proposal_days : [];
+    const m = {};
+    seed.forEach(d => { if (d && d.date) m[d.date] = d.slot || null; });
+    return m;
+  });
+  const [proposalLat, setProposalLat] = useState(draft.proposal_meeting_lat || bounty.demo_lat || null);
+  const [proposalLng, setProposalLng] = useState(draft.proposal_meeting_lng || bounty.demo_lng || null);
+  const [proposalLocationLabel, setProposalLocationLabel] = useState(draft.proposal_meeting_label || "");
+  const [proposalNote, setProposalNote] = useState(draft.proposal_note || "");
+  // Proof / submit state
   const [proofUploading, setProofUploading] = useState(false);
   const [proofPreview, setProofPreview] = useState(draft.proof_photo || null);
   const [proofCaption, setProofCaption] = useState(draft.proof_caption || "");
@@ -17318,9 +17548,15 @@ function DemoRequestFlow({ bounty, submission, currentUserId, isGuest, onGuestTa
     if (status === "rejected") return "rejected";
     if (status === "submitted") return "submitted";
     if (!draft.accepted_at) return "accept";
-    if (!draft.scheduled_at) return "schedule";
-    if (!draft.proof_photo) return "demo"; // awaiting / proof upload
-    return "review"; // proof uploaded, not yet submitted
+    // Schedule has THREE sub-states now:
+    //   schedule  — building the proposal (no proposal_sent_at yet)
+    //   awaiting  — proposal sent, customer hasn't responded with a lock-in
+    //   (after customer responds, the DM card's LOCK IT IN action sets
+    //   scheduled_at — flow drops out into the demo / review / submitted stages)
+    if (!draft.scheduled_at && !draft.proposal_sent_at) return "schedule";
+    if (!draft.scheduled_at) return "awaiting";
+    if (!draft.proof_photo) return "demo";
+    return "review";
   })();
 
   const handleAccept = async () => {
@@ -17335,39 +17571,78 @@ function DemoRequestFlow({ bounty, submission, currentUserId, isGuest, onGuestTa
         subId = res.data && res.data.submission_id;
       }
       if (!subId) throw new Error("Claim succeeded but no submission id");
-      // Mark accepted_at + bump status claimed → in_progress server-side.
-      // Only set accepted_at on the FIRST accept — re-running this path (e.g.
-      // re-tap if the overlay didn't dismiss cleanly) shouldn't backdate or
-      // re-prefill a duplicate opener message.
-      const alreadyAccepted = !!draft.accepted_at;
-      if (!alreadyAccepted) {
+      // Mark accepted_at + bump status claimed → in_progress. Idempotent —
+      // re-running won't backdate accepted_at if it was already set.
+      if (!draft.accepted_at) {
         const nextDraft = { ...(draft || {}), accepted_at: new Date().toISOString() };
         await onSaveDraft(subId, nextDraft);
       }
-      // Open the DM with the customer. Prefill the opener only on first
-      // accept; subsequent passes open the existing DM without prefilling.
-      if (customer && customer.id && onOpenDM) {
-        const opener = alreadyAccepted ? null : `Hi @${customer.handle || "there"}! I'd love to set up the demo you requested. When works for you?`;
-        onOpenDM(customer.id, opener);
-      }
-      // Close the demo overlay so the DM screen underneath becomes visible.
-      // User comes back to the bounty card to advance to the SCHEDULE stage.
-      onClose && onClose();
+      // Stay in the overlay — proposal panel renders next stage.
     } catch (e) {
       setError(e && e.message ? e.message : "Couldn't accept right now.");
     } finally { setBusy(false); }
   };
 
-  const handleSaveSchedule = async () => {
-    if (!scheduledAt) { setError("Pick a meeting time."); return; }
-    if (!scheduledLocation.trim()) { setError("Where will you meet?"); return; }
+  const toggleProposalDay = (k) => {
+    setProposalDays(prev => prev.includes(k) ? prev.filter(d => d !== k) : [...prev, k].sort());
+    setProposalSlots(prev => {
+      if (prev[k]) { const n = { ...prev }; delete n[k]; return n; }
+      return prev;
+    });
+  };
+  const setProposalSlotFor = (k, slot) => {
+    setProposalSlots(prev => {
+      if (slot === null) { const n = { ...prev }; delete n[k]; return n; }
+      return { ...prev, [k]: slot };
+    });
+  };
+  const removeProposalDay = (k) => {
+    setProposalDays(prev => prev.filter(d => d !== k));
+    setProposalSlots(prev => { const n = { ...prev }; delete n[k]; return n; });
+  };
+
+  const handleSendProposal = async () => {
+    if (proposalDays.length < 3) { setError("Pick at least 3 available days."); return; }
+    const missingSlot = proposalDays.find(k => !proposalSlots[k]);
+    if (missingSlot) { setError(`Pick a time slot for ${fmtPrettyDate(missingSlot)}.`); return; }
+    if (typeof proposalLat !== "number") { setError("Drop a pin for the meeting location."); return; }
+    if (!customer || !customer.id) { setError("Customer profile is still loading — try again in a sec."); return; }
+    if (!onSendDemoProposal) { setError("Demo proposal sender not wired up."); return; }
     setError(""); setBusy(true);
     try {
-      const next = { ...(draft || {}), scheduled_at: new Date(scheduledAt).toISOString(), scheduled_location: scheduledLocation.trim() };
-      const res = await onSaveDraft(submission.id, next);
+      const proposal = {
+        proposal_id: (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : `prop_${Date.now()}_${Math.floor(Math.random() * 99999)}`,
+        intent: "propose",
+        bounty_id: bounty.id,
+        submission_id: submission.id,
+        proposer_id: currentUserId,
+        customer_id: customer.id,
+        days: proposalDays.map(d => ({ date: d, slot: proposalSlots[d] })),
+        meeting_lat: proposalLat,
+        meeting_lng: proposalLng,
+        meeting_label: proposalLocationLabel || null,
+        note: (proposalNote || "").trim() || null,
+      };
+      const res = await onSendDemoProposal(customer.id, proposal);
       if (res && res.error) throw new Error(res.error);
-    } catch (e) { setError(e && e.message ? e.message : "Save failed."); }
-    finally { setBusy(false); }
+      // Persist a snapshot of the proposal into the bounty draft so the
+      // user can come back + view what they sent (and for re-edit on
+      // counter-counter flows).
+      const nextDraft = {
+        ...(draft || {}),
+        proposal_sent_at: new Date().toISOString(),
+        proposal_days: proposal.days,
+        proposal_meeting_lat: proposal.meeting_lat,
+        proposal_meeting_lng: proposal.meeting_lng,
+        proposal_meeting_label: proposal.meeting_label,
+        proposal_note: proposal.note,
+      };
+      await onSaveDraft(submission.id, nextDraft);
+      onClose && onClose();
+    } catch (e) {
+      console.error("[demo proposal] send failed", e);
+      setError(e && e.message ? e.message : "Couldn't send the proposal.");
+    } finally { setBusy(false); }
   };
 
   const handleProofUpload = async (e) => {
@@ -17487,10 +17762,10 @@ function DemoRequestFlow({ bounty, submission, currentUserId, isGuest, onGuestTa
           <div style={{ background: `${T.red}10`, border: `1px solid ${T.red}30`, borderRadius: 10, padding: "14px 16px" }}>
             <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, marginBottom: 8 }}>Accept this demo?</div>
             <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.5, margin: "0 0 12px" }}>
-              When you accept, a DM opens with the customer. You'll have <strong style={{ color: T.white }}>48 hours</strong> to schedule a meeting time and location with them. After the demo, upload a photo together as proof to claim the reward.
+              When you accept, you'll propose <strong style={{ color: T.white }}>3+ days you're available</strong>, pick a meeting spot, and send the customer a scheduling card. They confirm or counter, you lock it in, then upload a proof photo after the demo.
             </p>
             <button onClick={handleAccept} disabled={busy} style={{ width: "100%", padding: "12px", background: T.red, color: T.white, border: "none", borderRadius: 8, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 1, cursor: busy ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-              {busy ? "ACCEPTING…" : "ACCEPT & MESSAGE CUSTOMER"}
+              {busy ? "ACCEPTING…" : "ACCEPT AND SCHEDULE DEMO"}
             </button>
           </div>
         )}
@@ -17499,30 +17774,94 @@ function DemoRequestFlow({ bounty, submission, currentUserId, isGuest, onGuestTa
           <div style={{ background: T.darkCard, borderRadius: 10, padding: "14px 16px", border: `1px solid ${T.copper}40` }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
               <Clock size={14} color={T.copper} />
-              <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>SCHEDULE THE DEMO</span>
+              <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>BUILD YOUR PROPOSAL</span>
               {scheduleDeadlineMs && <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: 10, color: T.red, fontWeight: 700 }}>{fmtCountdown(scheduleDeadlineMs)}</span>}
             </div>
             <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.5, margin: "0 0 12px" }}>
-              Coordinate via DM, then lock the time + location below. The customer sees this on their side once you save.
+              Tell the customer when you're available + where you'd like to meet. Pick at least 3 days, set a time slot for each, drop a pin, add a comment.
             </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <div>
-                <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.5, marginBottom: 4 }}>Meeting time</div>
-                <input type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} style={{ width: "100%", padding: "10px 12px", borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, boxSizing: "border-box" }} />
+                <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.5, marginBottom: 6 }}>1. Pick your available days <span style={{ color: proposalDays.length >= 3 ? T.green : T.copper }}>({proposalDays.length}/3+)</span></div>
+                <DemoScheduleCalendar selectedDays={proposalDays} onToggleDay={toggleProposalDay} />
+              </div>
+              {proposalDays.length > 0 && (
+                <div>
+                  <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.5, marginBottom: 6 }}>2. Pick a time slot for each day</div>
+                  <DemoSlotPicker days={proposalDays} slotsByDay={proposalSlots} onSetSlot={setProposalSlotFor} onRemoveDay={removeProposalDay} />
+                </div>
+              )}
+              <div>
+                <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.5, marginBottom: 6 }}>3. Suggest a meeting spot</div>
+                <BountyDemoMapPicker
+                  lat={proposalLat}
+                  lng={proposalLng}
+                  radiusM={2000}
+                  onChange={({ lat, lng, label }) => { setProposalLat(lat); setProposalLng(lng); setProposalLocationLabel(label || ""); }}
+                />
+                <input
+                  value={proposalLocationLabel}
+                  onChange={(e) => setProposalLocationLabel(e.target.value)}
+                  placeholder="Meeting place name (e.g. Starbucks @ 4th + Main)"
+                  style={{ width: "100%", marginTop: 6, padding: "8px 10px", borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 12, boxSizing: "border-box" }}
+                />
               </div>
               <div>
-                <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.5, marginBottom: 4 }}>Meeting location</div>
-                <input value={scheduledLocation} onChange={(e) => setScheduledLocation(e.target.value)} placeholder="e.g. Starbucks @ Main + 4th, Lakewood CO" style={{ width: "100%", padding: "10px 12px", borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, boxSizing: "border-box" }} />
+                <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.5, marginBottom: 6 }}>4. Anything else? (optional)</div>
+                <textarea
+                  value={proposalNote}
+                  onChange={(e) => setProposalNote(e.target.value)}
+                  rows={3}
+                  placeholder="Add a note for the customer — what to bring, parking tips, etc."
+                  style={{ width: "100%", padding: "10px 12px", borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, boxSizing: "border-box", resize: "vertical", lineHeight: 1.4 }}
+                />
               </div>
               {error && <div style={{ color: T.red, fontFamily: sans, fontSize: 11 }}>{error}</div>}
               <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={handleSaveSchedule} disabled={busy} style={{ flex: 1, padding: "11px", background: T.green, color: T.white, border: "none", borderRadius: 6, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.8, cursor: busy ? "wait" : "pointer" }}>
-                  {busy ? "SAVING…" : "LOCK IN SCHEDULE"}
+                <button onClick={handleSendProposal} disabled={busy} style={{ flex: 1, padding: "12px", background: T.green, color: T.white, border: "none", borderRadius: 6, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.8, cursor: busy ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                  <Send size={12} color={T.white} />
+                  {busy ? "SENDING…" : "SEND PROPOSAL"}
                 </button>
-                <button onClick={handleWithdrawAction} disabled={busy} style={{ padding: "11px 14px", background: "none", color: T.tertiary, border: `1px solid ${T.charcoal}`, borderRadius: 6, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, cursor: busy ? "wait" : "pointer" }}>
+                <button onClick={handleWithdrawAction} disabled={busy} style={{ padding: "12px 14px", background: "none", color: T.tertiary, border: `1px solid ${T.charcoal}`, borderRadius: 6, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, cursor: busy ? "wait" : "pointer" }}>
                   WITHDRAW
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {stage === "awaiting" && (
+          <div style={{ background: T.darkCard, borderRadius: 10, padding: "14px 16px", border: `1px solid #C0A06040` }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <Clock size={14} color="#C0A060" />
+              <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>AWAITING CUSTOMER RESPONSE</span>
+            </div>
+            <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.5, margin: "0 0 12px" }}>
+              Your scheduling proposal is in the customer's DM. They'll either accept one of your slots or send back a counter-proposal — you'll see their reply here.
+            </p>
+            {Array.isArray(draft.proposal_days) && draft.proposal_days.length > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 700, marginBottom: 4 }}>YOU PROPOSED</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                  {draft.proposal_days.map((d, i) => (
+                    <span key={i} style={{ fontFamily: sans, fontSize: 10, color: T.copper, background: `${T.copper}18`, padding: "3px 8px", borderRadius: 10, fontWeight: 600 }}>
+                      {fmtPrettyDate(d.date)} · {d.slot}
+                    </span>
+                  ))}
+                </div>
+                {draft.proposal_meeting_label && <div style={{ marginTop: 6, fontFamily: serif, fontSize: 11, color: T.tertiary }}>📍 {draft.proposal_meeting_label}</div>}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 8 }}>
+              {customer && customer.id && onOpenDM && (
+                <button onClick={() => { onOpenDM(customer.id, null); onClose && onClose(); }} style={{ flex: 1, padding: "11px", background: T.copper, color: T.white, border: "none", borderRadius: 6, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                  <Send size={12} color={T.white} />
+                  OPEN DM
+                </button>
+              )}
+              <button onClick={handleWithdrawAction} disabled={busy} style={{ padding: "11px 14px", background: "none", color: T.tertiary, border: `1px solid ${T.charcoal}`, borderRadius: 6, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, cursor: busy ? "wait" : "pointer" }}>
+                WITHDRAW
+              </button>
             </div>
           </div>
         )}
@@ -18539,7 +18878,7 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
 }
 
 /* ─── RANKS / LEADERBOARD SCREEN ─── */
-function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, currentUserId, currentProfile, onLoadLeaderboard, onViewUser, bounties: bountiesFromDB, mySubmissions, isGuest, onGuestTap, onClaimBounty, onSaveBountyDraft, onSubmitBountyRPC, onWithdrawBounty, onUploadBountyPhotos, earnings, onOpenDM, onLoadProfileById }) {
+function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, currentUserId, currentProfile, onLoadLeaderboard, onViewUser, bounties: bountiesFromDB, mySubmissions, isGuest, onGuestTap, onClaimBounty, onSaveBountyDraft, onSubmitBountyRPC, onWithdrawBounty, onUploadBountyPhotos, earnings, onOpenDM, onLoadProfileById, onSendDemoProposal }) {
   const [tab, setTab] = useState("overview"); // overview | leaderboard | bounty | badges
   // Leaderboard state. lbScope = global | following | weekly; lbData[scope]
   // caches rows so switching tabs is instant after the first fetch. Refresh
@@ -19352,6 +19691,7 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
               onOpenDM={onOpenDM}
               onUploadPhoto={onUploadBountyPhotos}
               onLoadProfileById={onLoadProfileById}
+              onSendDemoProposal={onSendDemoProposal}
               currentUserId={currentUserId}
               isGuest={isGuest}
               onGuestTap={onGuestTap}
@@ -37255,7 +37595,7 @@ const dmConversations = [
   },
 ];
 
-function DMScreen({ onClose, onViewUser, initialConvId, initialMessage, initialSharedPost, conversations, currentUserId, onSendMessage, onMarkRead, onLoadMessages, onSearchUsers, onCreateGroup, onOpenPost, onRsvpConvoy, convoyRsvps, onLeaveConversation, onUploadError, onlineUserIds, dmMessageReactions, onSetDmMessageReaction, onActiveConvChange }) {
+function DMScreen({ onClose, onViewUser, initialConvId, initialMessage, initialSharedPost, conversations, currentUserId, onSendMessage, onMarkRead, onLoadMessages, onSearchUsers, onCreateGroup, onOpenPost, onRsvpConvoy, convoyRsvps, onLeaveConversation, onUploadError, onlineUserIds, dmMessageReactions, onSetDmMessageReaction, onActiveConvChange, onDemoProposalSelectSlot, onDemoProposalCounter, onDemoProposalLockIn }) {
   const [view, setView] = useState(initialConvId ? "chat" : "inbox"); // "inbox" | "chat" | "new"
   const [activeConvId, setActiveConvId] = useState(initialConvId || null);
   // Always derive the active convo from the source-of-truth `conversations`
@@ -37666,7 +38006,16 @@ function DMScreen({ onClose, onViewUser, initialConvId, initialMessage, initialS
                       </div>
                     </>
                   )}
-                  {msg.sharedPost && msg.sharedPost.type === "convoy_invite" ? (() => {
+                  {msg.sharedPost && msg.sharedPost.type === "demo_proposal" ? (
+                    <DemoProposalDmCard
+                      sp={msg.sharedPost}
+                      isMe={isMe}
+                      currentUserId={currentUserId}
+                      onSelectSlot={onDemoProposalSelectSlot}
+                      onCounter={onDemoProposalCounter}
+                      onLockIn={onDemoProposalLockIn}
+                    />
+                  ) : msg.sharedPost && msg.sharedPost.type === "convoy_invite" ? (() => {
                     // Source the current RSVP from convoyRsvps (DB-backed,
                     // realtime) so the button state stays correct after the
                     // user taps GOING/MAYBE/CAN'T from anywhere \u2014 DM card,
@@ -43470,6 +43819,133 @@ export default function Trailhead() {
       setBountyEarnings(data || { total_earned_cents: 0, total_pending_cents: 0, total_paid_cents: 0 });
     } catch (e) { console.error("[refreshBountyEarnings] failed", e); }
   };
+  // Send a Demo Request scheduling card to the customer's DM. The card
+  // payload carries the proposal data (days, slots, location, note) plus an
+  // intent marker that drives the recipient-side UI in DMScreen:
+  //   propose | counter — multi-day offer; recipient picks a slot or counters
+  //   select          — single chosen day+slot; original proposer locks in
+  //   final           — confirmation card; no actions, just informational
+  const sendDemoProposalCard = async (recipientUserId, proposal, intentOverride, bodyOverride) => {
+    if (!recipientUserId || !proposal) return { error: "Missing recipient or proposal" };
+    const intent = intentOverride || proposal.intent || "propose";
+    const sharedPost = {
+      type: "demo_proposal",
+      intent,
+      proposal_id: proposal.proposal_id,
+      bounty_id: proposal.bounty_id,
+      submission_id: proposal.submission_id,
+      proposer_id: proposal.proposer_id,
+      customer_id: proposal.customer_id,
+      days: proposal.days || [],
+      meeting_lat: proposal.meeting_lat,
+      meeting_lng: proposal.meeting_lng,
+      meeting_label: proposal.meeting_label || null,
+      note: proposal.note || null,
+    };
+    const body = bodyOverride || (intent === "select" ? "Picked a slot for the demo." : intent === "counter" ? "Counter-proposed the demo schedule." : intent === "final" ? "Demo confirmed." : "Suggested a demo schedule.");
+    try {
+      const ok = await sendDmInvite(recipientUserId, sharedPost, body);
+      if (!ok) return { error: "DM send failed" };
+      return { ok: true };
+    } catch (e) {
+      console.error("[sendDemoProposalCard] failed", e);
+      return { error: e && e.message ? e.message : "Network error" };
+    }
+  };
+  // Demo proposal DM card actions — bounce up from DMScreen.
+  // `demoPickerCtx` opens an inline modal asking the user to pick one
+  // day+slot from the proposal's offered list. mode='select' fires a
+  // "select" reply card back to the proposer; mode='lock_in' calls the
+  // finalize_demo_schedule RPC + sends a "final" confirmation card.
+  const [demoPickerCtx, setDemoPickerCtx] = useState(null); // { sp, mode }
+  const handleDemoProposalSelectSlot = (sp) => {
+    if (!sp || !Array.isArray(sp.days) || sp.days.length === 0) return;
+    if (sp.days.length === 1) {
+      // Only one option — skip the picker.
+      submitDemoSlotPick(sp, sp.days[0], "select");
+    } else {
+      setDemoPickerCtx({ sp, mode: "select" });
+    }
+  };
+  const handleDemoProposalLockIn = (sp) => {
+    if (!sp || !Array.isArray(sp.days) || sp.days.length === 0) return;
+    if (sp.days.length === 1) {
+      // Already a single chosen slot (intent=select). Confirm + lock.
+      submitDemoSlotPick(sp, sp.days[0], "lock_in");
+    } else {
+      setDemoPickerCtx({ sp, mode: "lock_in" });
+    }
+  };
+  const handleDemoProposalCounter = (sp) => {
+    alert("Counter-proposal coming in a follow-up. For now, agree on a slot via regular DM messaging and pick it via SELECT A SLOT / LOCK IT IN.");
+  };
+  const submitDemoSlotPick = async (sp, picked, mode) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) return;
+    setDemoPickerCtx(null);
+    if (mode === "select") {
+      // Customer side — send back a "select" reply with the chosen slot.
+      const reply = {
+        proposal_id: sp.proposal_id,
+        bounty_id: sp.bounty_id,
+        submission_id: sp.submission_id,
+        proposer_id: uid,
+        customer_id: sp.customer_id || (sp.proposer_id === uid ? null : uid),
+        days: [picked],
+        meeting_lat: sp.meeting_lat,
+        meeting_lng: sp.meeting_lng,
+        meeting_label: sp.meeting_label,
+        note: null,
+      };
+      const recipient = sp.proposer_id; // back to the original proposer
+      const res = await sendDemoProposalCard(recipient, reply, "select", `Picked ${fmtPrettyDate(picked.date)} ${picked.slot}.`);
+      if (res && res.error) alert(res.error);
+      return;
+    }
+    if (mode === "lock_in") {
+      // Bounty user side — finalize the schedule on the submission + send
+      // a "final" confirmation card to the customer.
+      const isoAt = buildScheduledAtIso(picked.date, picked.slot);
+      if (!isoAt) { alert("Couldn't parse the date."); return; }
+      const location = sp.meeting_label || "TBD";
+      const submissionId = sp.submission_id;
+      const res = await finalizeDemoSchedule(submissionId, isoAt, location, sp.meeting_lat, sp.meeting_lng);
+      if (res && res.error) { alert(res.error); return; }
+      const recipient = sp.proposer_id === uid ? sp.customer_id : sp.proposer_id;
+      if (recipient) {
+        const finalCard = {
+          proposal_id: sp.proposal_id,
+          bounty_id: sp.bounty_id,
+          submission_id: sp.submission_id,
+          proposer_id: uid,
+          customer_id: sp.customer_id,
+          days: [picked],
+          meeting_lat: sp.meeting_lat,
+          meeting_lng: sp.meeting_lng,
+          meeting_label: sp.meeting_label,
+          note: null,
+        };
+        await sendDemoProposalCard(recipient, finalCard, "final", `Demo confirmed for ${fmtPrettyDate(picked.date)} ${picked.slot}.`);
+      }
+    }
+  };
+  // Atomic lock-in — writes scheduled_at + scheduled_location into the
+  // submission's draft via RPC. Returns the same shape as the other
+  // bounty RPC helpers. After this, DemoRequestFlow drops out into PROOF.
+  const finalizeDemoSchedule = async (submissionId, scheduledAt, scheduledLocation, meetingLat, meetingLng) => {
+    if (!submissionId || !scheduledAt || !scheduledLocation) return { error: "Missing required fields" };
+    try {
+      const { data, error } = await supabase.rpc("finalize_demo_schedule", {
+        p_submission_id: submissionId,
+        p_scheduled_at: scheduledAt,
+        p_scheduled_location: scheduledLocation,
+        p_meeting_lat: typeof meetingLat === "number" ? meetingLat : null,
+        p_meeting_lng: typeof meetingLng === "number" ? meetingLng : null,
+      });
+      if (error) { console.error("[finalize_demo_schedule] error", error); return { error: error.message }; }
+      return { ok: true, data: Array.isArray(data) ? data[0] : data };
+    } catch (e) { return { error: e && e.message ? e.message : "Network error" }; }
+  };
   // Helper for fetching a single profile by id — used by Demo Request
   // bounty UI to show the customer's avatar/name + their handle.
   const loadProfileById = async (id) => {
@@ -49174,7 +49650,7 @@ export default function Trailhead() {
             {screen === "ranks" && (isGuest
               ? <GuestGateScreen title="RANKS REQUIRE AN ACCOUNT" subtitle="Sign in to see the leaderboard and start earning points from your posts, routes and builds." onSignIn={goToLoginFromGuest} />
               : isAdmin
-                ? <RanksScreen myPoints={myTotalPoints} pointsBreakdown={friendlyPointsBreakdown} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentProfile={currentProfile} onLoadLeaderboard={loadLeaderboard} onViewUser={openUserProfile} bounties={bounties} mySubmissions={myBountySubmissions} isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onClaimBounty={claimBounty} onSaveBountyDraft={saveBountyDraft} onSubmitBountyRPC={submitBountySubmission} onWithdrawBounty={withdrawBountySubmission} onUploadBountyPhotos={uploadBountyPhotoFiles} earnings={bountyEarnings} onOpenDM={openDM} onLoadProfileById={loadProfileById} />
+                ? <RanksScreen myPoints={myTotalPoints} pointsBreakdown={friendlyPointsBreakdown} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentProfile={currentProfile} onLoadLeaderboard={loadLeaderboard} onViewUser={openUserProfile} bounties={bounties} mySubmissions={myBountySubmissions} isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onClaimBounty={claimBounty} onSaveBountyDraft={saveBountyDraft} onSubmitBountyRPC={submitBountySubmission} onWithdrawBounty={withdrawBountySubmission} onUploadBountyPhotos={uploadBountyPhotoFiles} earnings={bountyEarnings} onOpenDM={openDM} onLoadProfileById={loadProfileById} onSendDemoProposal={sendDemoProposalCard} />
                 : <div style={{ padding: 32, textAlign: "center", fontFamily: serif, fontSize: 14, color: T.tertiary, lineHeight: 1.6 }}>Ranks is coming in a future release.</div>
             )}
             {screen === "admin" && (isAdmin
@@ -49971,6 +50447,9 @@ export default function Trailhead() {
           onSetDmMessageReaction={requireAuth(setDmMessageReaction)}
           onActiveConvChange={(convId) => setActiveDmConvId(convId)}
           convoyRsvps={convoyRsvps}
+          onDemoProposalSelectSlot={handleDemoProposalSelectSlot}
+          onDemoProposalLockIn={handleDemoProposalLockIn}
+          onDemoProposalCounter={handleDemoProposalCounter}
           onOpenPost={(sp) => {
             setShowDM(false); setDmInitialConvId(null); setDmInitialMessage(""); setDmSharedPost(null); setActiveDmConvId(null);
             if (sp.type === "FORUM" && sp.threadId) {
@@ -50145,6 +50624,41 @@ export default function Trailhead() {
           isAdminView={true}
           onRecompute={recomputeContentPartnerStanding}
         />
+      )}
+
+      {/* Demo Proposal slot-picker modal — opens when the user taps SELECT A
+          SLOT or LOCK IT IN on a multi-day proposal card. They pick ONE
+          day + slot, then we route to either send a "select" reply or
+          finalize the schedule, depending on the original context's mode. */}
+      {demoPickerCtx && demoPickerCtx.sp && (
+        <div onClick={() => setDemoPickerCtx(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 11000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 12, maxWidth: 380, width: "100%", overflow: "hidden", boxShadow: "0 12px 40px rgba(0,0,0,0.6)" }}>
+            <div style={{ padding: "14px 16px", borderBottom: `1px solid ${T.charcoal}`, display: "flex", alignItems: "center", gap: 8 }}>
+              <Clock size={14} color={T.copper} />
+              <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>
+                {demoPickerCtx.mode === "lock_in" ? "PICK A SLOT TO LOCK IN" : "PICK A SLOT"}
+              </span>
+              <button onClick={() => setDemoPickerCtx(null)} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+                <X size={16} color={T.tertiary} />
+              </button>
+            </div>
+            <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 6 }}>
+              {(demoPickerCtx.sp.days || []).map((d, i) => (
+                <button key={i} onClick={() => submitDemoSlotPick(demoPickerCtx.sp, d, demoPickerCtx.mode)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8, cursor: "pointer", textAlign: "left", transition: "background 0.12s" }} onMouseEnter={(e) => e.currentTarget.style.background = T.charcoal} onMouseLeave={(e) => e.currentTarget.style.background = T.darkCard}>
+                  <Clock size={14} color={T.copper} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600 }}>{fmtPrettyDate(d.date)}</div>
+                    <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{DEMO_SLOT_LABEL[d.slot] || d.slot}</div>
+                  </div>
+                  <ChevronRight size={14} color={T.tertiary} />
+                </button>
+              ))}
+              {demoPickerCtx.sp.meeting_label && (
+                <div style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, marginTop: 4, padding: "0 4px" }}>📍 {demoPickerCtx.sp.meeting_label}</div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Points Toast Notifications */}
