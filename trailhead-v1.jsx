@@ -17415,7 +17415,7 @@ const DEMO_SLOTS = [
        Plus: search-by-name (Mapbox forward geocode), fullscreen toggle,
        POI-preferring reverse geocode on tap so the label resolves to
        business names ("Starbucks") not just cities ("Lakewood, CO"). ─── */
-function DemoMeetingMapPicker({ referenceLat, referenceLng, referenceRadiusM, meetingLat, meetingLng, counterLat, counterLng, counterLabel, onChange }) {
+function DemoMeetingMapPicker({ referenceLat, referenceLng, referenceRadiusM, meetingLat, meetingLng, counterLat, counterLng, counterLabel, onChange, readOnly = false, initialFullscreen = false }) {
   const mapDivRef = useRef(null);
   const mapInstRef = useRef(null);
   const refMarkerRef = useRef(null);
@@ -17423,7 +17423,7 @@ function DemoMeetingMapPicker({ referenceLat, referenceLng, referenceRadiusM, me
   const meetingMarkerRef = useRef(null);
   const counterMarkerRef = useRef(null);
   const [busy, setBusy] = useState(false);
-  const [fullscreen, setFullscreen] = useState(false);
+  const [fullscreen, setFullscreen] = useState(initialFullscreen);
   const [searchQ, setSearchQ] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -17480,11 +17480,13 @@ function DemoMeetingMapPicker({ referenceLat, referenceLng, referenceRadiusM, me
           map.fitBounds([[referenceLng - dLng, referenceLat - dLat], [referenceLng + dLng, referenceLat + dLat]], { padding: 40, duration: 0 });
         }
       });
-      map.on("click", async (e) => {
-        const { lng: clickLng, lat: clickLat } = e.lngLat;
-        drawMeetingPin(gl, map, clickLng, clickLat);
-        await resolveAndEmit(clickLng, clickLat);
-      });
+      if (!readOnly) {
+        map.on("click", async (e) => {
+          const { lng: clickLng, lat: clickLat } = e.lngLat;
+          drawMeetingPin(gl, map, clickLng, clickLat);
+          await resolveAndEmit(clickLng, clickLat);
+        });
+      }
     })();
     return () => { cancelled = true; if (mapInstRef.current) { try { mapInstRef.current.remove(); } catch {} mapInstRef.current = null; } };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -17538,11 +17540,13 @@ function DemoMeetingMapPicker({ referenceLat, referenceLng, referenceRadiusM, me
     if (meetingMarkerRef.current) { try { meetingMarkerRef.current.remove(); } catch {} }
     const el = document.createElement("div");
     el.style.cssText = `width: 24px; height: 24px; border-radius: 50% 50% 50% 0; background: ${T.red}; border: 3px solid ${T.white}; box-shadow: 0 2px 8px rgba(0,0,0,0.4); transform: rotate(-45deg);`;
-    meetingMarkerRef.current = new gl.Marker({ element: el, anchor: "bottom", draggable: true }).setLngLat([lng, lat]).addTo(map);
-    meetingMarkerRef.current.on("dragend", async (e) => {
-      const ll = meetingMarkerRef.current.getLngLat();
-      await resolveAndEmit(ll.lng, ll.lat);
-    });
+    meetingMarkerRef.current = new gl.Marker({ element: el, anchor: "bottom", draggable: !readOnly }).setLngLat([lng, lat]).addTo(map);
+    if (!readOnly) {
+      meetingMarkerRef.current.on("dragend", async () => {
+        const ll = meetingMarkerRef.current.getLngLat();
+        await resolveAndEmit(ll.lng, ll.lat);
+      });
+    }
   };
   const drawCounterPin = (gl, map, lng, lat) => {
     if (counterMarkerRef.current) { try { counterMarkerRef.current.remove(); } catch {} counterMarkerRef.current = null; }
@@ -17619,32 +17623,36 @@ function DemoMeetingMapPicker({ referenceLat, referenceLng, referenceRadiusM, me
       )}
       <div style={mapShellStyle}>
         <div ref={mapDivRef} style={{ position: "absolute", inset: 0 }} />
-        {/* Search input — overlays the top of the map */}
-        <div style={{ position: "absolute", top: 8, left: 8, right: fullscreen ? 8 : 50, zIndex: 5 }}>
-          <input
-            value={searchQ}
-            onChange={(e) => setSearchQ(e.target.value)}
-            placeholder="Search a place (e.g. Starbucks @ 4th + Main)"
-            style={{ width: "100%", padding: "8px 12px", borderRadius: 6, background: "rgba(0,0,0,0.85)", border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 12, boxSizing: "border-box" }}
-          />
-          {searchResults.length > 0 && (
-            <div style={{ marginTop: 4, background: T.darkBg, borderRadius: 6, border: `1px solid ${T.charcoal}`, maxHeight: 200, overflowY: "auto", boxShadow: "0 4px 14px rgba(0,0,0,0.5)" }}>
-              {searchResults.map((r, i) => (
-                <button key={i} onClick={() => pickSearchResult(r)} style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 10px", background: "none", border: "none", borderBottom: i < searchResults.length - 1 ? `1px solid ${T.charcoal}40` : "none", cursor: "pointer", color: T.white, fontFamily: sans, fontSize: 11 }}>{r.label}</button>
-              ))}
-            </div>
-          )}
-        </div>
-        {/* Fullscreen toggle button — only when not fullscreen */}
-        {!fullscreen && (
+        {/* Search input — overlays the top of the map. Hidden in readOnly. */}
+        {!readOnly && (
+          <div style={{ position: "absolute", top: 8, left: 8, right: fullscreen ? 8 : 50, zIndex: 5 }}>
+            <input
+              value={searchQ}
+              onChange={(e) => setSearchQ(e.target.value)}
+              placeholder="Search a place (e.g. Starbucks @ 4th + Main)"
+              style={{ width: "100%", padding: "8px 12px", borderRadius: 6, background: "rgba(0,0,0,0.85)", border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 12, boxSizing: "border-box" }}
+            />
+            {searchResults.length > 0 && (
+              <div style={{ marginTop: 4, background: T.darkBg, borderRadius: 6, border: `1px solid ${T.charcoal}`, maxHeight: 200, overflowY: "auto", boxShadow: "0 4px 14px rgba(0,0,0,0.5)" }}>
+                {searchResults.map((r, i) => (
+                  <button key={i} onClick={() => pickSearchResult(r)} style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 10px", background: "none", border: "none", borderBottom: i < searchResults.length - 1 ? `1px solid ${T.charcoal}40` : "none", cursor: "pointer", color: T.white, fontFamily: sans, fontSize: 11 }}>{r.label}</button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {/* Fullscreen toggle button — only when not fullscreen + interactive */}
+        {!fullscreen && !readOnly && (
           <button onClick={() => setFullscreen(true)} title="Expand map" style={{ position: "absolute", top: 8, right: 8, zIndex: 5, width: 32, height: 32, borderRadius: 6, background: "rgba(0,0,0,0.85)", border: `1px solid ${T.charcoal}`, color: T.white, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <Maximize2 size={14} color={T.white} />
           </button>
         )}
         {busy && <div style={{ position: "absolute", bottom: 8, right: 8, background: "rgba(0,0,0,0.7)", color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 700, padding: "4px 8px", borderRadius: 4 }}>RESOLVING…</div>}
-        <div style={{ position: "absolute", bottom: 8, left: 8, background: "rgba(0,0,0,0.6)", color: T.white, fontFamily: sans, fontSize: 10, padding: "4px 8px", borderRadius: 4 }}>
-          Tap or drag the red pin to set the meeting spot
-        </div>
+        {!readOnly && (
+          <div style={{ position: "absolute", bottom: 8, left: 8, background: "rgba(0,0,0,0.6)", color: T.white, fontFamily: sans, fontSize: 10, padding: "4px 8px", borderRadius: 4 }}>
+            Tap or drag the red pin to set the meeting spot
+          </div>
+        )}
       </div>
       {/* Legend — only inside fullscreen mode where there's space */}
       {fullscreen && (
@@ -17661,18 +17669,233 @@ function DemoMeetingMapPicker({ referenceLat, referenceLng, referenceRadiusM, me
   );
 }
 
+/* ─── DemoCounterProposalEditor — full proposal editor for counter-proposals.
+       Customer (or bounty user) opens this from a DM card's COUNTER button.
+       Pre-fills with the previous proposal's data; user can change any
+       combination of days/slots/location/note. SEND COUNTER fires a "counter"
+       card back to the original proposer. ─── */
+function DemoCounterProposalEditor({ sp, bounty, currentUserId, onSubmit, onClose }) {
+  const [days, setDays] = useState(() => {
+    const seed = Array.isArray(sp && sp.days) ? sp.days : [];
+    return seed.map(d => d.date);
+  });
+  const [slots, setSlots] = useState(() => {
+    const seed = Array.isArray(sp && sp.days) ? sp.days : [];
+    const m = {};
+    seed.forEach(d => { if (d && d.date) m[d.date] = d.slot || null; });
+    return m;
+  });
+  const [meetingLat, setMeetingLat] = useState((sp && typeof sp.meeting_lat === "number") ? sp.meeting_lat : null);
+  const [meetingLng, setMeetingLng] = useState((sp && typeof sp.meeting_lng === "number") ? sp.meeting_lng : null);
+  const [meetingLabel, setMeetingLabel] = useState((sp && sp.meeting_label) || "");
+  const [note, setNote] = useState((sp && sp.note) || "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const toggleDay = (k) => {
+    setDays(prev => prev.includes(k) ? prev.filter(d => d !== k) : [...prev, k].sort());
+    setSlots(prev => { if (prev[k]) { const n = { ...prev }; delete n[k]; return n; } return prev; });
+  };
+  const setSlotFor = (k, slot) => {
+    setSlots(prev => { if (slot === null) { const n = { ...prev }; delete n[k]; return n; } return { ...prev, [k]: slot }; });
+  };
+  const removeDay = (k) => {
+    setDays(prev => prev.filter(d => d !== k));
+    setSlots(prev => { const n = { ...prev }; delete n[k]; return n; });
+  };
+
+  const handleSubmit = async () => {
+    // At least one day required for a counter (the customer may choose to
+    // narrow the offering to a single day they really want).
+    if (days.length < 1) { setError("Pick at least 1 day."); return; }
+    const missingSlot = days.find(k => !slots[k]);
+    if (missingSlot) { setError(`Pick a time slot for ${fmtPrettyDate(missingSlot)}.`); return; }
+    if (typeof meetingLat !== "number") { setError("Drop a pin for the meeting location."); return; }
+    setError(""); setBusy(true);
+    try {
+      // Recipient is the original proposer (or the customer if we're being
+      // counter-countered — same logic, just the opposite side from the
+      // current user).
+      const recipient = sp.proposer_id === currentUserId ? sp.customer_id : sp.proposer_id;
+      const counterPayload = {
+        proposal_id: sp.proposal_id,
+        bounty_id: sp.bounty_id,
+        submission_id: sp.submission_id,
+        proposer_id: currentUserId,
+        customer_id: sp.customer_id || (sp.proposer_id === currentUserId ? recipient : currentUserId),
+        days: days.map(d => ({ date: d, slot: slots[d] })),
+        meeting_lat: meetingLat,
+        meeting_lng: meetingLng,
+        meeting_label: meetingLabel || null,
+        note: (note || "").trim() || null,
+      };
+      const res = await onSubmit(recipient, counterPayload);
+      if (res && res.error) throw new Error(res.error);
+      onClose && onClose();
+    } catch (e) {
+      console.error("[counter editor] send failed", e);
+      setError(e && e.message ? e.message : "Couldn't send counter.");
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: T.darkBg, zIndex: 11200, display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", borderBottom: `1px solid ${T.charcoal}` }}>
+        <Edit3 size={14} color={T.copper} />
+        <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>COUNTER PROPOSAL</span>
+        <button onClick={onClose} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+          <X size={16} color={T.tertiary} />
+        </button>
+      </div>
+      <div className="th-scroll" style={{ flex: 1, overflowY: "auto", padding: "14px 16px" }}>
+        <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.5, margin: "0 0 14px" }}>
+          Adjust whatever you want — days, time slots, meeting spot, or note — then SEND COUNTER back to the proposer.
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div>
+            <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.5, marginBottom: 6 }}>1. Days you're available <span style={{ color: T.copper }}>({days.length})</span></div>
+            <DemoScheduleCalendar selectedDays={days} onToggleDay={toggleDay} />
+          </div>
+          {days.length > 0 && (
+            <div>
+              <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.5, marginBottom: 6 }}>2. Time block per day</div>
+              <DemoSlotPicker days={days} slotsByDay={slots} onSetSlot={setSlotFor} onRemoveDay={removeDay} />
+            </div>
+          )}
+          <div>
+            <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.5, marginBottom: 6 }}>3. Meeting spot</div>
+            <DemoMeetingMapPicker
+              referenceLat={bounty && bounty.demo_lat}
+              referenceLng={bounty && bounty.demo_lng}
+              referenceRadiusM={bounty && bounty.demo_radius_m || 80467}
+              meetingLat={meetingLat}
+              meetingLng={meetingLng}
+              onChange={({ lat, lng, label }) => { setMeetingLat(lat); setMeetingLng(lng); if (label) setMeetingLabel(label); }}
+            />
+            <input
+              value={meetingLabel}
+              onChange={(e) => setMeetingLabel(e.target.value)}
+              placeholder="Meeting place name (override if the geocoded label isn't quite right)"
+              style={{ width: "100%", marginTop: 6, padding: "8px 10px", borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 12, boxSizing: "border-box" }}
+            />
+          </div>
+          <div>
+            <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.5, marginBottom: 6 }}>4. Comment (optional)</div>
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              rows={3}
+              placeholder="Add a note — why you're countering, what changed, etc."
+              style={{ width: "100%", padding: "10px 12px", borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, boxSizing: "border-box", resize: "vertical", lineHeight: 1.4 }}
+            />
+          </div>
+          {error && <div style={{ color: T.red, fontFamily: sans, fontSize: 11 }}>{error}</div>}
+        </div>
+      </div>
+      <div style={{ padding: "12px 16px", borderTop: `1px solid ${T.charcoal}`, display: "flex", gap: 8 }}>
+        <button onClick={onClose} disabled={busy} style={{ padding: "12px 14px", background: "none", color: T.tertiary, border: `1px solid ${T.charcoal}`, borderRadius: 6, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, cursor: busy ? "wait" : "pointer" }}>CANCEL</button>
+        <button onClick={handleSubmit} disabled={busy} style={{ flex: 1, padding: "12px", background: T.copper, color: T.white, border: "none", borderRadius: 6, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.8, cursor: busy ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+          <Send size={12} color={T.white} />
+          {busy ? "SENDING…" : "SEND COUNTER"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ─── DemoSlotPickerModal — when a customer accepts one of the proposed
+       slots (or a proposer locks in a customer's counter), they pick the
+       date+block AND specify a precise time within the block's range. The
+       chosen time goes into the reply card so the other side knows
+       exactly when to show up. ─── */
+function DemoSlotPickerModal({ sp, mode, onPick, onClose }) {
+  const days = Array.isArray(sp && sp.days) ? sp.days : [];
+  // Per-day time state — seeded with the proposer's specific_time when
+  // present (already-customer-picked) or the block's default mid-time.
+  const [times, setTimes] = useState(() => {
+    const m = {};
+    days.forEach((d, i) => { m[i] = (d && d.specific_time) || DEMO_SLOT_DEFAULT_TIME[d && d.slot] || "12:00"; });
+    return m;
+  });
+  const headerLabel = mode === "lock_in" ? "LOCK IN A SPECIFIC TIME" : "PICK A SLOT + SPECIFIC TIME";
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 11000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 12, maxWidth: 420, width: "100%", overflow: "hidden", boxShadow: "0 12px 40px rgba(0,0,0,0.6)" }}>
+        <div style={{ padding: "14px 16px", borderBottom: `1px solid ${T.charcoal}`, display: "flex", alignItems: "center", gap: 8 }}>
+          <Clock size={14} color={T.copper} />
+          <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>{headerLabel}</span>
+          <button onClick={onClose} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+            <X size={16} color={T.tertiary} />
+          </button>
+        </div>
+        <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
+          {sp && sp.meeting_label && (
+            <div style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, paddingBottom: 4 }}>📍 {sp.meeting_label}</div>
+          )}
+          {days.length === 0 && <div style={{ fontFamily: serif, fontSize: 12, color: T.tertiary }}>No slots available.</div>}
+          {days.map((d, i) => {
+            const range = DEMO_SLOT_RANGE[d.slot] || DEMO_SLOT_RANGE.any;
+            return (
+              <div key={i} style={{ background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8, padding: "10px 12px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <Clock size={12} color={T.copper} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>{fmtPrettyDate(d.date)}</div>
+                    <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{DEMO_SLOT_LABEL[d.slot] || d.slot} · {range.start.replace(/^0/, "")}–{range.end.replace(/^0/, "")}</div>
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <input
+                    type="time"
+                    value={times[i]}
+                    min={range.start}
+                    max={range.end}
+                    onChange={(e) => setTimes(prev => ({ ...prev, [i]: e.target.value }))}
+                    style={{ flex: 1, padding: "8px 10px", borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, boxSizing: "border-box" }}
+                  />
+                  <button onClick={() => onPick && onPick(sp, { ...d, specific_time: times[i] }, mode)} style={{ background: T.green, color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, padding: "9px 14px", borderRadius: 6, border: "none", cursor: "pointer" }}>
+                    {mode === "lock_in" ? "LOCK IN" : "PICK THIS"}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── DemoProposalDmCard — renders a demo_proposal payload card inside a DM
        thread. Intent-specific layout + action buttons. Actions fire via
        the parent's onSelectSlot / onCounter / onLockIn callbacks. ─── */
 const DEMO_SLOT_LABEL = { morning: "Morning", afternoon: "Afternoon", any: "Any time" };
-const DEMO_SLOT_HOUR = { morning: 10, afternoon: 15, any: 12 };
-function buildScheduledAtIso(dateKey, slot) {
+const DEMO_SLOT_DEFAULT_TIME = { morning: "09:00", afternoon: "14:00", any: "12:00" };
+// Allowed time range per block — customer's specific_time input is clamped
+// to these so a "morning" slot can't end up at 11pm. "any" is broadly
+// "during the workday" (rough 6am→9pm) with no other constraint.
+const DEMO_SLOT_RANGE = {
+  morning:   { start: "06:00", end: "11:59" },
+  afternoon: { start: "12:00", end: "17:59" },
+  any:       { start: "06:00", end: "21:00" },
+};
+function buildScheduledAtIso(dateKey, slot, specificTime) {
   const d = parseDateKey(dateKey);
   if (!d) return null;
-  d.setHours(DEMO_SLOT_HOUR[slot] || 12, 0, 0, 0);
+  const time = specificTime || DEMO_SLOT_DEFAULT_TIME[slot] || "12:00";
+  const [h, m] = String(time).split(":").map(s => Number(s) || 0);
+  d.setHours(h, m, 0, 0);
   return d.toISOString();
 }
-function DemoProposalDmCard({ sp, isMe, currentUserId, onSelectSlot, onCounter, onLockIn }) {
+function fmtTimeFromString(t) {
+  if (!t) return "";
+  const [h, m] = String(t).split(":").map(s => Number(s) || 0);
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  const mm = String(m).padStart(2, "0");
+  return `${h12}:${mm} ${ampm}`;
+}
+function DemoProposalDmCard({ sp, isMe, currentUserId, onSelectSlot, onCounter, onLockIn, onViewMap }) {
   const intent = sp.intent || "propose";
   const amProposer = sp.proposer_id === currentUserId;
   const amRecipient = !amProposer;
@@ -17706,7 +17929,10 @@ function DemoProposalDmCard({ sp, isMe, currentUserId, onSelectSlot, onCounter, 
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 8px", background: T.charcoal, borderRadius: 5 }}>
                 <Clock size={11} color={accent} />
                 <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>{fmtPrettyDate(d.date)}</span>
-                <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>· {DEMO_SLOT_LABEL[d.slot] || d.slot}</span>
+                <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>· {d.specific_time ? fmtTimeFromString(d.specific_time) : (DEMO_SLOT_LABEL[d.slot] || d.slot)}</span>
+                {d.specific_time && (
+                  <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, marginLeft: 4 }}>({DEMO_SLOT_LABEL[d.slot] || d.slot})</span>
+                )}
               </div>
             ))}
           </div>
@@ -17714,11 +17940,14 @@ function DemoProposalDmCard({ sp, isMe, currentUserId, onSelectSlot, onCounter, 
       )}
 
       {(sp.meeting_label || typeof sp.meeting_lat === "number") && (
-        <div style={{ padding: "0 12px 10px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            <MapPin size={11} color={accent} />
-            <span style={{ fontFamily: serif, fontSize: 12, color: T.white }}>{sp.meeting_label || "(unnamed location)"}</span>
-          </div>
+        <div style={{ padding: "0 12px 10px", display: "flex", alignItems: "center", gap: 6 }}>
+          <MapPin size={11} color={accent} />
+          <span style={{ fontFamily: serif, fontSize: 12, color: T.white, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sp.meeting_label || "(unnamed location)"}</span>
+          {typeof sp.meeting_lat === "number" && onViewMap && (
+            <button onClick={() => onViewMap(sp)} style={{ background: "none", border: `1px solid ${accent}40`, color: accent, fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, padding: "3px 8px", borderRadius: 4, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+              <Maximize2 size={9} color={accent} /> VIEW MAP
+            </button>
+          )}
         </div>
       )}
 
@@ -37966,7 +38195,7 @@ const dmConversations = [
   },
 ];
 
-function DMScreen({ onClose, onViewUser, initialConvId, initialMessage, initialSharedPost, conversations, currentUserId, onSendMessage, onMarkRead, onLoadMessages, onSearchUsers, onCreateGroup, onOpenPost, onRsvpConvoy, convoyRsvps, onLeaveConversation, onUploadError, onlineUserIds, dmMessageReactions, onSetDmMessageReaction, onActiveConvChange, onDemoProposalSelectSlot, onDemoProposalCounter, onDemoProposalLockIn }) {
+function DMScreen({ onClose, onViewUser, initialConvId, initialMessage, initialSharedPost, conversations, currentUserId, onSendMessage, onMarkRead, onLoadMessages, onSearchUsers, onCreateGroup, onOpenPost, onRsvpConvoy, convoyRsvps, onLeaveConversation, onUploadError, onlineUserIds, dmMessageReactions, onSetDmMessageReaction, onActiveConvChange, onDemoProposalSelectSlot, onDemoProposalCounter, onDemoProposalLockIn, onDemoProposalViewMap }) {
   const [view, setView] = useState(initialConvId ? "chat" : "inbox"); // "inbox" | "chat" | "new"
   const [activeConvId, setActiveConvId] = useState(initialConvId || null);
   // Always derive the active convo from the source-of-truth `conversations`
@@ -38385,6 +38614,7 @@ function DMScreen({ onClose, onViewUser, initialConvId, initialMessage, initialS
                       onSelectSlot={onDemoProposalSelectSlot}
                       onCounter={onDemoProposalCounter}
                       onLockIn={onDemoProposalLockIn}
+                      onViewMap={onDemoProposalViewMap}
                     />
                   ) : msg.sharedPost && msg.sharedPost.type === "convoy_invite" ? (() => {
                     // Source the current RSVP from convoyRsvps (DB-backed,
@@ -44229,6 +44459,14 @@ export default function Trailhead() {
   // "select" reply card back to the proposer; mode='lock_in' calls the
   // finalize_demo_schedule RPC + sends a "final" confirmation card.
   const [demoPickerCtx, setDemoPickerCtx] = useState(null); // { sp, mode }
+  // Read-only map viewer overlay — opens when the user taps VIEW ON MAP on
+  // a demo_proposal card. State carries the reference + meeting + counter
+  // pin coords + label.
+  const [demoMapViewer, setDemoMapViewer] = useState(null);
+  // Counter-proposal editor overlay state. When set, a full proposal editor
+  // (calendar + slot picker + map + note) opens pre-filled with the previous
+  // proposal's data; SEND COUNTER → fires a "counter" card back.
+  const [demoCounterCtx, setDemoCounterCtx] = useState(null);
   const handleDemoProposalSelectSlot = (sp) => {
     if (!sp || !Array.isArray(sp.days) || sp.days.length === 0) return;
     if (sp.days.length === 1) {
@@ -44247,15 +44485,39 @@ export default function Trailhead() {
       setDemoPickerCtx({ sp, mode: "lock_in" });
     }
   };
-  const handleDemoProposalCounter = (sp) => {
-    alert("Counter-proposal coming in a follow-up. For now, agree on a slot via regular DM messaging and pick it via SELECT A SLOT / LOCK IT IN.");
+  const handleDemoProposalCounter = async (sp) => {
+    if (!sp || !sp.bounty_id) return;
+    // Fetch the bounty so the counter editor has the reference circle.
+    let bounty = bounties.find(b => b.id === sp.bounty_id);
+    if (!bounty) bounty = await loadBountyById(sp.bounty_id);
+    setDemoCounterCtx({ sp, bounty });
+  };
+  // VIEW ON MAP from a demo_proposal card. Pulls the bounty so the
+  // reference circle renders alongside the meeting + counter pins.
+  const handleDemoProposalViewMap = async (sp) => {
+    if (!sp) return;
+    let bounty = bounties.find(b => b.id === sp.bounty_id);
+    if (!bounty && sp.bounty_id) bounty = await loadBountyById(sp.bounty_id);
+    setDemoMapViewer({
+      bounty_demo_lat: bounty && typeof bounty.demo_lat === "number" ? bounty.demo_lat : null,
+      bounty_demo_lng: bounty && typeof bounty.demo_lng === "number" ? bounty.demo_lng : null,
+      bounty_demo_radius_m: bounty && bounty.demo_radius_m,
+      meeting_lat: sp.meeting_lat,
+      meeting_lng: sp.meeting_lng,
+      meeting_label: sp.meeting_label,
+      counter_lat: null, // populated when paired with a counter card
+      counter_lng: null,
+    });
   };
   const submitDemoSlotPick = async (sp, picked, mode) => {
+    // `picked` shape: { date: "YYYY-MM-DD", slot: "morning"|..., specific_time?: "HH:MM" }
     const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
     if (!uid) return;
     setDemoPickerCtx(null);
+    const timeLabel = picked.specific_time ? fmtTimeFromString(picked.specific_time) : DEMO_SLOT_LABEL[picked.slot] || picked.slot;
     if (mode === "select") {
-      // Customer side — send back a "select" reply with the chosen slot.
+      // Customer side — send back a "select" reply with the chosen slot
+      // INCLUDING the specific time within the block.
       const reply = {
         proposal_id: sp.proposal_id,
         bounty_id: sp.bounty_id,
@@ -44269,14 +44531,15 @@ export default function Trailhead() {
         note: null,
       };
       const recipient = sp.proposer_id; // back to the original proposer
-      const res = await sendDemoProposalCard(recipient, reply, "select", `Picked ${fmtPrettyDate(picked.date)} ${picked.slot}.`);
+      const res = await sendDemoProposalCard(recipient, reply, "select", `Picked ${fmtPrettyDate(picked.date)} at ${timeLabel}.`);
       if (res && res.error) alert(res.error);
       return;
     }
     if (mode === "lock_in") {
       // Bounty user side — finalize the schedule on the submission + send
-      // a "final" confirmation card to the customer.
-      const isoAt = buildScheduledAtIso(picked.date, picked.slot);
+      // a "final" confirmation card to the customer. Uses specific_time
+      // when present so the locked-in datetime is exact.
+      const isoAt = buildScheduledAtIso(picked.date, picked.slot, picked.specific_time);
       if (!isoAt) { alert("Couldn't parse the date."); return; }
       const location = sp.meeting_label || "TBD";
       const submissionId = sp.submission_id;
@@ -44296,7 +44559,7 @@ export default function Trailhead() {
           meeting_label: sp.meeting_label,
           note: null,
         };
-        await sendDemoProposalCard(recipient, finalCard, "final", `Demo confirmed for ${fmtPrettyDate(picked.date)} ${picked.slot}.`);
+        await sendDemoProposalCard(recipient, finalCard, "final", `Demo confirmed for ${fmtPrettyDate(picked.date)} at ${timeLabel}.`);
       }
     }
   };
@@ -50821,6 +51084,7 @@ export default function Trailhead() {
           onDemoProposalSelectSlot={handleDemoProposalSelectSlot}
           onDemoProposalLockIn={handleDemoProposalLockIn}
           onDemoProposalCounter={handleDemoProposalCounter}
+          onDemoProposalViewMap={handleDemoProposalViewMap}
           onOpenPost={(sp) => {
             setShowDM(false); setDmInitialConvId(null); setDmInitialMessage(""); setDmSharedPost(null); setActiveDmConvId(null);
             if (sp.type === "FORUM" && sp.threadId) {
@@ -50998,36 +51262,55 @@ export default function Trailhead() {
       )}
 
       {/* Demo Proposal slot-picker modal — opens when the user taps SELECT A
-          SLOT or LOCK IT IN on a multi-day proposal card. They pick ONE
-          day + slot, then we route to either send a "select" reply or
-          finalize the schedule, depending on the original context's mode. */}
+          SLOT or LOCK IT IN. They pick ONE day, then a specific time within
+          that day's block range. mode='select' sends a "select" reply card
+          to the proposer; mode='lock_in' calls finalize_demo_schedule + a
+          "final" confirmation card. */}
       {demoPickerCtx && demoPickerCtx.sp && (
-        <div onClick={() => setDemoPickerCtx(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 11000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 12, maxWidth: 380, width: "100%", overflow: "hidden", boxShadow: "0 12px 40px rgba(0,0,0,0.6)" }}>
-            <div style={{ padding: "14px 16px", borderBottom: `1px solid ${T.charcoal}`, display: "flex", alignItems: "center", gap: 8 }}>
-              <Clock size={14} color={T.copper} />
-              <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>
-                {demoPickerCtx.mode === "lock_in" ? "PICK A SLOT TO LOCK IN" : "PICK A SLOT"}
-              </span>
-              <button onClick={() => setDemoPickerCtx(null)} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", padding: 4 }}>
-                <X size={16} color={T.tertiary} />
-              </button>
-            </div>
-            <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 6 }}>
-              {(demoPickerCtx.sp.days || []).map((d, i) => (
-                <button key={i} onClick={() => submitDemoSlotPick(demoPickerCtx.sp, d, demoPickerCtx.mode)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8, cursor: "pointer", textAlign: "left", transition: "background 0.12s" }} onMouseEnter={(e) => e.currentTarget.style.background = T.charcoal} onMouseLeave={(e) => e.currentTarget.style.background = T.darkCard}>
-                  <Clock size={14} color={T.copper} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600 }}>{fmtPrettyDate(d.date)}</div>
-                    <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{DEMO_SLOT_LABEL[d.slot] || d.slot}</div>
-                  </div>
-                  <ChevronRight size={14} color={T.tertiary} />
-                </button>
-              ))}
-              {demoPickerCtx.sp.meeting_label && (
-                <div style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, marginTop: 4, padding: "0 4px" }}>📍 {demoPickerCtx.sp.meeting_label}</div>
-              )}
-            </div>
+        <DemoSlotPickerModal
+          sp={demoPickerCtx.sp}
+          mode={demoPickerCtx.mode}
+          onPick={submitDemoSlotPick}
+          onClose={() => setDemoPickerCtx(null)}
+        />
+      )}
+
+      {/* Demo counter-proposal editor — opens when the user taps COUNTER on
+          any demo_proposal card. Pre-fills with the previous proposal data;
+          SEND COUNTER fires a "counter" card back to the original proposer. */}
+      {demoCounterCtx && demoCounterCtx.sp && (
+        <DemoCounterProposalEditor
+          sp={demoCounterCtx.sp}
+          bounty={demoCounterCtx.bounty}
+          currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id}
+          onSubmit={(recipient, payload) => sendDemoProposalCard(recipient, payload, "counter")}
+          onClose={() => setDemoCounterCtx(null)}
+        />
+      )}
+
+      {/* Demo meeting-spot map viewer — opens when the user taps VIEW ON MAP
+          on any demo_proposal card. Read-only fullscreen DemoMeetingMapPicker
+          showing reference circle + meeting pin + (when present) counter pin. */}
+      {demoMapViewer && (
+        <div style={{ position: "fixed", inset: 0, background: T.darkBg, zIndex: 11500, display: "flex", flexDirection: "column" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", borderBottom: `1px solid ${T.charcoal}` }}>
+            <MapPin size={14} color={T.red} />
+            <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>MEETING SPOT</span>
+            {demoMapViewer.meeting_label && <span style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, marginLeft: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{demoMapViewer.meeting_label}</span>}
+            <button onClick={() => setDemoMapViewer(null)} style={{ background: T.red, color: T.white, border: "none", borderRadius: 4, padding: "6px 12px", fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}>CLOSE</button>
+          </div>
+          <div style={{ flex: 1, minHeight: 0 }}>
+            <DemoMeetingMapPicker
+              referenceLat={demoMapViewer.bounty_demo_lat}
+              referenceLng={demoMapViewer.bounty_demo_lng}
+              referenceRadiusM={demoMapViewer.bounty_demo_radius_m || 80467}
+              meetingLat={demoMapViewer.meeting_lat}
+              meetingLng={demoMapViewer.meeting_lng}
+              counterLat={demoMapViewer.counter_lat}
+              counterLng={demoMapViewer.counter_lng}
+              readOnly
+              initialFullscreen
+            />
           </div>
         </div>
       )}
