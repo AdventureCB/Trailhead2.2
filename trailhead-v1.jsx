@@ -27544,7 +27544,8 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, isGuest, onGuest
           {drop.start_lat != null && drop.start_lng != null && (
             <div style={{ padding: "12px 16px 14px", display: "flex", alignItems: "center", gap: 10 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                {locationLabel && <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, marginBottom: 2 }}>{locationLabel}</div>}
+                {drop.title && <div style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, marginBottom: 3, lineHeight: 1.25 }}>{drop.title}</div>}
+                {locationLabel && <div style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, marginBottom: 2, lineHeight: 1.35 }}>{locationLabel}</div>}
                 <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{drop.start_lat.toFixed(5)}, {drop.start_lng.toFixed(5)}</div>
               </div>
               <button
