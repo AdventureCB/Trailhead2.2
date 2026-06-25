@@ -17603,7 +17603,12 @@ function DemoMeetingMapPicker({ referenceLat, referenceLng, referenceRadiusM, me
   };
 
   const wrapperStyle = fullscreen
-    ? { position: "fixed", inset: 0, background: T.darkBg, zIndex: 1500, display: "flex", flexDirection: "column" }
+    ? (readOnly
+        // readOnly fullscreen = parent owns the viewport shell + chrome
+        // (see the demoMapViewer overlay). Fill the parent so we don't
+        // overlay the parent's CLOSE header with position:fixed.
+        ? { position: "absolute", inset: 0, display: "flex", flexDirection: "column" }
+        : { position: "fixed", inset: 0, background: T.darkBg, zIndex: 1500, display: "flex", flexDirection: "column" })
     : { position: "relative" };
   // Mapbox needs an explicit non-zero height. Inline mode = fixed 320px;
   // fullscreen = the shell flexes to fill remaining viewport, and the
@@ -51374,7 +51379,7 @@ export default function Trailhead() {
                 </button>
               )}
             </div>
-            <div style={{ flex: 1, minHeight: 0 }}>
+            <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
               <DemoMeetingMapPicker
                 referenceLat={demoMapViewer.bounty_demo_lat}
                 referenceLng={demoMapViewer.bounty_demo_lng}
