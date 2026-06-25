@@ -17336,12 +17336,23 @@ function DemoRequestFlow({ bounty, submission, currentUserId, isGuest, onGuestTa
       }
       if (!subId) throw new Error("Claim succeeded but no submission id");
       // Mark accepted_at + bump status claimed → in_progress server-side.
-      const nextDraft = { ...(draft || {}), accepted_at: new Date().toISOString() };
-      await onSaveDraft(subId, nextDraft);
-      // Open DM with the customer.
-      if (customer && customer.id && onOpenDM) {
-        onOpenDM(customer.id, `Hi @${customer.handle || "there"}! I'd love to set up the demo you requested. When works for you?`);
+      // Only set accepted_at on the FIRST accept — re-running this path (e.g.
+      // re-tap if the overlay didn't dismiss cleanly) shouldn't backdate or
+      // re-prefill a duplicate opener message.
+      const alreadyAccepted = !!draft.accepted_at;
+      if (!alreadyAccepted) {
+        const nextDraft = { ...(draft || {}), accepted_at: new Date().toISOString() };
+        await onSaveDraft(subId, nextDraft);
       }
+      // Open the DM with the customer. Prefill the opener only on first
+      // accept; subsequent passes open the existing DM without prefilling.
+      if (customer && customer.id && onOpenDM) {
+        const opener = alreadyAccepted ? null : `Hi @${customer.handle || "there"}! I'd love to set up the demo you requested. When works for you?`;
+        onOpenDM(customer.id, opener);
+      }
+      // Close the demo overlay so the DM screen underneath becomes visible.
+      // User comes back to the bounty card to advance to the SCHEDULE stage.
+      onClose && onClose();
     } catch (e) {
       setError(e && e.message ? e.message : "Couldn't accept right now.");
     } finally { setBusy(false); }
