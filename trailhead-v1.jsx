@@ -17339,8 +17339,8 @@ function DemoRequestFlow({ bounty, submission, currentUserId, isGuest, onGuestTa
       const nextDraft = { ...(draft || {}), accepted_at: new Date().toISOString() };
       await onSaveDraft(subId, nextDraft);
       // Open DM with the customer.
-      if (customer && onOpenDM) {
-        onOpenDM(customer, `Hi @${customer.handle || "there"}! I'd love to set up the demo you requested. When works for you?`);
+      if (customer && customer.id && onOpenDM) {
+        onOpenDM(customer.id, `Hi @${customer.handle || "there"}! I'd love to set up the demo you requested. When works for you?`);
       }
     } catch (e) {
       setError(e && e.message ? e.message : "Couldn't accept right now.");
@@ -17435,8 +17435,8 @@ function DemoRequestFlow({ bounty, submission, currentUserId, isGuest, onGuestTa
               <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600 }}>{customer.full_name || "(customer)"}</div>
               <div style={{ fontFamily: serif, fontSize: 11, color: T.tertiary }}>@{customer.handle || "—"}</div>
             </div>
-            {customer && stage !== "accept" && onOpenDM && (
-              <button onClick={() => onOpenDM(customer, null)} style={{ background: T.copper, color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 700, padding: "6px 10px", borderRadius: 4, border: "none", cursor: "pointer", letterSpacing: 0.5, display: "flex", alignItems: "center", gap: 4 }}>
+            {customer && customer.id && stage !== "accept" && onOpenDM && (
+              <button onClick={() => onOpenDM(customer.id, null)} style={{ background: T.copper, color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 700, padding: "6px 10px", borderRadius: 4, border: "none", cursor: "pointer", letterSpacing: 0.5, display: "flex", alignItems: "center", gap: 4 }}>
                 <Send size={11} color={T.white} /> DM
               </button>
             )}
