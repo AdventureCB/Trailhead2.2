@@ -420,6 +420,43 @@ async function mapboxReverseGeocode(lng, lat) {
 //
 // Region = nearest "place" context (city/town); state code parsed from the
 // "region" context short_code (e.g. "us-co" → "CO").
+// POI-preferring reverse geocode — prefers business/venue names over
+// city-level addresses. Used by the demo meeting picker so dropping a
+// pin on a Starbucks resolves to "Starbucks" instead of "Lakewood, CO".
+// Falls back to the address-level result when no POI is nearby.
+async function mapboxReverseGeocodePOI(lng, lat) {
+  try {
+    // First try POI types — tight feature class
+    const poiUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${MAPBOX_TOKEN}&types=poi&limit=1`;
+    const poiRes = await fetch(poiUrl);
+    if (poiRes.ok) {
+      const data = await poiRes.json();
+      const f = data.features && data.features[0];
+      if (f) {
+        const parts = (f.place_name || "").split(",").map(s => s.trim()).filter(Boolean);
+        const ctxParts = trimCountryTail(parts).slice(1, 3); // skip the venue name in idx 0
+        const ctx = ctxParts.join(", ");
+        return { label: f.text || f.place_name, context: ctx || null };
+      }
+    }
+    // Fallback to address-level (no POI nearby)
+    const addrUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${MAPBOX_TOKEN}&types=address,place,locality,neighborhood&limit=1`;
+    const addrRes = await fetch(addrUrl);
+    if (!addrRes.ok) return null;
+    const data2 = await addrRes.json();
+    const f2 = data2.features && data2.features[0];
+    if (!f2) return null;
+    const parts = (f2.place_name || "").split(",").map(s => s.trim()).filter(Boolean);
+    const trimmed = trimCountryTail(parts).slice(0, 3).join(", ");
+    return { label: trimmed || f2.text || null, context: null };
+  } catch (e) { console.error("[mapbox] POI reverse geocode failed", e); return null; }
+}
+function trimCountryTail(parts) {
+  if (!parts || !parts.length) return parts || [];
+  const last = parts[parts.length - 1];
+  return /\b(united states|usa|us|canada|mexico)\b/i.test(last) ? parts.slice(0, -1) : parts;
+}
+
 async function mapboxReverseGeocodeRich(lng, lat) {
   try {
     const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${MAPBOX_TOKEN}&limit=1`;
@@ -17300,6 +17337,239 @@ const DEMO_SLOTS = [
   { value: "any", label: "Any time" },
 ];
 
+/* ─── DemoMeetingMapPicker — purpose-built meeting-spot picker for demo
+       scheduling. Layered map:
+         - reference radius circle (admin's 50mi search area; locked)
+         - reference center pin (small grey dot at admin's pin)
+         - user's last-known location (blue dot; private to the viewer)
+         - meeting pin (red; current proposer's suggestion; draggable, click to move)
+         - counter pin (orange/copper; customer's counter when present)
+       Plus: search-by-name (Mapbox forward geocode), fullscreen toggle,
+       POI-preferring reverse geocode on tap so the label resolves to
+       business names ("Starbucks") not just cities ("Lakewood, CO"). ─── */
+function DemoMeetingMapPicker({ referenceLat, referenceLng, referenceRadiusM, meetingLat, meetingLng, counterLat, counterLng, counterLabel, onChange }) {
+  const mapDivRef = useRef(null);
+  const mapInstRef = useRef(null);
+  const refMarkerRef = useRef(null);
+  const userMarkerRef = useRef(null);
+  const meetingMarkerRef = useRef(null);
+  const counterMarkerRef = useRef(null);
+  const [busy, setBusy] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [searchQ, setSearchQ] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [userPos, setUserPos] = useState(null); // {lat, lng}
+  const searchDebounceRef = useRef(null);
+
+  // One-shot geolocation request on mount. We don't store this anywhere
+  // beyond local state — it stays private to the viewer.
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) return;
+    let cancelled = false;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => { if (!cancelled) setUserPos({ lat: pos.coords.latitude, lng: pos.coords.longitude }); },
+      (err) => { /* permission denied / unavailable — just don't show the dot */ },
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+    );
+    return () => { cancelled = true; };
+  }, []);
+
+  // Initialize the map.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const gl = await loadMapbox();
+      if (cancelled || !mapDivRef.current) return;
+      const initialCenter = (typeof meetingLng === "number" && typeof meetingLat === "number") ? [meetingLng, meetingLat]
+        : (typeof referenceLng === "number" && typeof referenceLat === "number") ? [referenceLng, referenceLat]
+        : [-98.5, 39.5];
+      const initialZoom = (typeof referenceLng === "number") ? 10 : 3.5;
+      const map = new gl.Map({
+        container: mapDivRef.current,
+        style: MAPBOX_STYLE,
+        center: initialCenter,
+        zoom: initialZoom,
+        attributionControl: false,
+      });
+      mapInstRef.current = map;
+      map.on("load", () => {
+        drawReference(map);
+        drawUserDot(gl, map, userPos);
+        drawMeetingPin(gl, map, meetingLng, meetingLat);
+        drawCounterPin(gl, map, counterLng, counterLat);
+      });
+      map.on("click", async (e) => {
+        const { lng: clickLng, lat: clickLat } = e.lngLat;
+        drawMeetingPin(gl, map, clickLng, clickLat);
+        await resolveAndEmit(clickLng, clickLat);
+      });
+    })();
+    return () => { cancelled = true; if (mapInstRef.current) { try { mapInstRef.current.remove(); } catch {} mapInstRef.current = null; } };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Sync user dot when geolocation arrives after map mount.
+  useEffect(() => {
+    if (!mapInstRef.current) return;
+    if (!userPos) return;
+    drawUserDot(window.mapboxgl, mapInstRef.current, userPos);
+  }, [userPos]);
+
+  // Sync counter pin if the prop changes.
+  useEffect(() => {
+    if (!mapInstRef.current) return;
+    drawCounterPin(window.mapboxgl, mapInstRef.current, counterLng, counterLat);
+  }, [counterLat, counterLng]);
+
+  // Force the map to re-flow on fullscreen toggle so it fills the new container.
+  useEffect(() => {
+    if (!mapInstRef.current) return;
+    const t = setTimeout(() => { try { mapInstRef.current.resize(); } catch {} }, 50);
+    return () => clearTimeout(t);
+  }, [fullscreen]);
+
+  const drawReference = (map) => {
+    if (typeof referenceLat !== "number" || typeof referenceLng !== "number") return;
+    const id = "ref-radius";
+    if (!map.isStyleLoaded()) { map.once("idle", () => drawReference(map)); return; }
+    const feature = makeCircleGeoJSON(referenceLat, referenceLng, referenceRadiusM || 80467);
+    if (feature && !map.getSource(id)) {
+      map.addSource(id, { type: "geojson", data: { type: "FeatureCollection", features: [feature] } });
+      map.addLayer({ id: `${id}-fill`, type: "fill", source: id, paint: { "fill-color": T.copper, "fill-opacity": 0.07 } });
+      map.addLayer({ id: `${id}-line`, type: "line", source: id, paint: { "line-color": T.copper, "line-width": 2, "line-opacity": 0.5, "line-dasharray": [3, 3] } });
+    }
+    // Reference center dot (small + non-interactive)
+    if (refMarkerRef.current) { try { refMarkerRef.current.remove(); } catch {} }
+    const el = document.createElement("div");
+    el.style.cssText = `width: 12px; height: 12px; border-radius: 50%; background: ${T.copper}; border: 2px solid ${T.darkBg}; pointer-events: none;`;
+    refMarkerRef.current = new window.mapboxgl.Marker({ element: el, anchor: "center" }).setLngLat([referenceLng, referenceLat]).addTo(map);
+  };
+  const drawUserDot = (gl, map, pos) => {
+    if (!gl || !map || !pos) return;
+    if (userMarkerRef.current) { try { userMarkerRef.current.remove(); } catch {} }
+    const el = document.createElement("div");
+    el.style.cssText = `width: 16px; height: 16px; border-radius: 50%; background: #2C8FFA; border: 3px solid ${T.white}; box-shadow: 0 0 12px rgba(44,143,250,0.6); pointer-events: none;`;
+    userMarkerRef.current = new gl.Marker({ element: el, anchor: "center" }).setLngLat([pos.lng, pos.lat]).addTo(map);
+  };
+  const drawMeetingPin = (gl, map, lng, lat) => {
+    if (!gl || !map || typeof lng !== "number" || typeof lat !== "number") return;
+    if (meetingMarkerRef.current) { try { meetingMarkerRef.current.remove(); } catch {} }
+    const el = document.createElement("div");
+    el.style.cssText = `width: 24px; height: 24px; border-radius: 50% 50% 50% 0; background: ${T.red}; border: 3px solid ${T.white}; box-shadow: 0 2px 8px rgba(0,0,0,0.4); transform: rotate(-45deg);`;
+    meetingMarkerRef.current = new gl.Marker({ element: el, anchor: "bottom", draggable: true }).setLngLat([lng, lat]).addTo(map);
+    meetingMarkerRef.current.on("dragend", async (e) => {
+      const ll = meetingMarkerRef.current.getLngLat();
+      await resolveAndEmit(ll.lng, ll.lat);
+    });
+  };
+  const drawCounterPin = (gl, map, lng, lat) => {
+    if (counterMarkerRef.current) { try { counterMarkerRef.current.remove(); } catch {} counterMarkerRef.current = null; }
+    if (!gl || !map || typeof lng !== "number" || typeof lat !== "number") return;
+    const el = document.createElement("div");
+    // Diamond-shaped, copper/orange so it's clearly different from the
+    // proposer's red drop pin even at a glance.
+    el.style.cssText = `width: 20px; height: 20px; background: #FF9933; border: 3px solid ${T.white}; box-shadow: 0 2px 6px rgba(0,0,0,0.4); transform: rotate(45deg);`;
+    counterMarkerRef.current = new gl.Marker({ element: el, anchor: "center" }).setLngLat([lng, lat]).addTo(map);
+  };
+
+  const resolveAndEmit = async (lng, lat) => {
+    setBusy(true);
+    try {
+      const info = await mapboxReverseGeocodePOI(lng, lat);
+      const label = info && info.label;
+      onChange && onChange({ lat, lng, label: label || null });
+    } catch (err) {
+      console.error("[meeting picker] geocode failed", err);
+      onChange && onChange({ lat, lng, label: null });
+    } finally { setBusy(false); }
+  };
+
+  // Forward search — debounced. Centers map + drops meeting pin on tap.
+  useEffect(() => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    if (!searchQ || searchQ.length < 2) { setSearchResults([]); return; }
+    searchDebounceRef.current = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const results = await mapboxGeocodeSearch(searchQ, 6);
+        setSearchResults(results);
+      } finally { setSearching(false); }
+    }, 250);
+    return () => { if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current); };
+  }, [searchQ]);
+
+  const pickSearchResult = (r) => {
+    if (!mapInstRef.current) return;
+    drawMeetingPin(window.mapboxgl, mapInstRef.current, r.lng, r.lat);
+    mapInstRef.current.flyTo({ center: [r.lng, r.lat], zoom: 14, duration: 600 });
+    setSearchQ("");
+    setSearchResults([]);
+    // The search result label is more accurate than reverse-geocoding the
+    // exact coordinate, so prefer it.
+    onChange && onChange({ lat: r.lat, lng: r.lng, label: r.label });
+  };
+
+  const wrapperStyle = fullscreen
+    ? { position: "fixed", inset: 0, background: T.darkBg, zIndex: 1500, display: "flex", flexDirection: "column" }
+    : { position: "relative" };
+  const mapStyle = fullscreen
+    ? { flex: 1 }
+    : { width: "100%", height: 320, borderRadius: 8, overflow: "hidden", background: T.charcoal };
+
+  return (
+    <div style={wrapperStyle}>
+      {fullscreen && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", borderBottom: `1px solid ${T.charcoal}` }}>
+          <Target size={14} color={T.red} />
+          <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>PICK A MEETING SPOT</span>
+          <button onClick={() => setFullscreen(false)} style={{ marginLeft: "auto", background: T.red, color: T.white, border: "none", borderRadius: 4, padding: "6px 12px", fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}>DONE</button>
+        </div>
+      )}
+      <div style={{ position: "relative", flex: fullscreen ? 1 : "0 0 auto" }}>
+        <div ref={mapDivRef} style={mapStyle} />
+        {/* Search input — overlays the top of the map */}
+        <div style={{ position: "absolute", top: 8, left: 8, right: fullscreen ? 8 : 50, zIndex: 5 }}>
+          <input
+            value={searchQ}
+            onChange={(e) => setSearchQ(e.target.value)}
+            placeholder="Search a place (e.g. Starbucks @ 4th + Main)"
+            style={{ width: "100%", padding: "8px 12px", borderRadius: 6, background: "rgba(0,0,0,0.85)", border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 12, boxSizing: "border-box" }}
+          />
+          {searchResults.length > 0 && (
+            <div style={{ marginTop: 4, background: T.darkBg, borderRadius: 6, border: `1px solid ${T.charcoal}`, maxHeight: 200, overflowY: "auto", boxShadow: "0 4px 14px rgba(0,0,0,0.5)" }}>
+              {searchResults.map((r, i) => (
+                <button key={i} onClick={() => pickSearchResult(r)} style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 10px", background: "none", border: "none", borderBottom: i < searchResults.length - 1 ? `1px solid ${T.charcoal}40` : "none", cursor: "pointer", color: T.white, fontFamily: sans, fontSize: 11 }}>{r.label}</button>
+              ))}
+            </div>
+          )}
+        </div>
+        {/* Fullscreen toggle button — only when not fullscreen */}
+        {!fullscreen && (
+          <button onClick={() => setFullscreen(true)} title="Expand map" style={{ position: "absolute", top: 8, right: 8, zIndex: 5, width: 32, height: 32, borderRadius: 6, background: "rgba(0,0,0,0.85)", border: `1px solid ${T.charcoal}`, color: T.white, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Maximize2 size={14} color={T.white} />
+          </button>
+        )}
+        {busy && <div style={{ position: "absolute", bottom: 8, right: 8, background: "rgba(0,0,0,0.7)", color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 700, padding: "4px 8px", borderRadius: 4 }}>RESOLVING…</div>}
+        <div style={{ position: "absolute", bottom: 8, left: 8, background: "rgba(0,0,0,0.6)", color: T.white, fontFamily: sans, fontSize: 10, padding: "4px 8px", borderRadius: 4 }}>
+          Tap or drag the red pin to set the meeting spot
+        </div>
+      </div>
+      {/* Legend — only inside fullscreen mode where there's space */}
+      {fullscreen && (
+        <div style={{ padding: "10px 16px", borderTop: `1px solid ${T.charcoal}`, display: "flex", gap: 14, flexWrap: "wrap", fontFamily: sans, fontSize: 10, color: T.tertiary }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: "50%", background: T.copper }} /> Bounty area</span>
+          <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: "50%", background: "#2C8FFA", border: `2px solid ${T.white}` }} /> Your location (private)</span>
+          <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 10, height: 10, background: T.red, transform: "rotate(-45deg)", borderRadius: "50% 50% 50% 0" }} /> Meeting pin</span>
+          {(typeof counterLat === "number") && (
+            <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 10, height: 10, background: "#FF9933", transform: "rotate(45deg)" }} /> Counter pin</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── DemoProposalDmCard — renders a demo_proposal payload card inside a DM
        thread. Intent-specific layout + action buttons. Actions fire via
        the parent's onSelectSlot / onCounter / onLockIn callbacks. ─── */
@@ -17796,16 +18066,18 @@ function DemoRequestFlow({ bounty, submission, currentUserId, isGuest, onGuestTa
               )}
               <div>
                 <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.5, marginBottom: 6 }}>3. Suggest a meeting spot</div>
-                <BountyDemoMapPicker
-                  lat={proposalLat}
-                  lng={proposalLng}
-                  radiusM={2000}
-                  onChange={({ lat, lng, label }) => { setProposalLat(lat); setProposalLng(lng); setProposalLocationLabel(label || ""); }}
+                <DemoMeetingMapPicker
+                  referenceLat={bounty.demo_lat}
+                  referenceLng={bounty.demo_lng}
+                  referenceRadiusM={bounty.demo_radius_m || 80467}
+                  meetingLat={proposalLat}
+                  meetingLng={proposalLng}
+                  onChange={({ lat, lng, label }) => { setProposalLat(lat); setProposalLng(lng); if (label) setProposalLocationLabel(label); }}
                 />
                 <input
                   value={proposalLocationLabel}
                   onChange={(e) => setProposalLocationLabel(e.target.value)}
-                  placeholder="Meeting place name (e.g. Starbucks @ 4th + Main)"
+                  placeholder="Meeting place name (override if the geocoded label isn't quite right)"
                   style={{ width: "100%", marginTop: 6, padding: "8px 10px", borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 12, boxSizing: "border-box" }}
                 />
               </div>
