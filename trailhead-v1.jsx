@@ -420,31 +420,37 @@ async function mapboxReverseGeocode(lng, lat) {
 //
 // Region = nearest "place" context (city/town); state code parsed from the
 // "region" context short_code (e.g. "us-co" → "CO").
-// POI-preferring reverse geocode — single round-trip, requests up to 5
-// candidates (no type filter so Mapbox returns the most relevant set
-// including POIs in range), then prefers POI features over plain
-// addresses. Lands on a "Starbucks" label when the user taps on or
-// near one; falls back to a clean address/city label otherwise.
+// POI-preferring reverse geocode.
+//
+// Mapbox v5 reverse geocoding constraint: when limit > 1 you MUST pass a
+// single types value; mixing types only works at limit=1 (returns the most
+// relevant single feature). So we do two sequential limit=1 calls:
+//   1. types=poi   — returns the POI feature if the coord falls inside one
+//   2. types=address,place,locality,neighborhood — fallback for blank areas
+// This lands on a venue name ("Starbucks @ 4th + Main") when one exists
+// and a clean city/address label otherwise.
 async function mapboxReverseGeocodePOI(lng, lat) {
-  try {
-    const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${MAPBOX_TOKEN}&limit=5`;
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const data = await res.json();
-    const features = Array.isArray(data.features) ? data.features : [];
-    if (features.length === 0) return null;
-    // Prefer the most specific feature type, in this order:
-    const priority = ["poi", "address", "neighborhood", "locality", "place"];
-    const ranked = features.slice().sort((a, b) => {
-      const ai = priority.indexOf((a.place_type || ["zzz"])[0]);
-      const bi = priority.indexOf((b.place_type || ["zzz"])[0]);
-      return (ai < 0 ? 999 : ai) - (bi < 0 ? 999 : bi);
-    });
-    const choice = ranked[0];
-    const parts = (choice.place_name || "").split(",").map(s => s.trim()).filter(Boolean);
+  const base = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${MAPBOX_TOKEN}&limit=1`;
+  const fromFeature = (f) => {
+    if (!f) return null;
+    const parts = (f.place_name || "").split(",").map(s => s.trim()).filter(Boolean);
     const trimmed = trimCountryTail(parts).slice(0, 3).join(", ");
-    return { label: trimmed || choice.text || null, context: null };
-  } catch (e) { console.error("[mapbox] POI reverse geocode failed", e); return null; }
+    return { label: trimmed || f.text || null, context: null };
+  };
+  try {
+    const poiRes = await fetch(`${base}&types=poi`);
+    if (poiRes.ok) {
+      const poiData = await poiRes.json();
+      const poi = (poiData.features || [])[0];
+      if (poi) return fromFeature(poi);
+    }
+  } catch (e) { /* keep going to fallback */ }
+  try {
+    const addrRes = await fetch(`${base}&types=address,place,locality,neighborhood`);
+    if (!addrRes.ok) return null;
+    const addrData = await addrRes.json();
+    return fromFeature((addrData.features || [])[0]);
+  } catch (e) { console.error("[mapbox] POI reverse geocode fallback failed", e); return null; }
 }
 function trimCountryTail(parts) {
   if (!parts || !parts.length) return parts || [];
