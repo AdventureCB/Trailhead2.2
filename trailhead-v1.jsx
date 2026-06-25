@@ -17623,7 +17623,10 @@ function DemoRequestFlow({ bounty, submission, currentUserId, isGuest, onGuestTa
         meeting_label: proposalLocationLabel || null,
         note: (proposalNote || "").trim() || null,
       };
-      const res = await onSendDemoProposal(customer.id, proposal);
+      // Personalized opener under the card — only on the initial propose,
+      // not on subsequent select/counter/final cards.
+      const opener = `Hi @${customer.handle || "there"}! I'd love to set up the demo you requested. When works for you?`;
+      const res = await onSendDemoProposal(customer.id, proposal, undefined, opener);
       if (res && res.error) throw new Error(res.error);
       // Persist a snapshot of the proposal into the bounty draft so the
       // user can come back + view what they sent (and for re-edit on
