@@ -18736,6 +18736,7 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
   const [expandedBounty, setExpandedBounty] = useState(null);
   const [activeBountyForm, setActiveBountyForm] = useState(null); // bounty object or null
   const [claimingId, setClaimingId] = useState(null);
+  const [claimError, setClaimError] = useState(null); // { bountyId, message }
 
   // Phase 5 wiring: actions route through the parent-supplied RPC callbacks.
   // The form's local field state mirrors the submission's `draft` jsonb on
@@ -18743,10 +18744,23 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
   const startBounty = async (bountyId) => {
     if (isGuest && onGuestTap) { onGuestTap(); return; }
     if (!onClaimBounty) return;
+    setClaimError(null);
     setClaimingId(bountyId);
     const res = await onClaimBounty(bountyId);
     setClaimingId(null);
-    if (res && res.error) { console.error("[claim_bounty]", res.error); return; }
+    if (res && res.error) {
+      console.error("[claim_bounty]", res.error);
+      // Surface the server message so the user sees why the tap did nothing.
+      // Friendlier wording for the most common case.
+      const msg = /all slots are claimed/i.test(res.error)
+        ? "All slots are already claimed. Check back if someone withdraws."
+        : /deadline/i.test(res.error) ? "This bounty has expired."
+        : /not open/i.test(res.error) ? "This bounty isn't open anymore."
+        : res.error;
+      setClaimError({ bountyId, message: msg });
+      setTimeout(() => setClaimError(prev => prev && prev.bountyId === bountyId ? null : prev), 6000);
+      return;
+    }
     // Open the form so user can start editing. We don't pass a draft —
     // submission was just created so it's empty.
     const b = bounties.find(x => x.id === bountyId);
@@ -19168,10 +19182,15 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
                         </div>
                       </div>
                       {b.status === "open" && slotsLeft > 0 && (
-                        <button onClick={(e) => { e.stopPropagation(); startBounty(b.id); }} disabled={claimingId === b.id} style={{ width: "100%", padding: "12px", background: T.red, color: T.white, fontFamily: sans, fontSize: 12, fontWeight: 700, borderRadius: 8, border: "none", cursor: claimingId === b.id ? "wait" : "pointer", letterSpacing: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: claimingId === b.id ? 0.6 : 1 }}>
-                          <Target size={14} color={T.white} />
-                          {claimingId === b.id ? "CLAIMING…" : "CLAIM BOUNTY"}
-                        </button>
+                        <>
+                          <button onClick={(e) => { e.stopPropagation(); startBounty(b.id); }} disabled={claimingId === b.id} style={{ width: "100%", padding: "12px", background: T.red, color: T.white, fontFamily: sans, fontSize: 12, fontWeight: 700, borderRadius: 8, border: "none", cursor: claimingId === b.id ? "wait" : "pointer", letterSpacing: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: claimingId === b.id ? 0.6 : 1 }}>
+                            <Target size={14} color={T.white} />
+                            {claimingId === b.id ? "CLAIMING…" : "CLAIM BOUNTY"}
+                          </button>
+                          {claimError && claimError.bountyId === b.id && (
+                            <div style={{ marginTop: 8, padding: "8px 12px", background: `${T.red}15`, border: `1px solid ${T.red}40`, borderRadius: 6, fontFamily: serif, fontSize: 12, color: T.white, lineHeight: 1.4 }}>{claimError.message}</div>
+                          )}
+                        </>
                       )}
                       {b.status === "open" && slotsLeft <= 0 && (
                         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0 0" }}>
