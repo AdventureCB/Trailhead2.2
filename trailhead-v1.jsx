@@ -420,35 +420,30 @@ async function mapboxReverseGeocode(lng, lat) {
 //
 // Region = nearest "place" context (city/town); state code parsed from the
 // "region" context short_code (e.g. "us-co" → "CO").
-// POI-preferring reverse geocode — prefers business/venue names over
-// city-level addresses. Used by the demo meeting picker so dropping a
-// pin on a Starbucks resolves to "Starbucks" instead of "Lakewood, CO".
-// Falls back to the address-level result when no POI is nearby.
+// POI-preferring reverse geocode — single round-trip, requests up to 5
+// candidates (no type filter so Mapbox returns the most relevant set
+// including POIs in range), then prefers POI features over plain
+// addresses. Lands on a "Starbucks" label when the user taps on or
+// near one; falls back to a clean address/city label otherwise.
 async function mapboxReverseGeocodePOI(lng, lat) {
   try {
-    // First try POI types — tight feature class
-    const poiUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${MAPBOX_TOKEN}&types=poi&limit=1`;
-    const poiRes = await fetch(poiUrl);
-    if (poiRes.ok) {
-      const data = await poiRes.json();
-      const f = data.features && data.features[0];
-      if (f) {
-        const parts = (f.place_name || "").split(",").map(s => s.trim()).filter(Boolean);
-        const ctxParts = trimCountryTail(parts).slice(1, 3); // skip the venue name in idx 0
-        const ctx = ctxParts.join(", ");
-        return { label: f.text || f.place_name, context: ctx || null };
-      }
-    }
-    // Fallback to address-level (no POI nearby)
-    const addrUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${MAPBOX_TOKEN}&types=address,place,locality,neighborhood&limit=1`;
-    const addrRes = await fetch(addrUrl);
-    if (!addrRes.ok) return null;
-    const data2 = await addrRes.json();
-    const f2 = data2.features && data2.features[0];
-    if (!f2) return null;
-    const parts = (f2.place_name || "").split(",").map(s => s.trim()).filter(Boolean);
+    const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${MAPBOX_TOKEN}&limit=5`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const features = Array.isArray(data.features) ? data.features : [];
+    if (features.length === 0) return null;
+    // Prefer the most specific feature type, in this order:
+    const priority = ["poi", "address", "neighborhood", "locality", "place"];
+    const ranked = features.slice().sort((a, b) => {
+      const ai = priority.indexOf((a.place_type || ["zzz"])[0]);
+      const bi = priority.indexOf((b.place_type || ["zzz"])[0]);
+      return (ai < 0 ? 999 : ai) - (bi < 0 ? 999 : bi);
+    });
+    const choice = ranked[0];
+    const parts = (choice.place_name || "").split(",").map(s => s.trim()).filter(Boolean);
     const trimmed = trimCountryTail(parts).slice(0, 3).join(", ");
-    return { label: trimmed || f2.text || null, context: null };
+    return { label: trimmed || choice.text || null, context: null };
   } catch (e) { console.error("[mapbox] POI reverse geocode failed", e); return null; }
 }
 function trimCountryTail(parts) {
@@ -17513,9 +17508,12 @@ function DemoMeetingMapPicker({ referenceLat, referenceLng, referenceRadiusM, me
   const wrapperStyle = fullscreen
     ? { position: "fixed", inset: 0, background: T.darkBg, zIndex: 1500, display: "flex", flexDirection: "column" }
     : { position: "relative" };
-  const mapStyle = fullscreen
-    ? { flex: 1 }
-    : { width: "100%", height: 320, borderRadius: 8, overflow: "hidden", background: T.charcoal };
+  // Mapbox needs an explicit non-zero height. Inline mode = fixed 320px;
+  // fullscreen = the shell flexes to fill remaining viewport, and the
+  // map div absolutely fills the shell.
+  const mapShellStyle = fullscreen
+    ? { flex: "1 1 auto", minHeight: 0, position: "relative" }
+    : { position: "relative", height: 320, borderRadius: 8, overflow: "hidden", background: T.charcoal };
 
   return (
     <div style={wrapperStyle}>
@@ -17526,8 +17524,8 @@ function DemoMeetingMapPicker({ referenceLat, referenceLng, referenceRadiusM, me
           <button onClick={() => setFullscreen(false)} style={{ marginLeft: "auto", background: T.red, color: T.white, border: "none", borderRadius: 4, padding: "6px 12px", fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}>DONE</button>
         </div>
       )}
-      <div style={{ position: "relative", flex: fullscreen ? 1 : "0 0 auto" }}>
-        <div ref={mapDivRef} style={mapStyle} />
+      <div style={mapShellStyle}>
+        <div ref={mapDivRef} style={{ position: "absolute", inset: 0 }} />
         {/* Search input — overlays the top of the map */}
         <div style={{ position: "absolute", top: 8, left: 8, right: fullscreen ? 8 : 50, zIndex: 5 }}>
           <input
@@ -19359,7 +19357,14 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
 
   const [bountyFilter, setBountyFilter] = useState("OPEN");
   const [expandedBounty, setExpandedBounty] = useState(null);
-  const [activeBountyForm, setActiveBountyForm] = useState(null); // bounty object or null
+  // Active bounty form/overlay — track by ID, derive the full row from
+  // `bounties` on every render so accept/claim/save updates flow through
+  // without forcing the overlay to be closed + reopened.
+  const [activeBountyFormId, setActiveBountyFormId] = useState(null);
+  const activeBountyForm = useMemo(() => {
+    if (!activeBountyFormId) return null;
+    return bounties.find(b => b.id === activeBountyFormId) || null;
+  }, [activeBountyFormId, bounties]);
   const [claimingId, setClaimingId] = useState(null);
   const [claimError, setClaimError] = useState(null); // { bountyId, message }
 
@@ -19388,13 +19393,11 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
     }
     // Open the form so user can start editing. We don't pass a draft —
     // submission was just created so it's empty.
-    const b = bounties.find(x => x.id === bountyId);
-    if (b) setActiveBountyForm(b);
+    setActiveBountyFormId(bountyId);
     setExpandedBounty(null);
   };
   const resumeBounty = (bountyId) => {
-    const b = bounties.find(x => x.id === bountyId);
-    if (b) setActiveBountyForm(b);
+    setActiveBountyFormId(bountyId);
   };
   const saveDraftFromForm = async (bountyId, fields) => {
     const sub = mySubsByBountyId[bountyId];
@@ -19406,7 +19409,7 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
     if (!sub || !sub.id || !onSubmitBountyRPC) return;
     const res = await onSubmitBountyRPC(sub.id, fields);
     if (res && res.error) { console.error("[submit_bounty]", res.error); alert(res.error); return; }
-    setActiveBountyForm(null);
+    setActiveBountyFormId(null);
   };
   const withdrawFromCard = async (bountyId) => {
     const sub = mySubsByBountyId[bountyId];
@@ -19970,7 +19973,7 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
               currentUserId={currentUserId}
               isGuest={isGuest}
               onGuestTap={onGuestTap}
-              onClose={() => setActiveBountyForm(null)}
+              onClose={() => setActiveBountyFormId(null)}
             />
           : <BountyResponseForm
               bounty={activeBountyForm}
@@ -19982,7 +19985,7 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
               onSubmit={submitFromForm}
               onUploadPhotos={onUploadBountyPhotos}
               currentUserId={currentUserId}
-              onClose={() => setActiveBountyForm(null)}
+              onClose={() => setActiveBountyFormId(null)}
             />
       )}
     </div>
