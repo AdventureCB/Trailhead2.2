@@ -27348,29 +27348,33 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, isGuest, onGuest
               with D/H/M/S columns ticking every second. Falls off once
               the drop flips to live and the IN PROGRESS chip takes over. */}
           {isScheduled && countdownParts && (
-            <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-              <div style={{ width: "100%", maxWidth: 360, padding: "16px 18px 18px", background: "rgba(15,15,15,0.92)", border: `2px solid ${T.copper}`, borderRadius: 16, boxShadow: `0 0 32px ${T.copper}55`, backdropFilter: "blur(8px)", textAlign: "center" }}>
-                <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 12 }}>
-                  <Clock size={12} color={T.copper} />
-                  <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 800, letterSpacing: 1.4 }}>STARTS IN</span>
+            // Pin the card to the TOP of the hero (not centered) and tighten
+            // its sizing so the hero <h1> title at the bottom stays visible
+            // on narrow mobile viewports. Was alignItems:center + big chunky
+            // card; now flex-start + compact.
+            <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "12px 16px 0" }}>
+              <div style={{ width: "100%", maxWidth: 300, padding: "8px 12px 10px", background: "rgba(15,15,15,0.92)", border: `2px solid ${T.copper}`, borderRadius: 12, boxShadow: `0 0 24px ${T.copper}55`, backdropFilter: "blur(8px)", textAlign: "center" }}>
+                <div style={{ display: "inline-flex", alignItems: "center", gap: 5, marginBottom: 6 }}>
+                  <Clock size={10} color={T.copper} />
+                  <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 800, letterSpacing: 1.3 }}>STARTS IN</span>
                 </div>
-                <div style={{ display: "flex", justifyContent: "center", gap: 6 }}>
+                <div style={{ display: "flex", justifyContent: "center", gap: 4 }}>
                   {[
                     { label: "DAYS", value: countdownParts.days },
                     { label: "HRS",  value: countdownParts.hours },
                     { label: "MIN",  value: countdownParts.mins },
                     { label: "SEC",  value: countdownParts.secs },
                   ].map((col, idx) => (
-                    <div key={col.label} style={{ flex: 1, padding: "8px 4px", background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 8 }}>
-                      <div style={{ fontFamily: sans, fontSize: 26, color: T.white, fontWeight: 800, lineHeight: 1, letterSpacing: -0.5, fontVariantNumeric: "tabular-nums" }}>
+                    <div key={col.label} style={{ flex: 1, padding: "5px 3px", background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 6 }}>
+                      <div style={{ fontFamily: sans, fontSize: 18, color: T.white, fontWeight: 800, lineHeight: 1, letterSpacing: -0.5, fontVariantNumeric: "tabular-nums" }}>
                         {String(col.value).padStart(2, "0")}
                       </div>
-                      <div style={{ fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 0.8, marginTop: 4, fontWeight: 700 }}>{col.label}</div>
+                      <div style={{ fontFamily: sans, fontSize: 7, color: T.tertiary, letterSpacing: 0.6, marginTop: 3, fontWeight: 700 }}>{col.label}</div>
                     </div>
                   ))}
                 </div>
                 {drop.starts_at && (
-                  <div style={{ marginTop: 12, fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.4 }}>
+                  <div style={{ marginTop: 6, fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.4 }}>
                     {new Date(drop.starts_at).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
                   </div>
                 )}
