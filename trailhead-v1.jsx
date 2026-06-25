@@ -27541,10 +27541,16 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, isGuest, onGuest
           ) : (
             <div style={{ padding: 14, fontFamily: serif, fontSize: 13, color: T.tertiary }}>Start location not set yet.</div>
           )}
-          {drop.start_lat != null && drop.start_lng != null && (
+          {drop.start_lat != null && drop.start_lng != null && (() => {
+            // Surface the first waypoint's host-authored label as the start
+            // point title (e.g. "Trailhead Diner"). Fall back to the
+            // reverse-geocoded address when the host left it blank.
+            const startPin = Array.isArray(drop.route_data && drop.route_data.pins) ? drop.route_data.pins[0] : null;
+            const startWaypointLabel = startPin && typeof startPin.label === "string" ? startPin.label.trim() : "";
+            return (
             <div style={{ padding: "12px 16px 14px", display: "flex", alignItems: "center", gap: 10 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                {drop.title && <div style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, marginBottom: 3, lineHeight: 1.25 }}>{drop.title}</div>}
+                {startWaypointLabel && <div style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, marginBottom: 3, lineHeight: 1.25 }}>{startWaypointLabel}</div>}
                 {locationLabel && <div style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, marginBottom: 2, lineHeight: 1.35 }}>{locationLabel}</div>}
                 <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{drop.start_lat.toFixed(5)}, {drop.start_lng.toFixed(5)}</div>
               </div>
@@ -27557,7 +27563,8 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, isGuest, onGuest
                 DIRECTIONS
               </button>
             </div>
-          )}
+            );
+          })()}
         </div>
 
         {/* Afterparty reveal — shown only after a winner is declared (or
