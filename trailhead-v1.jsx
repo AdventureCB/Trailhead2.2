@@ -27435,28 +27435,10 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, isGuest, onGuest
             : <div style={style}>{inner}</div>;
         })()}
 
-        {/* How it works — lifted above ABOUT so first-time viewers see
-            the gameplay rules before the marketing copy. */}
-        <div style={{ padding: 14, background: `${T.charcoal}80`, border: `1px solid ${T.charcoal}`, borderRadius: 10 }}>
-          <div style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 0.8, marginBottom: 6 }}>HOW IT WORKS</div>
-          <p style={{ fontFamily: serif, fontSize: 12, color: T.white, opacity: 0.8, lineHeight: 1.5, margin: 0 }}>
-            Show up at the start point. Each waypoint reveals only after you've reached the previous one and submitted a photo + note. First to reach the endpoint wins the prize.
-          </p>
-        </div>
-
-        {/* About this event (host-written rich text) */}
-        {drop.about && drop.about.trim().length > 0 && (
-          <div style={{ padding: 16, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-              <FileText size={14} color={T.green} />
-              <span style={{ fontFamily: sans, fontSize: 10, color: T.green, fontWeight: 700, letterSpacing: 0.8 }}>ABOUT</span>
-            </div>
-            <div style={{ color: T.white, opacity: 0.92 }} dangerouslySetInnerHTML={{ __html: `${GD_RB_CSS}<div class="gd-rb">${sanitizeForumHtml(drop.about)}</div>` }} />
-          </div>
-        )}
-
-        {/* Prize pack — one card per item, with section header showing
-            total approx. value when multiple items are configured. */}
+        {/* Prize pack — pulled up directly under BRAND PARTNER so the prize
+            is the second thing a visitor sees after who's sponsoring. One
+            card per item; header shows total approx. value for multi-item
+            packs. */}
         {prizeItems.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -27499,6 +27481,25 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, isGuest, onGuest
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* How it works — gameplay rules before the marketing copy. */}
+        <div style={{ padding: 14, background: `${T.charcoal}80`, border: `1px solid ${T.charcoal}`, borderRadius: 10 }}>
+          <div style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 0.8, marginBottom: 6 }}>HOW IT WORKS</div>
+          <p style={{ fontFamily: serif, fontSize: 12, color: T.white, opacity: 0.8, lineHeight: 1.5, margin: 0 }}>
+            Show up at the start point. Each waypoint reveals only after you've reached the previous one and submitted a photo + note. First to reach the endpoint wins the prize.
+          </p>
+        </div>
+
+        {/* About this event (host-written rich text) */}
+        {drop.about && drop.about.trim().length > 0 && (
+          <div style={{ padding: 16, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <FileText size={14} color={T.green} />
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.green, fontWeight: 700, letterSpacing: 0.8 }}>ABOUT</span>
+            </div>
+            <div style={{ color: T.white, opacity: 0.92 }} dangerouslySetInnerHTML={{ __html: `${GD_RB_CSS}<div class="gd-rb">${sanitizeForumHtml(drop.about)}</div>` }} />
           </div>
         )}
 
