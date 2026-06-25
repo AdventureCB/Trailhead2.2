@@ -25349,6 +25349,11 @@ function GDRichEditor({ label, value, onSave, placeholder, minHeight = 140 }) {
           <input autoFocus value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} onKeyDown={(e) => {
             if (e.key === "Enter" && linkUrl.trim()) {
               e.preventDefault();
+              // Refocus the contenteditable BEFORE restoring the saved range
+              // — otherwise createLink runs against the input's selection
+              // (or no selection at all) and the highlighted text isn't used
+              // as the link's display text.
+              if (bodyRef.current) bodyRef.current.focus();
               const sel = window.getSelection();
               if (savedRange.current) { sel.removeAllRanges(); sel.addRange(savedRange.current); }
               document.execCommand("createLink", false, linkUrl.trim().startsWith("http") ? linkUrl.trim() : "https://" + linkUrl.trim());
