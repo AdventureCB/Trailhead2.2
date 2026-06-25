@@ -17614,7 +17614,10 @@ function DemoMeetingMapPicker({ referenceLat, referenceLng, referenceRadiusM, me
 
   return (
     <div style={wrapperStyle}>
-      {fullscreen && (
+      {/* Internal fullscreen header — only when the picker owns its own
+          fullscreen state (i.e. interactive mode). In readOnly+initialFullscreen
+          the parent renders its own header so this would be redundant. */}
+      {fullscreen && !readOnly && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", borderBottom: `1px solid ${T.charcoal}` }}>
           <Target size={14} color={T.red} />
           <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>PICK A MEETING SPOT</span>
@@ -44507,8 +44510,43 @@ export default function Trailhead() {
       meeting_label: sp.meeting_label,
       counter_lat: null, // populated when paired with a counter card
       counter_lng: null,
+      travel: null, // { duration_text, distance_text, loading? }
     });
   };
+  // When the viewer opens, geolocate the user + fetch driving directions
+  // to the meeting pin. Result populates the travel-time chip in the
+  // overlay header. Silent on permission denied / no GPS.
+  useEffect(() => {
+    if (!demoMapViewer) return;
+    if (typeof demoMapViewer.meeting_lat !== "number" || typeof demoMapViewer.meeting_lng !== "number") return;
+    if (demoMapViewer.travel) return; // already fetched / loading
+    if (typeof navigator === "undefined" || !navigator.geolocation) return;
+    let cancelled = false;
+    setDemoMapViewer(prev => prev ? { ...prev, travel: { loading: true } } : prev);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        if (cancelled) return;
+        try {
+          const from = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          const to = { lat: demoMapViewer.meeting_lat, lng: demoMapViewer.meeting_lng };
+          const dir = await mapboxDirections(from, to);
+          if (cancelled) return;
+          if (dir) {
+            setDemoMapViewer(prev => prev ? { ...prev, travel: { durationText: dir.durationText, distanceText: dir.distanceText } } : prev);
+          } else {
+            setDemoMapViewer(prev => prev ? { ...prev, travel: { error: "No route found" } } : prev);
+          }
+        } catch (e) {
+          if (!cancelled) setDemoMapViewer(prev => prev ? { ...prev, travel: { error: "Directions failed" } } : prev);
+        }
+      },
+      () => {
+        if (!cancelled) setDemoMapViewer(prev => prev ? { ...prev, travel: { error: "Location unavailable" } } : prev);
+      },
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+    );
+    return () => { cancelled = true; };
+  }, [demoMapViewer && demoMapViewer.meeting_lat, demoMapViewer && demoMapViewer.meeting_lng]);
   const submitDemoSlotPick = async (sp, picked, mode) => {
     // `picked` shape: { date: "YYYY-MM-DD", slot: "morning"|..., specific_time?: "HH:MM" }
     const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
@@ -51291,29 +51329,61 @@ export default function Trailhead() {
       {/* Demo meeting-spot map viewer — opens when the user taps VIEW ON MAP
           on any demo_proposal card. Read-only fullscreen DemoMeetingMapPicker
           showing reference circle + meeting pin + (when present) counter pin. */}
-      {demoMapViewer && (
-        <div style={{ position: "fixed", inset: 0, background: T.darkBg, zIndex: 11500, display: "flex", flexDirection: "column" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", borderBottom: `1px solid ${T.charcoal}` }}>
-            <MapPin size={14} color={T.red} />
-            <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>MEETING SPOT</span>
-            {demoMapViewer.meeting_label && <span style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, marginLeft: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{demoMapViewer.meeting_label}</span>}
-            <button onClick={() => setDemoMapViewer(null)} style={{ background: T.red, color: T.white, border: "none", borderRadius: 4, padding: "6px 12px", fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}>CLOSE</button>
+      {demoMapViewer && (() => {
+        const travel = demoMapViewer.travel;
+        const directionsUrl = (typeof demoMapViewer.meeting_lat === "number" && typeof demoMapViewer.meeting_lng === "number")
+          ? `https://www.google.com/maps/dir/?api=1&destination=${demoMapViewer.meeting_lat},${demoMapViewer.meeting_lng}&travelmode=driving`
+          : null;
+        return (
+          <div style={{ position: "fixed", inset: 0, background: T.darkBg, zIndex: 11500, display: "flex", flexDirection: "column" }}>
+            {/* Header row 1: title + close */}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", borderBottom: `1px solid ${T.charcoal}` }}>
+              <MapPin size={14} color={T.red} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>MEETING SPOT</div>
+                {demoMapViewer.meeting_label && <div style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 2 }}>{demoMapViewer.meeting_label}</div>}
+              </div>
+              <button onClick={() => setDemoMapViewer(null)} style={{ background: T.red, color: T.white, border: "none", borderRadius: 4, padding: "6px 12px", fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}>CLOSE</button>
+            </div>
+            {/* Header row 2: travel time chip + directions deep link */}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", borderBottom: `1px solid ${T.charcoal}40`, background: T.darkCard }}>
+              <Route size={12} color={T.copper} />
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 700 }}>FROM YOU</span>
+              {(!travel || travel.loading) && (
+                <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>Calculating…</span>
+              )}
+              {travel && travel.error && (
+                <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{travel.error}</span>
+              )}
+              {travel && travel.durationText && (
+                <>
+                  <span style={{ fontFamily: sans, fontSize: 13, color: T.copper, fontWeight: 700 }}>{travel.durationText}</span>
+                  {travel.distanceText && <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>· {travel.distanceText}</span>}
+                </>
+              )}
+              {directionsUrl && (
+                <a href={directionsUrl} target="_blank" rel="noopener noreferrer" style={{ marginLeft: "auto", background: T.copper, color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, padding: "7px 12px", borderRadius: 4, textDecoration: "none", display: "flex", alignItems: "center", gap: 5 }}>
+                  <Navigation size={11} color={T.white} />
+                  GET DIRECTIONS
+                </a>
+              )}
+            </div>
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <DemoMeetingMapPicker
+                referenceLat={demoMapViewer.bounty_demo_lat}
+                referenceLng={demoMapViewer.bounty_demo_lng}
+                referenceRadiusM={demoMapViewer.bounty_demo_radius_m || 80467}
+                meetingLat={demoMapViewer.meeting_lat}
+                meetingLng={demoMapViewer.meeting_lng}
+                counterLat={demoMapViewer.counter_lat}
+                counterLng={demoMapViewer.counter_lng}
+                readOnly
+                initialFullscreen
+              />
+            </div>
           </div>
-          <div style={{ flex: 1, minHeight: 0 }}>
-            <DemoMeetingMapPicker
-              referenceLat={demoMapViewer.bounty_demo_lat}
-              referenceLng={demoMapViewer.bounty_demo_lng}
-              referenceRadiusM={demoMapViewer.bounty_demo_radius_m || 80467}
-              meetingLat={demoMapViewer.meeting_lat}
-              meetingLng={demoMapViewer.meeting_lng}
-              counterLat={demoMapViewer.counter_lat}
-              counterLng={demoMapViewer.counter_lng}
-              readOnly
-              initialFullscreen
-            />
-          </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Points Toast Notifications */}
       {pointsToasts.length > 0 && (
