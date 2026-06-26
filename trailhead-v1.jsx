@@ -26825,7 +26825,7 @@ function GearDropWinnerAlert({ drop, run, onContinueRace, onRouteToAfterparty, o
 // the recap needs drop-scoped context (parent drop title, brand, all
 // finishers for ranking) that a generic trip_reports row doesn't carry.
 // Fetches the parent drop + ranking data once on mount.
-function GearDropMementoScreen({ trip: tripProp, currentUserId, onClose, onOpenDrop, onShareIntent, onViewUser }) {
+function GearDropMementoScreen({ trip: tripProp, currentUserId, isAdmin, onClose, onOpenDrop, onShareIntent, onViewUser }) {
   // Internal trip state — kicks off from the prop, but if that prop came
   // from a loader that only pulled the generic trip-report column set
   // (no gear_drop_id / progress / finished_at), the load effect below
@@ -26893,7 +26893,7 @@ function GearDropMementoScreen({ trip: tripProp, currentUserId, onClose, onOpenD
         if (!workingTrip.gear_drop_id || !workingTrip.progress) {
           const { data: fullRow, error: fullErr } = await supabase
             .from("trip_reports")
-            .select("id, user_id, slug, name, hero_img, kind, status, visibility, gear_drop_id, progress, finished_at, last_unlocked_at, published_at, created_at")
+            .select("id, user_id, slug, name, hero_img, kind, status, visibility, gear_drop_id, progress, finished_at, last_unlocked_at, published_at, created_at, gd_review_status")
             .eq("id", trip.id)
             .maybeSingle();
           if (cancelled) return;
@@ -27048,6 +27048,44 @@ function GearDropMementoScreen({ trip: tripProp, currentUserId, onClose, onOpenD
     return null;
   })();
 
+  // Admin review gate. Pending mementos lie on the event page as
+  // un-openable placeholders for non-admin non-owner viewers. If
+  // somebody deep-links to /trips/<slug> before admin approval, show a
+  // soft "awaiting review" screen instead of the full recap so the
+  // photos / notes / pin trail don't leak. Owner + admin bypass. The
+  // gate keys off `trip` (which the upstream defensive re-fetch
+  // refreshes if needed) so it stays accurate after lazy hydration.
+  const reviewStatus = (trip && trip.gd_review_status) || "approved";
+  const isPending = reviewStatus === "pending";
+  const isRejected = reviewStatus === "rejected";
+  const isOwner = !!(currentUserId && trip && trip.user_id === currentUserId);
+  if ((isPending || isRejected) && !isAdmin && !isOwner) {
+    return (
+      <div style={{ position: "fixed", top: 0, bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 430, zIndex: 1000, background: T.darkBg, display: "flex", flexDirection: "column" }}>
+        <div style={{ padding: "14px 16px", borderBottom: `1px solid ${T.charcoal}`, display: "flex", alignItems: "center", gap: 8 }}>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+            <ChevronLeft size={20} color={T.white} />
+          </button>
+          <Lock size={14} color={T.copper} />
+          <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 0.6 }}>AWAITING REVIEW</span>
+        </div>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "24px" }}>
+          <div style={{ maxWidth: 360, textAlign: "center", display: "flex", flexDirection: "column", gap: 14, alignItems: "center" }}>
+            <Lock size={28} color={T.copper} />
+            <div style={{ fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700, lineHeight: 1.25 }}>
+              {isRejected ? "Recap unavailable" : "This recap is awaiting admin review"}
+            </div>
+            <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, lineHeight: 1.5, margin: 0 }}>
+              {isRejected
+                ? "This run's memento isn't publicly viewable. Head back to the event page for the rest of the recap."
+                : "Once an admin signs off on the racer's submissions, the full recap will open up here. Check back soon — or head back to the event page to see the leaderboard."}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ position: "fixed", top: 0, bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 430, zIndex: 1000, background: T.darkBg, overflowY: "auto" }}>
       <div style={{ position: "sticky", top: 0, padding: "14px 16px", background: T.darkBg, borderBottom: `1px solid ${T.charcoal}`, display: "flex", alignItems: "center", gap: 8, zIndex: 4 }}>
@@ -27056,6 +27094,9 @@ function GearDropMementoScreen({ trip: tripProp, currentUserId, onClose, onOpenD
         </button>
         <Trophy size={16} color={T.copper} />
         <span style={{ flex: 1, fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.8 }}>RACER RECAP</span>
+        {isAdmin && isPending && (
+          <span style={{ padding: "3px 7px", background: `${T.copper}25`, color: T.copper, fontFamily: sans, fontSize: 9, fontWeight: 800, letterSpacing: 0.7, borderRadius: 4, border: `1px solid ${T.copper}`, marginRight: 6 }}>PENDING REVIEW</span>
+        )}
         {onShareIntent && drop && trip && trip.slug && (
           <button onClick={() => onShareIntent({ trip, drop })} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
             <Share2 size={18} color={T.white} />
@@ -27186,7 +27227,7 @@ function GearDropMementoScreen({ trip: tripProp, currentUserId, onClose, onOpenD
   );
 }
 
-function GearDropDetailScreen({ dropId, currentUserId, isAdmin, isGuest, onGuestTap, onClose, onLoad, onJoin, onLeave, myRun, onOpenRun, onLoadComments, onAddComment, onDeleteComment, onLoadParticipants, onViewUser, onStartDirections, onOpenTrip, onBroadcastAnnouncement, onTransitionStatus }) {
+function GearDropDetailScreen({ dropId, currentUserId, isAdmin, isGuest, onGuestTap, onClose, onLoad, onJoin, onLeave, myRun, onOpenRun, onLoadComments, onAddComment, onDeleteComment, onLoadParticipants, onViewUser, onStartDirections, onOpenTrip, onBroadcastAnnouncement, onTransitionStatus, onApproveMemento, onRejectMemento }) {
   const [drop, setDrop] = useState(null);
   const [participantCount, setParticipantCount] = useState(null);
   const [joining, setJoining] = useState(false);
@@ -27985,30 +28026,75 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, isGuest, onGuest
               {mementos.map((m, idx) => {
                 const author = m.author;
                 const isWinner = idx === 0 && drop && drop.winner_run_id === m.id;
+                // Admin review gate. Pending mementos LAND on the event
+                // page so admin can see + review, but only admin (or the
+                // racer themselves) can open them. Non-admin sees a
+                // placeholder hero + AWAITING REVIEW badge + disabled
+                // tap. Approved mementos behave as before. Rejected rows
+                // are RLS-hidden for non-admin, so they only appear here
+                // for admin (with a REJECTED badge — no action buttons).
+                const reviewStatus = m.gd_review_status || "approved";
+                const isPending = reviewStatus === "pending";
+                const isRejected = reviewStatus === "rejected";
+                const isOwnRun = currentUserId && m.user_id === currentUserId;
+                const canOpen = !!(onOpenTrip && m.slug) && (!isPending || isAdmin || isOwnRun) && !isRejected;
+                const showHero = !isPending || isAdmin || isOwnRun;
                 return (
-                  <button
-                    key={m.id}
-                    onClick={() => onOpenTrip && m.slug && onOpenTrip(m.slug)}
-                    disabled={!onOpenTrip || !m.slug}
-                    style={{ display: "flex", alignItems: "stretch", gap: 0, padding: 0, background: T.darkCard, border: `1px solid ${isWinner ? T.copper : T.charcoal}`, borderRadius: 12, cursor: onOpenTrip && m.slug ? "pointer" : "default", textAlign: "left", overflow: "hidden" }}
-                  >
-                    <div style={{ width: 88, flexShrink: 0, background: m.hero_img ? `url(${m.hero_img}) center/cover` : `linear-gradient(135deg, ${T.charcoal}, ${T.darkCard})` }} />
-                    <div style={{ flex: 1, padding: "12px 14px", minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                        {isWinner && <Trophy size={12} color={T.copper} />}
-                        <div style={{ fontFamily: sans, fontSize: 9, color: isWinner ? T.copper : T.tertiary, letterSpacing: 0.8, fontWeight: 700 }}>
-                          {isWinner ? "WINNER" : `#${idx + 1}`} · {new Date(m.finished_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                  <div key={m.id} style={{ display: "flex", flexDirection: "column", gap: 0, background: T.darkCard, border: `1px solid ${isWinner ? T.copper : isPending ? `${T.copper}80` : isRejected ? `${T.red}80` : T.charcoal}`, borderRadius: 12, overflow: "hidden" }}>
+                    <button
+                      onClick={() => { if (canOpen) onOpenTrip(m.slug); }}
+                      disabled={!canOpen}
+                      style={{ display: "flex", alignItems: "stretch", gap: 0, padding: 0, background: "none", border: "none", borderRadius: 0, cursor: canOpen ? "pointer" : "default", textAlign: "left", width: "100%" }}
+                    >
+                      <div style={{ width: 88, flexShrink: 0, position: "relative", background: showHero && m.hero_img ? `url(${m.hero_img}) center/cover` : `linear-gradient(135deg, ${T.charcoal}, ${T.darkCard})`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        {!showHero && (
+                          <Lock size={20} color={T.copper} style={{ opacity: 0.85 }} />
+                        )}
+                      </div>
+                      <div style={{ flex: 1, padding: "12px 14px", minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, flexWrap: "wrap" }}>
+                          {isWinner && <Trophy size={12} color={T.copper} />}
+                          <div style={{ fontFamily: sans, fontSize: 9, color: isWinner ? T.copper : T.tertiary, letterSpacing: 0.8, fontWeight: 700 }}>
+                            {isWinner ? "WINNER" : `#${idx + 1}`} · {new Date(m.finished_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                          </div>
+                          {isPending && (
+                            <span style={{ marginLeft: 4, padding: "2px 6px", background: `${T.copper}25`, color: T.copper, fontFamily: sans, fontSize: 8, fontWeight: 800, letterSpacing: 0.7, borderRadius: 4, border: `1px solid ${T.copper}` }}>AWAITING REVIEW</span>
+                          )}
+                          {isRejected && (
+                            <span style={{ marginLeft: 4, padding: "2px 6px", background: `${T.red}25`, color: T.red, fontFamily: sans, fontSize: 8, fontWeight: 800, letterSpacing: 0.7, borderRadius: 4, border: `1px solid ${T.red}` }}>REJECTED</span>
+                          )}
                         </div>
+                        <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {(author && author.full_name) || "Racer"}'s run
+                        </div>
+                        <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>@{(author && author.handle) || "racer"}</div>
                       </div>
-                      <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {(author && author.full_name) || "Racer"}'s run
+                      <div style={{ display: "flex", alignItems: "center", paddingRight: 12 }}>
+                        {canOpen
+                          ? <ChevronRight size={14} color={T.tertiary} />
+                          : isPending ? <Lock size={12} color={T.copper} /> : null}
                       </div>
-                      <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>@{(author && author.handle) || "racer"}</div>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", paddingRight: 12 }}>
-                      <ChevronRight size={14} color={T.tertiary} />
-                    </div>
-                  </button>
+                    </button>
+                    {isAdmin && isPending && onApproveMemento && onRejectMemento && (
+                      <div style={{ display: "flex", borderTop: `1px solid ${T.charcoal}` }}>
+                        <button
+                          onClick={async () => {
+                            const res = await onApproveMemento(m.id);
+                            if (res && res.error) alert(`Approve failed: ${res.error}`);
+                          }}
+                          style={{ flex: 1, padding: "10px 12px", background: "transparent", color: T.green, border: "none", borderRight: `1px solid ${T.charcoal}`, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer" }}
+                        >APPROVE</button>
+                        <button
+                          onClick={async () => {
+                            if (typeof confirm === "function" && !confirm("Reject this memento? The card will be hidden from non-admins and the racer's recap won't be publicly openable.")) return;
+                            const res = await onRejectMemento(m.id);
+                            if (res && res.error) alert(`Reject failed: ${res.error}`);
+                          }}
+                          style={{ flex: 1, padding: "10px 12px", background: "transparent", color: T.red, border: "none", fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer" }}
+                        >REJECT</button>
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
@@ -40410,7 +40496,7 @@ export default function Trailhead() {
     try {
       const { data: row, error } = await supabase
         .from("trip_reports")
-        .select("id,user_id,name,slug,description,hero_img,start_lat,start_lng,end_lat,end_lng,route_geom,kind,visibility,status,distance_mi,elev_gain_ft,max_elev_ft,duration_min,region,state_code,build_id,terrains,tags,difficulty,planned_start,planned_end,party_size,view_count,created_at,updated_at,gear_drop_id,progress,finished_at,last_unlocked_at")
+        .select("id,user_id,name,slug,description,hero_img,start_lat,start_lng,end_lat,end_lng,route_geom,kind,visibility,status,distance_mi,elev_gain_ft,max_elev_ft,duration_min,region,state_code,build_id,terrains,tags,difficulty,planned_start,planned_end,party_size,view_count,created_at,updated_at,gear_drop_id,progress,finished_at,last_unlocked_at,gd_review_status")
         .eq("slug", slug)
         .maybeSingle();
       if (error || !row) return false;
@@ -40617,7 +40703,7 @@ export default function Trailhead() {
     try {
       const { data: tripRows } = await supabase
         .from("trip_reports")
-        .select("id,user_id,name,slug,description,hero_img,start_lat,start_lng,end_lat,end_lng,route_geom,kind,visibility,status,distance_mi,elev_gain_ft,max_elev_ft,duration_min,region,state_code,build_id,terrains,tags,difficulty,planned_start,planned_end,party_size,view_count,created_at,updated_at,gear_drop_id,progress,finished_at,last_unlocked_at")
+        .select("id,user_id,name,slug,description,hero_img,start_lat,start_lng,end_lat,end_lng,route_geom,kind,visibility,status,distance_mi,elev_gain_ft,max_elev_ft,duration_min,region,state_code,build_id,terrains,tags,difficulty,planned_start,planned_end,party_size,view_count,created_at,updated_at,gear_drop_id,progress,finished_at,last_unlocked_at,gd_review_status")
         .eq("status", "published")
         .order("created_at", { ascending: false })
         .limit(100);
@@ -45925,7 +46011,7 @@ export default function Trailhead() {
       // are publicly readable per the Phase 4 SELECT policy widening.
       const { data, error } = await supabase
         .from("trip_reports")
-        .select("id, user_id, name, slug, hero_img, status, finished_at, last_unlocked_at, progress")
+        .select("id, user_id, name, slug, hero_img, status, finished_at, last_unlocked_at, progress, gd_review_status")
         .eq("gear_drop_id", dropId)
         .eq("kind", "gear_drop_run");
       if (error) { console.error("[loadGearDropParticipants]", error); return []; }
@@ -45940,6 +46026,27 @@ export default function Trailhead() {
       }
       return (data || []).map(r => ({ ...r, author: authorMap[r.user_id] || null }));
     } catch (e) { console.error("[loadGearDropParticipants] threw", e); return []; }
+  };
+
+  // Admin-only — approve or reject a racer's memento. Pending mementos
+  // appear on the event page as un-openable cards (non-admin can't deep
+  // link to /trips/<slug>); admin acts via the inline buttons that show
+  // up on the RACER RECAPS card.
+  const adminApproveGearDropMemento = async (runId) => {
+    if (!runId) return { error: "missing run id" };
+    try {
+      const { data, error } = await supabase.rpc("admin_approve_gear_drop_memento", { p_run_id: runId });
+      if (error) { console.error("[admin_approve_gear_drop_memento]", error); return { error: error.message }; }
+      return { ok: true, data };
+    } catch (e) { return { error: e && e.message ? e.message : "Network error" }; }
+  };
+  const adminRejectGearDropMemento = async (runId) => {
+    if (!runId) return { error: "missing run id" };
+    try {
+      const { data, error } = await supabase.rpc("admin_reject_gear_drop_memento", { p_run_id: runId });
+      if (error) { console.error("[admin_reject_gear_drop_memento]", error); return { error: error.message }; }
+      return { ok: true, data };
+    } catch (e) { return { error: e && e.message ? e.message : "Network error" }; }
   };
 
   const loadGearDropEditors = async (dropId) => {
@@ -50709,6 +50816,7 @@ export default function Trailhead() {
             <GearDropMementoScreen
               trip={trip}
               currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id}
+              isAdmin={isAdmin}
               onClose={() => { setDetailTripId(null); setDetailTripInitialEdit(false); }}
               onOpenDrop={(slug) => { setDetailTripId(null); setPendingGearDropSlug(slug); }}
               onViewUser={openUserProfile}
@@ -51306,6 +51414,8 @@ export default function Trailhead() {
           onOpenTrip={(slug) => { setViewingGearDropId(null); setPendingTripNav(slug); }}
           onBroadcastAnnouncement={gearDropBroadcastAnnouncement}
           onTransitionStatus={transitionGearDropStatus}
+          onApproveMemento={adminApproveGearDropMemento}
+          onRejectMemento={adminRejectGearDropMemento}
         />
       )}
 
