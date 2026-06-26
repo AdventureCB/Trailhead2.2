@@ -5662,25 +5662,38 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
             {item.gearDropId && (() => {
               const liveDrop = (gearDrops || []).find(g => g && g.id === item.gearDropId) || null;
               const status = (liveDrop && liveDrop.status) || null;
+              const isScheduled = status === "scheduled";
+              const isEnded = status === "ended" || status === "archived";
               const statusMeta = status === "live"
                 ? { label: "LIVE", color: T.red }
-                : status === "ended" || status === "archived"
+                : isEnded
                 ? { label: "ENDED", color: T.tertiary }
-                : status === "scheduled"
+                : isScheduled
                 ? { label: "SCHEDULED", color: T.copper }
                 : { label: "EVENT", color: T.green };
               const startsAtSrc = (liveDrop && liveDrop.starts_at) || item.gearDropStartsAt;
+              const startsAtMs = startsAtSrc ? new Date(startsAtSrc).getTime() : null;
               const startsAtLabel = startsAtSrc
                 ? new Date(startsAtSrc).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
                 : null;
               const brand = (liveDrop && liveDrop.brand_partner_name) || item.gearDropBrand || null;
               const prizeLabel = liveDrop ? gearDropPrizeValueLabel(liveDrop) : fmtGearDropPrizeValue(item.gearDropPrizeCents);
               const heroImg = (liveDrop && liveDrop.hero_img) || item.gearDropHero || item.image || null;
+              const winner = (gearDropWinners && gearDropWinners[item.gearDropId]) || null;
+              // Show countdown overlay only when the drop is still
+              // scheduled AND the start moment is in the future. (Once
+              // the start passes but the drop hasn't transitioned, we
+              // hide the chip rather than show a negative — the live
+              // drop status will catch up.)
+              const showCountdown = isScheduled && startsAtMs && startsAtMs > Date.now();
               return (
                 <div onClick={() => onOpenGearDrop && onOpenGearDrop(item.gearDropId)}
                      style={{ borderRadius: 10, overflow: "hidden", border: `1px solid ${T.green}50`, marginBottom: 10, background: `${T.charcoal}80`, cursor: "pointer" }}>
                   {heroImg && (
-                    <LoadingImage src={heroImg} accent={T.green} width={480} style={{ width: "100%", height: 160 }} />
+                    <div style={{ position: "relative" }}>
+                      <LoadingImage src={heroImg} accent={T.green} width={480} style={{ width: "100%", height: 160 }} />
+                      {showCountdown && <GearDropFeedCountdown startsAtMs={startsAtMs} />}
+                    </div>
                   )}
                   <div style={{ padding: "12px 12px 10px" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
@@ -5707,6 +5720,23 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
                         <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700 }}>Prize {prizeLabel}</span>
                       </div>
                     )}
+                    {/* Winner pulled from the gearDropWinners map (loaded
+                        alongside gearDrops). Visible whenever a winner is
+                        attached — usually once the drop is ended, but if
+                        the host declares early it surfaces here regardless
+                        of status. Falls back to a "Winner declared" label
+                        if the profile fetch didn't resolve. */}
+                    {winner ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 4 }}>
+                        <Trophy size={11} color={T.copper} fill={T.copper} />
+                        <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 800, letterSpacing: 0.4 }}>WON BY @{winner.handle || "racer"}</span>
+                      </div>
+                    ) : (isEnded && liveDrop && liveDrop.winner_announced_at) ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 4 }}>
+                        <Trophy size={11} color={T.copper} />
+                        <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 0.4 }}>Winner declared {new Date(liveDrop.winner_announced_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
+                      </div>
+                    ) : null}
                     <button onClick={(e) => { e.stopPropagation(); onOpenGearDrop && onOpenGearDrop(item.gearDropId); }} style={{ marginTop: 10, width: "100%", padding: "9px 12px", background: T.green, color: T.white, border: "none", borderRadius: 6, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
                       VIEW EVENT
                       <ChevronRight size={13} color={T.white} />
@@ -25563,6 +25593,39 @@ function fmtGearDropPrizeValue(cents) {
 }
 function gearDropPrizeValueLabel(drop) {
   return fmtGearDropPrizeValue(gearDropPrizeTotalCents(drop));
+}
+
+// Lightweight countdown chip rendered over the hero of a SCHEDULED gear
+// drop's feed card. Owns its own tick so the feed isn't forced to
+// re-render every minute on the parent's account — only this chip
+// re-renders. Ticks every 60s (Dh Mm precision is enough for a feed
+// glance — anyone wanting seconds taps into the event detail). Cheap
+// enough that having a handful of these on screen doesn't hurt the feed.
+function GearDropFeedCountdown({ startsAtMs }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!startsAtMs) return;
+    const id = setInterval(() => setNow(Date.now()), 60000);
+    return () => clearInterval(id);
+  }, [startsAtMs]);
+  if (!startsAtMs) return null;
+  const deltaMs = startsAtMs - now;
+  if (deltaMs <= 0) return null;
+  const totalMin = Math.floor(deltaMs / 60000);
+  const days = Math.floor(totalMin / (60 * 24));
+  const hours = Math.floor((totalMin - days * 60 * 24) / 60);
+  const mins = totalMin - days * 60 * 24 - hours * 60;
+  let label;
+  if (days > 0) label = `${days}d ${hours}h`;
+  else if (hours > 0) label = `${hours}h ${mins}m`;
+  else label = `${mins}m`;
+  return (
+    <div style={{ position: "absolute", top: 10, right: 10, background: "rgba(15,15,15,0.86)", border: `1px solid ${T.copper}`, borderRadius: 999, padding: "6px 11px", display: "inline-flex", alignItems: "center", gap: 6, backdropFilter: "blur(6px)", boxShadow: "0 4px 14px rgba(0,0,0,0.5)" }}>
+      <Clock size={11} color={T.copper} />
+      <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 800, letterSpacing: 1 }}>STARTS IN</span>
+      <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 800, letterSpacing: 0.3 }}>{label}</span>
+    </div>
+  );
 }
 
 function GDInput({ label, value, onSave, type = "text", placeholder }) {
