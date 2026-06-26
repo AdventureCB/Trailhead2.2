@@ -1196,12 +1196,114 @@ function useLonePeakHQMarker(mapRef, ready, onSelect) {
   }, [mapRef, ready]);
 }
 
+// ───────────────────────────────────────────────────────────────────────
+// Device-heading singleton — hybrid compass (DeviceOrientation) + GPS
+// fallback. The compass is what people expect for "which way am I
+// FACING"; GPS heading is what they expect for "which way am I MOVING".
+// We prefer compass when available because the arrow stays accurate when
+// stationary. iOS Safari requires a one-time permission gesture
+// (DeviceOrientationEvent.requestPermission), surfaced via
+// CompassPermissionPill which auto-shows on any screen that mounts the
+// puck. Android Chrome + desktop Chrome start automatically.
+// Values are low-pass filtered to kill jitter; the puck consumer also
+// applies a CSS transform transition on top.
+let _deviceHeadingValue = null;
+let _deviceHeadingPermission = "unknown"; // unknown | granted | denied | unsupported
+let _deviceHeadingActive = false;
+const _deviceHeadingListeners = new Set();
+let _activePuckCount = 0;
+const _puckCountListeners = new Set();
+
+const _broadcastHeading = (h) => {
+  _deviceHeadingListeners.forEach(fn => { try { fn(h); } catch (_) {} });
+};
+
+const _handleOrientationEvent = (e) => {
+  let h = null;
+  // iOS — already true compass heading clockwise from North.
+  if (typeof e.webkitCompassHeading === "number" && isFinite(e.webkitCompassHeading)) {
+    h = e.webkitCompassHeading;
+  } else if (typeof e.alpha === "number" && isFinite(e.alpha)) {
+    // Android (deviceorientationabsolute) or fallback. alpha is rotation
+    // around z-axis, counter-clockwise from N when device flat.
+    h = (360 - e.alpha) % 360;
+  }
+  if (h === null) return;
+  // Screen-orientation compensation so portrait-vs-landscape both work.
+  try {
+    const so = (screen && screen.orientation && typeof screen.orientation.angle === "number") ? screen.orientation.angle : 0;
+    if (so) h = (h + so) % 360;
+  } catch (_) {}
+  if (h < 0) h += 360;
+  // Low-pass filter on circular value (handle 359→1 wrap). 0.3 = ~3 frames
+  // to converge on a sharp turn but still smooths out sensor noise.
+  if (_deviceHeadingValue !== null) {
+    let diff = h - _deviceHeadingValue;
+    if (diff > 180) diff -= 360;
+    if (diff < -180) diff += 360;
+    let next = (_deviceHeadingValue + diff * 0.3) % 360;
+    if (next < 0) next += 360;
+    _deviceHeadingValue = next;
+  } else {
+    _deviceHeadingValue = h;
+  }
+  _broadcastHeading(_deviceHeadingValue);
+};
+
+const _startDeviceHeadingListener = () => {
+  if (_deviceHeadingActive) return;
+  if (typeof window === "undefined" || !window.DeviceOrientationEvent) return;
+  // Prefer absolute=true so the value is relative to magnetic north (vs.
+  // device-startup orientation). Falls back to plain deviceorientation
+  // when the absolute variant isn't supported (older Safari, some
+  // Androids).
+  if ("ondeviceorientationabsolute" in window) {
+    window.addEventListener("deviceorientationabsolute", _handleOrientationEvent, true);
+  } else {
+    window.addEventListener("deviceorientation", _handleOrientationEvent, true);
+  }
+  _deviceHeadingActive = true;
+};
+
+const requestDeviceHeadingPermission = async () => {
+  if (typeof DeviceOrientationEvent === "undefined") {
+    _deviceHeadingPermission = "unsupported";
+    return "unsupported";
+  }
+  if (typeof DeviceOrientationEvent.requestPermission === "function") {
+    try {
+      const result = await DeviceOrientationEvent.requestPermission();
+      _deviceHeadingPermission = result === "granted" ? "granted" : "denied";
+      if (_deviceHeadingPermission === "granted") _startDeviceHeadingListener();
+      _puckCountListeners.forEach(fn => { try { fn(_activePuckCount); } catch (_) {} });
+      return _deviceHeadingPermission;
+    } catch (e) {
+      console.warn("[heading] requestPermission failed", e);
+      _deviceHeadingPermission = "denied";
+      return "denied";
+    }
+  }
+  // No gesture required (Android/desktop).
+  _deviceHeadingPermission = "granted";
+  _startDeviceHeadingListener();
+  return "granted";
+};
+
+const _autoStartDeviceHeadingIfFree = () => {
+  if (typeof DeviceOrientationEvent === "undefined") return;
+  // iOS needs gesture-triggered requestPermission — skip auto-start.
+  if (typeof DeviceOrientationEvent.requestPermission === "function") return;
+  if (_deviceHeadingPermission === "granted") return;
+  _deviceHeadingPermission = "granted";
+  _startDeviceHeadingListener();
+};
+
 // User location "puck" — a blue dot with a directional arrow rotated to
 // the user's heading. Tapping it drops a pin at the current GPS location
 // (calls onTap({lat, lng}) which the parent wires to setPlanTapPos so
-// the staged-pin type picker appears). Heading comes from pos.coords —
-// browsers compute it from movement vector, so it's null when stationary
-// or on desktop; arrow defaults to pointing up in those cases.
+// the staged-pin type picker appears). Heading comes from device compass
+// when available (preferred — accurate while stationary), GPS movement
+// vector otherwise (last known kept across stationary moments).
 // IMPORTANT: rotate the INNER arrow div, NOT the marker el — Mapbox
 // writes positioning transform on the el directly. See
 // feedback_mapbox_marker_positioning.
@@ -1217,27 +1319,65 @@ function buildUserLocationPuckEl() {
   // changes feel smooth instead of snapping.
   const arrow = document.createElement("div");
   arrow.className = "th-puck-arrow";
-  arrow.style.cssText = "position: absolute; left: 50%; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; transform: rotate(0deg); transform-origin: center; transition: transform 0.25s ease-out;";
+  arrow.style.cssText = "position: absolute; left: 50%; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; transform: rotate(0deg); transform-origin: center; transition: transform 0.15s ease-out;";
   arrow.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="#4285F4" xmlns="http://www.w3.org/2000/svg"><path d="M12 3 L20 21 L12 16 L4 21 Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>';
   el.appendChild(arrow);
   return el;
 }
 
+const _applyHeadingToMarker = (marker, heading) => {
+  if (!marker || typeof heading !== "number" || !isFinite(heading)) return;
+  try {
+    const arrow = marker.getElement().querySelector(".th-puck-arrow");
+    if (arrow) arrow.style.transform = `rotate(${heading}deg)`;
+  } catch (_) {}
+};
+
 function useUserLocationPuck(mapRef, ready, onTap, enabled) {
   const handlerRef = useRef(onTap);
   const lastPosRef = useRef(null);
+  const markerRef = useRef(null);
+  const lastCompassRef = useRef({ heading: null, ts: 0 });
+  const lastGpsHeadingRef = useRef(null);
+
   useEffect(() => { handlerRef.current = onTap; }, [onTap]);
+
+  // Refcount active pucks so CompassPermissionPill knows whether to show.
+  useEffect(() => {
+    if (enabled === false) return;
+    _activePuckCount += 1;
+    _puckCountListeners.forEach(fn => { try { fn(_activePuckCount); } catch (_) {} });
+    _autoStartDeviceHeadingIfFree();
+    return () => {
+      _activePuckCount = Math.max(0, _activePuckCount - 1);
+      _puckCountListeners.forEach(fn => { try { fn(_activePuckCount); } catch (_) {} });
+    };
+  }, [enabled]);
+
+  // Subscribe to compass heading updates — rotate marker as soon as a
+  // value arrives, and remember the timestamp so the GPS fallback path
+  // knows when the compass is stale.
+  useEffect(() => {
+    if (enabled === false) return;
+    const fn = (h) => {
+      if (typeof h !== "number") return;
+      lastCompassRef.current = { heading: h, ts: Date.now() };
+      _applyHeadingToMarker(markerRef.current, h);
+    };
+    _deviceHeadingListeners.add(fn);
+    return () => { _deviceHeadingListeners.delete(fn); };
+  }, [enabled]);
+
   useEffect(() => {
     const map = mapRef && mapRef.current;
     if (!ready || !map || !window.mapboxgl) return;
     if (enabled === false || !navigator.geolocation) return;
-    let marker = null;
     let watchId = null;
     let removed = false;
-    const updateOrCreate = (lat, lng, heading) => {
+    const updateOrCreate = (lat, lng, gpsHeading) => {
       if (removed) return;
       lastPosRef.current = { lat, lng };
-      if (!marker) {
+      if (!markerRef.current) {
         const el = buildUserLocationPuckEl();
         el.addEventListener("click", (e) => {
           e.stopPropagation();
@@ -1246,21 +1386,27 @@ function useUserLocationPuck(mapRef, ready, onTap, enabled) {
           if (fn && pos) fn(pos);
         });
         try {
-          marker = new window.mapboxgl.Marker({ element: el })
+          markerRef.current = new window.mapboxgl.Marker({ element: el })
             .setLngLat([lng, lat])
             .addTo(map);
         } catch (_) {}
       } else {
-        try { marker.setLngLat([lng, lat]); } catch (_) {}
+        try { markerRef.current.setLngLat([lng, lat]); } catch (_) {}
       }
-      // Rotate the inner arrow only — NOT the marker el (Mapbox owns its
-      // transform for positioning).
-      if (typeof heading === "number" && isFinite(heading) && marker) {
-        try {
-          const arrow = marker.getElement().querySelector(".th-puck-arrow");
-          if (arrow) arrow.style.transform = `rotate(${heading}deg)`;
-        } catch (_) {}
+      // Heading priority: fresh compass (< 5s) > new gps movement > last
+      // known gps (keeps arrow pointing where you were moving when you
+      // come to a stop, instead of snapping to up).
+      let h = null;
+      const now = Date.now();
+      if (lastCompassRef.current.heading !== null && now - lastCompassRef.current.ts < 5000) {
+        h = lastCompassRef.current.heading;
+      } else if (typeof gpsHeading === "number" && isFinite(gpsHeading)) {
+        h = gpsHeading;
+        lastGpsHeadingRef.current = gpsHeading;
+      } else if (lastGpsHeadingRef.current !== null) {
+        h = lastGpsHeadingRef.current;
       }
+      if (h !== null) _applyHeadingToMarker(markerRef.current, h);
     };
     watchId = navigator.geolocation.watchPosition(
       (pos) => {
@@ -1273,9 +1419,54 @@ function useUserLocationPuck(mapRef, ready, onTap, enabled) {
     return () => {
       removed = true;
       if (watchId !== null) { try { navigator.geolocation.clearWatch(watchId); } catch (_) {} }
-      if (marker) { try { marker.remove(); } catch (_) {} marker = null; }
+      if (markerRef.current) { try { markerRef.current.remove(); } catch (_) {} markerRef.current = null; }
     };
   }, [mapRef, ready, enabled]);
+}
+
+// Pill that appears at the top of the screen when iOS needs a gesture
+// to enable the compass + at least one user puck is mounted. Self-
+// suppresses on Android/desktop (auto-start path) and once the user
+// either grants or dismisses. Rendered once at the root — uses module-
+// level refcount + permission state to decide visibility.
+function CompassPermissionPill() {
+  const [count, setCount] = useState(_activePuckCount);
+  const [perm, setPerm] = useState(_deviceHeadingPermission);
+  const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    const fn = (c) => { setCount(c); setPerm(_deviceHeadingPermission); };
+    _puckCountListeners.add(fn);
+    return () => { _puckCountListeners.delete(fn); };
+  }, []);
+
+  // Only iOS Safari exposes DeviceOrientationEvent.requestPermission. On
+  // every other browser, _autoStartDeviceHeadingIfFree() already kicked
+  // in inside useUserLocationPuck — nothing to prompt.
+  const needsPrompt = typeof DeviceOrientationEvent !== "undefined"
+    && typeof DeviceOrientationEvent.requestPermission === "function"
+    && perm !== "granted"
+    && perm !== "denied";
+
+  if (!needsPrompt || count === 0 || dismissed) return null;
+
+  return (
+    <div style={{ position: "fixed", top: 80, left: "50%", transform: "translateX(-50%)", zIndex: 12000, display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", background: "rgba(15,15,15,0.96)", border: `1px solid ${T.copper}`, borderRadius: 999, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", maxWidth: "calc(100vw - 32px)" }}>
+      <Navigation size={14} color={T.copper} />
+      <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>Enable compass for accurate heading</span>
+      <button
+        onClick={async () => {
+          const result = await requestDeviceHeadingPermission();
+          if (result === "granted") setPerm("granted");
+          if (result !== "granted") setDismissed(true);
+        }}
+        style={{ background: T.copper, color: T.white, border: "none", borderRadius: 999, padding: "5px 11px", fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, cursor: "pointer" }}
+      >ENABLE</button>
+      <button onClick={() => setDismissed(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: 2 }}>
+        <X size={14} color={T.tertiary} />
+      </button>
+    </div>
+  );
 }
 
 // Map a camping spot's (source, source_id) pair to its public-facing
@@ -51263,6 +51454,11 @@ export default function Trailhead() {
           </div>
         );
       })()}
+
+      {/* iOS-only compass-permission prompt — self-suppresses on Android
+          + desktop + once granted/dismissed. Only renders when at least
+          one user-location puck is active on the page. */}
+      <CompassPermissionPill />
 
       {/* Points Toast Notifications */}
       {pointsToasts.length > 0 && (
