@@ -1325,11 +1325,32 @@ function buildUserLocationPuckEl() {
   return el;
 }
 
+// Apply a 0-360° heading to the marker's inner arrow, choosing the
+// shortest rotation path from whatever was applied last. Without this,
+// a value crossing 360→0 (e.g. 358° → 2°) makes the CSS transition
+// rotate the LONG way around (-356°) over 0.15s — which during a wide
+// turn looks like the arrow is vibrating / spazzing. We persist the
+// running unwrapped value on the arrow's dataset so it accumulates
+// (e.g. 358° → 362°) and the CSS sees a smooth +4° step.
 const _applyHeadingToMarker = (marker, heading) => {
   if (!marker || typeof heading !== "number" || !isFinite(heading)) return;
   try {
     const arrow = marker.getElement().querySelector(".th-puck-arrow");
-    if (arrow) arrow.style.transform = `rotate(${heading}deg)`;
+    if (!arrow) return;
+    const lastApplied = arrow.dataset.unwrappedHeading ? parseFloat(arrow.dataset.unwrappedHeading) : null;
+    let unwrapped = heading;
+    if (lastApplied !== null && isFinite(lastApplied)) {
+      // Normalize lastApplied into 0-360 so we can compare to incoming
+      // heading; then pick whichever direction (CW or CCW) covers less
+      // than 180° and add that diff to the running unwrapped value.
+      const lastMod = ((lastApplied % 360) + 360) % 360;
+      let diff = heading - lastMod;
+      if (diff > 180) diff -= 360;
+      if (diff < -180) diff += 360;
+      unwrapped = lastApplied + diff;
+    }
+    arrow.dataset.unwrappedHeading = String(unwrapped);
+    arrow.style.transform = `rotate(${unwrapped}deg)`;
   } catch (_) {}
 };
 
