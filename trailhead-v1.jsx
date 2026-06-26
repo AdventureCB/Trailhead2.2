@@ -1235,18 +1235,27 @@ const _handleOrientationEvent = (e) => {
     if (so) h = (h + so) % 360;
   } catch (_) {}
   if (h < 0) h += 360;
-  // Low-pass filter on circular value (handle 359→1 wrap). 0.3 = ~3 frames
-  // to converge on a sharp turn but still smooths out sensor noise.
-  if (_deviceHeadingValue !== null) {
-    let diff = h - _deviceHeadingValue;
-    if (diff > 180) diff -= 360;
-    if (diff < -180) diff += 360;
-    let next = (_deviceHeadingValue + diff * 0.3) % 360;
-    if (next < 0) next += 360;
-    _deviceHeadingValue = next;
-  } else {
+  if (_deviceHeadingValue === null) {
     _deviceHeadingValue = h;
+    _broadcastHeading(_deviceHeadingValue);
+    return;
   }
+  // Low-pass filter on circular value (handle 359→1 wrap).
+  let diff = h - _deviceHeadingValue;
+  if (diff > 180) diff -= 360;
+  if (diff < -180) diff += 360;
+  // Deadband — sensor noise is worst near magnetic-south (~180°) where
+  // magnetic dip variation amplifies any device tilt; raw values jitter
+  // ±2-3°. Suppress sub-1.5° updates so the arrow sits still when the
+  // user is approximately steady. Sharp turns blow through the deadband
+  // in a single frame and keep tracking normally.
+  if (Math.abs(diff) < 1.5) return;
+  // Softer step than before (0.2 vs 0.3) — more damping = less noise
+  // transmission, paired with the longer 0.25s CSS transition for
+  // smoother visual interpolation.
+  let next = (_deviceHeadingValue + diff * 0.2) % 360;
+  if (next < 0) next += 360;
+  _deviceHeadingValue = next;
   _broadcastHeading(_deviceHeadingValue);
 };
 
@@ -1319,7 +1328,7 @@ function buildUserLocationPuckEl() {
   // changes feel smooth instead of snapping.
   const arrow = document.createElement("div");
   arrow.className = "th-puck-arrow";
-  arrow.style.cssText = "position: absolute; left: 50%; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; transform: rotate(0deg); transform-origin: center; transition: transform 0.15s ease-out;";
+  arrow.style.cssText = "position: absolute; left: 50%; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; transform: rotate(0deg); transform-origin: center; transition: transform 0.25s ease-out;";
   arrow.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="#4285F4" xmlns="http://www.w3.org/2000/svg"><path d="M12 3 L20 21 L12 16 L4 21 Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>';
   el.appendChild(arrow);
   return el;
