@@ -2191,6 +2191,7 @@ function ShareIntentSheet({ target, onClose, onOpenShareCompose, onShowToast }) 
       }
       case "route": return { url: `${origin}/post/${data.id}`,   title: data.title || "Route",            label: "ROUTE",        accent: T.copper };
       case "post":  return { url: `${origin}/post/${data.id}`,   title: data.title || data.body || "Post", label: "POST",        accent: T.copper };
+      case "gear_drop": return { url: data.slug ? `${origin}/drops/${data.slug}` : origin, title: data.title || "Gear drop", label: "GEAR DROP", accent: T.green };
       default:      return { url: origin,                        title: "Trailhead",                       label: "SHARE",        accent: T.copper };
     }
   })();
@@ -5179,7 +5180,7 @@ function ImageCarousel({ images, startIndex, onClose }) {
 // Feed posts are now persisted to public.posts and hydrated on sign-in.
 // The legacy defaultFeedItems seed array was removed once the backend landed.
 
-function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShareCompose, onOpenShareIntent, onViewBuild, onOpenTripDetail, onOpenConvoy, feedItems, onUpdateFeed, onUpdatePost, likedPostIds, onTogglePostLike, postComments, onAddComment, onDeleteComment, likedCommentIds, onToggleCommentLike, currentUserId, currentUserName, currentUserHandle, currentUserAvatar, isAdmin, isModerator, isBetaTester, onDeletePost, onEditPost, onAddNotification, forumUserReplies, forumViewCounts, savedRoutes, onSaveRoute, onUnsaveRoute, onStartNav, onStartDirections, onAwardPoints, isGuest, onGuestTap, pendingPostNav, onConsumePendingPostNav, onSharedPostMissing, convoyRsvps, onRsvpConvoy, onSearchUsers, filterFn, hideFilters, onlineUserIds, tripReports, tripPlans, tripAuthors, onNewTripReport, onOpenTripDraft, onOpenSpotOnMap, onOpenHQOnMap, onLoadMore, hasMore, loadingMore, onLoadTripRouteData, onReportContent, activeFilter: controlledFilter, setActiveFilter: setControlledFilter, gearDrops, myGearDropRuns, onOpenGearDrop }) {
+function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShareCompose, onOpenShareIntent, onViewBuild, onOpenTripDetail, onOpenConvoy, feedItems, onUpdateFeed, onUpdatePost, likedPostIds, onTogglePostLike, postComments, onAddComment, onDeleteComment, likedCommentIds, onToggleCommentLike, currentUserId, currentUserName, currentUserHandle, currentUserAvatar, isAdmin, isModerator, isBetaTester, onDeletePost, onEditPost, onAddNotification, forumUserReplies, forumViewCounts, savedRoutes, onSaveRoute, onUnsaveRoute, onStartNav, onStartDirections, onAwardPoints, isGuest, onGuestTap, pendingPostNav, onConsumePendingPostNav, onSharedPostMissing, convoyRsvps, onRsvpConvoy, onSearchUsers, filterFn, hideFilters, onlineUserIds, tripReports, tripPlans, tripAuthors, onNewTripReport, onOpenTripDraft, onOpenSpotOnMap, onOpenHQOnMap, onLoadMore, hasMore, loadingMore, onLoadTripRouteData, onReportContent, activeFilter: controlledFilter, setActiveFilter: setControlledFilter, gearDrops, gearDropWinners, myGearDropRuns, onOpenGearDrop }) {
   // Infinite-scroll sentinel — bottom of the feed list. When it scrolls
   // into view, ask the root to load the next page. Disabled when the
   // active filter is anything but ALL (filter-narrowed lists don't drive
@@ -5653,6 +5654,68 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
                 </div>
               </div>
             )}
+            {/* Shared gear-drop card — POST type with gearDropId. Title +
+                brand + date/time + CURRENT status (live-looked-up from
+                the gearDrops array so an event shared while scheduled
+                shows LIVE / ENDED as it transitions). VIEW EVENT routes
+                through onOpenGearDrop → opens the detail screen overlay. */}
+            {item.gearDropId && (() => {
+              const liveDrop = (gearDrops || []).find(g => g && g.id === item.gearDropId) || null;
+              const status = (liveDrop && liveDrop.status) || null;
+              const statusMeta = status === "live"
+                ? { label: "LIVE", color: T.red }
+                : status === "ended" || status === "archived"
+                ? { label: "ENDED", color: T.tertiary }
+                : status === "scheduled"
+                ? { label: "SCHEDULED", color: T.copper }
+                : { label: "EVENT", color: T.green };
+              const startsAtSrc = (liveDrop && liveDrop.starts_at) || item.gearDropStartsAt;
+              const startsAtLabel = startsAtSrc
+                ? new Date(startsAtSrc).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+                : null;
+              const brand = (liveDrop && liveDrop.brand_partner_name) || item.gearDropBrand || null;
+              const prizeLabel = liveDrop ? gearDropPrizeValueLabel(liveDrop) : fmtGearDropPrizeValue(item.gearDropPrizeCents);
+              const heroImg = (liveDrop && liveDrop.hero_img) || item.gearDropHero || item.image || null;
+              return (
+                <div onClick={() => onOpenGearDrop && onOpenGearDrop(item.gearDropId)}
+                     style={{ borderRadius: 10, overflow: "hidden", border: `1px solid ${T.green}50`, marginBottom: 10, background: `${T.charcoal}80`, cursor: "pointer" }}>
+                  {heroImg && (
+                    <LoadingImage src={heroImg} accent={T.green} width={480} style={{ width: "100%", height: 160 }} />
+                  )}
+                  <div style={{ padding: "12px 12px 10px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
+                      <Gift size={12} color={T.green} />
+                      <span style={{ fontFamily: sans, fontSize: 9, color: T.green, letterSpacing: 1.2, fontWeight: 700 }}>GEAR DROP</span>
+                      <span style={{ fontFamily: sans, fontSize: 8, color: T.white, background: statusMeta.color, padding: "2px 7px", borderRadius: 6, fontWeight: 800, letterSpacing: 0.6, marginLeft: "auto" }}>{statusMeta.label}</span>
+                    </div>
+                    <p style={{ fontFamily: serif, fontSize: 15, color: T.white, margin: 0, fontWeight: 700, lineHeight: 1.3 }}>{(liveDrop && liveDrop.title) || item.gearDropTitle || item.title || "Gear drop"}</p>
+                    {brand && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 6 }}>
+                        <MapPin size={11} color={T.copper} />
+                        <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 0.4 }}>{brand}</span>
+                      </div>
+                    )}
+                    {startsAtLabel && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 4 }}>
+                        <Clock size={11} color={T.tertiary} />
+                        <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{startsAtLabel}</span>
+                      </div>
+                    )}
+                    {prizeLabel && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 4 }}>
+                        <Trophy size={11} color={T.copper} />
+                        <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700 }}>Prize {prizeLabel}</span>
+                      </div>
+                    )}
+                    <button onClick={(e) => { e.stopPropagation(); onOpenGearDrop && onOpenGearDrop(item.gearDropId); }} style={{ marginTop: 10, width: "100%", padding: "9px 12px", background: T.green, color: T.white, border: "none", borderRadius: 6, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                      VIEW EVENT
+                      <ChevronRight size={13} color={T.white} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Shared HQ card — fixed payload, taps deep-link into the map. */}
             {item.hqShare && (
               <div onClick={() => onOpenHQOnMap && onOpenHQOnMap()}
@@ -5668,7 +5731,7 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
                 <ChevronRight size={16} color={T.red} />
               </div>
             )}
-            {item.title && !item.spotId && !item.hqShare && !item.planId && editingFeedPost !== item.id && (
+            {item.title && !item.spotId && !item.hqShare && !item.planId && !item.gearDropId && editingFeedPost !== item.id && (
               <p style={{ fontFamily: serif, fontSize: 15, color: T.white, margin: "0 0 8px", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{item.title}</p>
             )}
             {item.location && (
@@ -6563,6 +6626,9 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
               <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 18 }}>
                 {list.map(g => {
                   const joined = !!myRunsMap[g.id];
+                  const prizeValue = gearDropPrizeValueLabel(g);
+                  const winner = (gearDropWinners && gearDropWinners[g.id]) || null;
+                  const isEnded = label === "ENDED";
                   return (
                     <button key={g.id} onClick={() => onOpenGearDrop && onOpenGearDrop(g.id)} style={{ display: "flex", gap: 12, padding: 0, borderRadius: 14, background: T.darkCard, border: `1px solid ${joined ? T.green : T.charcoal}`, cursor: "pointer", textAlign: "left", width: "100%", overflow: "hidden" }}>
                       <div style={{ width: 96, minHeight: 110, background: g.hero_img ? `url(${g.hero_img}) center/cover` : `linear-gradient(135deg, ${T.charcoal}, ${T.darkCard})`, flexShrink: 0 }} />
@@ -6573,8 +6639,17 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
                           {joined && <span style={{ fontFamily: sans, fontSize: 9, color: T.green, fontWeight: 700, letterSpacing: 0.6 }}>· ATTENDING</span>}
                         </div>
                         <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.title || "Untitled Drop"}</span>
-                        <span style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.prize_title || "—"}</span>
-                        {g.starts_at && <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.4 }}>{label === "ENDED" ? "Ended " : "Starts "}{new Date(g.starts_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</span>}
+                        <div style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
+                          <span style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{g.prize_title || "—"}</span>
+                          {prizeValue && <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 0.4, flexShrink: 0 }}>{prizeValue}</span>}
+                        </div>
+                        {isEnded && winner && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 2 }}>
+                            <Trophy size={10} color={T.copper} />
+                            <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 0.4 }}>WON BY @{winner.handle || "racer"}</span>
+                          </div>
+                        )}
+                        {g.starts_at && <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.4 }}>{isEnded ? "Ended " : "Starts "}{new Date(g.starts_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</span>}
                       </div>
                     </button>
                   );
@@ -6669,7 +6744,10 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
                   <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>· {completedDrops.length}</span>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 }}>
-                  {completedDrops.map(g => (
+                  {completedDrops.map(g => {
+                    const prizeValue = gearDropPrizeValueLabel(g);
+                    const winner = (gearDropWinners && gearDropWinners[g.id]) || null;
+                    return (
                     <button key={g.id} onClick={() => onOpenGearDrop && onOpenGearDrop(g.id)} style={{ display: "flex", gap: 12, padding: 0, borderRadius: 14, background: T.darkCard, border: `1px solid ${T.charcoal}`, cursor: "pointer", textAlign: "left", width: "100%", overflow: "hidden" }}>
                       <div style={{ width: 96, minHeight: 110, background: g.hero_img ? `url(${g.hero_img}) center/cover` : `linear-gradient(135deg, ${T.charcoal}, ${T.darkCard})`, flexShrink: 0 }} />
                       <div style={{ flex: 1, minWidth: 0, padding: "12px 12px 12px 0", display: "flex", flexDirection: "column", gap: 4 }}>
@@ -6681,15 +6759,25 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
                           {g.brand_partner_name && <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 0.6 }}>{g.brand_partner_name.toUpperCase()}</span>}
                         </div>
                         <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.title || "Untitled Drop"}</span>
-                        <span style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.prize_title || "—"}</span>
-                        {g.winner_announced_at && (
+                        <div style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
+                          <span style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{g.prize_title || "—"}</span>
+                          {prizeValue && <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 0.4, flexShrink: 0 }}>{prizeValue}</span>}
+                        </div>
+                        {winner && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 2 }}>
+                            <Trophy size={10} color={T.copper} />
+                            <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 0.4 }}>WON BY @{winner.handle || "racer"}</span>
+                          </div>
+                        )}
+                        {!winner && g.winner_announced_at && (
                           <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.4 }}>
                             Winner declared {new Date(g.winner_announced_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
                           </span>
                         )}
                       </div>
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -25455,6 +25543,28 @@ function fmtGearDropElapsed(ms) {
   return `${s}s`;
 }
 
+// Module-scope helpers so the gear drop detail screen + every feed card
+// + every share-compose preview compute prize value the same way.
+// Supports both the legacy single-prize columns (prize_title, value, etc.)
+// and the prize_items jsonb array (multi-item packs).
+function gearDropPrizeTotalCents(drop) {
+  if (!drop) return 0;
+  const items = Array.isArray(drop.prize_items) ? drop.prize_items : [];
+  if (items.length > 0) {
+    return items.reduce((s, it) => s + (Number(it && it.value_cents) || 0), 0);
+  }
+  return Number(drop.prize_value_cents) || 0;
+}
+function fmtGearDropPrizeValue(cents) {
+  if (cents == null || cents === 0) return null;
+  const dollars = cents / 100;
+  const whole = dollars % 1 === 0;
+  return `~$${whole ? dollars.toLocaleString() : dollars.toFixed(2)}`;
+}
+function gearDropPrizeValueLabel(drop) {
+  return fmtGearDropPrizeValue(gearDropPrizeTotalCents(drop));
+}
+
 function GDInput({ label, value, onSave, type = "text", placeholder }) {
   const [local, setLocal] = useState(value);
   useEffect(() => { setLocal(value); }, [value]);
@@ -27227,7 +27337,7 @@ function GearDropMementoScreen({ trip: tripProp, currentUserId, isAdmin, onClose
   );
 }
 
-function GearDropDetailScreen({ dropId, currentUserId, isAdmin, isGuest, onGuestTap, onClose, onLoad, onJoin, onLeave, myRun, onOpenRun, onLoadComments, onAddComment, onDeleteComment, onLoadParticipants, onViewUser, onStartDirections, onOpenTrip, onBroadcastAnnouncement, onTransitionStatus, onApproveMemento, onRejectMemento }) {
+function GearDropDetailScreen({ dropId, currentUserId, isAdmin, isGuest, onGuestTap, onClose, onLoad, onJoin, onLeave, myRun, onOpenRun, onLoadComments, onAddComment, onDeleteComment, onLoadParticipants, onViewUser, onStartDirections, onOpenTrip, onBroadcastAnnouncement, onTransitionStatus, onApproveMemento, onRejectMemento, onShareIntent }) {
   const [drop, setDrop] = useState(null);
   const [participantCount, setParticipantCount] = useState(null);
   const [joining, setJoining] = useState(false);
@@ -27583,6 +27693,14 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, isGuest, onGuest
         </button>
         <Gift size={16} color={T.green} />
         <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.8, flex: 1 }}>GEAR DROP</span>
+        {/* SHARE — any non-draft drop is shareable. Opens the share-intent
+            sheet at root (DM + feed + copy-link + native share). Hidden
+            for guests since they can't post. */}
+        {onShareIntent && drop.status !== "draft" && !isGuest && (
+          <button onClick={() => onShareIntent(drop)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+            <Share2 size={16} color={T.white} />
+          </button>
+        )}
         <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: statusColor, padding: "3px 10px", borderRadius: 8, fontWeight: 700, letterSpacing: 0.6 }}>{statusLabel}</span>
       </div>
 
@@ -42225,6 +42343,11 @@ export default function Trailhead() {
   // from it without a TDZ. The helpers (loadGearDrops, createGearDrop,
   // updateGearDrop, etc.) live further down and only re-use this state.
   const [gearDrops, setGearDrops] = useState([]);
+  // Per-drop winner profile snapshot keyed by drop.id. Populated lazily
+  // after loadGearDrops resolves so ended-drop cards on the GEAR DROPS
+  // tab + TRIP REPORTS' COMPLETED GEAR DROPS section can render "WON BY
+  // @handle" without a second round trip per render.
+  const [gearDropWinners, setGearDropWinners] = useState({});
   // Active content-report bottom sheet target. Shape:
   //   { targetType, targetId, targetOwnerId, targetOwnerHandle,
   //     targetSnapshot, targetUrl }
@@ -45498,7 +45621,36 @@ export default function Trailhead() {
         .select("id, title, brand_partner_name, brand_partner_url, brand_logo_url, hero_img, prize_title, prize_value_cents, prize_items, status, starts_at, ends_at, signup_open_until, late_signup_window_min, start_lat, start_lng, afterparty_lat, afterparty_lng, afterparty_label, convoy_post_id, host_admin_id, winner_run_id, winner_announced_at, created_at, updated_at")
         .order("created_at", { ascending: false });
       if (error) { console.error("[loadGearDrops]", error); return; }
-      setGearDrops(data || []);
+      const drops = data || [];
+      setGearDrops(drops);
+      // Lazy-fetch the winner profile for every drop that already has a
+      // declared winner. Single 2-step join (winner_run_id → trip_reports
+      // → profiles), batched. Failure is non-fatal — the card just falls
+      // back to its existing "Winner declared <date>" label.
+      try {
+        const winnerRunIds = drops.map(d => d.winner_run_id).filter(Boolean);
+        if (winnerRunIds.length === 0) { setGearDropWinners({}); return; }
+        const { data: runRows, error: runErr } = await supabase
+          .from("trip_reports")
+          .select("id, user_id, gear_drop_id")
+          .in("id", winnerRunIds);
+        if (runErr) { console.error("[loadGearDrops] winner runs", runErr); return; }
+        const userIds = Array.from(new Set((runRows || []).map(r => r.user_id).filter(Boolean)));
+        if (userIds.length === 0) { setGearDropWinners({}); return; }
+        const { data: profRows, error: profErr } = await supabase
+          .from("profiles")
+          .select("id, full_name, handle, avatar_url")
+          .in("id", userIds);
+        if (profErr) { console.error("[loadGearDrops] winner profiles", profErr); return; }
+        const profMap = {};
+        (profRows || []).forEach(p => { profMap[p.id] = p; });
+        const winnersByDrop = {};
+        (runRows || []).forEach(r => {
+          const drop = drops.find(d => d.winner_run_id === r.id);
+          if (drop && profMap[r.user_id]) winnersByDrop[drop.id] = profMap[r.user_id];
+        });
+        setGearDropWinners(winnersByDrop);
+      } catch (e) { console.error("[loadGearDrops] winner fetch threw", e); }
     } catch (e) { console.error("[loadGearDrops] threw", e); }
   }, [isAdmin, isBetaTester]);
 
@@ -48187,6 +48339,52 @@ export default function Trailhead() {
   // (mirrors the spot/HQ pattern). Tap-to-open routes through the map's
   // /plans/<slug> deep link so recipients see the dashed-line preview +
   // the inline popup with planned date / party / route.
+  // Share a gear drop (sponsored event) to the feed. POST-type with
+  // gearDropId discriminator so the feed renderer picks the dedicated
+  // card branch (title / date+time / brand / current status / VIEW EVENT).
+  // Status is INTENTIONALLY not snapshotted into the post — the card
+  // looks it up live from `gearDrops` at render time so it stays accurate
+  // as the drop transitions scheduled → live → ended.
+  const shareGearDropToFeed = (drop, captionRaw) => {
+    if (!drop || !drop.id) return;
+    if (drop.status === "draft") {
+      showErrorToast("Drafts can't be shared — set the drop to SCHEDULED first.");
+      return;
+    }
+    const caption = (captionRaw || "").trim();
+    const meName = (currentProfile && currentProfile.full_name) || "You";
+    const meHandle = (currentProfile && currentProfile.handle) || "";
+    const meInitial = meName.charAt(0).toUpperCase();
+    const heroImg = drop.hero_img || null;
+    addPost({
+      id: "shared_gear_drop_" + Date.now(),
+      type: "POST",
+      user: meName,
+      handle: meHandle ? `@${meHandle}` : undefined,
+      initial: meInitial,
+      time: Date.now(),
+      title: drop.title || "Untitled Drop",
+      caption: caption || null,
+      subtitle: "Shared a gear drop",
+      image: heroImg,
+      photoUrls: heroImg ? [heroImg] : undefined,
+      likes: 0,
+      comments: 0,
+      // Discriminator fields the feed renderer keys off.
+      gearDropId: drop.id,
+      gearDropSlug: drop.slug || null,
+      gearDropTitle: drop.title || "Untitled Drop",
+      gearDropBrand: drop.brand_partner_name || null,
+      gearDropStartsAt: drop.starts_at || null,
+      gearDropEndsAt: drop.ends_at || null,
+      gearDropPrizeTitle: drop.prize_title || null,
+      gearDropPrizeCents: gearDropPrizeTotalCents(drop),
+      gearDropHero: heroImg,
+    });
+    awardPoints(POINTS.feedPost, "Gear Drop Shared");
+    showErrorToast("Gear drop shared to your feed");
+  };
+
   const shareTripPlanToFeed = (plan, captionRaw) => {
     if (!plan || !plan.id) return;
     if (plan.visibility === "private") {
@@ -48346,6 +48544,24 @@ export default function Trailhead() {
         onSubmit: action === "feed"
           ? (caption) => shareTripPlanToFeed(data, caption)
           : sendDm({ id: "plan_" + data.id, type: "trip_plan", planId: data.id, planSlug: data.slug, title: data.name, body: data.description || null, image: img, plannedStart: data.planned_start || null, plannedEnd: data.planned_end || null, url: `${origin}/plans/${data.slug}` }),
+      });
+      return;
+    }
+    if (kind === "gear_drop") {
+      const img = data.hero_img || null;
+      const startsAtLabel = data.starts_at
+        ? new Date(data.starts_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+        : null;
+      setShareComposeTarget({
+        action, accent: T.green, IconComponent: Gift,
+        cardLabel: "GEAR DROP",
+        cardCta: "VIEW EVENT",
+        cardTitle: data.title || "Untitled Drop",
+        cardBody: [data.brand_partner_name, startsAtLabel].filter(Boolean).join(" · ") || null,
+        cardImage: img,
+        onSubmit: action === "feed"
+          ? (caption) => shareGearDropToFeed(data, caption)
+          : sendDm({ id: "gear_drop_" + data.id, type: "gear_drop", gearDropId: data.id, gearDropSlug: data.slug || null, title: data.title || "Untitled Drop", body: [data.brand_partner_name, startsAtLabel].filter(Boolean).join(" · ") || null, image: img, url: data.slug ? `${origin}/drops/${data.slug}` : null }),
       });
       return;
     }
@@ -50144,6 +50360,7 @@ export default function Trailhead() {
       isModerator={isModerator}
       isBetaTester={isBetaTester}
       gearDrops={gearDrops}
+      gearDropWinners={gearDropWinners}
       myGearDropRuns={myGearDropRuns}
       onOpenGearDrop={(id) => setViewingGearDropId(id)}
       pendingPostNav={pendingPostNav}
@@ -51416,6 +51633,7 @@ export default function Trailhead() {
           onTransitionStatus={transitionGearDropStatus}
           onApproveMemento={adminApproveGearDropMemento}
           onRejectMemento={adminRejectGearDropMemento}
+          onShareIntent={(drop) => openShareIntent({ kind: "gear_drop", data: drop })}
         />
       )}
 
