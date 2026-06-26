@@ -67,9 +67,11 @@ const VAPID_PUBLIC_KEY = "BKNmoN_428cxssoAL_Jca5zquLJnTKyfq3QAihVqpeP_4VNin8lxNr
 const RECOVERY_PROXIMITY_CONFIRM_ENABLED = false;
 
 // Master kill switch for the Gear Drops feature. While true, the UI is
-// gated to admins + opted-in beta testers (profiles.is_beta_tester=true).
-// Flip to false to instantly hide all Gear Drops surfaces (admin entry,
-// public feed pill, run screen, push notifications) without a redeploy.
+// visible to ALL signed-in users (beta gate removed 2026-06-26 — feature
+// shipped to general availability). Flip to false to instantly hide all
+// Gear Drops surfaces (admin entry, public feed pill, run screen, push
+// notifications) without a redeploy. `profiles.is_beta_tester` stays as
+// a generic admin-flippable flag for future feature gates.
 const GEAR_DROPS_ENABLED = true;
 
 // Convert a base64url VAPID key into the Uint8Array applicationServerKey
@@ -5205,7 +5207,7 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
   // list (drafts + published) instead of filtering the post stream by type.
   // Underlying posts of type "ROUTES" are still reachable from "ALL" — this
   // is purely a navigation surface for the trip-reports listing.
-  const showGearDropsPill = GEAR_DROPS_ENABLED && (isAdmin || isBetaTester);
+  const showGearDropsPill = GEAR_DROPS_ENABLED;
   const filters = ["ALL", "BUILDS", "CONVOYS", "TRIP REPORTS", ...(showGearDropsPill ? ["GEAR DROPS"] : []), "PHOTOS", "FORUM"];
   // Likes and comments are now hoisted to the root and backed by Supabase.
   // FeedScreen just reflects the props it's given. We kept `openComments`
@@ -42239,7 +42241,7 @@ export default function Trailhead() {
   // to in-component state for any FeedScreen instance that isn't passed a
   // controller (e.g. profile-screen activity tabs).
   const [feedFilter, setFeedFilter] = useState("ALL");
-  const FEED_PILL_FILTERS = ["ALL", "BUILDS", "CONVOYS", "TRIP REPORTS", ...(GEAR_DROPS_ENABLED && (isAdmin || isBetaTester) ? ["GEAR DROPS"] : []), "PHOTOS", "FORUM"];
+  const FEED_PILL_FILTERS = ["ALL", "BUILDS", "CONVOYS", "TRIP REPORTS", ...(GEAR_DROPS_ENABLED ? ["GEAR DROPS"] : []), "PHOTOS", "FORUM"];
 
   // Desktop layout — Twitter-style centered column (the existing 430px app
   // shell) flanked by a left nav sidebar + right info sidebar. Activates
@@ -45677,7 +45679,6 @@ export default function Trailhead() {
 
   const loadGearDrops = useCallback(async () => {
     if (!GEAR_DROPS_ENABLED) return;
-    if (!isAdmin && !isBetaTester) return;
     try {
       const { data, error } = await supabase
         .from("gear_drops")
@@ -45715,13 +45716,12 @@ export default function Trailhead() {
         setGearDropWinners(winnersByDrop);
       } catch (e) { console.error("[loadGearDrops] winner fetch threw", e); }
     } catch (e) { console.error("[loadGearDrops] threw", e); }
-  }, [isAdmin, isBetaTester]);
+  }, []);
 
   useEffect(() => {
     if (!GEAR_DROPS_ENABLED) { setGearDrops([]); return; }
-    if (!isAdmin && !isBetaTester) { setGearDrops([]); return; }
     loadGearDrops();
-  }, [isAdmin, isBetaTester, loadGearDrops]);
+  }, [loadGearDrops]);
 
   // Fetches a single gear drop row with full route_data jsonb. Used by the
   // editor + the public detail screen + the run screen.
