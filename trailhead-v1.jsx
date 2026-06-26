@@ -27958,7 +27958,7 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, isGuest, onGuest
                             </>
                           );
                         })() : (
-                          <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, fontWeight: 700 }}>{progress}/{waypointCount}</span>
+                          <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, fontWeight: 700 }}>{Math.max(0, progress - 1)}/{Math.max(0, waypointCount - 1)}</span>
                         )}
                       </div>
                     </button>
@@ -29118,7 +29118,12 @@ function GearDropRunScreen({ runId, currentUserId, onClose, onLoadRun, onLoadDro
             <Target size={16} color={isStart ? T.green : isLast ? T.red : T.copper} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.8, fontWeight: 700 }}>
-                {isStart ? `START · STOP 1 OF ${totalStops}` : isLast ? `FINAL · STOP ${totalStops} OF ${totalStops}` : `STOP ${nextIdx + 1} OF ${totalStops}`}
+                {/* The start point is a submission but doesn't count as a
+                    "stop" in the displayed numbering — a 4-pin route (start
+                    + 2 waypoints + endpoint) reads as 3 stops. Stop number
+                    = nextIdx (so heading to first non-start pin = STOP 1
+                    OF (totalStops - 1)). */}
+                {isStart ? "START" : isLast ? `FINAL · STOP ${totalStops - 1} OF ${totalStops - 1}` : `STOP ${nextIdx} OF ${totalStops - 1}`}
               </div>
               <div style={{ fontFamily: sans, fontSize: 15, color: T.white, fontWeight: 700, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nextPin.label || (isStart ? "Start" : isLast ? "Endpoint" : `Waypoint ${nextIdx}`)}</div>
             </div>
@@ -29190,7 +29195,7 @@ function GearDropRunScreen({ runId, currentUserId, onClose, onLoadRun, onLoadDro
               {inRange ? (isStart ? "START RUN — SUBMIT" : "ARRIVED — SUBMIT") : "MOVE CLOSER"}
             </button>
             <div style={{ padding: "8px 16px 10px", fontFamily: sans, fontSize: 9, color: T.tertiary, textAlign: "center", letterSpacing: 0.5 }}>
-              {unlockedCount} of {totalStops} stops complete
+              {Math.max(0, unlockedCount - 1)} of {Math.max(0, totalStops - 1)} stops complete
             </div>
           </div>
 
@@ -29245,7 +29250,7 @@ function GearDropRunScreen({ runId, currentUserId, onClose, onLoadRun, onLoadDro
                             </>
                           );
                         })() : (
-                          <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, fontWeight: 700 }}>{progress}/{totalStops}</span>
+                          <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, fontWeight: 700 }}>{Math.max(0, progress - 1)}/{Math.max(0, totalStops - 1)}</span>
                         )}
                       </div>
                     </button>
