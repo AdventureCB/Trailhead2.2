@@ -19823,9 +19823,12 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
             );
           }
 
-          // Text fields (h1, h2, h3, p, short)
+          // Text fields (h1, h2, h3, p, short). For h2/h3, the fixed
+          // variant short-circuited above into the read-only header
+          // render; reaching here means user-filled. Include h2 in
+          // isHeading so the input is styled as a heading.
           const isH1 = section.type === "h1";
-          const isHeading = isH1 || section.type === "h3";
+          const isHeading = isH1 || section.type === "h2" || section.type === "h3";
           const isShort = section.type === "short";
           const isLong = section.type === "p";
           // Prefilled text is locked — admin's content can't be edited.
@@ -33117,10 +33120,16 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
                   : s.type === "hero_image" ? T.copper
                   : s.type === "route_builder" ? T.purple || "#8B6FAF"
                   : T.tertiary;
-                const showPlaceholder = ["p", "short", "h1"].includes(s.type) || s.type === "photos" || s.type === "hero_image" || s.type === "bullet_list";
-                const showRequired = !s.fixed && (s.type !== "h2" && s.type !== "h3");
+                const isHeadingType = s.type === "h2" || s.type === "h3";
+                // For h2/h3, admin can pick FIXED (label-style, locked to
+                // admin's text) or USER-FILLED (participant types their
+                // own heading; can be marked required). Other types use
+                // the existing rules.
+                const showPlaceholder = ["p", "short", "h1"].includes(s.type) || s.type === "photos" || s.type === "hero_image" || s.type === "bullet_list" || (isHeadingType && !s.fixed);
+                const showRequired = !s.fixed;
                 const showMin = s.type === "photos";
-                const showFixedValue = s.fixed && (s.type === "h2" || s.type === "h3");
+                const showFixedValue = s.fixed && isHeadingType;
+                const showHeadingSourceToggle = isHeadingType;
                 const showOptions = s.type === "tag_select" || s.type === "select";
                 const showMax = s.type === "rating";
                 return (
@@ -33146,9 +33155,24 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
                         <FieldLabel>Label (admin-side; not shown to participant)</FieldLabel>
                         <input value={s.label || ""} onChange={(e) => updateSection(s.id, { label: e.target.value })} style={{ ...inputStyle, padding: "8px 10px", fontSize: 12 }} />
                       </div>
+                      {showHeadingSourceToggle && (
+                        <div>
+                          <FieldLabel>Heading source</FieldLabel>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button
+                              onClick={() => updateSection(s.id, { fixed: true, value: s.value || "Heading", required: undefined, placeholder: undefined })}
+                              style={{ flex: 1, padding: "8px 10px", borderRadius: 6, border: `1px solid ${s.fixed ? T.copper : T.charcoal}`, background: s.fixed ? `${T.copper}20` : T.darkBg, color: s.fixed ? T.copper : T.tertiary, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.4, cursor: "pointer" }}
+                            >FIXED (admin sets)</button>
+                            <button
+                              onClick={() => updateSection(s.id, { fixed: false, value: undefined })}
+                              style={{ flex: 1, padding: "8px 10px", borderRadius: 6, border: `1px solid ${!s.fixed ? T.copper : T.charcoal}`, background: !s.fixed ? `${T.copper}20` : T.darkBg, color: !s.fixed ? T.copper : T.tertiary, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.4, cursor: "pointer" }}
+                            >USER FILLS</button>
+                          </div>
+                        </div>
+                      )}
                       {showFixedValue && (
                         <div>
-                          <FieldLabel>Heading text (shown to participant)</FieldLabel>
+                          <FieldLabel>Heading text (shown to participant as a label — not editable)</FieldLabel>
                           <input value={s.value || ""} onChange={(e) => updateSection(s.id, { value: e.target.value })} style={{ ...inputStyle, padding: "8px 10px", fontSize: 12 }} />
                         </div>
                       )}
@@ -33197,8 +33221,10 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
 
                       {/* Prefilled value editor — admin can seed the field so the
                           participant starts with content they can edit. Photos
-                          stay attached unless the participant deletes them. */}
-                      {(s.type === "p" || s.type === "short" || s.type === "h1") && (
+                          stay attached unless the participant deletes them.
+                          h2/h3 only when source = user-filled (the fixed
+                          variant already has its own value editor above). */}
+                      {(s.type === "p" || s.type === "short" || s.type === "h1" || (isHeadingType && !s.fixed)) && (
                         <div style={{ borderTop: `1px solid ${T.charcoal}`, paddingTop: 8 }}>
                           <FieldLabel>Prefilled value (optional)</FieldLabel>
                           <textarea value={s.default_value || ""} onChange={(e) => updateSection(s.id, { default_value: e.target.value })} rows={s.type === "p" ? 3 : 1} placeholder="Participants see this prefilled; they can edit." style={{ ...inputStyle, padding: "8px 10px", fontSize: 12, resize: "vertical", lineHeight: 1.4 }} />
