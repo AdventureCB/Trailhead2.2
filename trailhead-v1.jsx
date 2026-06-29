@@ -899,6 +899,57 @@ function txImg(url, width) {
   return url.replace("/storage/v1/object/", "/storage/v1/render/image/") + (url.indexOf("?") >= 0 ? "&" : "?") + "width=" + w + "&quality=75";
 }
 
+// True for any Supabase storage URL on our project — covers both the
+// raw /object/ path AND the /render/image/ transform path. Used by the
+// admin image-download gesture so we only ever intercept clicks on
+// images we know we can fetch + reuse-the-original-for.
+function isStorageImageUrl(url) {
+  return typeof url === "string" && url.indexOf("/storage/v1/") >= 0;
+}
+
+// Rewrite a render-image transform URL back to the raw object URL +
+// strip every query param. Result is the ORIGINAL upload — best
+// quality available, no width/quality downscaling. Inverse of txImg.
+function bestQualityStorageUrl(url) {
+  if (!url || typeof url !== "string") return url;
+  let out = url.replace("/storage/v1/render/image/public/", "/storage/v1/object/public/");
+  // Strip query (width=, quality=, etc.) — render URLs always carry one.
+  const q = out.indexOf("?");
+  if (q >= 0) out = out.substring(0, q);
+  return out;
+}
+
+// Admin-side download: fetch the original-quality image as a blob and
+// trigger a browser download via a synthetic <a download>. Uses blob
+// (not navigation) so the response actually saves vs opening in a new
+// tab. Falls through to window.open if fetch fails (CORS, network).
+async function downloadStorageImageOriginal(url, suggestedAlt) {
+  const bestUrl = bestQualityStorageUrl(url);
+  // Filename: last path segment of the URL (Supabase paths are uuid-based
+  // so they're guaranteed unique). Sanitize for browsers that reject
+  // tricky chars.
+  const tail = bestUrl.split("/").pop() || "trailhead-image";
+  const safeAlt = (suggestedAlt || "").trim().replace(/[^a-zA-Z0-9_\- ]/g, "").slice(0, 60);
+  const filename = safeAlt ? `${safeAlt}-${tail}` : tail;
+  try {
+    const res = await fetch(bestUrl, { cache: "no-cache" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = filename;
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { try { URL.revokeObjectURL(blobUrl); a.remove(); } catch {} }, 2000);
+    return { ok: true, filename };
+  } catch (e) {
+    console.warn("[downloadStorageImageOriginal] fetch failed, falling back to window.open", e);
+    try { window.open(bestUrl, "_blank", "noopener"); return { ok: true, filename, fallback: true }; } catch { return { ok: false, error: String(e) }; }
+  }
+}
+
 function ContentLoader({ spinnerSize = 22, accent }) {
   const col = accent || T.copper;
   return (
@@ -44775,6 +44826,101 @@ export default function Trailhead() {
       window.removeEventListener("trailhead:upload_rejected", onUploadRejected);
     };
   }, []);
+
+  // ── Admin image download gesture ──
+  // Admin only: long-press (touch hold OR mouse hold >600ms) on ANY
+  // Supabase-hosted image triggers an original-quality download. The
+  // follow-up click that would normally fire after mouseup/touchend is
+  // suppressed so existing image-click handlers (lightbox / open-detail
+  // / etc.) don't fire in the same gesture. Plain clicks stay unchanged
+  // for non-admin users AND for admin users when they release before
+  // the 600ms threshold.
+  useEffect(() => {
+    if (!isAdmin || typeof document === "undefined") return;
+    let pressTimer = null;
+    let suppressNextClick = false;
+    let pressedImg = null;
+
+    const findImgFromTarget = (target) => {
+      let el = target;
+      while (el && el !== document.body && el !== document) {
+        if (el.tagName === "IMG") return el;
+        el = el.parentElement;
+      }
+      return null;
+    };
+
+    const startPress = (target) => {
+      const img = findImgFromTarget(target);
+      if (!img || !isStorageImageUrl(img.src)) return;
+      pressedImg = img;
+      pressTimer = setTimeout(async () => {
+        pressTimer = null;
+        suppressNextClick = true;
+        // Visual: green outline flash so the admin sees the gesture fired.
+        const prevShadow = img.style.boxShadow;
+        const prevTrans = img.style.transition;
+        try {
+          img.style.transition = "box-shadow 120ms ease-out";
+          img.style.boxShadow = `0 0 0 3px ${T.green}`;
+          setTimeout(() => { try { img.style.boxShadow = prevShadow; img.style.transition = prevTrans; } catch {} }, 500);
+        } catch {}
+        const res = await downloadStorageImageOriginal(img.src, img.alt);
+        if (!res || !res.ok) {
+          showErrorToast("Couldn't download image — see console.");
+        }
+      }, 600);
+    };
+    const cancelPress = () => {
+      if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+      pressedImg = null;
+    };
+
+    // Suppress the click that bubbles AFTER a long-press download fires —
+    // prevents the image's normal click handler (lightbox etc.) from
+    // also running on the same gesture.
+    const onClickCapture = (e) => {
+      if (!suppressNextClick) return;
+      suppressNextClick = false;
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    const onMouseDown = (e) => {
+      if (e.button !== 0) return; // primary button only
+      startPress(e.target);
+    };
+    const onMouseUp = () => cancelPress();
+    const onMouseLeave = () => cancelPress();
+
+    const onTouchStart = (e) => {
+      if (e.touches && e.touches.length > 1) { cancelPress(); return; }
+      startPress(e.target);
+    };
+    const onTouchMove = () => cancelPress();    // any drag cancels
+    const onTouchEnd = () => cancelPress();
+    const onTouchCancel = () => cancelPress();
+
+    document.addEventListener("click", onClickCapture, true);
+    document.addEventListener("mousedown", onMouseDown, true);
+    document.addEventListener("mouseup", onMouseUp, true);
+    document.addEventListener("mouseleave", onMouseLeave, true);
+    document.addEventListener("touchstart", onTouchStart, { capture: true, passive: true });
+    document.addEventListener("touchmove", onTouchMove, { capture: true, passive: true });
+    document.addEventListener("touchend", onTouchEnd, true);
+    document.addEventListener("touchcancel", onTouchCancel, true);
+    return () => {
+      document.removeEventListener("click", onClickCapture, true);
+      document.removeEventListener("mousedown", onMouseDown, true);
+      document.removeEventListener("mouseup", onMouseUp, true);
+      document.removeEventListener("mouseleave", onMouseLeave, true);
+      document.removeEventListener("touchstart", onTouchStart, true);
+      document.removeEventListener("touchmove", onTouchMove, true);
+      document.removeEventListener("touchend", onTouchEnd, true);
+      document.removeEventListener("touchcancel", onTouchCancel, true);
+      if (pressTimer) clearTimeout(pressTimer);
+    };
+  }, [isAdmin]);
   const [feedItems, setFeedItems] = useState([]);
   // Ref mirror so mutating helpers (updatePost, onRsvpConvoy, etc.) can read
   // the latest feed state without closing over a stale snapshot.
