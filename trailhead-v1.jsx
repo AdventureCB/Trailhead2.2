@@ -18409,6 +18409,12 @@ function DemoRequestFlow({ bounty, submission, currentUserId, isGuest, onGuestTa
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const proofInputRef = useRef(null);
+  // When true, the awaiting stage drops into the schedule panel so the
+  // provider can adjust the days / time slots / meeting spot / note
+  // they already sent. SEND PROPOSAL replays as SEND UPDATED PROPOSAL
+  // with a different opener line + a fresh proposal_id (new card thread
+  // in the DM). Cleared after a successful send OR via CANCEL EDIT.
+  const [editingProposal, setEditingProposal] = useState(false);
 
   const stage = (() => {
     if (!submission) return "accept";
@@ -18417,11 +18423,13 @@ function DemoRequestFlow({ bounty, submission, currentUserId, isGuest, onGuestTa
     if (status === "submitted") return "submitted";
     if (!draft.accepted_at) return "accept";
     // Schedule has THREE sub-states now:
-    //   schedule  — building the proposal (no proposal_sent_at yet)
+    //   schedule  — building the proposal (no proposal_sent_at yet, OR
+    //               provider tapped EDIT OFFER from awaiting)
     //   awaiting  — proposal sent, customer hasn't responded with a lock-in
     //   (after customer responds, the DM card's LOCK IT IN action sets
     //   scheduled_at — flow drops out into the demo / review / submitted stages)
     if (!draft.scheduled_at && !draft.proposal_sent_at) return "schedule";
+    if (!draft.scheduled_at && editingProposal) return "schedule";
     if (!draft.scheduled_at) return "awaiting";
     if (!draft.proof_photo) return "demo";
     return "review";
@@ -18491,14 +18499,19 @@ function DemoRequestFlow({ bounty, submission, currentUserId, isGuest, onGuestTa
         meeting_label: proposalLocationLabel || null,
         note: (proposalNote || "").trim() || null,
       };
-      // Personalized opener under the card — only on the initial propose,
-      // not on subsequent select/counter/final cards.
-      const opener = `Hi @${customer.handle || "there"}! I'd love to set up the demo you requested. When works for you?`;
+      // Personalized opener under the card. First-time send greets the
+      // customer; an EDIT-OFFER send (provider revising days/location
+      // after the first propose) leads with "Updated" so the customer
+      // knows to look at the new card and not the old one.
+      const isEdit = !!draft.proposal_sent_at;
+      const opener = isEdit
+        ? "Updated my demo offer — here's my latest availability + meeting spot:"
+        : `Hi @${customer.handle || "there"}! I'd love to set up the demo you requested. When works for you?`;
       const res = await onSendDemoProposal(customer.id, proposal, undefined, opener);
       if (res && res.error) throw new Error(res.error);
       // Persist a snapshot of the proposal into the bounty draft so the
-      // user can come back + view what they sent (and for re-edit on
-      // counter-counter flows).
+      // user can come back + view what they sent. proposal_sent_at gets
+      // overwritten on edits so "AWAITING since X" stays accurate.
       const nextDraft = {
         ...(draft || {}),
         proposal_sent_at: new Date().toISOString(),
@@ -18509,6 +18522,7 @@ function DemoRequestFlow({ bounty, submission, currentUserId, isGuest, onGuestTa
         proposal_note: proposal.note,
       };
       await onSaveDraft(submission.id, nextDraft);
+      setEditingProposal(false);
       onClose && onClose();
       // Drop the user straight into the DM thread with the customer so they
       // can see the card they just sent + chat from there. Skip silently if
@@ -18649,11 +18663,13 @@ function DemoRequestFlow({ bounty, submission, currentUserId, isGuest, onGuestTa
           <div style={{ background: T.darkCard, borderRadius: 10, padding: "14px 16px", border: `1px solid ${T.copper}40` }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
               <Clock size={14} color={T.copper} />
-              <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>BUILD YOUR PROPOSAL</span>
-              {scheduleDeadlineMs && <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: 10, color: T.red, fontWeight: 700 }}>{fmtCountdown(scheduleDeadlineMs)}</span>}
+              <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>{editingProposal ? "UPDATE YOUR OFFER" : "BUILD YOUR PROPOSAL"}</span>
+              {scheduleDeadlineMs && !editingProposal && <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: 10, color: T.red, fontWeight: 700 }}>{fmtCountdown(scheduleDeadlineMs)}</span>}
             </div>
             <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.5, margin: "0 0 12px" }}>
-              Tell the customer when you're available + where you'd like to meet. Pick at least 3 days, set a time slot for each, drop a pin, add a comment.
+              {editingProposal
+                ? "Adjust the days, time slots, meeting spot, or note. Sending creates a new proposal card in the DM — the customer will see the updated availability."
+                : "Tell the customer when you're available + where you'd like to meet. Pick at least 3 days, set a time slot for each, drop a pin, add a comment."}
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <div>
@@ -18697,11 +18713,23 @@ function DemoRequestFlow({ bounty, submission, currentUserId, isGuest, onGuestTa
               <div style={{ display: "flex", gap: 8 }}>
                 <button onClick={handleSendProposal} disabled={busy} style={{ flex: 1, padding: "12px", background: T.green, color: T.white, border: "none", borderRadius: 6, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.8, cursor: busy ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
                   <Send size={12} color={T.white} />
-                  {busy ? "SENDING…" : "SEND PROPOSAL"}
+                  {busy ? "SENDING…" : (editingProposal ? "SEND UPDATED PROPOSAL" : "SEND PROPOSAL")}
                 </button>
-                <button onClick={handleWithdrawAction} disabled={busy} style={{ padding: "12px 14px", background: "none", color: T.tertiary, border: `1px solid ${T.charcoal}`, borderRadius: 6, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, cursor: busy ? "wait" : "pointer" }}>
-                  WITHDRAW
-                </button>
+                {/* Edit-mode CANCEL returns the user to the awaiting card
+                    without sending. Otherwise it's a WITHDRAW (kills the
+                    whole submission). Different verbs for different
+                    consequences — important so the provider doesn't
+                    accidentally tank the whole demo while just abandoning
+                    an in-progress edit. */}
+                {editingProposal ? (
+                  <button onClick={() => { setEditingProposal(false); setError(""); }} disabled={busy} style={{ padding: "12px 14px", background: "none", color: T.tertiary, border: `1px solid ${T.charcoal}`, borderRadius: 6, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, cursor: busy ? "wait" : "pointer" }}>
+                    CANCEL EDIT
+                  </button>
+                ) : (
+                  <button onClick={handleWithdrawAction} disabled={busy} style={{ padding: "12px 14px", background: "none", color: T.tertiary, border: `1px solid ${T.charcoal}`, borderRadius: 6, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, cursor: busy ? "wait" : "pointer" }}>
+                    WITHDRAW
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -18714,7 +18742,7 @@ function DemoRequestFlow({ bounty, submission, currentUserId, isGuest, onGuestTa
               <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>AWAITING CUSTOMER RESPONSE</span>
             </div>
             <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.5, margin: "0 0 12px" }}>
-              Your scheduling proposal is in the customer's DM. They'll either accept one of your slots or send back a counter-proposal — you'll see their reply here.
+              Your scheduling proposal is in the customer's DM. They'll lock in one of your slots — you'll see the confirmed time here. If they ask for different times or a different spot, tap EDIT OFFER to send an updated proposal.
             </p>
             {Array.isArray(draft.proposal_days) && draft.proposal_days.length > 0 && (
               <div style={{ marginBottom: 12 }}>
@@ -18729,13 +18757,37 @@ function DemoRequestFlow({ bounty, submission, currentUserId, isGuest, onGuestTa
                 {draft.proposal_meeting_label && <div style={{ marginTop: 6, fontFamily: serif, fontSize: 11, color: T.tertiary }}>📍 {draft.proposal_meeting_label}</div>}
               </div>
             )}
-            <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {customer && customer.id && onOpenDM && (
-                <button onClick={() => { onOpenDM(customer.id, null); onClose && onClose(); }} style={{ flex: 1, padding: "11px", background: T.copper, color: T.white, border: "none", borderRadius: 6, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                <button onClick={() => { onOpenDM(customer.id, null); onClose && onClose(); }} style={{ flex: "1 1 140px", padding: "11px", background: T.copper, color: T.white, border: "none", borderRadius: 6, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
                   <Send size={12} color={T.white} />
                   OPEN DM
                 </button>
               )}
+              {/* Provider can revise the proposal at any time pre-finalize.
+                  Reseeds the schedule panel from the CURRENT draft (not
+                  from stale in-memory state of a half-finished prior edit)
+                  so editing always starts from what was actually sent. */}
+              <button
+                onClick={() => {
+                  setError("");
+                  const seedDays = Array.isArray(draft.proposal_days) ? draft.proposal_days : [];
+                  setProposalDays(seedDays.map(d => d.date));
+                  const slotMap = {};
+                  seedDays.forEach(d => { if (d && d.date) slotMap[d.date] = d.slot || null; });
+                  setProposalSlots(slotMap);
+                  setProposalLat(draft.proposal_meeting_lat != null ? draft.proposal_meeting_lat : (bounty.demo_lat || null));
+                  setProposalLng(draft.proposal_meeting_lng != null ? draft.proposal_meeting_lng : (bounty.demo_lng || null));
+                  setProposalLocationLabel(draft.proposal_meeting_label || "");
+                  setProposalNote(draft.proposal_note || "");
+                  setEditingProposal(true);
+                }}
+                disabled={busy}
+                style={{ flex: "1 1 140px", padding: "11px", background: "transparent", color: T.green, border: `1px solid ${T.green}`, borderRadius: 6, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.8, cursor: busy ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+              >
+                <Edit3 size={12} color={T.green} />
+                EDIT OFFER
+              </button>
               <button onClick={handleWithdrawAction} disabled={busy} style={{ padding: "11px 14px", background: "none", color: T.tertiary, border: `1px solid ${T.charcoal}`, borderRadius: 6, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, cursor: busy ? "wait" : "pointer" }}>
                 WITHDRAW
               </button>
