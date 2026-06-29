@@ -19554,8 +19554,7 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
           // their content is actually surfaced — not just a label).
           if (section.fixed && (section.type === "h2" || section.type === "h3")) {
             return (
-              <div key={section.id} style={{ display: "flex", alignItems: "center", gap: 8, margin: "20px 0 8px" }}>
-                <span style={{ fontFamily: sans, fontSize: 8, color: T.white, background: blockLabelColor(section.type), padding: "2px 5px", borderRadius: 3, fontWeight: 700, letterSpacing: 0.5 }}>{blockLabel(section.type)}</span>
+              <div key={section.id} style={{ margin: "20px 0 8px" }}>
                 <span style={{ fontFamily: sans, fontSize: 15, color: T.copper, fontWeight: 700 }}>{section.value}</span>
               </div>
             );
@@ -20083,7 +20082,6 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
           return (
             <div key={section.id} style={{ margin: "12px 0" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                <span style={{ fontFamily: sans, fontSize: 8, color: T.white, background: blockLabelColor(section.type), padding: "2px 5px", borderRadius: 3, fontWeight: 700, letterSpacing: 0.5 }}>{blockLabel(section.type)}</span>
                 <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>{section.label}</span>
                 {section.required && <span style={{ fontFamily: sans, fontSize: 9, color: T.red }}>REQUIRED</span>}
                 {textLocked && <span style={{ display: "flex", alignItems: "center", gap: 4 }}><Lock size={9} color={T.copper} /><span style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 700, letterSpacing: 0.5 }}>PREFILLED</span></span>}
