@@ -127,7 +127,15 @@ Deno.serve(async (req: Request) => {
       type: "express",
       country: "US",
       ...(email ? { email } : {}),
+      // Live mode requires platforms to request `card_payments` alongside
+      // `transfers` — transfers-only needs explicit Stripe approval which
+      // takes 1-3 weeks. Easier to just request both. Ambassadors never
+      // actually accept card payments because we don't trigger any payment
+      // flows on their accounts; the capability is permission-only, not
+      // usage. Test mode auto-allowed transfers-only so this is a live-
+      // mode-only divergence (discovered 2026-05-29 during live switch).
       "capabilities[transfers][requested]": "true",
+      "capabilities[card_payments][requested]": "true",
       "business_profile[product_description]": "Overland gear sales commission via Lone Peak Overland ambassador program",
       "business_profile[url]": APP_BASE_URL,
       "metadata[ambassador_id]": ambassadorRow.id,

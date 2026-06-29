@@ -297,6 +297,31 @@ async function resolveRoleConfig(role: string, baseCode: string, body: any): Pro
 
 // Create one Shopify code (price_rule + discount_code pair). Returns the
 // IDs or an error. Rollback handled by caller.
+// Look up an existing Shopify discount code by its text. Returns the
+// price_rule_id + discount_id so callers can reuse instead of recreating.
+// Used for idempotency on retry-create flows (admin "RETRY PRIMARY CODE"
+// after the orphan-row trap, see project_ambassador_program memory). 404
+// from Shopify means the code doesn't exist yet — return null so caller
+// proceeds with creation.
+async function lookupExistingShopifyCode(code: string): Promise<
+  { found: true; priceRuleId: string; discountId: string; finalCode: string }
+  | { found: false }
+  | { found: false; error: true; status: number; detail?: any }
+> {
+  if (!code) return { found: false };
+  const r = await shopifyAdminFetch(`/discount_codes/lookup.json?code=${encodeURIComponent(code)}`, { method: "GET" });
+  if (r.status === 404) return { found: false };
+  if (!r.ok) return { found: false, error: true, status: r.status, detail: r.data };
+  const dc = r.data?.discount_code;
+  if (!dc?.id || !dc?.price_rule_id) return { found: false };
+  return {
+    found: true,
+    priceRuleId: String(dc.price_rule_id),
+    discountId: String(dc.id),
+    finalCode: String(dc.code),
+  };
+}
+
 async function createShopifyCode(args: {
   title: string;
   variant: "public" | "internal";
@@ -307,7 +332,23 @@ async function createShopifyCode(args: {
   minPurchase?: number | null;
   startsAt?: string | null;
   endsAt?: string | null;
-}): Promise<{ ok: true; priceRuleId: string; discountId: string; finalCode: string } | { ok: false; error: string; status: number; detail?: any }> {
+}): Promise<{ ok: true; priceRuleId: string; discountId: string; finalCode: string; reused?: boolean } | { ok: false; error: string; status: number; detail?: any }> {
+  // Idempotency check — if a Shopify discount with this exact code text
+  // already exists, reuse its IDs instead of creating new. Two scenarios
+  // this fixes:
+  //   (1) Admin "RETRY PRIMARY CODE" after a prior partial-failure left
+  //       Shopify codes provisioned without a matching DB row (no
+  //       attribution lost because we reuse the same codes).
+  //   (2) Same-base-code admin re-runs (replace_existing not set) — used
+  //       to fail with "already taken" 422; now silently reuses.
+  // If lookup itself errors (5xx from Shopify), fall through to create
+  // and let that path error naturally — better than masking a real outage.
+  const existing = await lookupExistingShopifyCode(args.code);
+  if ((existing as any).found === true) {
+    const e = existing as { found: true; priceRuleId: string; discountId: string; finalCode: string };
+    return { ok: true, priceRuleId: e.priceRuleId, discountId: e.discountId, finalCode: e.finalCode, reused: true };
+  }
+
   let prBody: any;
   try { prBody = buildPriceRule(args); }
   catch (e: any) { return { ok: false, error: e.message || String(e), status: 500 }; }

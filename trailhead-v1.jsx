@@ -18731,17 +18731,35 @@ function DemoRequestFlow({ bounty, submission, currentUserId, isGuest, onGuestTa
         </div>
 
         {/* Stage-specific UI */}
-        {stage === "accept" && (
-          <div style={{ background: `${T.red}10`, border: `1px solid ${T.red}30`, borderRadius: 10, padding: "14px 16px" }}>
-            <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, marginBottom: 8 }}>Accept this demo?</div>
-            <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.5, margin: "0 0 12px" }}>
-              When you accept, you'll build a scheduling proposal for the customer — <strong style={{ color: T.white }}>at least 3 days you're available</strong> (offer time windows like "morning"/"afternoon" or pick a specific time), <strong style={{ color: T.white }}>a meeting spot</strong>, and any notes for them. The customer locks in one of your slots, and you can <strong style={{ color: T.white }}>edit your offer anytime</strong> if they ask for something different. After the demo, upload a proof photo to submit for review and earn the reward.
-            </p>
-            <button onClick={handleAccept} disabled={busy} style={{ width: "100%", padding: "12px", background: T.red, color: T.white, border: "none", borderRadius: 8, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 1, cursor: busy ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-              {busy ? "ACCEPTING…" : "ACCEPT AND SCHEDULE DEMO"}
-            </button>
-          </div>
-        )}
+        {stage === "accept" && (() => {
+          // The customer who requested this demo can't claim it themselves.
+          // Mirrors the bounty-card hide + server RPC guard.
+          const isOwnDemo = bounty && bounty.demo_customer_user_id && bounty.demo_customer_user_id === currentUserId;
+          if (isOwnDemo) {
+            return (
+              <div style={{ background: `${T.copper}10`, border: `1px solid ${T.copper}30`, borderRadius: 10, padding: "14px 16px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <Users size={14} color={T.copper} />
+                  <span style={{ fontFamily: sans, fontSize: 13, color: T.copper, fontWeight: 700 }}>This is your requested demo</span>
+                </div>
+                <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.5, margin: 0 }}>
+                  You can't claim a demo you requested. Someone else in the community needs to claim it — they'll reach out via DM to schedule.
+                </p>
+              </div>
+            );
+          }
+          return (
+            <div style={{ background: `${T.red}10`, border: `1px solid ${T.red}30`, borderRadius: 10, padding: "14px 16px" }}>
+              <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, marginBottom: 8 }}>Accept this demo?</div>
+              <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.5, margin: "0 0 12px" }}>
+                When you accept, you'll build a scheduling proposal for the customer — <strong style={{ color: T.white }}>at least 3 days you're available</strong> (offer time windows like "morning"/"afternoon" or pick a specific time), <strong style={{ color: T.white }}>a meeting spot</strong>, and any notes for them. The customer locks in one of your slots, and you can <strong style={{ color: T.white }}>edit your offer anytime</strong> if they ask for something different. After the demo, upload a proof photo to submit for review and earn the reward.
+              </p>
+              <button onClick={handleAccept} disabled={busy} style={{ width: "100%", padding: "12px", background: T.red, color: T.white, border: "none", borderRadius: 8, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 1, cursor: busy ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                {busy ? "ACCEPTING…" : "ACCEPT AND SCHEDULE DEMO"}
+              </button>
+            </div>
+          );
+        })()}
 
         {stage === "schedule" && (
           <div style={{ background: T.darkCard, borderRadius: 10, padding: "14px 16px", border: `1px solid ${T.copper}40` }}>
@@ -20872,17 +20890,34 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
                           <span style={{ fontFamily: serif, fontSize: 12, color: T.tertiary }}>All submission slots are filled — this bounty is done.</span>
                         </div>
                       )}
-                      {b.status === "open" && !b.isFull && (
-                        <>
-                          <button onClick={(e) => { e.stopPropagation(); startBounty(b.id); }} disabled={claimingId === b.id} style={{ width: "100%", padding: "12px", background: T.red, color: T.white, fontFamily: sans, fontSize: 12, fontWeight: 700, borderRadius: 8, border: "none", cursor: claimingId === b.id ? "wait" : "pointer", letterSpacing: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: claimingId === b.id ? 0.6 : 1 }}>
-                            <Target size={14} color={T.white} />
-                            {claimingId === b.id ? "CLAIMING…" : "CLAIM BOUNTY"}
-                          </button>
-                          {claimError && claimError.bountyId === b.id && (
-                            <div style={{ marginTop: 8, padding: "8px 12px", background: `${T.red}15`, border: `1px solid ${T.red}40`, borderRadius: 6, fontFamily: serif, fontSize: 12, color: T.white, lineHeight: 1.4 }}>{claimError.message}</div>
-                          )}
-                        </>
-                      )}
+                      {b.status === "open" && !b.isFull && (() => {
+                        // Demo Request bounties: the customer who requested
+                        // the demo can't claim their own. Show a status chip
+                        // instead of the CLAIM button. Server RPC also blocks
+                        // this — UI hide is purely UX.
+                        const isOwnDemo = b.category === "Demo Request"
+                          && b.demo_customer_user_id
+                          && b.demo_customer_user_id === currentUserId;
+                        if (isOwnDemo) {
+                          return (
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0 0" }}>
+                              <Users size={14} color={T.copper} />
+                              <span style={{ fontFamily: serif, fontSize: 12, color: T.copper }}>This is your requested demo — waiting for someone to claim it.</span>
+                            </div>
+                          );
+                        }
+                        return (
+                          <>
+                            <button onClick={(e) => { e.stopPropagation(); startBounty(b.id); }} disabled={claimingId === b.id} style={{ width: "100%", padding: "12px", background: T.red, color: T.white, fontFamily: sans, fontSize: 12, fontWeight: 700, borderRadius: 8, border: "none", cursor: claimingId === b.id ? "wait" : "pointer", letterSpacing: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: claimingId === b.id ? 0.6 : 1 }}>
+                              <Target size={14} color={T.white} />
+                              {claimingId === b.id ? "CLAIMING…" : "CLAIM BOUNTY"}
+                            </button>
+                            {claimError && claimError.bountyId === b.id && (
+                              <div style={{ marginTop: 8, padding: "8px 12px", background: `${T.red}15`, border: `1px solid ${T.red}40`, borderRadius: 6, fontFamily: serif, fontSize: 12, color: T.white, lineHeight: 1.4 }}>{claimError.message}</div>
+                            )}
+                          </>
+                        );
+                      })()}
                       {b.status === "in_progress" && (
                         <div style={{ display: "flex", gap: 8 }}>
                           <button onClick={(e) => { e.stopPropagation(); resumeBounty(b.id); }} style={{ flex: 1, padding: "12px", background: T.copper, color: T.white, fontFamily: sans, fontSize: 12, fontWeight: 700, borderRadius: 8, border: "none", cursor: "pointer", letterSpacing: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
@@ -32914,6 +32949,81 @@ function BountyCustomerPicker({ valueId, valueProfile, onChange, onSearchUsers }
   );
 }
 
+/* ─── DemoPushAllUsersButton — admin push-all trigger for Demo Request bounties.
+   Renders inside BountyEditor's DEMO SETUP section. Disabled until the
+   bounty has the customer + location label + open status. On click,
+   confirms the preview, then invokes broadcast-push with segment=all.
+   Inline status (busy / sent count / error) so admin doesn't have to
+   bounce to /admin to verify the broadcast landed. */
+function DemoPushAllUsersButton({ bounty, customerProfile }) {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null); // { sent, status } | null
+  const [error, setError] = useState("");
+
+  const customerName = (customerProfile && (customerProfile.full_name || customerProfile.handle)) || "A customer";
+  const locationLabel = (bounty && bounty.demo_location_label) || "";
+  const previewBody = `${customerName} has requested a demo in ${locationLabel}. Open the app to claim it.`;
+
+  const isReady = bounty
+    && bounty.category === "Demo Request"
+    && bounty.status === "open"
+    && bounty.demo_customer_user_id
+    && locationLabel.trim().length > 0;
+  const disabledReason = !bounty ? ""
+    : bounty.category !== "Demo Request" ? ""
+    : bounty.status !== "open" ? "Publish the bounty first (status must be OPEN)"
+    : !bounty.demo_customer_user_id ? "Pick the customer above first"
+    : !locationLabel.trim() ? "Set a location label above first"
+    : "";
+
+  const handlePush = async () => {
+    if (!isReady || busy) return;
+    if (!confirm(`Send this push to EVERY Trailhead user?\n\n"${previewBody}"`)) return;
+    setBusy(true); setError(""); setResult(null);
+    try {
+      const { data, error: invokeErr } = await supabase.functions.invoke("broadcast-push", {
+        body: { body: previewBody, segment: "all", image_url: null },
+      });
+      if (invokeErr) throw invokeErr;
+      if (data && data.ok === false) throw new Error(data.error || "Push failed");
+      setResult({ sent: data?.sent ?? data?.recipient_count ?? 0, status: "ok" });
+    } catch (e) {
+      setError((e && e.message) || "Push failed");
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div style={{ background: T.darkCard, borderRadius: 8, padding: "12px 14px", border: `1px solid ${T.charcoal}` }}>
+      <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>NOTIFY THE COMMUNITY</div>
+      {isReady ? (
+        <div style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.5, margin: "0 0 10px" }}>
+          Preview: <span style={{ color: T.white, fontStyle: "italic" }}>"{previewBody}"</span>
+        </div>
+      ) : (
+        <div style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.5, margin: "0 0 10px" }}>
+          {disabledReason || "Set customer + location above to enable."}
+        </div>
+      )}
+      <button
+        onClick={handlePush}
+        disabled={!isReady || busy}
+        style={{ width: "100%", padding: "10px 12px", background: isReady && !busy ? T.red : T.charcoal, color: T.white, border: "none", borderRadius: 6, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.5, cursor: isReady && !busy ? "pointer" : "default", opacity: isReady && !busy ? 1 : 0.6, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+      >
+        <Bell size={13} color={T.white} />
+        {busy ? "SENDING…" : "PUSH TO ALL USERS"}
+      </button>
+      {result && (
+        <div style={{ marginTop: 8, fontFamily: sans, fontSize: 11, color: T.green, fontWeight: 600 }}>
+          Sent to {result.sent} {result.sent === 1 ? "device" : "devices"}.
+        </div>
+      )}
+      {error && (
+        <div style={{ marginTop: 8, fontFamily: sans, fontSize: 11, color: T.red }}>{error}</div>
+      )}
+    </div>
+  );
+}
+
 /* ─── BOUNTY EDITOR — admin create + edit (Phase 4) ─── */
 // Used for both new (bountyId="") and existing (bountyId=uuid). Loads
 // from DB on mount; auto-prefills via category template on new.
@@ -33434,12 +33544,22 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
               )}
             </div>
             <div>
-              <FieldLabel>Search radius for nearby-user push (miles)</FieldLabel>
+              <FieldLabel>Demo coverage radius (miles) — shown as a circle on the map for participants</FieldLabel>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <input type="range" min="5" max="200" step="5" value={Math.round((bounty.demo_radius_m || 80467) / 1609.34)} onChange={(e) => patch({ demo_radius_m: Math.round(Number(e.target.value) * 1609.34) })} style={{ flex: 1 }} />
                 <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, minWidth: 56, textAlign: "right" }}>{Math.round((bounty.demo_radius_m || 80467) / 1609.34)} mi</span>
               </div>
             </div>
+
+            {/* PUSH ALL USERS — manual broadcast for live demo bounties.
+                Disabled when prerequisites missing (customer + label) or
+                bounty isn't open yet. Click → confirm preview → broadcast.
+                Recipient + status surfaced inline so admin doesn't have
+                to scroll to the dashboard to verify it landed. */}
+            <DemoPushAllUsersButton
+              bounty={bounty}
+              customerProfile={customerProfile}
+            />
           </div>
         </>
       )}

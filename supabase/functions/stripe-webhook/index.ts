@@ -13,12 +13,23 @@
 // DEPLOY: `supabase functions deploy stripe-webhook --no-verify-jwt`
 //
 // Required secrets:
-//   STRIPE_WEBHOOK_SECRET (whsec_…)
+//   STRIPE_WEBHOOK_SECRET          (whsec_… for the "Your account" scope endpoint
+//                                   subscribed to transfer.reversed)
+//   STRIPE_WEBHOOK_SECRET_CONNECT  (whsec_… for the "Connected accounts" scope
+//                                   endpoint subscribed to account.updated)
 //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (auto-populated)
+//
+// The new Stripe Workbench webhook UI forces a single scope per endpoint, so
+// we maintain two endpoints with separate signing secrets and let the
+// function accept either one. Same URL on both endpoints; same handlers
+// (idempotent on payout state + onboarded flag) so duplicate delivery is
+// harmless. If you ever consolidate to a single endpoint with both scopes,
+// just leave STRIPE_WEBHOOK_SECRET_CONNECT unset and this falls back gracefully.
 
-const STRIPE_WEBHOOK_SECRET = Deno.env.get("STRIPE_WEBHOOK_SECRET");
-const SUPABASE_URL          = Deno.env.get("SUPABASE_URL");
-const SERVICE_KEY           = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const STRIPE_WEBHOOK_SECRET         = Deno.env.get("STRIPE_WEBHOOK_SECRET");
+const STRIPE_WEBHOOK_SECRET_CONNECT = Deno.env.get("STRIPE_WEBHOOK_SECRET_CONNECT");
+const SUPABASE_URL                  = Deno.env.get("SUPABASE_URL");
+const SERVICE_KEY                   = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -85,13 +96,25 @@ async function verifyStripeSignature(rawBody: string, sigHeader: string | null, 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return ok({ ok: false, error: "method not allowed" }, 405);
-  if (!STRIPE_WEBHOOK_SECRET) return ok({ ok: false, error: "STRIPE_WEBHOOK_SECRET missing" }, 500);
+  if (!STRIPE_WEBHOOK_SECRET && !STRIPE_WEBHOOK_SECRET_CONNECT) {
+    return ok({ ok: false, error: "no STRIPE_WEBHOOK_SECRET configured" }, 500);
+  }
   if (!SUPABASE_URL || !SERVICE_KEY) return ok({ ok: false, error: "Supabase env missing" }, 500);
 
   const rawBody = await req.text();
   const sig = req.headers.get("stripe-signature");
-  if (!(await verifyStripeSignature(rawBody, sig, STRIPE_WEBHOOK_SECRET))) {
-    console.warn("[stripe-webhook] signature verification failed");
+
+  // Try each configured secret. First match wins. The platform-scope
+  // endpoint (transfer.reversed) and the connected-accounts-scope endpoint
+  // (account.updated) each have their own signing secret in the Stripe
+  // dashboard; both events come to the same URL, so we just try both.
+  const secrets = [STRIPE_WEBHOOK_SECRET, STRIPE_WEBHOOK_SECRET_CONNECT].filter(Boolean) as string[];
+  let verified = false;
+  for (const s of secrets) {
+    if (await verifyStripeSignature(rawBody, sig, s)) { verified = true; break; }
+  }
+  if (!verified) {
+    console.warn("[stripe-webhook] signature verification failed against all configured secrets");
     return ok({ ok: false, error: "invalid signature" }, 401);
   }
 
