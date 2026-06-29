@@ -44827,104 +44827,116 @@ export default function Trailhead() {
     };
   }, []);
 
-  // ── Admin image download gesture ──
-  // Admin only: RIGHT-CLICK (desktop) OR LONG-PRESS 500ms (mobile) on
-  // any Supabase-hosted image fires an original-quality download. On
-  // mobile we also inject a global CSS rule that disables the native
-  // iOS long-press callout (Save Image / Share sheet) so our timer
-  // can run uninterrupted. Plain left clicks and taps are unchanged.
+  // ── Admin image download ──
+  // Admin sessions: every Supabase-hosted image gets a small ⋮ button
+  // overlay (top-left, doesn't collide w/ the existing X close buttons
+  // that live top-right on many image cards). Click → original-quality
+  // download. Skips avatars (too small for the affordance to be useful
+  // + would flood the feed). Implemented via a MutationObserver so
+  // images added by lazy scrolls, modals, and React re-renders all get
+  // the overlay.
   useEffect(() => {
     if (!isAdmin || typeof document === "undefined") return;
 
-    // Suppress iOS native long-press menu (Save Image / Share / Copy)
-    // + the highlight that comes with it, but only for admin sessions.
-    // touch-callout is the iOS-specific switch; user-select kills the
-    // selection highlight that Android + Chrome show.
+    // CSS for the ⋮ pill. Top-left so it doesn't collide with the X
+    // close buttons that live top-right across the app.
     const styleEl = document.createElement("style");
-    styleEl.setAttribute("data-trailhead", "admin-img-callout");
+    styleEl.setAttribute("data-trailhead", "admin-img-dots");
     styleEl.textContent = `
-      img { -webkit-touch-callout: none !important; -webkit-user-select: none !important; user-select: none !important; }
+      .th-admin-img-dots {
+        position: absolute;
+        top: 6px;
+        left: 6px;
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        background: rgba(0,0,0,0.72);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        z-index: 50;
+        border: none;
+        color: white;
+        font-size: 18px;
+        font-weight: 700;
+        line-height: 1;
+        padding: 0 0 4px 0;
+        margin: 0;
+        font-family: -apple-system, sans-serif;
+        user-select: none;
+      }
+      .th-admin-img-dots:hover { background: rgba(0,0,0,0.92); }
+      .th-admin-img-dots:active { background: ${T.green}; }
     `;
     document.head.appendChild(styleEl);
 
-    const findImgFromTarget = (target) => {
-      let el = target;
-      while (el && el !== document.body && el !== document) {
-        if (el && el.tagName === "IMG") return el;
-        el = el.parentElement;
-      }
-      return null;
+    const augmentImg = (img) => {
+      if (!img || img.tagName !== "IMG") return;
+      if (img.dataset.thAdminDots === "1") return;
+      const src = img.currentSrc || img.src;
+      if (!isStorageImageUrl(src)) return;
+      // Skip avatars — too small for the overlay to be useful + would
+      // sprinkle dots across every profile pic in the feed.
+      if (src.indexOf("/storage/v1/object/public/avatars/") >= 0
+          || src.indexOf("/storage/v1/render/image/public/avatars/") >= 0) return;
+      const parent = img.parentElement;
+      if (!parent) return;
+      // The parent must be a positioning context for the dots to sit
+      // over the image. If it's static, promote to relative (idempotent
+      // — only set if needed so we don't trample inline layout choices).
+      const computedPos = window.getComputedStyle(parent).position;
+      if (computedPos === "static") parent.style.position = "relative";
+      img.dataset.thAdminDots = "1";
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "th-admin-img-dots";
+      btn.textContent = "⋮";
+      btn.title = "Admin: download original";
+      btn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const liveSrc = img.currentSrc || img.src;
+        const res = await downloadStorageImageOriginal(liveSrc, img.alt);
+        if (!res || !res.ok) showErrorToast("Couldn't download image — see console.");
+      });
+      // Also stop pointer events from bubbling up to underlying tap
+      // handlers (lightbox / open-detail).
+      btn.addEventListener("mousedown", (e) => { e.stopPropagation(); });
+      btn.addEventListener("touchstart", (e) => { e.stopPropagation(); }, { passive: true });
+      parent.appendChild(btn);
     };
 
-    const flashAndDownload = async (img) => {
-      // Visual feedback: green outline so admin sees the gesture fired.
-      const prevShadow = img.style.boxShadow;
-      const prevTrans = img.style.transition;
+    const scanRoot = (root) => {
       try {
-        img.style.transition = "box-shadow 120ms ease-out";
-        img.style.boxShadow = `0 0 0 3px ${T.green}`;
-        setTimeout(() => { try { img.style.boxShadow = prevShadow; img.style.transition = prevTrans; } catch {} }, 500);
+        const imgs = root && root.querySelectorAll ? root.querySelectorAll("img") : [];
+        imgs.forEach(augmentImg);
       } catch {}
-      const res = await downloadStorageImageOriginal(img.src, img.alt);
-      if (!res || !res.ok) showErrorToast("Couldn't download image — see console.");
     };
 
-    // ── Desktop: right-click ──
-    // contextmenu fires on right-click + on long-press in some browsers.
-    // preventDefault suppresses the native menu so the admin gets the
-    // download instead. Storage-image-only check keeps the native menu
-    // available for external/inline images.
-    const onContextMenu = (e) => {
-      const img = findImgFromTarget(e.target);
-      if (!img || !isStorageImageUrl(img.src)) return;
-      e.preventDefault();
-      e.stopPropagation();
-      flashAndDownload(img);
-    };
+    // Initial sweep — anything in the DOM right now.
+    scanRoot(document.body);
 
-    // ── Mobile: long-press 500ms ──
-    // touchstart starts the timer; touchmove/touchend/touchcancel cancel
-    // it. The follow-up click that bubbles after a long-press release is
-    // suppressed so lightbox / open-detail handlers don't also fire.
-    let pressTimer = null;
-    let suppressNextClick = false;
-
-    const onTouchStart = (e) => {
-      if (e.touches && e.touches.length > 1) { cancel(); return; }
-      const img = findImgFromTarget(e.target);
-      if (!img || !isStorageImageUrl(img.src)) return;
-      pressTimer = setTimeout(() => {
-        pressTimer = null;
-        suppressNextClick = true;
-        flashAndDownload(img);
-      }, 500);
-    };
-    const cancel = () => {
-      if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
-    };
-    const onClickCapture = (e) => {
-      if (!suppressNextClick) return;
-      suppressNextClick = false;
-      e.preventDefault();
-      e.stopPropagation();
-    };
-
-    document.addEventListener("contextmenu", onContextMenu, true);
-    document.addEventListener("touchstart", onTouchStart, { capture: true, passive: true });
-    document.addEventListener("touchmove", cancel, { capture: true, passive: true });
-    document.addEventListener("touchend", cancel, true);
-    document.addEventListener("touchcancel", cancel, true);
-    document.addEventListener("click", onClickCapture, true);
+    // Watch every subsequent DOM insertion (React re-renders, lazy
+    // images, modal mounts, etc.).
+    const observer = new MutationObserver((muts) => {
+      for (const m of muts) {
+        for (const n of m.addedNodes) {
+          if (n.nodeType !== 1) continue;
+          if (n.tagName === "IMG") augmentImg(n);
+          else if (n.querySelectorAll) scanRoot(n);
+        }
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
 
     return () => {
+      observer.disconnect();
       try { styleEl.remove(); } catch {}
-      document.removeEventListener("contextmenu", onContextMenu, true);
-      document.removeEventListener("touchstart", onTouchStart, true);
-      document.removeEventListener("touchmove", cancel, true);
-      document.removeEventListener("touchend", cancel, true);
-      document.removeEventListener("touchcancel", cancel, true);
-      document.removeEventListener("click", onClickCapture, true);
-      if (pressTimer) clearTimeout(pressTimer);
+      // Remove every injected dots button + clear the marker so a
+      // re-toggle of isAdmin re-augments cleanly.
+      document.querySelectorAll(".th-admin-img-dots").forEach(b => { try { b.remove(); } catch {} });
+      document.querySelectorAll("img[data-th-admin-dots]").forEach(i => { try { delete i.dataset.thAdminDots; } catch {} });
     };
   }, [isAdmin]);
   const [feedItems, setFeedItems] = useState([]);
