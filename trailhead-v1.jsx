@@ -18414,7 +18414,7 @@ function DemoSlotPicker({ days, slotsByDay, onSetSlot, onRemoveDay, specificTime
          5. SUBMITTED   → status='submitted', awaiting admin review
        Each stage commits its data through onSaveDraft (save_bounty_draft RPC).
 ─── */
-function DemoRequestFlow({ bounty, submission, currentUserId, isGuest, onGuestTap, onClaim, onSaveDraft, onSubmit, onWithdraw, onOpenDM, onUploadPhoto, onLoadProfileById, onSendDemoProposal, onClose }) {
+function DemoRequestFlow({ bounty, submission, currentUserId, isGuest, onGuestTap, onClaim, onSaveDraft, onSubmit, onWithdraw, onOpenDM, onUploadPhoto, onLoadProfileById, onSendDemoProposal, onSendDmInvite, onClose }) {
   const draft = (submission && submission.draft) || {};
   const status = submission && submission.status;
   const [customer, setCustomer] = useState(null);
@@ -18639,6 +18639,20 @@ function DemoRequestFlow({ bounty, submission, currentUserId, isGuest, onGuestTa
     try {
       const res = await onWithdraw(submission.id);
       if (res && res.error) throw new Error(res.error);
+      // Best-effort: drop the customer a DM letting them know the
+      // claimer pulled out. Sent from the claimer's account so the
+      // customer can recognize / reply in-thread. Skipped silently if
+      // we don't know the customer or DM helper isn't wired.
+      try {
+        const customerId = bounty && bounty.demo_customer_user_id;
+        if (customerId && onSendDmInvite && customerId !== currentUserId) {
+          const title = (bounty && bounty.title) ? `"${bounty.title}"` : "your demo request";
+          const body = `Heads up — I've had to withdraw from ${title}. Your demo request slot is open again.`;
+          await onSendDmInvite(customerId, null, body);
+        }
+      } catch (notifyErr) {
+        console.warn("[demo withdraw notify]", notifyErr);
+      }
       onClose && onClose();
     } catch (e) { setError(e && e.message ? e.message : "Withdraw failed."); }
     finally { setBusy(false); }
@@ -20143,7 +20157,7 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
 }
 
 /* ─── RANKS / LEADERBOARD SCREEN ─── */
-function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, currentUserId, currentProfile, onLoadLeaderboard, onViewUser, bounties: bountiesFromDB, mySubmissions, isGuest, onGuestTap, onClaimBounty, onSaveBountyDraft, onSubmitBountyRPC, onWithdrawBounty, onUploadBountyPhotos, earnings, onOpenDM, onLoadProfileById, onSendDemoProposal }) {
+function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, currentUserId, currentProfile, onLoadLeaderboard, onViewUser, bounties: bountiesFromDB, mySubmissions, isGuest, onGuestTap, onClaimBounty, onSaveBountyDraft, onSubmitBountyRPC, onWithdrawBounty, onUploadBountyPhotos, earnings, onOpenDM, onLoadProfileById, onSendDemoProposal, onSendDmInvite }) {
   const [tab, setTab] = useState("overview"); // overview | leaderboard | bounty | badges
   // Leaderboard state. lbScope = global | following | weekly; lbData[scope]
   // caches rows so switching tabs is instant after the first fetch. Refresh
@@ -21019,6 +21033,7 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
               onUploadPhoto={onUploadBountyPhotos}
               onLoadProfileById={onLoadProfileById}
               onSendDemoProposal={onSendDemoProposal}
+              onSendDmInvite={onSendDmInvite}
               currentUserId={currentUserId}
               isGuest={isGuest}
               onGuestTap={onGuestTap}
@@ -51635,7 +51650,7 @@ export default function Trailhead() {
             {screen === "ranks" && (isGuest
               ? <GuestGateScreen title="RANKS REQUIRE AN ACCOUNT" subtitle="Sign in to see the leaderboard and start earning points from your posts, routes and builds." onSignIn={goToLoginFromGuest} />
               : (isAdmin || isBetaTester)
-                ? <RanksScreen myPoints={myTotalPoints} pointsBreakdown={friendlyPointsBreakdown} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentProfile={currentProfile} onLoadLeaderboard={loadLeaderboard} onViewUser={openUserProfile} bounties={bounties} mySubmissions={myBountySubmissions} isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onClaimBounty={claimBounty} onSaveBountyDraft={saveBountyDraft} onSubmitBountyRPC={submitBountySubmission} onWithdrawBounty={withdrawBountySubmission} onUploadBountyPhotos={uploadBountyPhotoFiles} earnings={bountyEarnings} onOpenDM={openDM} onLoadProfileById={loadProfileById} onSendDemoProposal={sendDemoProposalCard} />
+                ? <RanksScreen myPoints={myTotalPoints} pointsBreakdown={friendlyPointsBreakdown} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentProfile={currentProfile} onLoadLeaderboard={loadLeaderboard} onViewUser={openUserProfile} bounties={bounties} mySubmissions={myBountySubmissions} isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onClaimBounty={claimBounty} onSaveBountyDraft={saveBountyDraft} onSubmitBountyRPC={submitBountySubmission} onWithdrawBounty={withdrawBountySubmission} onUploadBountyPhotos={uploadBountyPhotoFiles} earnings={bountyEarnings} onOpenDM={openDM} onLoadProfileById={loadProfileById} onSendDemoProposal={sendDemoProposalCard} onSendDmInvite={sendDmInvite} />
                 : <div style={{ padding: 32, textAlign: "center", fontFamily: serif, fontSize: 14, color: T.tertiary, lineHeight: 1.6 }}>Ranks is coming in a future release.</div>
             )}
             {screen === "admin" && (isAdmin
