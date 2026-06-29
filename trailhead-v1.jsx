@@ -44828,57 +44828,80 @@ export default function Trailhead() {
   }, []);
 
   // ── Admin image download gesture ──
-  // Admin only: long-press (touch hold OR mouse hold >600ms) on ANY
-  // Supabase-hosted image triggers an original-quality download. The
-  // follow-up click that would normally fire after mouseup/touchend is
-  // suppressed so existing image-click handlers (lightbox / open-detail
-  // / etc.) don't fire in the same gesture. Plain clicks stay unchanged
-  // for non-admin users AND for admin users when they release before
-  // the 600ms threshold.
+  // Admin only: RIGHT-CLICK (desktop) OR LONG-PRESS 500ms (mobile) on
+  // any Supabase-hosted image fires an original-quality download. On
+  // mobile we also inject a global CSS rule that disables the native
+  // iOS long-press callout (Save Image / Share sheet) so our timer
+  // can run uninterrupted. Plain left clicks and taps are unchanged.
   useEffect(() => {
     if (!isAdmin || typeof document === "undefined") return;
-    let pressTimer = null;
-    let suppressNextClick = false;
-    let pressedImg = null;
+
+    // Suppress iOS native long-press menu (Save Image / Share / Copy)
+    // + the highlight that comes with it, but only for admin sessions.
+    // touch-callout is the iOS-specific switch; user-select kills the
+    // selection highlight that Android + Chrome show.
+    const styleEl = document.createElement("style");
+    styleEl.setAttribute("data-trailhead", "admin-img-callout");
+    styleEl.textContent = `
+      img { -webkit-touch-callout: none !important; -webkit-user-select: none !important; user-select: none !important; }
+    `;
+    document.head.appendChild(styleEl);
 
     const findImgFromTarget = (target) => {
       let el = target;
       while (el && el !== document.body && el !== document) {
-        if (el.tagName === "IMG") return el;
+        if (el && el.tagName === "IMG") return el;
         el = el.parentElement;
       }
       return null;
     };
 
-    const startPress = (target) => {
-      const img = findImgFromTarget(target);
-      if (!img || !isStorageImageUrl(img.src)) return;
-      pressedImg = img;
-      pressTimer = setTimeout(async () => {
-        pressTimer = null;
-        suppressNextClick = true;
-        // Visual: green outline flash so the admin sees the gesture fired.
-        const prevShadow = img.style.boxShadow;
-        const prevTrans = img.style.transition;
-        try {
-          img.style.transition = "box-shadow 120ms ease-out";
-          img.style.boxShadow = `0 0 0 3px ${T.green}`;
-          setTimeout(() => { try { img.style.boxShadow = prevShadow; img.style.transition = prevTrans; } catch {} }, 500);
-        } catch {}
-        const res = await downloadStorageImageOriginal(img.src, img.alt);
-        if (!res || !res.ok) {
-          showErrorToast("Couldn't download image — see console.");
-        }
-      }, 600);
-    };
-    const cancelPress = () => {
-      if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
-      pressedImg = null;
+    const flashAndDownload = async (img) => {
+      // Visual feedback: green outline so admin sees the gesture fired.
+      const prevShadow = img.style.boxShadow;
+      const prevTrans = img.style.transition;
+      try {
+        img.style.transition = "box-shadow 120ms ease-out";
+        img.style.boxShadow = `0 0 0 3px ${T.green}`;
+        setTimeout(() => { try { img.style.boxShadow = prevShadow; img.style.transition = prevTrans; } catch {} }, 500);
+      } catch {}
+      const res = await downloadStorageImageOriginal(img.src, img.alt);
+      if (!res || !res.ok) showErrorToast("Couldn't download image — see console.");
     };
 
-    // Suppress the click that bubbles AFTER a long-press download fires —
-    // prevents the image's normal click handler (lightbox etc.) from
-    // also running on the same gesture.
+    // ── Desktop: right-click ──
+    // contextmenu fires on right-click + on long-press in some browsers.
+    // preventDefault suppresses the native menu so the admin gets the
+    // download instead. Storage-image-only check keeps the native menu
+    // available for external/inline images.
+    const onContextMenu = (e) => {
+      const img = findImgFromTarget(e.target);
+      if (!img || !isStorageImageUrl(img.src)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      flashAndDownload(img);
+    };
+
+    // ── Mobile: long-press 500ms ──
+    // touchstart starts the timer; touchmove/touchend/touchcancel cancel
+    // it. The follow-up click that bubbles after a long-press release is
+    // suppressed so lightbox / open-detail handlers don't also fire.
+    let pressTimer = null;
+    let suppressNextClick = false;
+
+    const onTouchStart = (e) => {
+      if (e.touches && e.touches.length > 1) { cancel(); return; }
+      const img = findImgFromTarget(e.target);
+      if (!img || !isStorageImageUrl(img.src)) return;
+      pressTimer = setTimeout(() => {
+        pressTimer = null;
+        suppressNextClick = true;
+        flashAndDownload(img);
+      }, 500);
+    };
+    const cancel = () => {
+      if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+    };
     const onClickCapture = (e) => {
       if (!suppressNextClick) return;
       suppressNextClick = false;
@@ -44886,38 +44909,21 @@ export default function Trailhead() {
       e.stopPropagation();
     };
 
-    const onMouseDown = (e) => {
-      if (e.button !== 0) return; // primary button only
-      startPress(e.target);
-    };
-    const onMouseUp = () => cancelPress();
-    const onMouseLeave = () => cancelPress();
-
-    const onTouchStart = (e) => {
-      if (e.touches && e.touches.length > 1) { cancelPress(); return; }
-      startPress(e.target);
-    };
-    const onTouchMove = () => cancelPress();    // any drag cancels
-    const onTouchEnd = () => cancelPress();
-    const onTouchCancel = () => cancelPress();
-
-    document.addEventListener("click", onClickCapture, true);
-    document.addEventListener("mousedown", onMouseDown, true);
-    document.addEventListener("mouseup", onMouseUp, true);
-    document.addEventListener("mouseleave", onMouseLeave, true);
+    document.addEventListener("contextmenu", onContextMenu, true);
     document.addEventListener("touchstart", onTouchStart, { capture: true, passive: true });
-    document.addEventListener("touchmove", onTouchMove, { capture: true, passive: true });
-    document.addEventListener("touchend", onTouchEnd, true);
-    document.addEventListener("touchcancel", onTouchCancel, true);
+    document.addEventListener("touchmove", cancel, { capture: true, passive: true });
+    document.addEventListener("touchend", cancel, true);
+    document.addEventListener("touchcancel", cancel, true);
+    document.addEventListener("click", onClickCapture, true);
+
     return () => {
-      document.removeEventListener("click", onClickCapture, true);
-      document.removeEventListener("mousedown", onMouseDown, true);
-      document.removeEventListener("mouseup", onMouseUp, true);
-      document.removeEventListener("mouseleave", onMouseLeave, true);
+      try { styleEl.remove(); } catch {}
+      document.removeEventListener("contextmenu", onContextMenu, true);
       document.removeEventListener("touchstart", onTouchStart, true);
-      document.removeEventListener("touchmove", onTouchMove, true);
-      document.removeEventListener("touchend", onTouchEnd, true);
-      document.removeEventListener("touchcancel", onTouchCancel, true);
+      document.removeEventListener("touchmove", cancel, true);
+      document.removeEventListener("touchend", cancel, true);
+      document.removeEventListener("touchcancel", cancel, true);
+      document.removeEventListener("click", onClickCapture, true);
       if (pressTimer) clearTimeout(pressTimer);
     };
   }, [isAdmin]);
