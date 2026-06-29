@@ -5907,12 +5907,20 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
                 <RankBadge points={getPoints(item.user)} size={12} />
                 <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>· {formatPostTime(item.time)}</span>
               </div>
-              {item.subtitle && (
+              {item.subtitle && !item.mementoRecap && (
                 <span style={{ fontFamily: sans, fontSize: 12, color: T.tertiary, display: "block" }}>{item.subtitle}</span>
               )}
-              {item.sharedFromOwnerHandle && (
+              {/* Symbol-prefixed attribution. For non-mementos this only
+                  shows on reshare (sharer != original owner). For mementos
+                  this is always shown so the racer is named even on a
+                  self-share — we override the resharer-only gating since
+                  the plain `subtitle` is suppressed above. */}
+              {(item.sharedFromOwnerHandle || item.mementoRecap) && (
                 <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, display: "flex", alignItems: "center", gap: 4, marginTop: 2, fontWeight: 600 }}>
-                  <Share2 size={10} color={T.copper} />Shared from @{item.sharedFromOwnerHandle}'s {item.mementoRecap ? "gear drop recap" : "trip report"}
+                  <Share2 size={10} color={T.copper} />
+                  {item.mementoRecap
+                    ? `Shared @${item.sharedFromOwnerHandle || item.racerHandle || "racer"}'s gear drop recap`
+                    : `Shared from @${item.sharedFromOwnerHandle}'s trip report`}
                 </span>
               )}
             </div>
@@ -5920,55 +5928,73 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
           </div>
           {feedEditBar(item)}
           {feedDeleteConfirm(item)}
-          {/* Memento recap chrome — visible only on shared gear-drop runs.
-              Renders a GEAR DROP RECAP label + brand attribution + a
-              trophy badge (winner) OR a finishing-position chip. Sits
-              between the header and the map so it sets context before
-              the route preview. */}
-          {item.mementoRecap && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 16px 10px", flexWrap: "wrap" }}>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 8px", background: `${T.copper}25`, border: `1px solid ${T.copper}`, borderRadius: 6, fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 800, letterSpacing: 0.8 }}>
-                <Gift size={10} color={T.copper} /> GEAR DROP RECAP
-              </span>
-              {item.mementoIsWinner ? (
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px", background: T.copper, color: T.white, borderRadius: 6, fontFamily: sans, fontSize: 9, fontWeight: 800, letterSpacing: 0.8 }}>
-                  <Trophy size={10} color={T.white} fill={T.white} /> WINNER
-                </span>
-              ) : (typeof item.mementoPosition === "number" && item.mementoPosition > 0) && (
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px", background: T.charcoal, color: T.white, border: `1px solid ${T.tertiary}40`, borderRadius: 6, fontFamily: sans, fontSize: 9, fontWeight: 800, letterSpacing: 0.8 }}>
-                  <Trophy size={10} color={T.tertiary} /> #{item.mementoPosition}
-                </span>
-              )}
-              {item.gearDropBrand && (
-                <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 0.5, marginLeft: "auto" }}>{item.gearDropBrand.toUpperCase()}</span>
-              )}
-            </div>
-          )}
           {/* User-supplied caption — rendered above the route map preview
               for shared trip reports. Mirrors the pattern in the POST
               branch for spot/HQ/plan shares. */}
           {item.caption && (
             <p style={{ fontFamily: serif, fontSize: 14, color: T.white, margin: 0, padding: "0 16px 10px", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{item.caption}</p>
           )}
-          <div onClick={openMapOrExpand} style={{ height: 160, background: T.charcoal, position: "relative", cursor: "pointer", overflow: "hidden" }}>
-            {/* Show live map if route has pins/points, otherwise fallback */}
-            {((item.pins && item.pins.length > 0) || (item.points && item.points.length > 0)) ? (
-              <RouteMapPreview pins={item.pins} points={item.points} photos={item.photos} />
-            ) : (
-              <div style={{ width: "100%", height: "100%", background: `linear-gradient(135deg, ${T.charcoal} 0%, ${T.tertiary}40 100%)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Map size={48} color={T.tertiary} strokeWidth={0.5} style={{ opacity: 0.3 }} />
+          {item.mementoRecap ? (
+            // Memento hero — endpoint photo from the racer's final
+            // submission. Brand attribution + WINNER badge / #N chip
+            // overlay so the recap context reads at a glance without an
+            // extra chrome row.
+            <div onClick={openMapOrExpand} style={{ height: 220, background: T.charcoal, position: "relative", cursor: "pointer", overflow: "hidden" }}>
+              {item.mementoEndpointImage ? (
+                <img src={item.mementoEndpointImage} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+              ) : (
+                <div style={{ width: "100%", height: "100%", background: `linear-gradient(135deg, ${T.charcoal} 0%, ${T.copper}30 100%)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Trophy size={48} color={T.copper} strokeWidth={1} style={{ opacity: 0.4 }} />
+                </div>
+              )}
+              {/* Bottom gradient so the overlay chips read against a
+                  bright endpoint photo. */}
+              <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0) 35%, rgba(0,0,0,0) 65%, rgba(0,0,0,0.75) 100%)", pointerEvents: "none" }} />
+              {/* Top-left: brand attribution */}
+              {item.gearDropBrand && (
+                <div style={{ position: "absolute", top: 12, left: 12, zIndex: 5, padding: "5px 10px", background: `${T.darkBg}D0`, border: `1px solid ${T.copper}`, borderRadius: 6, backdropFilter: "blur(4px)" }}>
+                  <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 800, letterSpacing: 0.8 }}>{item.gearDropBrand.toUpperCase()}</span>
+                </div>
+              )}
+              {/* Top-right: OPEN RECAP affordance */}
+              <div style={{ position: "absolute", top: 12, right: 12, zIndex: 5, display: "flex", alignItems: "center", gap: 4, background: `${T.darkBg}80`, padding: "4px 8px", borderRadius: 6, backdropFilter: "blur(4px)" }}>
+                <ExternalLink size={12} color={T.white} style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.6))" }} />
+                <span style={{ fontFamily: sans, fontSize: 8, color: T.white, letterSpacing: 0.5, fontWeight: 600 }}>OPEN RECAP</span>
               </div>
-            )}
-            {item.badge && (
-              <div style={{ position: "absolute", top: 12, right: 12, background: `${T.charcoal}CC`, padding: "4px 10px", borderRadius: 4, zIndex: 5 }}>
-                <span style={{ fontFamily: sans, fontSize: 9, color: T.warmBg, letterSpacing: 1, fontWeight: 600 }}>{item.badge}</span>
-              </div>
-            )}
-            <div style={{ position: "absolute", top: 12, left: 12, zIndex: 5, display: "flex", alignItems: "center", gap: 4, background: `${T.darkBg}80`, padding: "4px 8px", borderRadius: 6, backdropFilter: "blur(4px)" }}>
-              {hasTripLink ? <ExternalLink size={12} color={T.white} style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.6))" }} /> : <Maximize2 size={12} color={T.white} style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.6))" }} />}
-              <span style={{ fontFamily: sans, fontSize: 8, color: T.white, letterSpacing: 0.5, fontWeight: 600 }}>{hasTripLink ? (item.mementoRecap ? "OPEN RECAP" : "OPEN TRIP") : "VIEW MAP"}</span>
+              {/* Bottom-left: winner / position badge */}
+              {item.mementoIsWinner ? (
+                <div style={{ position: "absolute", bottom: 12, left: 12, zIndex: 5, display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 11px", background: T.copper, color: T.white, borderRadius: 6, boxShadow: "0 4px 12px rgba(0,0,0,0.5)" }}>
+                  <Trophy size={12} color={T.white} fill={T.white} />
+                  <span style={{ fontFamily: sans, fontSize: 10, fontWeight: 800, letterSpacing: 1 }}>WINNER</span>
+                </div>
+              ) : (typeof item.mementoPosition === "number" && item.mementoPosition > 0) && (
+                <div style={{ position: "absolute", bottom: 12, left: 12, zIndex: 5, display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 11px", background: `${T.darkBg}D0`, color: T.white, border: `1px solid ${T.tertiary}60`, borderRadius: 6, backdropFilter: "blur(4px)" }}>
+                  <Trophy size={12} color={T.copper} />
+                  <span style={{ fontFamily: sans, fontSize: 10, fontWeight: 800, letterSpacing: 0.8 }}>#{item.mementoPosition} FINISHER</span>
+                </div>
+              )}
             </div>
-          </div>
+          ) : (
+            <div onClick={openMapOrExpand} style={{ height: 160, background: T.charcoal, position: "relative", cursor: "pointer", overflow: "hidden" }}>
+              {/* Show live map if route has pins/points, otherwise fallback */}
+              {((item.pins && item.pins.length > 0) || (item.points && item.points.length > 0)) ? (
+                <RouteMapPreview pins={item.pins} points={item.points} photos={item.photos} />
+              ) : (
+                <div style={{ width: "100%", height: "100%", background: `linear-gradient(135deg, ${T.charcoal} 0%, ${T.tertiary}40 100%)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Map size={48} color={T.tertiary} strokeWidth={0.5} style={{ opacity: 0.3 }} />
+                </div>
+              )}
+              {item.badge && (
+                <div style={{ position: "absolute", top: 12, right: 12, background: `${T.charcoal}CC`, padding: "4px 10px", borderRadius: 4, zIndex: 5 }}>
+                  <span style={{ fontFamily: sans, fontSize: 9, color: T.warmBg, letterSpacing: 1, fontWeight: 600 }}>{item.badge}</span>
+                </div>
+              )}
+              <div style={{ position: "absolute", top: 12, left: 12, zIndex: 5, display: "flex", alignItems: "center", gap: 4, background: `${T.darkBg}80`, padding: "4px 8px", borderRadius: 6, backdropFilter: "blur(4px)" }}>
+                {hasTripLink ? <ExternalLink size={12} color={T.white} style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.6))" }} /> : <Maximize2 size={12} color={T.white} style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.6))" }} />}
+                <span style={{ fontFamily: sans, fontSize: 8, color: T.white, letterSpacing: 0.5, fontWeight: 600 }}>{hasTripLink ? "OPEN TRIP" : "VIEW MAP"}</span>
+              </div>
+            </div>
+          )}
           <div onClick={() => { if (hasTripLink) { onOpenTripDetail(item.tripSlug); return; } setExpandedRoutePost(isRouteExp ? null : item.id); }} style={{ padding: 16, cursor: "pointer" }}>
             <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
               <h3 style={{ fontFamily: serif, fontSize: 15, color: T.white, margin: "0 0 8px", flex: 1 }}>{item.title}</h3>
@@ -48399,11 +48425,25 @@ export default function Trailhead() {
     const isMemento = !!memento;
     const racerHandle = isMemento ? ((author && author.handle) || ownerHandle || "") : null;
     const racerName = isMemento ? ((author && author.full_name) || ownerName || null) : null;
+    // For mementos the symbol-prefixed "Shared from @racer's gear drop
+    // recap" line carries the attribution. Plain subtitle is omitted so
+    // the header isn't doubled up. For ordinary trip reports keep the
+    // legacy subtitle behavior.
     const subtitle = isMemento
-      ? (isReshare
-          ? `Shared @${racerHandle || "racer"}'s gear drop recap`
-          : "Shared your gear drop recap")
+      ? null
       : (isReshare ? `Shared @${ownerHandle}'s trip report` : "Shared a trip report");
+    // Endpoint photo — the last submission in progress.submissions is from
+    // the final pin. Falls back to trip.hero_img (which the auto-publish
+    // sets to the FIRST submission photo) if progress isn't loaded.
+    let endpointPhoto = null;
+    if (isMemento) {
+      const subs = (trip && trip.progress && Array.isArray(trip.progress.submissions)) ? trip.progress.submissions : [];
+      if (subs.length > 0) {
+        const last = subs[subs.length - 1];
+        if (last && last.photoUrl) endpointPhoto = last.photoUrl;
+      }
+    }
+    const postImage = isMemento ? (endpointPhoto || heroImg) : heroImg;
     addPost({
       id: "shared_trip_" + Date.now(),
       type: "ROUTES",
@@ -48422,10 +48462,12 @@ export default function Trailhead() {
       location,
       terrains: trip.terrains || [],
       tags: trip.tags || [],
+      // For mementos drop the pins so the route map can't render —
+      // we want the endpoint photo as the hero, not a map preview.
       photos,
-      pins,
-      image: heroImg,
-      photoUrls: heroImg ? [heroImg] : undefined,
+      pins: isMemento ? [] : pins,
+      image: postImage,
+      photoUrls: postImage ? [postImage] : undefined,
       likes: 0,
       comments: 0,
       tripId: trip.id,
@@ -48434,8 +48476,9 @@ export default function Trailhead() {
       sharedFromOwnerName: ownerName,
       // Memento-recap discriminator fields. The feed renderer keys off
       // `mementoRecap: true` to switch the card to the trophy/position +
-      // brand variant. All fields safely absent for non-memento shares.
+      // brand overlay variant. All fields safely absent for non-memento shares.
       mementoRecap: isMemento || undefined,
+      mementoEndpointImage: isMemento ? postImage : undefined,
       gearDropId: isMemento ? memento.dropId || null : undefined,
       gearDropSlug: isMemento ? memento.dropSlug || null : undefined,
       gearDropTitle: isMemento ? memento.dropTitle || null : undefined,
