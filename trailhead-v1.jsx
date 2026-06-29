@@ -125,7 +125,9 @@ function getUserRank(points) {
 // site (~10 across feed, forum, comments). The `Trailhead` root updates
 // this via a useEffect any time the viewer's role changes. Defaults to
 // false so first render before hydrate doesn't flash a rank icon for
-// non-admins. Ranks is a v2 feature — admin-only until shipped.
+// non-admins. Ranks is a v2 feature — gated to admins + opted-in beta
+// testers (profiles.is_beta_tester=true) until it ships to GA. The beta
+// flag was repurposed from gear drops once that feature went GA.
 let RANKS_VISIBLE_TO_VIEWER = false;
 function RankBadge({ points, size = 12 }) {
   if (!RANKS_VISIBLE_TO_VIEWER) return null;
@@ -4059,17 +4061,18 @@ const cardStyle = {
 };
 
 /* ─── Bottom Nav ─── */
-function BottomNav({ active, onNav, isGuest, isAdmin }) {
-  // Ranks is gated to admins-only while it's developed in-place on the
-  // live platform (v2 feature). Guests + general users + ambassadors
-  // don't see the tab at all. The screen-render guard at the root is
-  // kept as a safety net in case anything calls setScreen("ranks").
+function BottomNav({ active, onNav, isGuest, isAdmin, isBetaTester }) {
+  // Ranks is gated to admins + opted-in beta testers
+  // (profiles.is_beta_tester=true — the same flag formerly used for the
+  // gear drops beta). Guests + general users + ambassadors don't see
+  // the tab. The screen-render guard at the root is kept as a safety
+  // net in case anything calls setScreen("ranks").
   const items = [
     { key: "feed", label: "Feed", icon: Home },
     { key: "forum", label: "Forum", icon: Compass },
     { key: "routes", label: "Maps", icon: Map },
     { key: "builds", label: "Builds", icon: Wrench },
-    (!isGuest && isAdmin) ? { key: "ranks", label: "Ranks", icon: Trophy } : null,
+    (!isGuest && (isAdmin || isBetaTester)) ? { key: "ranks", label: "Ranks", icon: Trophy } : null,
   ].filter(Boolean);
   return (
     <div style={{ display: "flex", position: "sticky", bottom: 0, background: T.darkCard, padding: "10px 0 max(10px, env(safe-area-inset-bottom))", borderTop: `1px solid ${T.charcoal}`, zIndex: 100, flexShrink: 0 }}>
@@ -47776,7 +47779,7 @@ export default function Trailhead() {
   // flips isAdmin also shows/hides every RankBadge child component. An
   // effect would lag one paint behind, briefly hiding badges on admin
   // login or briefly flashing them after demotion.
-  RANKS_VISIBLE_TO_VIEWER = !!isAdmin;
+  RANKS_VISIBLE_TO_VIEWER = !!isAdmin || !!isBetaTester;
   // Shared-link URL parsing now happens synchronously via parseInitialSharedLink()
   // above, seeded into initial useState values. This avoids the React reconciliation
   // error (removeChild NotFoundError) that occurred when we swapped LoginScreen for
@@ -50732,7 +50735,7 @@ export default function Trailhead() {
     { key: "forum", label: "Forum", icon: Compass },
     { key: "routes", label: "Maps", icon: Map },
     { key: "builds", label: "Builds", icon: Wrench },
-    (!isGuest && isAdmin) ? { key: "ranks", label: "Ranks", icon: Trophy } : null,
+    (!isGuest && (isAdmin || isBetaTester)) ? { key: "ranks", label: "Ranks", icon: Trophy } : null,
     (!isGuest && isAdmin) ? { key: "admin", label: "Admin", icon: Shield } : null,
   ].filter(Boolean);
   const myFullName = (currentProfile && currentProfile.full_name) || "You";
@@ -51060,7 +51063,7 @@ export default function Trailhead() {
             )}
             {screen === "ranks" && (isGuest
               ? <GuestGateScreen title="RANKS REQUIRE AN ACCOUNT" subtitle="Sign in to see the leaderboard and start earning points from your posts, routes and builds." onSignIn={goToLoginFromGuest} />
-              : isAdmin
+              : (isAdmin || isBetaTester)
                 ? <RanksScreen myPoints={myTotalPoints} pointsBreakdown={friendlyPointsBreakdown} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentProfile={currentProfile} onLoadLeaderboard={loadLeaderboard} onViewUser={openUserProfile} bounties={bounties} mySubmissions={myBountySubmissions} isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onClaimBounty={claimBounty} onSaveBountyDraft={saveBountyDraft} onSubmitBountyRPC={submitBountySubmission} onWithdrawBounty={withdrawBountySubmission} onUploadBountyPhotos={uploadBountyPhotoFiles} earnings={bountyEarnings} onOpenDM={openDM} onLoadProfileById={loadProfileById} onSendDemoProposal={sendDemoProposalCard} />
                 : <div style={{ padding: 32, textAlign: "center", fontFamily: serif, fontSize: 14, color: T.tertiary, lineHeight: 1.6 }}>Ranks is coming in a future release.</div>
             )}
@@ -51190,7 +51193,7 @@ export default function Trailhead() {
         </button>
       )}
 
-      {!keyboardOpen && !isDesktop && <BottomNav active={isOverlay ? "" : screen} onNav={handleNav} isGuest={isGuest} isAdmin={isAdmin} />}
+      {!keyboardOpen && !isDesktop && <BottomNav active={isOverlay ? "" : screen} onNav={handleNav} isGuest={isGuest} isAdmin={isAdmin} isBetaTester={isBetaTester} />}
 
       {/* Map Overlay */}
       {mapData && (
