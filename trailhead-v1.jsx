@@ -20381,9 +20381,17 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
           <div style={{ padding: "0 16px", display: "flex", flexDirection: "column", gap: 8 }}>
             {bounties.filter(b => {
               if (bountyFilter === "ALL") return true;
-              if (bountyFilter === "OPEN") return b.status === "open";
-              // MINE = anything with an active user submission (drafts + changes requested)
-              if (bountyFilter === "MINE") return b.status === "in_progress" || b.status === "changes_requested";
+              // Drive OPEN / MINE off the raw submission status when the
+              // user has one — derivedStatus collapses claimed/in_progress
+              // into "in_progress" but a missing or terminal sub falls
+              // through to "open", which would bury an actively-claimed
+              // demo bounty (sub exists but is being negotiated via DM)
+              // under the OPEN pill. Direct check by submission keeps the
+              // bounty on the user's plate from claim → finalize → proof.
+              const subStatus = b.submission && b.submission.status;
+              const isActiveOnMine = subStatus === "claimed" || subStatus === "in_progress" || subStatus === "changes_requested";
+              if (bountyFilter === "OPEN") return !isActiveOnMine && b.status === "open";
+              if (bountyFilter === "MINE") return isActiveOnMine;
               if (bountyFilter === "REVIEW") return b.status === "submitted";
               // DONE = approved by admin or bounty closed
               return b.status === "approved" || b.status === "completed";
