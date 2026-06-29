@@ -18961,14 +18961,31 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
     || BOUNTY_FORM_TEMPLATES[bounty.category]
     || BOUNTY_FORM_TEMPLATES["Content Creation"];
   const [fields, setFields] = useState(() => {
-    if (draft) return draft;
-    // Hydrate from per-section prefilled values (admin-set in the prompt
-    // editor). When admin uploads default_photos, those copy in as if the
-    // user already attached them — they can keep, remove, or add more.
-    // Bullet_list / tag_select / rating prefills come through default_value.
+    // Always compute per-section prefilled defaults FIRST so the preview
+    // surfaces admin content even when the server has an empty draft
+    // (claim_bounty seeds draft as {} — truthy but contains no prefills).
+    // Then overlay the saved draft on top so user-typed values win for
+    // non-fixed sections. For `fixed` sections, prefill always wins —
+    // the user can't change them and the preview must always reflect
+    // exactly what the admin set.
     const init = {};
     template.sections.forEach(s => {
-      if (s.fixed) { init[s.id] = s.value; }
+      if (s.fixed) {
+        // FIXED branches: pull straight from the section's authoring fields.
+        if (s.type === "photos") {
+          init[s.id] = Array.isArray(s.default_photos)
+            ? s.default_photos.map(p => ({ ...p, id: Date.now() + Math.random(), _locked: true }))
+            : [];
+        } else if (s.type === "hero_image") {
+          init[s.id] = s.default_value ? { ...s.default_value, _locked: true } : null;
+        } else if (s.type === "bullet_list") {
+          init[s.id] = Array.isArray(s.default_value) ? s.default_value.slice() : [];
+        } else {
+          // h1/h2/h3/p/short: admin's authored text lives in s.value
+          // (legacy) — fall back to default_value for forward-compat.
+          init[s.id] = (s.value != null ? s.value : s.default_value) || "";
+        }
+      }
       else if (s.type === "photos") {
         // Mark admin-prefilled photos with _locked so the renderer hides the
         // remove + caption-edit affordances. User can still add more photos
@@ -18989,6 +19006,16 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
       else if (s.type === "rating") { init[s.id] = Number(s.default_value) || 0; }
       else { init[s.id] = s.default_value || ""; }
     });
+    // Overlay saved draft. For fixed sections, prefill wins (drop any draft
+    // value the legacy form may have persisted for a fixed field).
+    if (draft && typeof draft === "object") {
+      const fixedIds = new Set(template.sections.filter(s => s.fixed).map(s => s.id));
+      Object.entries(draft).forEach(([k, v]) => {
+        if (fixedIds.has(k)) return;
+        if (v == null) return;
+        init[k] = v;
+      });
+    }
     return init;
   });
   const [saving, setSaving] = useState(false);
