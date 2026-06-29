@@ -44871,23 +44871,27 @@ export default function Trailhead() {
     `;
     document.head.appendChild(styleEl);
 
-    const augmentImg = (img) => {
-      if (!img || img.tagName !== "IMG") return;
-      if (img.dataset.thAdminDots === "1") return;
-      const src = img.currentSrc || img.src;
-      if (!isStorageImageUrl(src)) return;
-      // Skip avatars — too small for the overlay to be useful + would
-      // sprinkle dots across every profile pic in the feed.
-      if (src.indexOf("/storage/v1/object/public/avatars/") >= 0
-          || src.indexOf("/storage/v1/render/image/public/avatars/") >= 0) return;
-      const parent = img.parentElement;
-      if (!parent) return;
-      // The parent must be a positioning context for the dots to sit
-      // over the image. If it's static, promote to relative (idempotent
-      // — only set if needed so we don't trample inline layout choices).
-      const computedPos = window.getComputedStyle(parent).position;
-      if (computedPos === "static") parent.style.position = "relative";
-      img.dataset.thAdminDots = "1";
+    // Url-from-bg-image extractor. Handles both quoted + unquoted
+    // url(...) syntax that browsers produce.
+    const extractBgUrl = (el) => {
+      const bg = (el && el.style && el.style.backgroundImage) || "";
+      if (!bg) return null;
+      const m = bg.match(/url\(["']?([^"')]+)["']?\)/);
+      return m ? m[1] : null;
+    };
+
+    const shouldSkipUrl = (url) => {
+      // Skip avatars regardless of object vs render path.
+      return !!url && (
+        url.indexOf("/storage/v1/object/public/avatars/") >= 0 ||
+        url.indexOf("/storage/v1/render/image/public/avatars/") >= 0
+      );
+    };
+
+    // Shared dot-button builder. Caller supplies the URL + alt-ish hint
+    // + the host element that the button should anchor inside (must be
+    // a positioning context — caller is responsible for that).
+    const makeDotButton = (url, alt, getCurrentUrl) => {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "th-admin-img-dots";
@@ -44896,21 +44900,58 @@ export default function Trailhead() {
       btn.addEventListener("click", async (e) => {
         e.preventDefault();
         e.stopPropagation();
-        const liveSrc = img.currentSrc || img.src;
-        const res = await downloadStorageImageOriginal(liveSrc, img.alt);
+        const liveUrl = (getCurrentUrl && getCurrentUrl()) || url;
+        const res = await downloadStorageImageOriginal(liveUrl, alt);
         if (!res || !res.ok) showErrorToast("Couldn't download image — see console.");
       });
-      // Also stop pointer events from bubbling up to underlying tap
-      // handlers (lightbox / open-detail).
       btn.addEventListener("mousedown", (e) => { e.stopPropagation(); });
       btn.addEventListener("touchstart", (e) => { e.stopPropagation(); }, { passive: true });
+      return btn;
+    };
+
+    const augmentImg = (img) => {
+      if (!img || img.tagName !== "IMG") return;
+      if (img.dataset.thAdminDots === "1") return;
+      const src = img.currentSrc || img.src;
+      if (!isStorageImageUrl(src)) return;
+      if (shouldSkipUrl(src)) return;
+      const parent = img.parentElement;
+      if (!parent) return;
+      const computedPos = window.getComputedStyle(parent).position;
+      if (computedPos === "static") parent.style.position = "relative";
+      img.dataset.thAdminDots = "1";
+      // Re-read src at click time so a swapped src (rare) still works.
+      const btn = makeDotButton(src, img.alt, () => img.currentSrc || img.src);
       parent.appendChild(btn);
+    };
+
+    // Same idea but for elements rendered as a CSS background-image (e.g.
+    // GearDropMementoScreen uses divs w/ `background: url(...)` for the
+    // hero + waypoint submissions). Walk inline-style background values.
+    const augmentBgEl = (el) => {
+      if (!el || el.nodeType !== 1) return;
+      if (el.dataset.thAdminDots === "1") return;
+      const url = extractBgUrl(el);
+      if (!isStorageImageUrl(url)) return;
+      if (shouldSkipUrl(url)) return;
+      // For bg-image, the host IS the positioned context. Promote to
+      // relative if static.
+      const computedPos = window.getComputedStyle(el).position;
+      if (computedPos === "static") el.style.position = "relative";
+      el.dataset.thAdminDots = "1";
+      // bg URL is captured in closure — bg-image divs rarely swap src.
+      const btn = makeDotButton(url, el.getAttribute("aria-label") || "", null);
+      el.appendChild(btn);
     };
 
     const scanRoot = (root) => {
       try {
-        const imgs = root && root.querySelectorAll ? root.querySelectorAll("img") : [];
-        imgs.forEach(augmentImg);
+        if (!root || !root.querySelectorAll) return;
+        root.querySelectorAll("img").forEach(augmentImg);
+        // Background-image divs: any inline style that mentions
+        // 'background' is a candidate. Quick filter via attribute
+        // selector, then verify the actual url() at augment time.
+        root.querySelectorAll('[style*="background"]').forEach(augmentBgEl);
       } catch {}
     };
 
@@ -44936,7 +44977,7 @@ export default function Trailhead() {
       // Remove every injected dots button + clear the marker so a
       // re-toggle of isAdmin re-augments cleanly.
       document.querySelectorAll(".th-admin-img-dots").forEach(b => { try { b.remove(); } catch {} });
-      document.querySelectorAll("img[data-th-admin-dots]").forEach(i => { try { delete i.dataset.thAdminDots; } catch {} });
+      document.querySelectorAll("[data-th-admin-dots]").forEach(i => { try { delete i.dataset.thAdminDots; } catch {} });
     };
   }, [isAdmin]);
   const [feedItems, setFeedItems] = useState([]);
