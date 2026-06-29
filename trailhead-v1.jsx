@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback, useDeferredValue, memo } from "react";
 import { createRoot } from "react-dom/client";
 import { createPortal } from "react-dom";
-import { Heart, MessageCircle, MapPin, Clock, Mountain, ChevronRight, ChevronLeft, ChevronDown, Search, Plus, Home, Compass, Map, Wrench, Trophy, AlertTriangle, Navigation, Star, Share2, Bookmark, MoreHorizontal, MoreVertical, ArrowUp, ArrowRight, Users, Radio, CloudSun, CheckCircle, Target, Gift, ChevronUp, ExternalLink, Lock, Globe, Shield, ShieldCheck, UserPlus, UserCheck, Settings, Camera, Eye, EyeOff, X, Bell, ThumbsUp, UserPlus as UserPlusIcon, AtSign, Mail, Send, Image, Smartphone, Trash2, Edit2, Edit3, Award, Zap, TrendingUp, Flame, DollarSign, Route, Video, Play, Maximize2, Minimize2, LogOut, Binoculars, Layers, Tent, BookOpen, Link2, PlusSquare, Disc, Cog, MoveVertical, CircleDashed, Anchor, Tag, Flag, FileText, ZoomIn, ZoomOut } from "lucide-react";
+import { Heart, MessageCircle, MapPin, Clock, Mountain, ChevronRight, ChevronLeft, ChevronDown, Search, Plus, Home, Compass, Map, Wrench, Trophy, AlertTriangle, Navigation, Star, Share2, Bookmark, MoreHorizontal, MoreVertical, ArrowUp, ArrowRight, Users, Radio, CloudSun, CheckCircle, Target, Gift, ChevronUp, ExternalLink, Lock, Globe, Shield, ShieldCheck, UserPlus, UserCheck, Settings, Camera, Eye, EyeOff, X, Bell, ThumbsUp, UserPlus as UserPlusIcon, AtSign, Mail, Send, Image, Smartphone, Trash2, Edit2, Edit3, Award, Zap, TrendingUp, Flame, DollarSign, Route, Video, Play, Maximize2, Minimize2, LogOut, Binoculars, Layers, Tent, BookOpen, Link2, PlusSquare, Disc, Cog, MoveVertical, CircleDashed, Anchor, Tag, Flag, FileText, ZoomIn, ZoomOut, Crop } from "lucide-react";
 import { supabase } from "./supabase-client.js";
 
 // Hard cap for any file uploaded to Supabase Storage. Free tier enforces
@@ -19098,6 +19098,31 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
 
   const updateField = (id, val) => setFields(prev => ({ ...prev, [id]: val }));
 
+  // Custom crop modal target. When non-null, GDImageCropper opens with the
+  // referenced photo/hero and on apply replaces the source URL with the
+  // newly-uploaded cropped image. Shape:
+  //   { fieldId, kind: "photo" | "hero", photoId?, currentUrl }
+  const [cropTarget, setCropTarget] = useState(null);
+  const handleCropSave = async (newUrl) => {
+    if (!cropTarget || !newUrl) return;
+    if (cropTarget.kind === "hero") {
+      setFields(prev => {
+        const cur = prev[cropTarget.fieldId];
+        if (!cur) return prev;
+        // Drop fit override on crop — the cropped image already matches the
+        // intended aspect, so default cover is correct. User can still
+        // flip back to contain after if they want.
+        return { ...prev, [cropTarget.fieldId]: { ...cur, url: newUrl, fit: "cover" } };
+      });
+    } else if (cropTarget.kind === "photo" && cropTarget.photoId != null) {
+      setFields(prev => ({
+        ...prev,
+        [cropTarget.fieldId]: (prev[cropTarget.fieldId] || []).map(p =>
+          p.id === cropTarget.photoId ? { ...p, url: newUrl, fit: "cover" } : p),
+      }));
+    }
+  };
+
   // Image-fit toggles — per-photo (for `photos` sections) and per-hero (for
   // `hero_image` sections). Stored as `fit: "cover" | "contain"` on the
   // object. Default is cover (current behavior); user can switch to contain
@@ -19596,9 +19621,16 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
                             <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 700, letterSpacing: 0.5 }}>PREFILLED</span>
                           </div>
                         ) : (
-                          <button onClick={() => removePhoto(section.id, p.id)} style={{ position: "absolute", top: 8, right: 8, width: 28, height: 28, borderRadius: "50%", background: "rgba(0,0,0,0.6)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2 }}>
-                            <X size={14} color={T.white} />
-                          </button>
+                          <div style={{ position: "absolute", top: 8, right: 8, display: "flex", gap: 6, zIndex: 2 }}>
+                            {p.type !== "video" && p.url && /^https?:/.test(p.url) && (
+                              <button onClick={() => setCropTarget({ fieldId: section.id, kind: "photo", photoId: p.id, currentUrl: p.url })} title="Crop — set a custom visible region" style={{ width: 28, height: 28, borderRadius: "50%", background: "rgba(0,0,0,0.6)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                <Crop size={13} color={T.green} />
+                              </button>
+                            )}
+                            <button onClick={() => removePhoto(section.id, p.id)} style={{ width: 28, height: 28, borderRadius: "50%", background: "rgba(0,0,0,0.6)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                              <X size={14} color={T.white} />
+                            </button>
+                          </div>
                         )}
                       </div>
                       {!p._locked && (
@@ -19707,6 +19739,11 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
                       </div>
                     ) : (
                       <div style={{ position: "absolute", top: 8, right: 8, display: "flex", gap: 6 }}>
+                        {hero.url && /^https?:/.test(hero.url) && (
+                          <button onClick={() => setCropTarget({ fieldId: section.id, kind: "hero", currentUrl: hero.url })} title="Crop — set a custom visible region" style={{ width: 30, height: 30, borderRadius: "50%", background: "rgba(0,0,0,0.6)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <Crop size={13} color={T.green} />
+                          </button>
+                        )}
                         <button onClick={() => { setActivePhotoField(section.id); setTimeout(() => heroRef.current && heroRef.current.click(), 50); }} style={{ width: 30, height: 30, borderRadius: "50%", background: "rgba(0,0,0,0.6)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                           <Edit3 size={12} color={T.white} />
                         </button>
@@ -20074,6 +20111,18 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
           <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>SUBMIT</span>
         </button>
       </div>
+
+      {/* Custom crop modal — green-outlined pan/zoom cropper. Aspect ratio
+          matches the rendered display so WYSIWYG. */}
+      {cropTarget && (
+        <GDImageCropper
+          src={cropTarget.currentUrl}
+          aspectRatio="16/9"
+          currentUserId={currentUserId}
+          onSave={handleCropSave}
+          onClose={() => setCropTarget(null)}
+        />
+      )}
     </div>
   );
 }
@@ -32818,7 +32867,7 @@ function BountyCustomerPicker({ valueId, valueProfile, onChange, onSearchUsers }
 /* ─── BOUNTY EDITOR — admin create + edit (Phase 4) ─── */
 // Used for both new (bountyId="") and existing (bountyId=uuid). Loads
 // from DB on mount; auto-prefills via category template on new.
-function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, onUploadPhoto, onSearchUsers, onLoadProfileById }) {
+function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, onUploadPhoto, onSearchUsers, onLoadProfileById, currentUserId }) {
   const isNew = !bountyId;
   const [bounty, setBounty] = useState(null);
   const [loading, setLoading] = useState(!isNew);
@@ -33075,6 +33124,41 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
           const cur = (s.default_value && typeof s.default_value === "object") ? s.default_value : null;
           if (!cur || !cur.url) return s;
           return { ...s, default_value: { ...cur, fit: cur.fit === "contain" ? "cover" : "contain" } };
+        }),
+      };
+      return { ...prev, form_config: next };
+    });
+    setHasUnsaved(true);
+  };
+
+  // Custom crop target for admin authoring. Shape:
+  //   { sectionId, kind: "photo" | "hero", fieldKey?, originalUrl, currentUrl }
+  // On apply, GDImageCropper uploads the cropped result and calls
+  // handleEditorCropSave(newUrl) which swaps the URL in either
+  // default_photos[i] or default_value.
+  const [editorCropTarget, setEditorCropTarget] = useState(null);
+  const handleEditorCropSave = async (newUrl) => {
+    if (!editorCropTarget || !newUrl) return;
+    setBounty(prev => {
+      if (!prev) return prev;
+      const baseConfig = ensureFormConfig(prev);
+      if (!baseConfig) return prev;
+      const next = {
+        ...baseConfig,
+        sections: baseConfig.sections.map(s => {
+          if (s.id !== editorCropTarget.sectionId) return s;
+          if (editorCropTarget.kind === "hero") {
+            const cur = (s.default_value && typeof s.default_value === "object") ? s.default_value : {};
+            // Drop fit override — cropped image already matches intended
+            // aspect, so cover renders correctly.
+            return { ...s, default_value: { ...cur, url: newUrl, fit: "cover" } };
+          }
+          // Photo: swap by original URL in the chosen list.
+          const fieldKey = editorCropTarget.fieldKey || "default_photos";
+          const list = Array.isArray(s[fieldKey]) ? s[fieldKey] : [];
+          return { ...s, [fieldKey]: list.map(p => p.url === editorCropTarget.originalUrl
+            ? { ...p, url: newUrl, fit: "cover" }
+            : p) };
         }),
       };
       return { ...prev, form_config: next };
@@ -33507,6 +33591,16 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
                                     {p.fit === "contain" ? <Maximize2 size={8} color={T.white} /> : <Minimize2 size={8} color={T.white} />}
                                     <span style={{ fontFamily: sans, fontSize: 8, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>{p.fit === "contain" ? "FILL" : "FIT"}</span>
                                   </button>
+                                  {/* Crop — opens green-outline pan/zoom cropper for a custom visible region. */}
+                                  {p.url && /^https?:/.test(p.url) && (p.type !== "video") && (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setEditorCropTarget({ sectionId: s.id, kind: "photo", fieldKey: "default_photos", originalUrl: p.url, currentUrl: p.url }); }}
+                                      title="Crop — set a custom visible region"
+                                      style={{ position: "absolute", bottom: 2, right: 2, background: "rgba(0,0,0,0.7)", border: "none", borderRadius: 3, padding: "3px 4px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+                                    >
+                                      <Crop size={10} color={T.green} />
+                                    </button>
+                                  )}
                                   <button onClick={() => removeSectionPhoto(s.id, "default_photos", p.url)} style={{ position: "absolute", top: 2, right: 2, background: "rgba(0,0,0,0.7)", border: "none", borderRadius: 3, padding: "2px 4px", color: T.white, cursor: "pointer" }}>
                                     <X size={10} color={T.white} />
                                   </button>
@@ -33527,7 +33621,15 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
                             <div style={{ position: "relative", borderRadius: 6, overflow: "hidden", background: T.darkBg }}>
                               <img src={s.default_value.url} alt="" style={{ width: "100%", display: "block", height: 140, objectFit: resolveObjectFit(s.default_value) }} />
                               <ImageFitToggle fit={s.default_value.fit} onToggle={() => toggleSectionHeroFit(s.id)} />
-                              <button onClick={() => updateSection(s.id, { default_value: null })} style={{ position: "absolute", top: 6, right: 6, background: "rgba(0,0,0,0.7)", border: "none", borderRadius: 4, padding: "4px 6px", color: T.red, cursor: "pointer", fontFamily: sans, fontSize: 9, fontWeight: 700 }}>REMOVE</button>
+                              <div style={{ position: "absolute", top: 6, right: 6, display: "flex", gap: 6 }}>
+                                {/^https?:/.test(s.default_value.url) && (
+                                  <button onClick={() => setEditorCropTarget({ sectionId: s.id, kind: "hero", originalUrl: s.default_value.url, currentUrl: s.default_value.url })} title="Crop — set a custom visible region" style={{ background: "rgba(0,0,0,0.7)", border: "none", borderRadius: 4, padding: "4px 6px", color: T.green, cursor: "pointer", fontFamily: sans, fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", gap: 3 }}>
+                                    <Crop size={10} color={T.green} />
+                                    CROP
+                                  </button>
+                                )}
+                                <button onClick={() => updateSection(s.id, { default_value: null })} style={{ background: "rgba(0,0,0,0.7)", border: "none", borderRadius: 4, padding: "4px 6px", color: T.red, cursor: "pointer", fontFamily: sans, fontSize: 9, fontWeight: 700 }}>REMOVE</button>
+                              </div>
                             </div>
                           ) : (
                             <label style={{ display: "inline-block", background: T.darkBg, border: `1px dashed ${T.copper}40`, color: T.copper, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, padding: "6px 12px", borderRadius: 4, cursor: "pointer" }}>
@@ -33614,6 +33716,19 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
           </button>
         )}
       </div>
+
+      {/* Custom crop modal for admin authoring — green-outlined pan/zoom
+          cropper that uploads a new cropped image and swaps it into
+          default_photos[i] / default_value via handleEditorCropSave. */}
+      {editorCropTarget && (
+        <GDImageCropper
+          src={editorCropTarget.currentUrl}
+          aspectRatio="16/9"
+          currentUserId={currentUserId}
+          onSave={handleEditorCropSave}
+          onClose={() => setEditorCropTarget(null)}
+        />
+      )}
     </div>
   );
 }
@@ -51533,6 +51648,7 @@ export default function Trailhead() {
                       onUploadPhoto={uploadBountyPhotoFiles}
                       onSearchUsers={searchUsers}
                       onLoadProfileById={loadProfileById}
+                      currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id}
                     />
                   : <BountiesAdminScreen
                       bounties={bounties}
