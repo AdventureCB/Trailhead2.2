@@ -5912,7 +5912,7 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
               )}
               {item.sharedFromOwnerHandle && (
                 <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, display: "flex", alignItems: "center", gap: 4, marginTop: 2, fontWeight: 600 }}>
-                  <Share2 size={10} color={T.copper} />Shared from @{item.sharedFromOwnerHandle}'s trip report
+                  <Share2 size={10} color={T.copper} />Shared from @{item.sharedFromOwnerHandle}'s {item.mementoRecap ? "gear drop recap" : "trip report"}
                 </span>
               )}
             </div>
@@ -5920,6 +5920,30 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
           </div>
           {feedEditBar(item)}
           {feedDeleteConfirm(item)}
+          {/* Memento recap chrome — visible only on shared gear-drop runs.
+              Renders a GEAR DROP RECAP label + brand attribution + a
+              trophy badge (winner) OR a finishing-position chip. Sits
+              between the header and the map so it sets context before
+              the route preview. */}
+          {item.mementoRecap && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 16px 10px", flexWrap: "wrap" }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 8px", background: `${T.copper}25`, border: `1px solid ${T.copper}`, borderRadius: 6, fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 800, letterSpacing: 0.8 }}>
+                <Gift size={10} color={T.copper} /> GEAR DROP RECAP
+              </span>
+              {item.mementoIsWinner ? (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px", background: T.copper, color: T.white, borderRadius: 6, fontFamily: sans, fontSize: 9, fontWeight: 800, letterSpacing: 0.8 }}>
+                  <Trophy size={10} color={T.white} fill={T.white} /> WINNER
+                </span>
+              ) : (typeof item.mementoPosition === "number" && item.mementoPosition > 0) && (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px", background: T.charcoal, color: T.white, border: `1px solid ${T.tertiary}40`, borderRadius: 6, fontFamily: sans, fontSize: 9, fontWeight: 800, letterSpacing: 0.8 }}>
+                  <Trophy size={10} color={T.tertiary} /> #{item.mementoPosition}
+                </span>
+              )}
+              {item.gearDropBrand && (
+                <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 0.5, marginLeft: "auto" }}>{item.gearDropBrand.toUpperCase()}</span>
+              )}
+            </div>
+          )}
           {/* User-supplied caption — rendered above the route map preview
               for shared trip reports. Mirrors the pattern in the POST
               branch for spot/HQ/plan shares. */}
@@ -5942,7 +5966,7 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
             )}
             <div style={{ position: "absolute", top: 12, left: 12, zIndex: 5, display: "flex", alignItems: "center", gap: 4, background: `${T.darkBg}80`, padding: "4px 8px", borderRadius: 6, backdropFilter: "blur(4px)" }}>
               {hasTripLink ? <ExternalLink size={12} color={T.white} style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.6))" }} /> : <Maximize2 size={12} color={T.white} style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.6))" }} />}
-              <span style={{ fontFamily: sans, fontSize: 8, color: T.white, letterSpacing: 0.5, fontWeight: 600 }}>{hasTripLink ? "OPEN TRIP" : "VIEW MAP"}</span>
+              <span style={{ fontFamily: sans, fontSize: 8, color: T.white, letterSpacing: 0.5, fontWeight: 600 }}>{hasTripLink ? (item.mementoRecap ? "OPEN RECAP" : "OPEN TRIP") : "VIEW MAP"}</span>
             </div>
           </div>
           <div onClick={() => { if (hasTripLink) { onOpenTripDetail(item.tripSlug); return; } setExpandedRoutePost(isRouteExp ? null : item.id); }} style={{ padding: 16, cursor: "pointer" }}>
@@ -27273,7 +27297,7 @@ function GearDropMementoScreen({ trip: tripProp, currentUserId, isAdmin, onClose
           <span style={{ padding: "3px 7px", background: `${T.copper}25`, color: T.copper, fontFamily: sans, fontSize: 9, fontWeight: 800, letterSpacing: 0.7, borderRadius: 4, border: `1px solid ${T.copper}`, marginRight: 6 }}>PENDING REVIEW</span>
         )}
         {onShareIntent && drop && trip && trip.slug && (
-          <button onClick={() => onShareIntent({ trip, drop })} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+          <button onClick={() => onShareIntent({ trip, drop, position })} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
             <Share2 size={18} color={T.white} />
           </button>
         )}
@@ -48365,6 +48389,21 @@ export default function Trailhead() {
     const durationLabel = trip.duration_min != null ? `${Math.floor(trip.duration_min / 60)}h ${trip.duration_min % 60}m` : null;
     const elevationLabel = trip.elev_gain_ft != null ? `+${Number(trip.elev_gain_ft).toLocaleString()} ft` : null;
     const location = [trip.region, trip.state_code].filter(Boolean).join(", ");
+    // Memento share path. trip._memento is set by GearDropMementoScreen's
+    // onShareIntent prop and carries the gear-drop context the feed card
+    // needs to render the recap variant (trophy/position + brand + a
+    // "@racer's gear drop recap" subtitle). Always treat the run owner as
+    // the racer (NOT the resharer), since the subtitle is talking about
+    // who DID the run.
+    const memento = (trip && trip._memento) || null;
+    const isMemento = !!memento;
+    const racerHandle = isMemento ? ((author && author.handle) || ownerHandle || "") : null;
+    const racerName = isMemento ? ((author && author.full_name) || ownerName || null) : null;
+    const subtitle = isMemento
+      ? (isReshare
+          ? `Shared @${racerHandle || "racer"}'s gear drop recap`
+          : "Shared your gear drop recap")
+      : (isReshare ? `Shared @${ownerHandle}'s trip report` : "Shared a trip report");
     addPost({
       id: "shared_trip_" + Date.now(),
       type: "ROUTES",
@@ -48375,7 +48414,7 @@ export default function Trailhead() {
       title: trip.name,
       caption: caption || null,
       body: trip.description || null,
-      subtitle: isReshare ? `Shared @${ownerHandle}'s trip report` : "Shared a trip report",
+      subtitle,
       distance: distanceLabel,
       duration: durationLabel,
       elevation: elevationLabel,
@@ -48393,9 +48432,21 @@ export default function Trailhead() {
       tripSlug: trip.slug,
       sharedFromOwnerHandle: ownerHandle,
       sharedFromOwnerName: ownerName,
+      // Memento-recap discriminator fields. The feed renderer keys off
+      // `mementoRecap: true` to switch the card to the trophy/position +
+      // brand variant. All fields safely absent for non-memento shares.
+      mementoRecap: isMemento || undefined,
+      gearDropId: isMemento ? memento.dropId || null : undefined,
+      gearDropSlug: isMemento ? memento.dropSlug || null : undefined,
+      gearDropTitle: isMemento ? memento.dropTitle || null : undefined,
+      gearDropBrand: isMemento ? memento.brand || null : undefined,
+      mementoIsWinner: isMemento ? !!memento.isWinner : undefined,
+      mementoPosition: isMemento ? (typeof memento.position === "number" ? memento.position : null) : undefined,
+      racerHandle: isMemento ? racerHandle : undefined,
+      racerName: isMemento ? racerName : undefined,
     });
     awardPoints(POINTS.feedPost, "Trip Shared");
-    showErrorToast("Trip shared to your feed");
+    showErrorToast(isMemento ? "Recap shared to your feed" : "Trip shared to your feed");
   };
 
   // Share a trip plan to the feed. POST-type with planId discriminator
@@ -51100,7 +51151,28 @@ export default function Trailhead() {
               onClose={() => { setDetailTripId(null); setDetailTripInitialEdit(false); }}
               onOpenDrop={(slug) => { setDetailTripId(null); setPendingGearDropSlug(slug); }}
               onViewUser={openUserProfile}
-              onShareIntent={(payload) => openShareIntent({ kind: "trip", data: { ...trip, description: (payload && payload.drop && payload.drop.title) || trip.description || trip.name } })}
+              onShareIntent={(payload) => {
+                // Memento share — flow gear-drop context through `_memento`
+                // so shareTripToFeed inlines a recap-card-shaped post.
+                const pDrop = payload && payload.drop;
+                const pos = payload && payload.position;
+                const isWinner = !!(pDrop && pDrop.winner_run_id && trip.id && pDrop.winner_run_id === trip.id);
+                openShareIntent({
+                  kind: "trip",
+                  data: {
+                    ...trip,
+                    description: (pDrop && pDrop.title) || trip.description || trip.name,
+                    _memento: {
+                      dropId: pDrop && pDrop.id,
+                      dropSlug: pDrop && pDrop.slug,
+                      dropTitle: pDrop && pDrop.title,
+                      brand: pDrop && pDrop.brand_partner_name,
+                      isWinner,
+                      position: typeof pos === "number" ? pos : null,
+                    },
+                  },
+                });
+              }}
             />
           );
         }
