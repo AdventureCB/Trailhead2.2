@@ -18950,6 +18950,41 @@ function DemoRequestFlow({ bounty, submission, currentUserId, isGuest, onGuestTa
   );
 }
 
+/* ─── ImageFitToggle ─── small overlay chip that flips an image between
+   "cover" (default — fills the container, crops) and "contain" (fits the
+   whole image into the container with letterboxing). Used in both the
+   bounty form builder (admin authoring) + the participant response form
+   so either side can dial in how a too-tall or too-wide upload renders. */
+function ImageFitToggle({ fit, onToggle }) {
+  const isCover = fit !== "contain";
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); e.preventDefault(); onToggle(); }}
+      style={{
+        position: "absolute", top: 8, left: 8,
+        background: "rgba(0,0,0,0.72)", borderRadius: 4,
+        padding: "4px 8px",
+        display: "flex", alignItems: "center", gap: 4,
+        border: "none", cursor: "pointer", zIndex: 3,
+      }}
+      title={isCover ? "Switch to FIT — show entire image" : "Switch to FILL — crop to fill"}
+    >
+      {isCover ? <Minimize2 size={10} color={T.white} /> : <Maximize2 size={10} color={T.white} />}
+      <span style={{ fontFamily: sans, fontSize: 9, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>
+        {isCover ? "FIT" : "FILL"}
+      </span>
+    </button>
+  );
+}
+
+/* Resolve the actual objectFit CSS value from a photo/hero object.
+   Treats absent/legacy entries as "cover" so existing uploads don't
+   suddenly flip rendering. */
+function resolveObjectFit(obj) {
+  return (obj && obj.fit === "contain") ? "contain" : "cover";
+}
+
 /* ─── BOUNTY RESPONSE FORM ─── */
 function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUploadPhotos, currentUserId }) {
   // Phase 6 polish: prefer bounty.form_config (admin-customized prompts) over
@@ -19062,6 +19097,26 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
   };
 
   const updateField = (id, val) => setFields(prev => ({ ...prev, [id]: val }));
+
+  // Image-fit toggles — per-photo (for `photos` sections) and per-hero (for
+  // `hero_image` sections). Stored as `fit: "cover" | "contain"` on the
+  // object. Default is cover (current behavior); user can switch to contain
+  // to show the entire image with letterboxing for tall/wide uploads.
+  const togglePhotoFit = (fieldId, photoId) => {
+    setFields(prev => ({
+      ...prev,
+      [fieldId]: (prev[fieldId] || []).map(p => p.id === photoId
+        ? { ...p, fit: p.fit === "contain" ? "cover" : "contain" }
+        : p),
+    }));
+  };
+  const toggleHeroFit = (fieldId) => {
+    setFields(prev => {
+      const h = prev[fieldId];
+      if (!h) return prev;
+      return { ...prev, [fieldId]: { ...h, fit: h.fit === "contain" ? "cover" : "contain" } };
+    });
+  };
 
   // Auto-save: 1.5s after the user stops editing, persist the current
   // `fields` to the server-side draft. Skips the initial mount.
@@ -19239,7 +19294,7 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
               return (
                 <div key={s.id} style={{ display: "flex", flexDirection: "column", gap: 10, margin: "12px 0" }}>
                   {val.map((p, pi) => (
-                    <div key={pi} style={{ borderRadius: 10, overflow: "hidden", border: `1px solid ${T.charcoal}` }}>
+                    <div key={pi} style={{ borderRadius: 10, overflow: "hidden", border: `1px solid ${T.charcoal}`, background: p.type === "video" ? "#000" : T.darkBg }}>
                       {p.type === "video" ? (
                         <div style={{ position: "relative" }}>
                           <video src={p.url + "#t=0.001"} preload="auto" muted playsInline onLoadedMetadata={(e) => { try { e.currentTarget.currentTime = 0.001; } catch (err) {} }} controls style={{ width: "100%", maxHeight: 280, objectFit: "contain", display: "block", background: "#000" }} />
@@ -19249,7 +19304,7 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
                           </div>
                         </div>
                       ) : (
-                        <img src={txImg(p.url, 480)} alt="" style={{ width: "100%", height: 200, objectFit: "cover", display: "block" }} />
+                        <img src={txImg(p.url, 480)} alt="" style={{ width: "100%", height: 200, objectFit: resolveObjectFit(p), display: "block" }} />
                       )}
                       {p.caption && (
                         <div style={{ padding: "8px 12px", background: T.darkCard }}>
@@ -19264,8 +19319,8 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
             if (s.type === "hero_image") {
               if (!val || !val.url) return null;
               return (
-                <div key={s.id} style={{ position: "relative", borderRadius: 12, overflow: "hidden", margin: "-16px -16px 16px", width: "calc(100% + 32px)" }}>
-                  <img src={txImg(val.url, 480)} alt="" style={{ width: "100%", height: 260, objectFit: "cover", display: "block" }} />
+                <div key={s.id} style={{ position: "relative", borderRadius: 12, overflow: "hidden", margin: "-16px -16px 16px", width: "calc(100% + 32px)", background: T.darkBg }}>
+                  <img src={txImg(val.url, 480)} alt="" style={{ width: "100%", height: 260, objectFit: resolveObjectFit(val), display: "block" }} />
                   <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(transparent, rgba(0,0,0,0.75))", padding: "40px 16px 14px" }}>
                     <span style={{ fontFamily: sans, fontSize: 20, color: T.white, fontWeight: 800, textShadow: "0 1px 4px rgba(0,0,0,0.5)" }}>{fields["title"] || "Untitled"}</span>
                   </div>
@@ -19490,11 +19545,11 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                       {fixedPhotos.map((p, pi) => (
-                        <div key={pi} style={{ borderRadius: 12, overflow: "hidden", border: `1px solid ${T.charcoal}`, background: T.darkCard }}>
+                        <div key={pi} style={{ borderRadius: 12, overflow: "hidden", border: `1px solid ${T.charcoal}`, background: p.type === "video" ? "#000" : T.darkBg }}>
                           {p.type === "video" ? (
                             <video src={(p.url || "") + "#t=0.001"} preload="auto" muted playsInline controls style={{ width: "100%", maxHeight: 280, objectFit: "contain", display: "block", background: "#000" }} />
                           ) : (
-                            <img src={txImg(p.url, 480)} alt={p.alt || ""} style={{ width: "100%", height: 220, objectFit: "cover", display: "block" }} />
+                            <img src={txImg(p.url, 480)} alt={p.alt || ""} style={{ width: "100%", height: 220, objectFit: resolveObjectFit(p), display: "block" }} />
                           )}
                           {p.caption && (
                             <div style={{ padding: "8px 10px", fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.4 }}>{p.caption}</div>
@@ -19517,7 +19572,7 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   {photos.map(p => (
                     <div key={p.id} style={{ borderRadius: 12, overflow: "hidden", border: `1px solid ${T.charcoal}`, background: T.darkCard }}>
-                      <div style={{ position: "relative" }}>
+                      <div style={{ position: "relative", background: p.type === "video" ? "#000" : T.darkBg }}>
                         {p.type === "video" ? (
                           <div style={{ position: "relative" }}>
                             <video src={p.url + "#t=0.001"} preload="auto" muted playsInline onLoadedMetadata={(e) => { try { e.currentTarget.currentTime = 0.001; } catch (err) {} }} controls style={{ width: "100%", maxHeight: 280, objectFit: "contain", display: "block", background: "#000" }} />
@@ -19527,7 +19582,12 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
                             </div>
                           </div>
                         ) : (
-                          <img src={txImg(p.url, 480)} alt="" style={{ width: "100%", height: 220, objectFit: "cover", display: "block" }} />
+                          <img src={txImg(p.url, 480)} alt="" style={{ width: "100%", height: 220, objectFit: resolveObjectFit(p), display: "block" }} />
+                        )}
+                        {/* FIT/FILL toggle — only on non-locked images. Locked
+                            media keeps the admin's chosen fit. */}
+                        {!p._locked && p.type !== "video" && (
+                          <ImageFitToggle fit={p.fit} onToggle={() => togglePhotoFit(section.id, p.id)} />
                         )}
                         {/* Admin-prefilled media: locked badge, no remove button */}
                         {p._locked ? (
@@ -19612,8 +19672,8 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
                     </span>
                   </div>
                   {fixedHero ? (
-                    <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: `1px solid ${T.charcoal}` }}>
-                      <img src={txImg(fixedHero.url, 480)} alt={fixedHero.alt || ""} style={{ width: "100%", height: 240, objectFit: "cover", display: "block" }} />
+                    <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: `1px solid ${T.charcoal}`, background: T.darkBg }}>
+                      <img src={txImg(fixedHero.url, 480)} alt={fixedHero.alt || ""} style={{ width: "100%", height: 240, objectFit: resolveObjectFit(fixedHero), display: "block" }} />
                       <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(transparent, rgba(0,0,0,0.7))", padding: "24px 14px 12px" }}>
                         <span style={{ fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 }}>{fields["title"] || "Your Title Here"}</span>
                       </div>
@@ -19632,11 +19692,14 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
                   {section.required && <span style={{ fontFamily: sans, fontSize: 9, color: T.red }}>REQUIRED</span>}
                 </div>
                 {hero ? (
-                  <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: `1px solid ${T.charcoal}` }}>
-                    <img src={txImg(hero.url, 480)} alt="" style={{ width: "100%", height: 240, objectFit: "cover", display: "block" }} />
+                  <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: `1px solid ${T.charcoal}`, background: T.darkBg }}>
+                    <img src={txImg(hero.url, 480)} alt="" style={{ width: "100%", height: 240, objectFit: resolveObjectFit(hero), display: "block" }} />
                     <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(transparent, rgba(0,0,0,0.7))", padding: "24px 14px 12px" }}>
                       <span style={{ fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 }}>{fields["title"] || "Your Title Here"}</span>
                     </div>
+                    {!hero._locked && (
+                      <ImageFitToggle fit={hero.fit} onToggle={() => toggleHeroFit(section.id)} />
+                    )}
                     {hero._locked ? (
                       <div style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,0.7)", borderRadius: 4, padding: "3px 8px", display: "flex", alignItems: "center", gap: 4 }}>
                         <Lock size={10} color={T.copper} />
@@ -32977,6 +33040,47 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
     });
     setHasUnsaved(true);
   };
+  // FIT/FILL toggle for admin-prefilled default_photos[i] — flips the
+  // `fit` property on the matching entry so the same setting propagates
+  // through to the participant's render via the init-merge pipeline.
+  const toggleSectionPhotoFit = (sectionId, fieldKey, photoUrl) => {
+    setBounty(prev => {
+      if (!prev) return prev;
+      const baseConfig = ensureFormConfig(prev);
+      if (!baseConfig) return prev;
+      const next = {
+        ...baseConfig,
+        sections: baseConfig.sections.map(s => {
+          if (s.id !== sectionId) return s;
+          const cur = Array.isArray(s[fieldKey]) ? s[fieldKey] : [];
+          return { ...s, [fieldKey]: cur.map(p => p.url === photoUrl
+            ? { ...p, fit: p.fit === "contain" ? "cover" : "contain" }
+            : p) };
+        }),
+      };
+      return { ...prev, form_config: next };
+    });
+    setHasUnsaved(true);
+  };
+  // Same toggle but for the hero_image section's single default_value object.
+  const toggleSectionHeroFit = (sectionId) => {
+    setBounty(prev => {
+      if (!prev) return prev;
+      const baseConfig = ensureFormConfig(prev);
+      if (!baseConfig) return prev;
+      const next = {
+        ...baseConfig,
+        sections: baseConfig.sections.map(s => {
+          if (s.id !== sectionId) return s;
+          const cur = (s.default_value && typeof s.default_value === "object") ? s.default_value : null;
+          if (!cur || !cur.url) return s;
+          return { ...s, default_value: { ...cur, fit: cur.fit === "contain" ? "cover" : "contain" } };
+        }),
+      };
+      return { ...prev, form_config: next };
+    });
+    setHasUnsaved(true);
+  };
   const handleSave = async (nextStatus) => {
     if (!bounty) return;
     setSaving(true); setError("");
@@ -33393,7 +33497,16 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
                             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4, marginBottom: 6 }}>
                               {s.default_photos.map((p, pi) => (
                                 <div key={pi} style={{ position: "relative", aspectRatio: "1/1", borderRadius: 4, overflow: "hidden", background: T.charcoal }}>
-                                  <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                  <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: resolveObjectFit(p) }} />
+                                  {/* Compact fit toggle for the small tile — tap to flip cover ↔ contain. */}
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); toggleSectionPhotoFit(s.id, "default_photos", p.url); }}
+                                    title={p.fit === "contain" ? "Switch to FILL — crop to fill" : "Switch to FIT — show entire image"}
+                                    style={{ position: "absolute", bottom: 2, left: 2, background: "rgba(0,0,0,0.72)", border: "none", borderRadius: 3, padding: "2px 4px", display: "flex", alignItems: "center", gap: 2, cursor: "pointer" }}
+                                  >
+                                    {p.fit === "contain" ? <Maximize2 size={8} color={T.white} /> : <Minimize2 size={8} color={T.white} />}
+                                    <span style={{ fontFamily: sans, fontSize: 8, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>{p.fit === "contain" ? "FILL" : "FIT"}</span>
+                                  </button>
                                   <button onClick={() => removeSectionPhoto(s.id, "default_photos", p.url)} style={{ position: "absolute", top: 2, right: 2, background: "rgba(0,0,0,0.7)", border: "none", borderRadius: 3, padding: "2px 4px", color: T.white, cursor: "pointer" }}>
                                     <X size={10} color={T.white} />
                                   </button>
@@ -33411,8 +33524,9 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
                         <div style={{ borderTop: `1px solid ${T.charcoal}`, paddingTop: 8 }}>
                           <FieldLabel>Prefilled hero (optional)</FieldLabel>
                           {s.default_value && s.default_value.url ? (
-                            <div style={{ position: "relative", borderRadius: 6, overflow: "hidden", background: T.charcoal }}>
-                              <img src={s.default_value.url} alt="" style={{ width: "100%", display: "block", maxHeight: 140, objectFit: "cover" }} />
+                            <div style={{ position: "relative", borderRadius: 6, overflow: "hidden", background: T.darkBg }}>
+                              <img src={s.default_value.url} alt="" style={{ width: "100%", display: "block", height: 140, objectFit: resolveObjectFit(s.default_value) }} />
+                              <ImageFitToggle fit={s.default_value.fit} onToggle={() => toggleSectionHeroFit(s.id)} />
                               <button onClick={() => updateSection(s.id, { default_value: null })} style={{ position: "absolute", top: 6, right: 6, background: "rgba(0,0,0,0.7)", border: "none", borderRadius: 4, padding: "4px 6px", color: T.red, cursor: "pointer", fontFamily: sans, fontSize: 9, fontWeight: 700 }}>REMOVE</button>
                             </div>
                           ) : (
