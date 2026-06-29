@@ -20174,8 +20174,226 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
   );
 }
 
+/* ─── BountyEarningsCard ─── PENDING / ON GIFT CARD / TOTAL PAID OUT
+   three-stat block with VIEW GIFT CARD / REQUEST PAYOUT / HISTORY
+   buttons. Renders inside RanksScreen's OVERVIEW tab. Module-scope to
+   keep state stable across RanksScreen re-renders. */
+const MIN_PAYOUT_CENTS = 2500;
+
+function BountyEarningsCard({ earnings, currentProfile, onRefreshGiftCard, onRequestPayout, onLoadBountyHistory }) {
+  const pending = (earnings && earnings.total_pending_cents) || 0;
+  const paid = (earnings && earnings.total_paid_cents) || 0;
+  const balance = (currentProfile && currentProfile.lpo_gift_card_balance_cents) || 0;
+  const hasCard = !!(currentProfile && currentProfile.lpo_gift_card_id);
+  const last4 = (currentProfile && currentProfile.lpo_gift_card_last4) || null;
+
+  const [showGiftCard, setShowGiftCard] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [requestState, setRequestState] = useState(""); // "" | "busy" | "sent" | "error:<msg>"
+
+  const canRequestPayout = pending >= MIN_PAYOUT_CENTS;
+
+  const handleRequest = async () => {
+    if (!canRequestPayout || requestState === "busy") return;
+    if (!confirm(`Request a $${(pending / 100).toFixed(2)} payout? Admin will be notified.`)) return;
+    setRequestState("busy");
+    const res = await onRequestPayout();
+    if (res && res.error) setRequestState("error:" + res.error);
+    else setRequestState("sent");
+  };
+
+  return (
+    <>
+      <div style={{ padding: "0 16px 12px" }}>
+        <div style={{ background: `linear-gradient(135deg, ${T.charcoal}, #333330)`, borderRadius: 14, padding: "20px 20px", border: `1px solid ${T.copper}30`, position: "relative", overflow: "hidden" }}>
+          <div style={{ position: "absolute", top: -20, right: -20, width: 100, height: 100, borderRadius: "50%", background: `${T.copper}08` }} />
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+            <DollarSign size={14} color={T.copper} />
+            <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.5, fontWeight: 600 }}>BOUNTY EARNINGS</span>
+          </div>
+          {/* Three stat blocks */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
+            <div>
+              <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600 }}>PENDING</div>
+              <div style={{ fontFamily: sans, fontSize: 18, color: T.green, fontWeight: 700, marginTop: 2 }}>${(pending / 100).toFixed(2)}</div>
+            </div>
+            <div>
+              <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600 }}>ON GIFT CARD</div>
+              <div style={{ fontFamily: sans, fontSize: 18, color: T.copper, fontWeight: 700, marginTop: 2 }}>${(balance / 100).toFixed(2)}</div>
+            </div>
+            <div>
+              <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600 }}>TOTAL PAID</div>
+              <div style={{ fontFamily: sans, fontSize: 18, color: T.white, fontWeight: 700, marginTop: 2 }}>${(paid / 100).toFixed(2)}</div>
+            </div>
+          </div>
+          {/* Action row */}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={handleRequest} disabled={!canRequestPayout || requestState === "busy" || requestState === "sent"}
+              style={{ flex: 1, background: canRequestPayout ? T.copper : T.charcoal, color: canRequestPayout ? T.charcoal : T.tertiary, border: "none", borderRadius: 6, padding: "10px 8px", fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, cursor: canRequestPayout ? "pointer" : "default", opacity: canRequestPayout ? (requestState === "busy" ? 0.5 : 1) : 0.5 }}>
+              {requestState === "busy" ? "SENDING…" : requestState === "sent" ? "REQUEST SENT" : "REQUEST PAYOUT"}
+            </button>
+            <button onClick={() => setShowGiftCard(true)}
+              style={{ flex: 1, background: T.darkCard, color: T.copper, border: `1px solid ${T.copper}40`, borderRadius: 6, padding: "10px 8px", fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, cursor: "pointer" }}>
+              VIEW GIFT CARD
+            </button>
+            <button onClick={() => setShowHistory(true)}
+              style={{ flex: 1, background: T.darkCard, color: T.tertiary, border: `1px solid ${T.charcoal}`, borderRadius: 6, padding: "10px 8px", fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, cursor: "pointer" }}>
+              HISTORY
+            </button>
+          </div>
+          {!canRequestPayout && pending > 0 && (
+            <div style={{ marginTop: 8, fontFamily: serif, fontSize: 11, color: T.tertiary, fontStyle: "italic" }}>
+              Earn ${((MIN_PAYOUT_CENTS - pending) / 100).toFixed(2)} more pending to request a payout.
+            </div>
+          )}
+          {requestState.startsWith("error:") && (
+            <div style={{ marginTop: 8, fontFamily: sans, fontSize: 10, color: T.red }}>{requestState.slice(6)}</div>
+          )}
+        </div>
+      </div>
+
+      {showGiftCard && (
+        <GiftCardModal
+          balance={balance}
+          hasCard={hasCard}
+          last4={last4}
+          syncedAt={currentProfile && currentProfile.lpo_gift_card_synced_at}
+          onRefresh={() => onRefreshGiftCard()}
+          onClose={() => setShowGiftCard(false)}
+        />
+      )}
+      {showHistory && (
+        <BountyHistoryModal
+          onLoad={onLoadBountyHistory}
+          onClose={() => setShowHistory(false)}
+        />
+      )}
+    </>
+  );
+}
+
+/* ─── GiftCardModal ─── shows balance + last4 + refresh + SHOP NOW.
+   Code itself is NEVER displayed — Shopify is the source of truth.
+   "SHOP NOW" deeplinks to LPO with the gift card pre-applied if the
+   customer is signed in (gift card is linked via shopify_customer_id).
+   When no card yet exists, copy invites the user to earn one. */
+function GiftCardModal({ balance, hasCard, last4, syncedAt, onRefresh, onClose }) {
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
+  const handleRefresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true); setError("");
+    const res = await onRefresh();
+    if (res && res.error) setError(res.error);
+    setRefreshing(false);
+  };
+  const fmtSynced = syncedAt ? new Date(syncedAt).toLocaleString() : "never";
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 1100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 400, background: T.darkBg, borderRadius: 14, padding: 20, border: `1px solid ${T.charcoal}` }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+          <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.8 }}>YOUR GIFT CARD</span>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><X size={18} color={T.tertiary} /></button>
+        </div>
+        {!hasCard ? (
+          <div style={{ padding: "20px 0", textAlign: "center" }}>
+            <DollarSign size={28} color={T.copper} style={{ margin: "0 auto 10px" }} />
+            <div style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 600, marginBottom: 6 }}>No gift card yet.</div>
+            <div style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.5 }}>
+              Complete a bounty + request a payout to get your first Lone Peak Overland gift card. Funds add to the same card across every future payout.
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Gift card visual */}
+            <div style={{ background: `linear-gradient(135deg, ${T.red}, ${T.copper})`, borderRadius: 12, padding: "22px 18px", marginBottom: 14, position: "relative", overflow: "hidden" }}>
+              <div style={{ fontFamily: sans, fontSize: 9, color: "rgba(255,255,255,0.7)", letterSpacing: 1.5, fontWeight: 600 }}>LONE PEAK OVERLAND</div>
+              <div style={{ fontFamily: sans, fontSize: 11, color: "rgba(255,255,255,0.9)", letterSpacing: 1, fontWeight: 600, marginTop: 2 }}>GIFT CARD</div>
+              <div style={{ fontFamily: sans, fontSize: 32, color: T.white, fontWeight: 700, marginTop: 16 }}>${(balance / 100).toFixed(2)}</div>
+              {last4 && (
+                <div style={{ fontFamily: sans, fontSize: 11, color: "rgba(255,255,255,0.8)", letterSpacing: 2, fontWeight: 600, marginTop: 8 }}>•••• {last4}</div>
+              )}
+            </div>
+            <button
+              onClick={() => window.open("https://lonepeakoverland.com/", "_blank", "noopener")}
+              style={{ width: "100%", padding: "12px", background: T.copper, color: T.charcoal, border: "none", borderRadius: 8, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 10 }}>
+              <ExternalLink size={14} color={T.charcoal} />
+              SHOP AT LONEPEAKOVERLAND.COM
+            </button>
+            <button onClick={handleRefresh} disabled={refreshing}
+              style={{ width: "100%", padding: "10px", background: T.darkCard, color: T.tertiary, border: `1px solid ${T.charcoal}`, borderRadius: 8, fontFamily: sans, fontSize: 11, fontWeight: 600, letterSpacing: 0.5, cursor: refreshing ? "wait" : "pointer" }}>
+              {refreshing ? "CHECKING…" : "REFRESH BALANCE"}
+            </button>
+            <div style={{ marginTop: 10, fontFamily: sans, fontSize: 10, color: T.tertiary, textAlign: "center" }}>
+              Last synced: {fmtSynced}
+            </div>
+            {error && <div style={{ marginTop: 8, fontFamily: sans, fontSize: 11, color: T.red, textAlign: "center" }}>{error}</div>}
+            <div style={{ marginTop: 14, padding: "10px 12px", background: T.darkCard, borderRadius: 8, fontFamily: serif, fontSize: 11, color: T.tertiary, lineHeight: 1.5 }}>
+              Your gift card code is held by Shopify for security — you don't need to enter it manually. At checkout while signed in, it'll apply automatically.
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ─── BountyHistoryModal ─── chronological stream from user_bounty_history
+   RPC. Approved submissions + payouts mixed. Lazy-loads on open. */
+function BountyHistoryModal({ onLoad, onClose }) {
+  const [rows, setRows] = useState(null); // null = loading
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    onLoad(200).then(res => {
+      if (cancelled) return;
+      if (res && res.error) setError(res.error);
+      else setRows(res && res.data ? res.data : []);
+    });
+    return () => { cancelled = true; };
+  }, []);
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 1100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 430, maxHeight: "80vh", background: T.darkBg, borderRadius: 14, padding: 20, border: `1px solid ${T.charcoal}`, display: "flex", flexDirection: "column" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+          <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.8 }}>EARNINGS HISTORY</span>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><X size={18} color={T.tertiary} /></button>
+        </div>
+        <div className="th-scroll" style={{ flex: 1, overflowY: "auto" }}>
+          {rows === null && <div style={{ padding: 20, fontFamily: serif, fontSize: 12, color: T.tertiary, textAlign: "center" }}>Loading…</div>}
+          {error && <div style={{ padding: 20, fontFamily: sans, fontSize: 12, color: T.red, textAlign: "center" }}>{error}</div>}
+          {rows && rows.length === 0 && (
+            <div style={{ padding: 20, fontFamily: serif, fontSize: 12, color: T.tertiary, textAlign: "center" }}>No earnings yet. Claim a bounty to get started.</div>
+          )}
+          {rows && rows.map((r, i) => {
+            const isPayout = r.kind === "payout";
+            const dollars = `$${((r.amount_cents || 0) / 100).toFixed(2)}`;
+            const dateStr = r.ts ? new Date(r.ts).toLocaleDateString() : "";
+            return (
+              <div key={i} style={{ padding: "10px 12px", marginBottom: 6, background: T.darkCard, borderRadius: 8, display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: isPayout ? `${T.copper}20` : `${T.green}20`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  {isPayout ? <ArrowRight size={16} color={T.copper} /> : <CheckCircle size={16} color={T.green} />}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>
+                    {isPayout ? (r.payout_method === "manual" ? `Manual payout · ${r.payout_reference || ""}` : "Disbursed to gift card") : (r.bounty_title || "Bounty")}
+                  </div>
+                  <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>
+                    {isPayout ? "Payout" : "Approved bounty"} · {dateStr}
+                  </div>
+                </div>
+                <div style={{ fontFamily: sans, fontSize: 14, color: isPayout ? T.copper : T.green, fontWeight: 700 }}>{isPayout ? "−" : "+"}{dollars}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── RANKS / LEADERBOARD SCREEN ─── */
-function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, currentUserId, currentProfile, onLoadLeaderboard, onViewUser, bounties: bountiesFromDB, mySubmissions, isGuest, onGuestTap, onClaimBounty, onSaveBountyDraft, onSubmitBountyRPC, onWithdrawBounty, onUploadBountyPhotos, earnings, onOpenDM, onLoadProfileById, onSendDemoProposal, onSendDmInvite }) {
+function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, currentUserId, currentProfile, onLoadLeaderboard, onViewUser, bounties: bountiesFromDB, mySubmissions, isGuest, onGuestTap, onClaimBounty, onSaveBountyDraft, onSubmitBountyRPC, onWithdrawBounty, onUploadBountyPhotos, earnings, onOpenDM, onLoadProfileById, onSendDemoProposal, onSendDmInvite, onRefreshGiftCard, onRequestPayout, onLoadBountyHistory }) {
   const [tab, setTab] = useState("overview"); // overview | leaderboard | bounty | badges
   // Leaderboard state. lbScope = global | following | weekly; lbData[scope]
   // caches rows so switching tabs is instant after the first fetch. Refresh
@@ -20531,30 +20749,20 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
             </div>
           </div>
 
-          {/* Bounty Credit Card */}
-          <div style={{ padding: "0 16px 16px" }}>
-            <div style={{ background: `linear-gradient(135deg, ${T.charcoal}, #333330)`, borderRadius: 14, padding: "20px 20px", border: `1px solid ${T.copper}30`, position: "relative", overflow: "hidden" }}>
-              <div style={{ position: "absolute", top: -20, right: -20, width: 100, height: 100, borderRadius: "50%", background: `${T.copper}08` }} />
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                <DollarSign size={14} color={T.copper} />
-                <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.5, fontWeight: 600 }}>BOUNTY EARNINGS</span>
-              </div>
-              <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginBottom: 4 }}>
-                <span style={{ fontFamily: sans, fontSize: 28, color: T.white, fontWeight: 700 }}>${(myBountyEarnings / 100).toFixed(2)}</span>
-                <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>lifetime earned</span>
-              </div>
-              <div style={{ display: "flex", gap: 16, marginBottom: 14, marginTop: 8 }}>
-                <div>
-                  <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600 }}>PENDING</div>
-                  <div style={{ fontFamily: sans, fontSize: 14, color: T.green, fontWeight: 700 }}>${(myBountyPending / 100).toFixed(2)}</div>
-                </div>
-                <div>
-                  <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600 }}>PAID OUT</div>
-                  <div style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700 }}>${(myBountyPaid / 100).toFixed(2)}</div>
-                </div>
-              </div>
-              <button disabled style={{ background: T.copper, color: T.charcoal, fontFamily: sans, fontSize: 11, fontWeight: 700, padding: "10px 24px", borderRadius: 6, border: "none", cursor: "not-allowed", letterSpacing: 1, opacity: 0.45 }}>REDEEM CREDIT (PHASE 7)</button>
-            </div>
+          {/* Bounty Credit Card (Phase 7) — PENDING / ON GIFT CARD /
+              TOTAL PAID OUT, w/ VIEW GIFT CARD + REQUEST PAYOUT + HISTORY
+              actions. Pulls live data from bounty_earnings denorm +
+              profiles.lpo_gift_card_* cache. */}
+          <BountyEarningsCard
+            earnings={earnings}
+            currentProfile={currentProfile}
+            onRefreshGiftCard={onRefreshGiftCard}
+            onRequestPayout={onRequestPayout}
+            onLoadBountyHistory={onLoadBountyHistory}
+          />
+          {/* Lifetime + breakdown still surfaces below for context. */}
+          <div style={{ padding: "0 16px 10px", fontFamily: sans, fontSize: 11, color: T.tertiary, letterSpacing: 0.5 }}>
+            Lifetime earned: <span style={{ color: T.white, fontWeight: 600 }}>${(myBountyEarnings / 100).toFixed(2)}</span>
           </div>
 
           {/* Points Breakdown */}
@@ -32544,8 +32752,234 @@ function BountySubmissionReviewScreen({ submission, onBack, onApprove, onRequest
 }
 
 /* ─── BOUNTIES ADMIN — list w/ tabs + NEW button (Phase 4) ─── */
-function BountiesAdminScreen({ bounties, reviewQueue, onLoadReviewQueue, onBack, onOpenEditor, onNewBounty, onOpenReview }) {
-  const [tab, setTab] = useState("review"); // review | draft | open | completed | archived
+/* ─── BountyPayoutsQueue ─── admin payout queue. Fetches users with
+   total_pending_cents >= $25 via admin_bounty_payout_queue RPC; renders
+   one row per user with ISSUE GIFT CARD CREDIT + RECORD MANUAL PAYOUT
+   buttons. Modal collects amount + (optional) reference + invokes the
+   shopify-bounty-payout edge function. Refreshes the queue + the
+   target user's gift card cache after a successful payout. */
+function BountyPayoutsQueue({ onLoadQueue, onLoadPendingSubmissionsForUser, onIssuePayout, onRefreshGiftCard }) {
+  const [rows, setRows] = useState(null);
+  const [error, setError] = useState("");
+  const [issueTarget, setIssueTarget] = useState(null); // { row, method: 'gift_card' | 'manual' }
+  const reload = async () => {
+    setRows(null); setError("");
+    const res = await onLoadQueue();
+    if (res && res.error) setError(res.error);
+    else setRows(res && res.data ? res.data : []);
+  };
+  useEffect(() => { reload(); }, []);
+
+  return (
+    <>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+        <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700 }}>
+          USERS WITH PENDING ≥ $25
+        </span>
+        <button onClick={reload} style={{ fontFamily: sans, fontSize: 10, color: T.copper, background: "none", border: `1px solid ${T.copper}40`, borderRadius: 5, padding: "5px 10px", cursor: "pointer", fontWeight: 700, letterSpacing: 0.5 }}>
+          REFRESH
+        </button>
+      </div>
+      {rows === null && <div style={{ padding: 30, textAlign: "center", fontFamily: serif, fontSize: 12, color: T.tertiary }}>Loading…</div>}
+      {error && <div style={{ padding: 16, fontFamily: sans, fontSize: 12, color: T.red }}>{error}</div>}
+      {rows && rows.length === 0 && (
+        <div style={{ padding: 30, textAlign: "center", fontFamily: serif, fontSize: 13, color: T.tertiary }}>
+          No payouts pending. Everyone's been paid.
+        </div>
+      )}
+      {rows && rows.map(r => {
+        const name = r.full_name || r.handle || "User";
+        const initial = (name.charAt(0) || "?").toUpperCase();
+        const oldestAgo = r.oldest_pending_at ? Math.floor((Date.now() - new Date(r.oldest_pending_at).getTime()) / 86400000) : null;
+        return (
+          <div key={r.user_id} style={{ background: T.darkCard, borderRadius: 12, padding: 14, border: `1px solid ${T.charcoal}`, display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ width: 40, height: 40, borderRadius: "50%", background: T.charcoal, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                {r.avatar_url
+                  ? <img src={r.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  : <span style={{ fontFamily: sans, fontSize: 14, fontWeight: 700, color: T.white }}>{initial}</span>}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 600 }}>{name}</div>
+                <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>@{r.handle || "—"}</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontFamily: sans, fontSize: 16, color: T.green, fontWeight: 700 }}>${(Number(r.pending_cents) / 100).toFixed(2)}</div>
+                <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.5 }}>PENDING</div>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 12, fontFamily: sans, fontSize: 11, color: T.tertiary }}>
+              <span>Paid: <span style={{ color: T.white, fontWeight: 600 }}>${(Number(r.paid_cents) / 100).toFixed(2)}</span></span>
+              {r.lpo_gift_card_id && (
+                <span>On card: <span style={{ color: T.copper, fontWeight: 600 }}>${(Number(r.lpo_gift_card_balance_cents) / 100).toFixed(2)}</span> (•••• {r.lpo_gift_card_last4 || "—"})</span>
+              )}
+              {oldestAgo !== null && (
+                <span style={{ marginLeft: "auto", color: oldestAgo >= 14 ? T.red : T.tertiary }}>
+                  Oldest pending: {oldestAgo}d
+                </span>
+              )}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => setIssueTarget({ row: r, method: "gift_card" })} style={{ flex: 1, background: T.copper, color: T.charcoal, border: "none", borderRadius: 6, padding: "10px", fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                <DollarSign size={13} color={T.charcoal} />
+                ISSUE GIFT CARD CREDIT
+              </button>
+              <button onClick={() => setIssueTarget({ row: r, method: "manual" })} style={{ flex: 1, background: T.darkBg, color: T.tertiary, border: `1px solid ${T.charcoal}`, borderRadius: 6, padding: "10px", fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}>
+                RECORD MANUAL PAYOUT
+              </button>
+            </div>
+          </div>
+        );
+      })}
+      {issueTarget && (
+        <BountyIssuePayoutModal
+          row={issueTarget.row}
+          method={issueTarget.method}
+          onLoadPendingSubmissionsForUser={onLoadPendingSubmissionsForUser}
+          onIssuePayout={onIssuePayout}
+          onClose={() => setIssueTarget(null)}
+          onSuccess={async () => {
+            setIssueTarget(null);
+            await reload();
+            try { onRefreshGiftCard && await onRefreshGiftCard(issueTarget.row.user_id); } catch {}
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+/* ─── BountyIssuePayoutModal ─── confirm form for issuing a payout to
+   a target user. Loads the user's pending submissions, lets the admin
+   pick which to clear (default: all), confirms the amount, optionally
+   captures a reference (required for manual). Calls onIssuePayout
+   which routes to shopify-bounty-payout. */
+function BountyIssuePayoutModal({ row, method, onLoadPendingSubmissionsForUser, onIssuePayout, onClose, onSuccess }) {
+  const [pending, setPending] = useState(null); // null = loading
+  const [pendingErr, setPendingErr] = useState("");
+  const [selected, setSelected] = useState({}); // submission_id → bool
+  const [reference, setReference] = useState("");
+  const [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [submitErr, setSubmitErr] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    onLoadPendingSubmissionsForUser(row.user_id).then(res => {
+      if (cancelled) return;
+      if (res && res.error) { setPendingErr(res.error); setPending([]); }
+      else {
+        const list = res && res.data ? res.data : [];
+        setPending(list);
+        // Default-select all rows.
+        const init = {};
+        list.forEach(p => { init[p.id] = true; });
+        setSelected(init);
+      }
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const selectedRows = (pending || []).filter(p => selected[p.id]);
+  const amountCents = selectedRows.reduce((acc, p) => acc + (Number(p.reward_cents) || 0), 0);
+  const canSubmit = amountCents > 0 && (method !== "manual" || reference.trim().length > 0);
+
+  const handleSubmit = async () => {
+    if (!canSubmit || busy) return;
+    setBusy(true); setSubmitErr("");
+    const res = await onIssuePayout({
+      user_id: row.user_id,
+      amount_cents: amountCents,
+      submission_ids: selectedRows.map(s => s.id),
+      method,
+      reference: method === "manual" ? reference.trim() : null,
+      notes: notes.trim() || null,
+    });
+    if (res && res.error) { setSubmitErr(res.error + (res.detail ? ` — ${JSON.stringify(res.detail).slice(0, 200)}` : "")); setBusy(false); return; }
+    setBusy(false);
+    onSuccess && onSuccess();
+  };
+
+  const title = method === "manual" ? "RECORD MANUAL PAYOUT" : "ISSUE GIFT CARD CREDIT";
+  const name = row.full_name || row.handle || "user";
+
+  return (
+    <div onClick={busy ? undefined : onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 1200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 430, maxHeight: "85vh", background: T.darkBg, borderRadius: 14, padding: 20, border: `1px solid ${T.charcoal}`, display: "flex", flexDirection: "column" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+          <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 0.8 }}>{title}</span>
+          <button onClick={onClose} disabled={busy} style={{ background: "none", border: "none", cursor: busy ? "default" : "pointer", padding: 4 }}><X size={18} color={T.tertiary} /></button>
+        </div>
+        <div style={{ fontFamily: sans, fontSize: 12, color: T.tertiary, marginBottom: 12 }}>
+          For <span style={{ color: T.white, fontWeight: 600 }}>{name}</span> · @{row.handle || "—"}
+        </div>
+
+        {/* Pending submissions list (multi-select) */}
+        <div className="th-scroll" style={{ flex: 1, overflowY: "auto", marginBottom: 14 }}>
+          <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 700, marginBottom: 8 }}>SUBMISSIONS TO CLEAR</div>
+          {pending === null && <div style={{ padding: 14, textAlign: "center", fontFamily: serif, fontSize: 12, color: T.tertiary }}>Loading…</div>}
+          {pendingErr && <div style={{ padding: 12, fontFamily: sans, fontSize: 11, color: T.red }}>{pendingErr}</div>}
+          {pending && pending.length === 0 && (
+            <div style={{ padding: 14, textAlign: "center", fontFamily: serif, fontSize: 12, color: T.tertiary }}>No pending submissions found.</div>
+          )}
+          {pending && pending.map(p => (
+            <label key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", background: T.darkCard, borderRadius: 6, marginBottom: 4, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={!!selected[p.id]}
+                onChange={(e) => setSelected(prev => ({ ...prev, [p.id]: e.target.checked }))}
+                style={{ accentColor: T.copper, width: 16, height: 16, flexShrink: 0 }}
+              />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>{p.bounty_title || "Bounty"}</div>
+                <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{p.reviewed_at ? new Date(p.reviewed_at).toLocaleDateString() : "—"}</div>
+              </div>
+              <div style={{ fontFamily: sans, fontSize: 12, color: T.green, fontWeight: 700 }}>${((p.reward_cents || 0) / 100).toFixed(2)}</div>
+            </label>
+          ))}
+        </div>
+
+        {/* Manual-only reference field */}
+        {method === "manual" && (
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 700, marginBottom: 4 }}>REFERENCE (REQUIRED)</div>
+            <input
+              value={reference}
+              onChange={(e) => setReference(e.target.value)}
+              placeholder="Check #4523, Venmo @user, cash 2026-06-29, etc."
+              style={{ width: "100%", padding: "10px 12px", borderRadius: 6, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", boxSizing: "border-box" }}
+            />
+          </div>
+        )}
+
+        {/* Optional notes */}
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 700, marginBottom: 4 }}>NOTES (optional, admin-only)</div>
+          <input
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Internal note for the audit row"
+            style={{ width: "100%", padding: "10px 12px", borderRadius: 6, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", boxSizing: "border-box" }}
+          />
+        </div>
+
+        {/* Total + submit */}
+        <div style={{ borderTop: `1px solid ${T.charcoal}`, paddingTop: 12, display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+          <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, letterSpacing: 0.5, fontWeight: 600 }}>TOTAL PAYOUT</span>
+          <span style={{ fontFamily: sans, fontSize: 22, color: T.green, fontWeight: 700 }}>${(amountCents / 100).toFixed(2)}</span>
+        </div>
+        {submitErr && <div style={{ marginBottom: 10, fontFamily: sans, fontSize: 11, color: T.red, lineHeight: 1.4 }}>{submitErr}</div>}
+        <button onClick={handleSubmit} disabled={!canSubmit || busy}
+          style={{ width: "100%", padding: "12px", background: canSubmit && !busy ? T.copper : T.charcoal, color: canSubmit && !busy ? T.charcoal : T.tertiary, border: "none", borderRadius: 8, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.6, cursor: canSubmit && !busy ? "pointer" : "default", opacity: canSubmit ? (busy ? 0.5 : 1) : 0.6 }}>
+          {busy ? "PROCESSING…" : (method === "manual" ? "RECORD PAYOUT" : "ISSUE GIFT CARD CREDIT")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function BountiesAdminScreen({ bounties, reviewQueue, onLoadReviewQueue, onBack, onOpenEditor, onNewBounty, onOpenReview, onLoadPayoutQueue, onLoadPendingSubmissionsForUser, onIssuePayout, onRefreshGiftCard }) {
+  const [tab, setTab] = useState("review"); // review | draft | open | completed | archived | payouts
   // Approved-submission map for the COMPLETED tab. Keyed by bounty_id →
   // array of winner rows ({user_id, handle, full_name, avatar_url,
   // reward_cents, reward_points, reviewed_at}). Loaded lazily when the
@@ -32621,6 +33055,7 @@ function BountiesAdminScreen({ bounties, reviewQueue, onLoadReviewQueue, onBack,
   }, [bounties, tab]);
   const TABS = [
     { key: "review", label: "REVIEW", count: counts.review, urgent: true },
+    { key: "payouts", label: "PAYOUTS" },
     { key: "draft", label: "DRAFTS", count: counts.draft },
     { key: "open", label: "OPEN", count: counts.open },
     { key: "completed", label: "COMPLETED", count: counts.completed },
@@ -32703,7 +33138,16 @@ function BountiesAdminScreen({ bounties, reviewQueue, onLoadReviewQueue, onBack,
             })}
           </>
         )}
-        {tab !== "review" && filtered.length === 0 && (
+        {/* Payouts queue (Phase 7) */}
+        {tab === "payouts" && (
+          <BountyPayoutsQueue
+            onLoadQueue={onLoadPayoutQueue}
+            onLoadPendingSubmissionsForUser={onLoadPendingSubmissionsForUser}
+            onIssuePayout={onIssuePayout}
+            onRefreshGiftCard={onRefreshGiftCard}
+          />
+        )}
+        {tab !== "review" && tab !== "payouts" && filtered.length === 0 && (
           <div style={{ padding: "40px 16px", textAlign: "center" }}>
             <span style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, lineHeight: 1.6, display: "block" }}>
               {tab === "draft" ? "No drafts. Tap NEW to start one." :
@@ -32713,7 +33157,7 @@ function BountiesAdminScreen({ bounties, reviewQueue, onLoadReviewQueue, onBack,
             </span>
           </div>
         )}
-        {tab !== "review" && filtered.map(b => {
+        {tab !== "review" && tab !== "payouts" && filtered.map(b => {
           const diffColor = b.difficulty === "Hard" ? T.red : b.difficulty === "Easy" ? T.green : T.copper;
           const slotsLeft = (b.total_slots || 1) - (b.claimed_slots || 0);
           // Winners list for completed bounties — pulled from the bulk
@@ -45724,6 +46168,108 @@ export default function Trailhead() {
       setBountyEarnings(data || { total_earned_cents: 0, total_pending_cents: 0, total_paid_cents: 0 });
     } catch (e) { console.error("[refreshBountyEarnings] failed", e); }
   };
+  // ── Phase 7 — gift card balance refresh + payout request ──
+  // Owner-or-admin call to shopify-refresh-gift-card. Returns the fresh
+  // balance + last4 (or {has_card:false} if no card linked yet). Updates
+  // currentProfile cache so the modal re-renders.
+  const refreshGiftCardBalance = async (forUserId) => {
+    try {
+      const { data, error } = await supabase.functions.invoke("shopify-refresh-gift-card", {
+        body: forUserId ? { user_id: forUserId } : {},
+      });
+      if (error) { console.error("[refreshGiftCardBalance]", error); return { error: error.message }; }
+      if (data && data.ok === false) return { error: data.error || "refresh failed" };
+      // If we just refreshed our OWN card, patch local profile cache.
+      const myUid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+      if ((!forUserId || forUserId === myUid) && data) {
+        setCurrentProfile(prev => prev ? { ...prev, lpo_gift_card_balance_cents: data.balance_cents || 0, lpo_gift_card_last4: data.last4 || prev.lpo_gift_card_last4 || null, lpo_gift_card_synced_at: data.synced_at || null } : prev);
+      }
+      return { ok: true, data };
+    } catch (e) { console.error("[refreshGiftCardBalance] failed", e); return { error: "Network error" }; }
+  };
+  // User-initiated payout request — drops a notification to every admin
+  // so they know to look at the queue. No throttling for v1; admins will
+  // get spammy notifs only if the same user re-clicks, which is on them.
+  const requestBountyPayout = async () => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) return { error: "Not authenticated" };
+    const pendingC = (bountyEarnings && bountyEarnings.total_pending_cents) || 0;
+    if (pendingC < 2500) return { error: "Pending must be at least $25" };
+    try {
+      // Fetch admin ids — service-role would be ideal but we'll use the
+      // is_admin filter on profiles (admin SELECT on own row is allowed
+      // via the existing public-read policy).
+      const { data: admins, error: aerr } = await supabase.from("profiles").select("id").eq("role", "admin");
+      if (aerr) { console.error("[requestBountyPayout] admin lookup", aerr); return { error: aerr.message }; }
+      const myName = (currentProfile && (currentProfile.full_name || currentProfile.handle)) || "A user";
+      const dollars = (pendingC / 100).toFixed(2);
+      const rows = (admins || []).filter(a => a.id !== uid).map(a => ({
+        user_id: a.id,
+        type: "bounty_payout_received", // reuse existing enum
+        actor_id: uid,
+        actor_name: myName,
+        text: `requested a $${dollars} gift card payout`,
+        target: "Bounty payouts",
+      }));
+      if (rows.length === 0) return { error: "No admin available" };
+      const { error: nerr } = await supabase.from("notifications").insert(rows);
+      if (nerr) { console.error("[requestBountyPayout] notif insert", nerr); return { error: nerr.message }; }
+      return { ok: true, sent_to: rows.length };
+    } catch (e) { console.error("[requestBountyPayout] failed", e); return { error: "Network error" }; }
+  };
+  // Lazy-loaded payout history for the user's HISTORY modal. Single RPC
+  // returns approved-submissions + payouts mixed chronologically.
+  const loadBountyHistory = async (limit = 100) => {
+    try {
+      const { data, error } = await supabase.rpc("user_bounty_history", { p_limit: limit });
+      if (error) { console.error("[loadBountyHistory]", error); return { error: error.message }; }
+      return { ok: true, data: data || [] };
+    } catch (e) { console.error("[loadBountyHistory] failed", e); return { error: "Network error" }; }
+  };
+  // Admin payout queue — pulls users w/ pending >= $25 from
+  // admin_bounty_payout_queue RPC. Plus admin-only fetch of a target
+  // user's currently-pending submission ids so we can pass them to
+  // shopify-bounty-payout (clears them as paid).
+  const loadAdminPayoutQueue = async (minCents = 2500) => {
+    try {
+      const { data, error } = await supabase.rpc("admin_bounty_payout_queue", { p_min_cents: minCents });
+      if (error) { console.error("[loadAdminPayoutQueue]", error); return { error: error.message }; }
+      return { ok: true, data: data || [] };
+    } catch (e) { console.error("[loadAdminPayoutQueue] failed", e); return { error: "Network error" }; }
+  };
+  const loadPendingSubmissionsForUser = async (userId) => {
+    try {
+      const { data, error } = await supabase
+        .from("bounty_submissions")
+        .select("id, bounty_id, reward_cents, reviewed_at")
+        .eq("user_id", userId)
+        .eq("status", "approved")
+        .eq("payout_status", "pending")
+        .order("reviewed_at", { ascending: true });
+      if (error) { console.error("[loadPendingSubmissionsForUser]", error); return { error: error.message }; }
+      // Join bounty titles in a second roundtrip.
+      const ids = Array.from(new Set((data || []).map(r => r.bounty_id).filter(Boolean)));
+      let titleMap = {};
+      if (ids.length > 0) {
+        const { data: bs } = await supabase.from("bounties").select("id, title").in("id", ids);
+        (bs || []).forEach(b => { titleMap[b.id] = b.title; });
+      }
+      return { ok: true, data: (data || []).map(r => ({ ...r, bounty_title: titleMap[r.bounty_id] || "Bounty" })) };
+    } catch (e) { console.error("[loadPendingSubmissionsForUser] failed", e); return { error: "Network error" }; }
+  };
+  // Admin issues a payout via shopify-bounty-payout. method='gift_card'
+  // (default) or 'manual'. submission_ids should be the rows being cleared
+  // by this payout (validated server-side).
+  const issueBountyPayout = async ({ user_id, amount_cents, submission_ids = [], method = "gift_card", reference = "", notes = "" }) => {
+    try {
+      const { data, error } = await supabase.functions.invoke("shopify-bounty-payout", {
+        body: { user_id, amount_cents, submission_ids, method, reference, notes },
+      });
+      if (error) { console.error("[issueBountyPayout]", error); return { error: error.message }; }
+      if (data && data.ok === false) return { error: data.error || "Payout failed", detail: data.detail };
+      return { ok: true, data };
+    } catch (e) { console.error("[issueBountyPayout] failed", e); return { error: "Network error" }; }
+  };
   // Send a Demo Request scheduling card to the customer's DM. The card
   // payload carries the proposal data (days, slots, location, note) plus an
   // intent marker that drives the recipient-side UI in DMScreen:
@@ -51770,7 +52316,7 @@ export default function Trailhead() {
             {screen === "ranks" && (isGuest
               ? <GuestGateScreen title="RANKS REQUIRE AN ACCOUNT" subtitle="Sign in to see the leaderboard and start earning points from your posts, routes and builds." onSignIn={goToLoginFromGuest} />
               : (isAdmin || isBetaTester)
-                ? <RanksScreen myPoints={myTotalPoints} pointsBreakdown={friendlyPointsBreakdown} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentProfile={currentProfile} onLoadLeaderboard={loadLeaderboard} onViewUser={openUserProfile} bounties={bounties} mySubmissions={myBountySubmissions} isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onClaimBounty={claimBounty} onSaveBountyDraft={saveBountyDraft} onSubmitBountyRPC={submitBountySubmission} onWithdrawBounty={withdrawBountySubmission} onUploadBountyPhotos={uploadBountyPhotoFiles} earnings={bountyEarnings} onOpenDM={openDM} onLoadProfileById={loadProfileById} onSendDemoProposal={sendDemoProposalCard} onSendDmInvite={sendDmInvite} />
+                ? <RanksScreen myPoints={myTotalPoints} pointsBreakdown={friendlyPointsBreakdown} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentProfile={currentProfile} onLoadLeaderboard={loadLeaderboard} onViewUser={openUserProfile} bounties={bounties} mySubmissions={myBountySubmissions} isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onClaimBounty={claimBounty} onSaveBountyDraft={saveBountyDraft} onSubmitBountyRPC={submitBountySubmission} onWithdrawBounty={withdrawBountySubmission} onUploadBountyPhotos={uploadBountyPhotoFiles} earnings={bountyEarnings} onOpenDM={openDM} onLoadProfileById={loadProfileById} onSendDemoProposal={sendDemoProposalCard} onSendDmInvite={sendDmInvite} onRefreshGiftCard={refreshGiftCardBalance} onRequestPayout={requestBountyPayout} onLoadBountyHistory={loadBountyHistory} />
                 : <div style={{ padding: 32, textAlign: "center", fontFamily: serif, fontSize: 14, color: T.tertiary, lineHeight: 1.6 }}>Ranks is coming in a future release.</div>
             )}
             {screen === "admin" && (isAdmin
@@ -51828,6 +52374,10 @@ export default function Trailhead() {
                       onOpenEditor={(id) => setEditingBountyId(id)}
                       onNewBounty={() => setEditingBountyId("")}
                       onOpenReview={(id) => setReviewingSubmissionId(id)}
+                      onLoadPayoutQueue={loadAdminPayoutQueue}
+                      onLoadPendingSubmissionsForUser={loadPendingSubmissionsForUser}
+                      onIssuePayout={issueBountyPayout}
+                      onRefreshGiftCard={refreshGiftCardBalance}
                     />)
                 : adminSubScreen === "partners"
                 ? (editingContentPartnerId !== null
