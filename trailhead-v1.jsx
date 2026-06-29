@@ -26358,6 +26358,21 @@ function GDMultiImagePicker({ label, value, onSave, currentUserId, max = 8 }) {
 // container is locked to the requested aspect ratio so the WYSIWYG
 // matches the public render.
 function GDImageCropper({ src, aspectRatio, onSave, onClose, currentUserId }) {
+  // Parse "w/h" string into a numeric ratio so we can cap the cropper's
+  // width to keep its visual shape locked to the requested aspect. Without
+  // this, max-height: 62vh wins on tall desktop viewports and the container
+  // ends up wider than aspectRatio — the cropped output then ships with the
+  // wrong aspect and gets re-cropped by the display container's objectFit.
+  const ratioNum = (() => {
+    const m = String(aspectRatio || "").match(/^\s*(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)\s*$/);
+    if (m) return parseFloat(m[1]) / parseFloat(m[2]);
+    const n = parseFloat(aspectRatio);
+    return n > 0 ? n : 1;
+  })();
+  // The cropper's max height. The matching max-width cap keeps the
+  // container at the exact requested aspect even when this kicks in.
+  const cropperMaxHeightCss = "62vh";
+  const cropperMaxWidthCss = `calc(${cropperMaxHeightCss} * ${ratioNum})`;
   const [scale, setScale] = useState(1);
   const [tx, setTx] = useState(0);
   const [ty, setTy] = useState(0);
@@ -26461,8 +26476,13 @@ function GDImageCropper({ src, aspectRatio, onSave, onClose, currentUserId }) {
       const srcH = ch / effectiveScale;
       const srcX = imgW / 2 - srcW / 2 - tx / effectiveScale;
       const srcY = imgH / 2 - srcH / 2 - ty / effectiveScale;
+      // Lock output dimensions to the REQUESTED aspect ratio, not the
+      // measured container. The maxWidth cap above already pins the
+      // container to ratioNum, but sub-pixel rounding can still drift it
+      // — derive outH from ratioNum directly so the saved image is
+      // exactly the aspect the display container expects.
       const outW = 1600;
-      const outH = Math.round(outW * (ch / cw));
+      const outH = Math.round(outW / ratioNum);
       const canvas = document.createElement("canvas");
       canvas.width = outW;
       canvas.height = outH;
@@ -26504,7 +26524,7 @@ function GDImageCropper({ src, aspectRatio, onSave, onClose, currentUserId }) {
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
-        style={{ width: "100%", aspectRatio, maxHeight: "62vh", margin: "0 auto", overflow: "hidden", position: "relative", borderRadius: 8, background: "#000", touchAction: "none", cursor: dragRef.current ? "grabbing" : "grab" }}
+        style={{ width: "100%", maxWidth: cropperMaxWidthCss, aspectRatio, maxHeight: cropperMaxHeightCss, margin: "0 auto", overflow: "hidden", position: "relative", borderRadius: 8, background: "#000", touchAction: "none", cursor: dragRef.current ? "grabbing" : "grab" }}
       >
         <img
           ref={imgRef}
