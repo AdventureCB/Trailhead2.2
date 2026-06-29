@@ -19361,8 +19361,8 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
             if (s.type === "hero_image") {
               if (!val || !val.url) return null;
               return (
-                <div key={s.id} style={{ position: "relative", borderRadius: 12, overflow: "hidden", margin: "-16px -16px 16px", width: "calc(100% + 32px)", background: T.darkBg }}>
-                  <img src={txImg(val.url, 480)} alt="" style={{ width: "100%", height: 260, objectFit: resolveObjectFit(val), display: "block" }} />
+                <div key={s.id} style={{ position: "relative", borderRadius: 12, overflow: "hidden", margin: "-16px -16px 16px", width: "calc(100% + 32px)", background: T.darkBg, aspectRatio: "16 / 9" }}>
+                  <img src={txImg(val.url, 480)} alt="" style={{ width: "100%", height: "100%", objectFit: resolveObjectFit(val), display: "block" }} />
                   <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(transparent, rgba(0,0,0,0.75))", padding: "40px 16px 14px" }}>
                     <span style={{ fontFamily: sans, fontSize: 20, color: T.white, fontWeight: 800, textShadow: "0 1px 4px rgba(0,0,0,0.5)" }}>{fields["title"] || "Untitled"}</span>
                   </div>
@@ -19721,8 +19721,8 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
                     </span>
                   </div>
                   {fixedHero ? (
-                    <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: `1px solid ${T.charcoal}`, background: T.darkBg }}>
-                      <img src={txImg(fixedHero.url, 480)} alt={fixedHero.alt || ""} style={{ width: "100%", height: 240, objectFit: resolveObjectFit(fixedHero), display: "block" }} />
+                    <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: `1px solid ${T.charcoal}`, background: T.darkBg, aspectRatio: "16 / 9" }}>
+                      <img src={txImg(fixedHero.url, 480)} alt={fixedHero.alt || ""} style={{ width: "100%", height: "100%", objectFit: resolveObjectFit(fixedHero), display: "block" }} />
                       <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(transparent, rgba(0,0,0,0.7))", padding: "24px 14px 12px" }}>
                         <span style={{ fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 }}>{fields["title"] || "Your Title Here"}</span>
                       </div>
@@ -19741,8 +19741,8 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
                   {section.required && <span style={{ fontFamily: sans, fontSize: 9, color: T.red }}>REQUIRED</span>}
                 </div>
                 {hero ? (
-                  <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: `1px solid ${T.charcoal}`, background: T.darkBg }}>
-                    <img src={txImg(hero.url, 480)} alt="" style={{ width: "100%", height: 240, objectFit: resolveObjectFit(hero), display: "block" }} />
+                  <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: `1px solid ${T.charcoal}`, background: T.darkBg, aspectRatio: "16 / 9" }}>
+                    <img src={txImg(hero.url, 480)} alt="" style={{ width: "100%", height: "100%", objectFit: resolveObjectFit(hero), display: "block" }} />
                     <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(transparent, rgba(0,0,0,0.7))", padding: "24px 14px 12px" }}>
                       <span style={{ fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 }}>{fields["title"] || "Your Title Here"}</span>
                     </div>
@@ -33635,8 +33635,8 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
                         <div style={{ borderTop: `1px solid ${T.charcoal}`, paddingTop: 8 }}>
                           <FieldLabel>Prefilled hero (optional)</FieldLabel>
                           {s.default_value && s.default_value.url ? (
-                            <div style={{ position: "relative", borderRadius: 6, overflow: "hidden", background: T.darkBg }}>
-                              <img src={s.default_value.url} alt="" style={{ width: "100%", display: "block", height: 140, objectFit: resolveObjectFit(s.default_value) }} />
+                            <div style={{ position: "relative", borderRadius: 6, overflow: "hidden", background: T.darkBg, aspectRatio: "16 / 9" }}>
+                              <img src={s.default_value.url} alt="" style={{ width: "100%", display: "block", height: "100%", objectFit: resolveObjectFit(s.default_value) }} />
                               <ImageFitToggle fit={s.default_value.fit} onToggle={() => toggleSectionHeroFit(s.id)} />
                               <div style={{ position: "absolute", top: 6, right: 6, display: "flex", gap: 6 }}>
                                 {/^https?:/.test(s.default_value.url) && (
