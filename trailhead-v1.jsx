@@ -5950,10 +5950,17 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
               {/* Bottom gradient so the overlay chips read against a
                   bright endpoint photo. */}
               <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0) 35%, rgba(0,0,0,0) 65%, rgba(0,0,0,0.75) 100%)", pointerEvents: "none" }} />
-              {/* Top-left: brand attribution */}
-              {item.gearDropBrand && (
-                <div style={{ position: "absolute", top: 12, left: 12, zIndex: 5, padding: "5px 10px", background: `${T.darkBg}D0`, border: `1px solid ${T.copper}`, borderRadius: 6, backdropFilter: "blur(4px)" }}>
-                  <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 800, letterSpacing: 0.8 }}>{item.gearDropBrand.toUpperCase()}</span>
+              {/* Top-left: brand attribution — includes the partner's
+                  logo when present (auto-fills from drop.brand_logo_url
+                  at share time). Falls back to a text-only chip. */}
+              {(item.gearDropBrand || item.gearDropBrandLogo) && (
+                <div style={{ position: "absolute", top: 12, left: 12, zIndex: 5, display: "inline-flex", alignItems: "center", gap: 7, padding: item.gearDropBrandLogo ? "4px 10px 4px 4px" : "5px 10px", background: `${T.darkBg}D0`, border: `1px solid ${T.copper}`, borderRadius: 6, backdropFilter: "blur(4px)" }}>
+                  {item.gearDropBrandLogo && (
+                    <img src={item.gearDropBrandLogo} alt="" style={{ width: 22, height: 22, borderRadius: 4, objectFit: "cover", flexShrink: 0 }} />
+                  )}
+                  {item.gearDropBrand && (
+                    <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 800, letterSpacing: 0.8 }}>{item.gearDropBrand.toUpperCase()}</span>
+                  )}
                 </div>
               )}
               {/* Top-right: OPEN RECAP affordance */}
@@ -48483,6 +48490,7 @@ export default function Trailhead() {
       gearDropSlug: isMemento ? memento.dropSlug || null : undefined,
       gearDropTitle: isMemento ? memento.dropTitle || null : undefined,
       gearDropBrand: isMemento ? memento.brand || null : undefined,
+      gearDropBrandLogo: isMemento ? memento.brandLogo || null : undefined,
       mementoIsWinner: isMemento ? !!memento.isWinner : undefined,
       mementoPosition: isMemento ? (typeof memento.position === "number" ? memento.position : null) : undefined,
       racerHandle: isMemento ? racerHandle : undefined,
@@ -51210,6 +51218,7 @@ export default function Trailhead() {
                       dropSlug: pDrop && pDrop.slug,
                       dropTitle: pDrop && pDrop.title,
                       brand: pDrop && pDrop.brand_partner_name,
+                      brandLogo: pDrop && pDrop.brand_logo_url,
                       isWinner,
                       position: typeof pos === "number" ? pos : null,
                     },
