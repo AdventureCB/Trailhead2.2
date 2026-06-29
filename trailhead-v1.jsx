@@ -41130,7 +41130,7 @@ export default function Trailhead() {
     try { hydrateForumCategories(); } catch (e) { /* non-fatal */ }
     try { hydrateSavedTrips(); } catch (e) { /* non-fatal */ }
     try { hydrateBounties(); } catch (e) { /* non-fatal */ }
-    try { hydrateMyBountySubmissions(); } catch (e) { /* non-fatal */ }
+    try { hydrateMyBountySubmissions(uid); } catch (e) { /* non-fatal */ }
     try { refreshBountyEarnings(); } catch (e) { /* non-fatal */ }
 
     // ─── Tier 1 — critical for first paint ───
@@ -44866,8 +44866,14 @@ export default function Trailhead() {
   // app boot + kept fresh via realtime sub. Status drives the action
   // button on each bounty card (START → RESUME → "awaiting review" → etc.).
   const [myBountySubmissions, setMyBountySubmissions] = useState([]);
-  const hydrateMyBountySubmissions = async () => {
-    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+  const hydrateMyBountySubmissions = async (overrideUid) => {
+    // Accept an explicit uid so the cold-boot path (hydrateUserData) can
+    // pass session.user.id straight through. Without it we used to fall
+    // back to `supabaseSession` from closure — which could be the stale
+    // null from an earlier render, leaving mySubmissions empty after
+    // refresh. Result: just-claimed bounties showed up under OPEN with
+    // "1 claimed" because the per-user MINE filter couldn't see the row.
+    const uid = overrideUid || (supabaseSession && supabaseSession.user && supabaseSession.user.id);
     if (!uid) return;
     try {
       const { data, error } = await supabase
