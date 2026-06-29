@@ -20062,6 +20062,15 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
           deadlineAt: b.deadline_at,
           slots: b.total_slots || 1,
           claimed: b.claimed_slots || 0,
+          // Number of users who have actually SUBMITTED (status in
+          // submitted/approved). Driven by a trigger on bounty_submissions
+          // — see migration 20260629_bounty_submitted_count.sql. Used by
+          // the card "X started · Y completed" copy + the full-cap gate.
+          completed: b.submitted_count || 0,
+          // Bounty is effectively full when the completed count hits
+          // total_slots — the server's claim_bounty + submit_bounty RPCs
+          // also enforce this. UI surfaces it as "All slots filled".
+          isFull: (b.submitted_count || 0) >= (b.total_slots || 1),
           status: derivedStatus,
           submission: sub || null,
           submissionId: sub ? sub.id : null,
@@ -20518,7 +20527,7 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
                           <span style={{ fontFamily: sans, fontSize: 9, color: "#C0A060", fontWeight: 600 }}>UNDER REVIEW</span>
                         </div>
                       ) : (
-                        <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, fontWeight: 600 }}>{b.claimed || 0} CLAIMED · {b.slots} {b.slots === 1 ? "SLOT" : "SLOTS"}</span>
+                        <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, fontWeight: 600 }}>{b.claimed || 0} STARTED · {b.completed || 0} COMPLETED</span>
                       )}
                     </div>
                     <h3 style={{ fontFamily: sans, fontSize: 15, color: T.white, margin: "0 0 6px", fontWeight: 600 }}>{b.title}</h3>
@@ -20551,16 +20560,22 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                           <Users size={11} color={T.tertiary} />
-                          <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{b.claimed}/{b.slots} claimed</span>
+                          <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{b.claimed || 0} started · {b.completed || 0}/{b.slots} completed</span>
                         </div>
                       </div>
-                      {/* CLAIM is always offered while the bounty is open —
-                          the submitted-count cap (post-2026-06-29) lives
-                          server-side, so the click might still bounce
-                          back with "all slots filled" if another claimer
-                          beat them to the punch. startBounty surfaces
-                          that as a friendly toast. */}
-                      {b.status === "open" && (
+                      {/* When all submission slots are filled the bounty is
+                          effectively closed — server's claim_bounty RPC
+                          would reject anyway, but surfacing it as a chip
+                          beats a hidden tap-then-error. Otherwise the
+                          CLAIM button stays open while bounty.status is
+                          'open'; the cap check is server-side. */}
+                      {b.status === "open" && b.isFull && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0 0" }}>
+                          <Lock size={14} color={T.tertiary} />
+                          <span style={{ fontFamily: serif, fontSize: 12, color: T.tertiary }}>All submission slots are filled — this bounty is done.</span>
+                        </div>
+                      )}
+                      {b.status === "open" && !b.isFull && (
                         <>
                           <button onClick={(e) => { e.stopPropagation(); startBounty(b.id); }} disabled={claimingId === b.id} style={{ width: "100%", padding: "12px", background: T.red, color: T.white, fontFamily: sans, fontSize: 12, fontWeight: 700, borderRadius: 8, border: "none", cursor: claimingId === b.id ? "wait" : "pointer", letterSpacing: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: claimingId === b.id ? 0.6 : 1 }}>
                             <Target size={14} color={T.white} />
@@ -20616,9 +20631,16 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
                               <div style={{ fontFamily: serif, fontSize: 12, color: T.white, lineHeight: 1.5 }}>{b.reviewerNotes}</div>
                             </div>
                           )}
-                          <button onClick={(e) => { e.stopPropagation(); startBounty(b.id); }} disabled={claimingId === b.id} style={{ width: "100%", padding: "12px", background: T.darkCard, color: T.copper, fontFamily: sans, fontSize: 12, fontWeight: 700, borderRadius: 8, border: `1px solid ${T.copper}40`, cursor: claimingId === b.id ? "wait" : "pointer", letterSpacing: 1 }}>
-                            CLAIM AGAIN
-                          </button>
+                          {b.isFull ? (
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0 0" }}>
+                              <Lock size={14} color={T.tertiary} />
+                              <span style={{ fontFamily: serif, fontSize: 12, color: T.tertiary }}>All submission slots are filled — this bounty is done.</span>
+                            </div>
+                          ) : (
+                            <button onClick={(e) => { e.stopPropagation(); startBounty(b.id); }} disabled={claimingId === b.id} style={{ width: "100%", padding: "12px", background: T.darkCard, color: T.copper, fontFamily: sans, fontSize: 12, fontWeight: 700, borderRadius: 8, border: `1px solid ${T.copper}40`, cursor: claimingId === b.id ? "wait" : "pointer", letterSpacing: 1 }}>
+                              CLAIM AGAIN
+                            </button>
+                          )}
                           {claimError && claimError.bountyId === b.id && (
                             <div style={{ marginTop: 8, padding: "8px 12px", background: `${T.red}15`, border: `1px solid ${T.red}40`, borderRadius: 6, fontFamily: serif, fontSize: 12, color: T.white, lineHeight: 1.4 }}>{claimError.message}</div>
                           )}
