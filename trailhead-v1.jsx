@@ -17801,6 +17801,11 @@ const DEMO_SLOTS = [
   { value: "morning", label: "Morning" },
   { value: "afternoon", label: "Afternoon" },
   { value: "any", label: "Any time" },
+  // SPECIFIC = provider pins down the exact start time per day instead
+  // of offering a window. When this is set, an HH:MM input appears
+  // beneath the slot row and the customer's pick modal becomes a
+  // single-tap CONFIRM (no time editing on their end).
+  { value: "specific", label: "Specific time" },
 ];
 
 /* ─── DemoMeetingMapPicker — purpose-built meeting-spot picker for demo
@@ -18107,27 +18112,43 @@ function DemoSlotPickerModal({ sp, mode, onPick, onClose }) {
           )}
           {days.length === 0 && <div style={{ fontFamily: serif, fontSize: 12, color: T.tertiary }}>No slots available.</div>}
           {days.map((d, i) => {
+            // Provider-pinned specific time — customer can't edit, just
+            // confirms. Subtitle shows the locked time + an "exact time"
+            // hint so it's obvious why no input is rendered. Block-typed
+            // slots keep the existing editable time input clamped to
+            // the block's range.
+            const isFixed = d.slot === "specific" && !!d.specific_time;
             const range = DEMO_SLOT_RANGE[d.slot] || DEMO_SLOT_RANGE.any;
+            const subtitle = isFixed
+              ? `${fmtTimeFromString(d.specific_time)} · exact time`
+              : (d.slot
+                  ? `${DEMO_SLOT_LABEL[d.slot] || d.slot} · ${range.start.replace(/^0/, "")}–${range.end.replace(/^0/, "")}`
+                  : (d.specific_time ? fmtTimeFromString(d.specific_time) : "Specific time"));
+            const pickedTime = isFixed ? d.specific_time : times[i];
             return (
               <div key={i} style={{ background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8, padding: "10px 12px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                   <Clock size={12} color={T.copper} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>{fmtPrettyDate(d.date)}</div>
-                    <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{d.slot ? `${DEMO_SLOT_LABEL[d.slot] || d.slot} · ${range.start.replace(/^0/, "")}–${range.end.replace(/^0/, "")}` : (d.specific_time ? fmtTimeFromString(d.specific_time) : "Specific time")}</div>
+                    <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{subtitle}</div>
                   </div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <input
-                    type="time"
-                    value={times[i]}
-                    min={range.start}
-                    max={range.end}
-                    onChange={(e) => setTimes(prev => ({ ...prev, [i]: e.target.value }))}
-                    style={{ flex: 1, padding: "8px 10px", borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, boxSizing: "border-box" }}
-                  />
-                  <button onClick={() => onPick && onPick(sp, { ...d, specific_time: times[i] }, mode)} style={{ background: T.green, color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, padding: "9px 14px", borderRadius: 6, border: "none", cursor: "pointer" }}>
-                    {mode === "lock_in" ? "LOCK IN" : "PICK THIS"}
+                  {isFixed ? (
+                    <div style={{ flex: 1, padding: "8px 10px", borderRadius: 6, background: T.darkBg, border: `1px solid ${T.copper}40`, color: T.copper, fontFamily: sans, fontSize: 13, fontWeight: 700, letterSpacing: 0.5, textAlign: "center" }}>{fmtTimeFromString(d.specific_time)}</div>
+                  ) : (
+                    <input
+                      type="time"
+                      value={times[i]}
+                      min={range.start}
+                      max={range.end}
+                      onChange={(e) => setTimes(prev => ({ ...prev, [i]: e.target.value }))}
+                      style={{ flex: 1, padding: "8px 10px", borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13, boxSizing: "border-box" }}
+                    />
+                  )}
+                  <button onClick={() => onPick && onPick(sp, { ...d, specific_time: pickedTime }, mode)} style={{ background: T.green, color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, padding: "9px 14px", borderRadius: 6, border: "none", cursor: "pointer" }}>
+                    {mode === "lock_in" ? "LOCK IN" : (isFixed ? "CONFIRM" : "PICK THIS")}
                   </button>
                 </div>
               </div>
@@ -18142,8 +18163,8 @@ function DemoSlotPickerModal({ sp, mode, onPick, onClose }) {
 /* ─── DemoProposalDmCard — renders a demo_proposal payload card inside a DM
        thread. Intent-specific layout + action buttons. Actions fire via
        the parent's onSelectSlot / onLockIn callbacks. ─── */
-const DEMO_SLOT_LABEL = { morning: "Morning", afternoon: "Afternoon", any: "Any time" };
-const DEMO_SLOT_DEFAULT_TIME = { morning: "09:00", afternoon: "14:00", any: "12:00" };
+const DEMO_SLOT_LABEL = { morning: "Morning", afternoon: "Afternoon", any: "Any time", specific: "Specific time" };
+const DEMO_SLOT_DEFAULT_TIME = { morning: "09:00", afternoon: "14:00", any: "12:00", specific: "12:00" };
 // Allowed time range per block — customer's specific_time input is clamped
 // to these so a "morning" slot can't end up at 11pm. "any" is broadly
 // "during the workday" (rough 6am→9pm) with no other constraint.
@@ -18328,32 +18349,50 @@ function DemoScheduleCalendar({ selectedDays, onToggleDay }) {
   );
 }
 
-/* ─── DemoSlotPicker — per-day morning / afternoon / any-time picker.
-       Renders one row per selected day. Tap a slot button to set, again
-       to clear. Used inside the proposal panel + the counter editor. ─── */
-function DemoSlotPicker({ days, slotsByDay, onSetSlot, onRemoveDay }) {
+/* ─── DemoSlotPicker — per-day slot picker. Tap a chip to choose a
+       window (morning / afternoon / any) OR "Specific time" to pin
+       down an exact HH:MM. When SPECIFIC is selected for a day, a
+       time input renders on a second row below the chips so the
+       provider can dial in the precise start. ─── */
+function DemoSlotPicker({ days, slotsByDay, onSetSlot, onRemoveDay, specificTimesByDay, onSetSpecificTime }) {
   if (!days || days.length === 0) return null;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       {days.map(k => {
         const cur = slotsByDay[k];
+        const isSpecific = cur === "specific";
+        const specificValue = (specificTimesByDay && specificTimesByDay[k]) || "";
         return (
-          <div key={k} style={{ display: "flex", alignItems: "center", gap: 6, background: T.darkCard, borderRadius: 6, padding: "8px 10px", border: `1px solid ${T.charcoal}` }}>
-            <div style={{ flex: "0 0 auto", minWidth: 96 }}>
-              <div style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>{fmtPrettyDate(k)}</div>
+          <div key={k} style={{ display: "flex", flexDirection: "column", gap: 6, background: T.darkCard, borderRadius: 6, padding: "8px 10px", border: `1px solid ${T.charcoal}` }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <div style={{ flex: "0 0 auto", minWidth: 96 }}>
+                <div style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>{fmtPrettyDate(k)}</div>
+              </div>
+              <div style={{ display: "flex", gap: 4, flex: 1, flexWrap: "wrap" }}>
+                {DEMO_SLOTS.map(s => {
+                  const active = cur === s.value;
+                  return (
+                    <button key={s.value} onClick={() => onSetSlot(k, active ? null : s.value)} style={{ padding: "4px 10px", borderRadius: 12, border: active ? `1px solid ${T.copper}` : `1px solid ${T.charcoal}`, background: active ? `${T.copper}25` : "transparent", color: active ? T.copper : T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.3, cursor: "pointer" }}>{s.label}</button>
+                  );
+                })}
+              </div>
+              {onRemoveDay && (
+                <button onClick={() => onRemoveDay(k)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: T.tertiary, display: "flex" }} title="Remove day">
+                  <X size={12} color={T.tertiary} />
+                </button>
+              )}
             </div>
-            <div style={{ display: "flex", gap: 4, flex: 1, flexWrap: "wrap" }}>
-              {DEMO_SLOTS.map(s => {
-                const active = cur === s.value;
-                return (
-                  <button key={s.value} onClick={() => onSetSlot(k, active ? null : s.value)} style={{ padding: "4px 10px", borderRadius: 12, border: active ? `1px solid ${T.copper}` : `1px solid ${T.charcoal}`, background: active ? `${T.copper}25` : "transparent", color: active ? T.copper : T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.3, cursor: "pointer" }}>{s.label}</button>
-                );
-              })}
-            </div>
-            {onRemoveDay && (
-              <button onClick={() => onRemoveDay(k)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: T.tertiary, display: "flex" }} title="Remove day">
-                <X size={12} color={T.tertiary} />
-              </button>
+            {isSpecific && onSetSpecificTime && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, paddingLeft: 96 }}>
+                <Clock size={11} color={T.copper} />
+                <input
+                  type="time"
+                  value={specificValue}
+                  onChange={(e) => onSetSpecificTime(k, e.target.value)}
+                  style={{ padding: "5px 8px", borderRadius: 4, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 12, boxSizing: "border-box" }}
+                />
+                <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>The customer just confirms — no edits on their end.</span>
+              </div>
             )}
           </div>
         );
@@ -18396,6 +18435,16 @@ function DemoRequestFlow({ bounty, submission, currentUserId, isGuest, onGuestTa
     const seed = Array.isArray(draft.proposal_days) ? draft.proposal_days : [];
     const m = {};
     seed.forEach(d => { if (d && d.date) m[d.date] = d.slot || null; });
+    return m;
+  });
+  // Per-day exact HH:MM the provider entered when they picked
+  // slot='specific' for that day. Keyed by date; carried separately
+  // so toggling the chip away from "Specific time" doesn't lose the
+  // input when they toggle back.
+  const [proposalSpecificTimes, setProposalSpecificTimes] = useState(() => {
+    const seed = Array.isArray(draft.proposal_days) ? draft.proposal_days : [];
+    const m = {};
+    seed.forEach(d => { if (d && d.date && d.specific_time) m[d.date] = d.specific_time; });
     return m;
   });
   const [proposalLat, setProposalLat] = useState(draft.proposal_meeting_lat || bounty.demo_lat || null);
@@ -18465,22 +18514,35 @@ function DemoRequestFlow({ bounty, submission, currentUserId, isGuest, onGuestTa
       if (prev[k]) { const n = { ...prev }; delete n[k]; return n; }
       return prev;
     });
+    setProposalSpecificTimes(prev => {
+      if (prev[k]) { const n = { ...prev }; delete n[k]; return n; }
+      return prev;
+    });
   };
   const setProposalSlotFor = (k, slot) => {
     setProposalSlots(prev => {
       if (slot === null) { const n = { ...prev }; delete n[k]; return n; }
       return { ...prev, [k]: slot };
     });
+    // Switching off the specific-time slot doesn't necessarily wipe the
+    // user's entered time — they might re-toggle. Only clear when the
+    // day is also being removed entirely (above).
+  };
+  const setProposalSpecificTimeFor = (k, time) => {
+    setProposalSpecificTimes(prev => ({ ...prev, [k]: time }));
   };
   const removeProposalDay = (k) => {
     setProposalDays(prev => prev.filter(d => d !== k));
     setProposalSlots(prev => { const n = { ...prev }; delete n[k]; return n; });
+    setProposalSpecificTimes(prev => { const n = { ...prev }; delete n[k]; return n; });
   };
 
   const handleSendProposal = async () => {
     if (proposalDays.length < 3) { setError("Pick at least 3 available days."); return; }
     const missingSlot = proposalDays.find(k => !proposalSlots[k]);
     if (missingSlot) { setError(`Pick a time slot for ${fmtPrettyDate(missingSlot)}.`); return; }
+    const missingSpecific = proposalDays.find(k => proposalSlots[k] === "specific" && !(proposalSpecificTimes[k] || "").trim());
+    if (missingSpecific) { setError(`Enter a specific time for ${fmtPrettyDate(missingSpecific)}.`); return; }
     if (typeof proposalLat !== "number") { setError("Drop a pin for the meeting location."); return; }
     if (!customer || !customer.id) { setError("Customer profile is still loading — try again in a sec."); return; }
     if (!onSendDemoProposal) { setError("Demo proposal sender not wired up."); return; }
@@ -18493,7 +18555,12 @@ function DemoRequestFlow({ bounty, submission, currentUserId, isGuest, onGuestTa
         submission_id: submission.id,
         proposer_id: currentUserId,
         customer_id: customer.id,
-        days: proposalDays.map(d => ({ date: d, slot: proposalSlots[d] })),
+        days: proposalDays.map(d => {
+          const slot = proposalSlots[d];
+          const day = { date: d, slot };
+          if (slot === "specific") day.specific_time = proposalSpecificTimes[d];
+          return day;
+        }),
         meeting_lat: proposalLat,
         meeting_lng: proposalLng,
         meeting_label: proposalLocationLabel || null,
@@ -18651,7 +18718,7 @@ function DemoRequestFlow({ bounty, submission, currentUserId, isGuest, onGuestTa
           <div style={{ background: `${T.red}10`, border: `1px solid ${T.red}30`, borderRadius: 10, padding: "14px 16px" }}>
             <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, marginBottom: 8 }}>Accept this demo?</div>
             <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.5, margin: "0 0 12px" }}>
-              When you accept, you'll propose <strong style={{ color: T.white }}>3+ days you're available</strong>, pick a meeting spot, and send the customer a scheduling card. They confirm or counter, you lock it in, then upload a proof photo after the demo.
+              When you accept, you'll build a scheduling proposal for the customer — <strong style={{ color: T.white }}>at least 3 days you're available</strong> (offer time windows like "morning"/"afternoon" or pick a specific time), <strong style={{ color: T.white }}>a meeting spot</strong>, and any notes for them. The customer locks in one of your slots, and you can <strong style={{ color: T.white }}>edit your offer anytime</strong> if they ask for something different. After the demo, upload a proof photo to submit for review and earn the reward.
             </p>
             <button onClick={handleAccept} disabled={busy} style={{ width: "100%", padding: "12px", background: T.red, color: T.white, border: "none", borderRadius: 8, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 1, cursor: busy ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
               {busy ? "ACCEPTING…" : "ACCEPT AND SCHEDULE DEMO"}
@@ -18679,7 +18746,7 @@ function DemoRequestFlow({ bounty, submission, currentUserId, isGuest, onGuestTa
               {proposalDays.length > 0 && (
                 <div>
                   <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.5, marginBottom: 6 }}>2. Pick a time slot for each day</div>
-                  <DemoSlotPicker days={proposalDays} slotsByDay={proposalSlots} onSetSlot={setProposalSlotFor} onRemoveDay={removeProposalDay} />
+                  <DemoSlotPicker days={proposalDays} slotsByDay={proposalSlots} onSetSlot={setProposalSlotFor} onRemoveDay={removeProposalDay} specificTimesByDay={proposalSpecificTimes} onSetSpecificTime={setProposalSpecificTimeFor} />
                 </div>
               )}
               <div>
@@ -18774,8 +18841,14 @@ function DemoRequestFlow({ bounty, submission, currentUserId, isGuest, onGuestTa
                   const seedDays = Array.isArray(draft.proposal_days) ? draft.proposal_days : [];
                   setProposalDays(seedDays.map(d => d.date));
                   const slotMap = {};
-                  seedDays.forEach(d => { if (d && d.date) slotMap[d.date] = d.slot || null; });
+                  const specMap = {};
+                  seedDays.forEach(d => {
+                    if (!d || !d.date) return;
+                    slotMap[d.date] = d.slot || null;
+                    if (d.specific_time) specMap[d.date] = d.specific_time;
+                  });
                   setProposalSlots(slotMap);
+                  setProposalSpecificTimes(specMap);
                   setProposalLat(draft.proposal_meeting_lat != null ? draft.proposal_meeting_lat : (bounty.demo_lat || null));
                   setProposalLng(draft.proposal_meeting_lng != null ? draft.proposal_meeting_lng : (bounty.demo_lng || null));
                   setProposalLocationLabel(draft.proposal_meeting_label || "");
@@ -20038,8 +20111,8 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
       console.error("[claim_bounty]", res.error);
       // Surface the server message so the user sees why the tap did nothing.
       // Friendlier wording for the most common case.
-      const msg = /all slots are claimed/i.test(res.error)
-        ? "All slots are already claimed. Check back if someone withdraws."
+      const msg = /all slots (are )?(claimed|filled)/i.test(res.error)
+        ? "All submission slots are filled — this bounty is done."
         : /deadline/i.test(res.error) ? "This bounty has expired."
         : /not open/i.test(res.error) ? "This bounty isn't open anymore."
         : res.error;
@@ -20397,7 +20470,12 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
               return b.status === "approved" || b.status === "completed";
             }).map(b => {
               const expanded = expandedBounty === b.id;
-              const slotsLeft = b.slots - b.claimed;
+              // Slot cap is now driven by SUBMITTED count, not claims —
+              // see migration 20260629_bounty_slot_cap_on_submitted.sql.
+              // claimed_slots stays as an informational "X working on it"
+              // counter. slotsLeft kept here to preserve existing button
+              // visibility logic; the server will reject if the cap is hit.
+              const slotsLeft = Math.max(0, b.slots - b.claimed);
               return (
                 <div key={b.id} onClick={() => setExpandedBounty(expanded ? null : b.id)} style={{ background: T.darkCard, borderRadius: 12, overflow: "hidden", cursor: "pointer", border: b.status === "completed" ? `1px solid ${T.green}20` : b.status === "in_progress" ? `1px solid ${T.copper}25` : b.status === "submitted" ? `1px solid #C0A06025` : `1px solid ${T.charcoal}` }}>
                   <div style={{ padding: "14px 16px" }}>
@@ -20437,7 +20515,7 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
                           <span style={{ fontFamily: sans, fontSize: 9, color: "#C0A060", fontWeight: 600 }}>UNDER REVIEW</span>
                         </div>
                       ) : (
-                        <span style={{ fontFamily: sans, fontSize: 9, color: slotsLeft <= 1 ? T.red : T.tertiary, fontWeight: 600 }}>{slotsLeft} SLOT{slotsLeft !== 1 ? "S" : ""} LEFT</span>
+                        <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, fontWeight: 600 }}>{b.claimed || 0} CLAIMED · {b.slots} {b.slots === 1 ? "SLOT" : "SLOTS"}</span>
                       )}
                     </div>
                     <h3 style={{ fontFamily: sans, fontSize: 15, color: T.white, margin: "0 0 6px", fontWeight: 600 }}>{b.title}</h3>
@@ -20473,7 +20551,13 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
                           <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{b.claimed}/{b.slots} claimed</span>
                         </div>
                       </div>
-                      {b.status === "open" && slotsLeft > 0 && (
+                      {/* CLAIM is always offered while the bounty is open —
+                          the submitted-count cap (post-2026-06-29) lives
+                          server-side, so the click might still bounce
+                          back with "all slots filled" if another claimer
+                          beat them to the punch. startBounty surfaces
+                          that as a friendly toast. */}
+                      {b.status === "open" && (
                         <>
                           <button onClick={(e) => { e.stopPropagation(); startBounty(b.id); }} disabled={claimingId === b.id} style={{ width: "100%", padding: "12px", background: T.red, color: T.white, fontFamily: sans, fontSize: 12, fontWeight: 700, borderRadius: 8, border: "none", cursor: claimingId === b.id ? "wait" : "pointer", letterSpacing: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: claimingId === b.id ? 0.6 : 1 }}>
                             <Target size={14} color={T.white} />
@@ -20483,12 +20567,6 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
                             <div style={{ marginTop: 8, padding: "8px 12px", background: `${T.red}15`, border: `1px solid ${T.red}40`, borderRadius: 6, fontFamily: serif, fontSize: 12, color: T.white, lineHeight: 1.4 }}>{claimError.message}</div>
                           )}
                         </>
-                      )}
-                      {b.status === "open" && slotsLeft <= 0 && (
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0 0" }}>
-                          <Lock size={14} color={T.tertiary} />
-                          <span style={{ fontFamily: serif, fontSize: 12, color: T.tertiary }}>All slots are claimed. Check back if someone withdraws.</span>
-                        </div>
                       )}
                       {b.status === "in_progress" && (
                         <div style={{ display: "flex", gap: 8 }}>
@@ -20535,12 +20613,11 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
                               <div style={{ fontFamily: serif, fontSize: 12, color: T.white, lineHeight: 1.5 }}>{b.reviewerNotes}</div>
                             </div>
                           )}
-                          {slotsLeft > 0 ? (
-                            <button onClick={(e) => { e.stopPropagation(); startBounty(b.id); }} disabled={claimingId === b.id} style={{ width: "100%", padding: "12px", background: T.darkCard, color: T.copper, fontFamily: sans, fontSize: 12, fontWeight: 700, borderRadius: 8, border: `1px solid ${T.copper}40`, cursor: claimingId === b.id ? "wait" : "pointer", letterSpacing: 1 }}>
-                              CLAIM AGAIN
-                            </button>
-                          ) : (
-                            <div style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, padding: "8px 0 0" }}>No slots remaining.</div>
+                          <button onClick={(e) => { e.stopPropagation(); startBounty(b.id); }} disabled={claimingId === b.id} style={{ width: "100%", padding: "12px", background: T.darkCard, color: T.copper, fontFamily: sans, fontSize: 12, fontWeight: 700, borderRadius: 8, border: `1px solid ${T.copper}40`, cursor: claimingId === b.id ? "wait" : "pointer", letterSpacing: 1 }}>
+                            CLAIM AGAIN
+                          </button>
+                          {claimError && claimError.bountyId === b.id && (
+                            <div style={{ marginTop: 8, padding: "8px 12px", background: `${T.red}15`, border: `1px solid ${T.red}40`, borderRadius: 6, fontFamily: serif, fontSize: 12, color: T.white, lineHeight: 1.4 }}>{claimError.message}</div>
                           )}
                         </div>
                       )}
