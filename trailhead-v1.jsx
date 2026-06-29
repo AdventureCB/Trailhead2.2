@@ -19423,7 +19423,12 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
         )}
 
         {template.sections.map((section) => {
-          if (section.fixed) {
+          // FIXED-h2/h3: classic section divider rendered as a copper
+          // sub-header. Other fixed types fall through to their
+          // type-specific locked branches below (photos / hero_image /
+          // bullet_list / text get their own read-only rendering so
+          // their content is actually surfaced — not just a label).
+          if (section.fixed && (section.type === "h2" || section.type === "h3")) {
             return (
               <div key={section.id} style={{ display: "flex", alignItems: "center", gap: 8, margin: "20px 0 8px" }}>
                 <span style={{ fontFamily: sans, fontSize: 8, color: T.white, background: blockLabelColor(section.type), padding: "2px 5px", borderRadius: 3, fontWeight: 700, letterSpacing: 0.5 }}>{blockLabel(section.type)}</span>
@@ -19437,6 +19442,43 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
             const updateCaption = (photoId, caption) => {
               setFields(prev => ({ ...prev, [section.id]: (prev[section.id] || []).map(p => p.id === photoId ? { ...p, caption } : p) }));
             };
+            // FIXED photos section: admin-owned read-only gallery.
+            // Renders any default_photos as a grid with no add / remove
+            // / caption-edit affordances. Participant sees them but
+            // can't touch.
+            if (section.fixed) {
+              const fixedPhotos = Array.isArray(section.default_photos) ? section.default_photos : [];
+              return (
+                <div key={section.id} style={{ margin: "16px 0" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                    <Camera size={14} color={T.copper} />
+                    <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>{section.label}</span>
+                    <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <Lock size={9} color={T.copper} />
+                      <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 700, letterSpacing: 0.5 }}>PREFILLED</span>
+                    </span>
+                  </div>
+                  {fixedPhotos.length === 0 ? (
+                    <div style={{ padding: 14, fontFamily: serif, fontSize: 12, color: T.tertiary, textAlign: "center", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8 }}>No media set.</div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                      {fixedPhotos.map((p, pi) => (
+                        <div key={pi} style={{ borderRadius: 12, overflow: "hidden", border: `1px solid ${T.charcoal}`, background: T.darkCard }}>
+                          {p.type === "video" ? (
+                            <video src={(p.url || "") + "#t=0.001"} preload="auto" muted playsInline controls style={{ width: "100%", maxHeight: 280, objectFit: "contain", display: "block", background: "#000" }} />
+                          ) : (
+                            <img src={txImg(p.url, 480)} alt={p.alt || ""} style={{ width: "100%", height: 220, objectFit: "cover", display: "block" }} />
+                          )}
+                          {p.caption && (
+                            <div style={{ padding: "8px 10px", fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.4 }}>{p.caption}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            }
             return (
               <div key={section.id} style={{ margin: "16px 0" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
@@ -19527,6 +19569,34 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
 
           if (section.type === "hero_image") {
             const hero = fields[section.id];
+            // FIXED hero: admin-owned read-only display. Shows the
+            // prefilled image (default_value) without replace/remove
+            // affordances or upload UI.
+            if (section.fixed) {
+              const fixedHero = (section.default_value && section.default_value.url) ? section.default_value : null;
+              return (
+                <div key={section.id} style={{ margin: "16px 0" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                    <Image size={14} color={T.copper} />
+                    <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>{section.label}</span>
+                    <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <Lock size={9} color={T.copper} />
+                      <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 700, letterSpacing: 0.5 }}>PREFILLED</span>
+                    </span>
+                  </div>
+                  {fixedHero ? (
+                    <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: `1px solid ${T.charcoal}` }}>
+                      <img src={txImg(fixedHero.url, 480)} alt={fixedHero.alt || ""} style={{ width: "100%", height: 240, objectFit: "cover", display: "block" }} />
+                      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(transparent, rgba(0,0,0,0.7))", padding: "24px 14px 12px" }}>
+                        <span style={{ fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 }}>{fields["title"] || "Your Title Here"}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ padding: 14, fontFamily: serif, fontSize: 12, color: T.tertiary, textAlign: "center", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 8 }}>No hero set.</div>
+                  )}
+                </div>
+              );
+            }
             return (
               <div key={section.id} style={{ margin: "16px 0" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
@@ -19767,6 +19837,36 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
           if (section.type === "bullet_list") {
             const items = fields[section.id] || [""];
             const listColor = section.color || T.white;
+            // FIXED bullet_list: admin-owned read-only list. Renders
+            // default_value bullets as a static list; participant
+            // sees no inputs / no add buttons.
+            if (section.fixed) {
+              const fixedBullets = Array.isArray(section.default_value) ? section.default_value.filter(x => x && String(x).trim()) : [];
+              return (
+                <div key={section.id} style={{ margin: "12px 0" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                    {section.icon === "check" ? <CheckCircle size={14} color={listColor} /> : <X size={14} color={listColor} />}
+                    <span style={{ fontFamily: sans, fontSize: 12, color: listColor, fontWeight: 700 }}>{section.label}</span>
+                    <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <Lock size={9} color={T.copper} />
+                      <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 700, letterSpacing: 0.5 }}>PREFILLED</span>
+                    </span>
+                  </div>
+                  {fixedBullets.length === 0 ? (
+                    <div style={{ padding: 10, fontFamily: serif, fontSize: 12, color: T.tertiary }}>No bullets set.</div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {fixedBullets.map((b, i) => (
+                        <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                          <span style={{ color: listColor, fontSize: 18, lineHeight: 1.2, flexShrink: 0 }}>•</span>
+                          <span style={{ fontFamily: serif, fontSize: 13, color: T.white, lineHeight: 1.5 }}>{b}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            }
             // First N bullets are admin-prefilled and locked. User can edit
             // and remove only items at index >= prefillCount.
             const prefillCount = Array.isArray(section.default_value) ? section.default_value.filter(x => x && String(x).trim()).length : 0;
@@ -19825,14 +19925,17 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
 
           // Text fields (h1, h2, h3, p, short). For h2/h3, the fixed
           // variant short-circuited above into the read-only header
-          // render; reaching here means user-filled. Include h2 in
-          // isHeading so the input is styled as a heading.
+          // render; reaching here means user-filled or h1/p/short. h2 is
+          // in isHeading so the input is styled as a heading when user-
+          // filled.
           const isH1 = section.type === "h1";
           const isHeading = isH1 || section.type === "h2" || section.type === "h3";
           const isShort = section.type === "short";
           const isLong = section.type === "p";
-          // Prefilled text is locked — admin's content can't be edited.
-          const textLocked = !!(section.default_value && String(section.default_value).trim());
+          // Locked either because admin flipped the FIXED toggle OR
+          // (legacy path) because admin set a default_value with no
+          // toggle. Both surface the same read-only treatment.
+          const textLocked = !!section.fixed || !!(section.default_value && String(section.default_value).trim());
           return (
             <div key={section.id} style={{ margin: "12px 0" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
@@ -33121,15 +33224,18 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
                   : s.type === "route_builder" ? T.purple || "#8B6FAF"
                   : T.tertiary;
                 const isHeadingType = s.type === "h2" || s.type === "h3";
-                // For h2/h3, admin can pick FIXED (label-style, locked to
-                // admin's text) or USER-FILLED (participant types their
-                // own heading; can be marked required). Other types use
-                // the existing rules.
-                const showPlaceholder = ["p", "short", "h1"].includes(s.type) || s.type === "photos" || s.type === "hero_image" || s.type === "bullet_list" || (isHeadingType && !s.fixed);
+                // The FIXED / USER FILLS toggle now applies to every
+                // "fixable" type — text, headings, media, bullets. When
+                // FIXED, admin owns the content + the participant sees
+                // it read-only with no input UI. When USER FILLS, the
+                // participant inputs the content (with admin's optional
+                // editable prefill where applicable).
+                const isFixableType = ["h1","h2","h3","p","short","photos","hero_image","bullet_list"].includes(s.type);
+                const showPlaceholder = !s.fixed && (["p", "short", "h1"].includes(s.type) || s.type === "photos" || s.type === "hero_image" || s.type === "bullet_list" || isHeadingType);
                 const showRequired = !s.fixed;
-                const showMin = s.type === "photos";
+                const showMin = !s.fixed && s.type === "photos";
                 const showFixedValue = s.fixed && isHeadingType;
-                const showHeadingSourceToggle = isHeadingType;
+                const showHeadingSourceToggle = isFixableType;
                 const showOptions = s.type === "tag_select" || s.type === "select";
                 const showMax = s.type === "rating";
                 return (
@@ -33157,14 +33263,18 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
                       </div>
                       {showHeadingSourceToggle && (
                         <div>
-                          <FieldLabel>Heading source</FieldLabel>
+                          <FieldLabel>Content source</FieldLabel>
                           <div style={{ display: "flex", gap: 6 }}>
                             <button
-                              onClick={() => updateSection(s.id, { fixed: true, value: s.value || "Heading", required: undefined, placeholder: undefined })}
+                              onClick={() => updateSection(s.id, isHeadingType
+                                ? { fixed: true, value: s.value || "Heading", required: undefined, placeholder: undefined }
+                                : { fixed: true, required: undefined, placeholder: undefined })}
                               style={{ flex: 1, padding: "8px 10px", borderRadius: 6, border: `1px solid ${s.fixed ? T.copper : T.charcoal}`, background: s.fixed ? `${T.copper}20` : T.darkBg, color: s.fixed ? T.copper : T.tertiary, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.4, cursor: "pointer" }}
                             >FIXED (admin sets)</button>
                             <button
-                              onClick={() => updateSection(s.id, { fixed: false, value: undefined })}
+                              onClick={() => updateSection(s.id, isHeadingType
+                                ? { fixed: false, value: undefined }
+                                : { fixed: false })}
                               style={{ flex: 1, padding: "8px 10px", borderRadius: 6, border: `1px solid ${!s.fixed ? T.copper : T.charcoal}`, background: !s.fixed ? `${T.copper}20` : T.darkBg, color: !s.fixed ? T.copper : T.tertiary, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.4, cursor: "pointer" }}
                             >USER FILLS</button>
                           </div>
