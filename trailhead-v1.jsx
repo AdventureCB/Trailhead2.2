@@ -20455,12 +20455,35 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
             <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: 0, lineHeight: 1.5 }}>Complete bounties to earn cash credit and bonus points. All submissions are reviewed by admins before rewards are issued.</p>
           </div>
 
-          {/* Filter */}
-          <div style={{ display: "flex", gap: 6, padding: "10px 16px", overflowX: "auto" }}>
-            {["OPEN", "MINE", "REVIEW", "DONE", "ALL"].map(f => (
-              <button key={f} onClick={() => setBountyFilter(f)} style={{ padding: "6px 12px", borderRadius: 14, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 10, fontWeight: 600, letterSpacing: 0.5, background: bountyFilter === f ? T.red : T.darkCard, color: bountyFilter === f ? T.white : T.tertiary, whiteSpace: "nowrap" }}>{f}</button>
-            ))}
-          </div>
+          {/* Filter — pills flex to fill the row + each carries a count
+              so the user can see how much is in each bucket at a glance. */}
+          {(() => {
+            const matchesFilter = (b, f) => {
+              if (f === "ALL") return true;
+              const subStatus = b.submission && b.submission.status;
+              const isActiveOnMine = subStatus === "claimed" || subStatus === "in_progress" || subStatus === "changes_requested";
+              if (f === "OPEN") return !isActiveOnMine && b.status === "open";
+              if (f === "MINE") return isActiveOnMine;
+              if (f === "REVIEW") return b.status === "submitted";
+              return b.status === "approved" || b.status === "completed";
+            };
+            const filters = ["OPEN", "MINE", "REVIEW", "DONE", "ALL"];
+            const counts = {};
+            filters.forEach(f => { counts[f] = bounties.filter(b => matchesFilter(b, f)).length; });
+            return (
+              <div style={{ display: "flex", gap: 6, padding: "10px 16px" }}>
+                {filters.map(f => {
+                  const active = bountyFilter === f;
+                  return (
+                    <button key={f} onClick={() => setBountyFilter(f)} style={{ flex: 1, minWidth: 0, padding: "10px 4px", borderRadius: 10, border: active ? `1px solid ${T.red}` : `1px solid ${T.charcoal}`, cursor: "pointer", fontFamily: sans, fontWeight: 700, background: active ? T.red : T.darkCard, color: active ? T.white : T.tertiary, display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                      <span style={{ fontSize: 16, fontWeight: 800, lineHeight: 1, color: active ? T.white : (counts[f] > 0 ? T.copper : T.tertiary), fontVariantNumeric: "tabular-nums" }}>{counts[f]}</span>
+                      <span style={{ fontSize: 9, letterSpacing: 0.8 }}>{f}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })()}
 
           {/* Bounty Cards */}
           <div style={{ padding: "0 16px", display: "flex", flexDirection: "column", gap: 8 }}>
