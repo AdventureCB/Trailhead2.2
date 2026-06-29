@@ -51100,7 +51100,7 @@ export default function Trailhead() {
               onClose={() => { setDetailTripId(null); setDetailTripInitialEdit(false); }}
               onOpenDrop={(slug) => { setDetailTripId(null); setPendingGearDropSlug(slug); }}
               onViewUser={openUserProfile}
-              onShareIntent={(payload) => openShareIntent({ kind: "trip", data: { id: trip.id, name: trip.name, slug: trip.slug, description: (payload && payload.drop && payload.drop.title) || trip.name, hero_img: trip.hero_img } })}
+              onShareIntent={(payload) => openShareIntent({ kind: "trip", data: { ...trip, description: (payload && payload.drop && payload.drop.title) || trip.description || trip.name } })}
             />
           );
         }
