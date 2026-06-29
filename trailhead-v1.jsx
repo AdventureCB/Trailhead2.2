@@ -19043,11 +19043,28 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
     });
     // Overlay saved draft. For fixed sections, prefill wins (drop any draft
     // value the legacy form may have persisted for a fixed field).
+    // Also: any draft entry marked _locked: true is a stale snapshot of an
+    // admin-prefilled image — replace it with whatever's currently in the
+    // section (in case the admin re-uploaded or cropped after the draft
+    // last auto-saved). Otherwise the participant sees the old URL forever.
     if (draft && typeof draft === "object") {
       const fixedIds = new Set(template.sections.filter(s => s.fixed).map(s => s.id));
       Object.entries(draft).forEach(([k, v]) => {
         if (fixedIds.has(k)) return;
         if (v == null) return;
+        // Photos arrays: re-use fresh prefills from init (they're all
+        // _locked); only keep the user-added (non-locked) entries from
+        // the draft, appended after the prefills.
+        if (Array.isArray(v)) {
+          const fresh = Array.isArray(init[k]) ? init[k] : [];
+          const userAdded = v.filter(p => p && !p._locked);
+          init[k] = [...fresh, ...userAdded];
+          return;
+        }
+        // Hero / single-object: if draft was a stale prefill (carries
+        // _locked), discard it so the fresh init wins. Otherwise the user
+        // replaced it with their own upload and we keep the draft.
+        if (v && typeof v === "object" && v._locked) return;
         init[k] = v;
       });
     }
