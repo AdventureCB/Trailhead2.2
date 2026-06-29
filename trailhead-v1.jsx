@@ -32216,6 +32216,13 @@ function BountySubmissionReviewScreen({ submission, onBack, onApprove, onRequest
 /* ─── BOUNTIES ADMIN — list w/ tabs + NEW button (Phase 4) ─── */
 function BountiesAdminScreen({ bounties, reviewQueue, onLoadReviewQueue, onBack, onOpenEditor, onNewBounty, onOpenReview }) {
   const [tab, setTab] = useState("review"); // review | draft | open | completed | archived
+  // Approved-submission map for the COMPLETED tab. Keyed by bounty_id →
+  // array of winner rows ({user_id, handle, full_name, avatar_url,
+  // reward_cents, reward_points, reviewed_at}). Loaded lazily when the
+  // admin first lands on the COMPLETED tab — single query that joins
+  // bounty_submissions → profiles for every bounty in the closed bucket.
+  const [completedWinners, setCompletedWinners] = useState({});
+  const [winnersLoading, setWinnersLoading] = useState(false);
   const counts = useMemo(() => {
     const c = { draft: 0, open: 0, review: (reviewQueue || []).length, completed: 0, archived: 0 };
     (bounties || []).forEach(b => {
@@ -32234,6 +32241,46 @@ function BountiesAdminScreen({ bounties, reviewQueue, onLoadReviewQueue, onBack,
   useEffect(() => {
     if (tab === "review" && onLoadReviewQueue) onLoadReviewQueue();
   }, [tab]);
+  // Lazy-load winners (approved submissions + profile snapshot) for the
+  // COMPLETED tab. Single round-trip: bulk select on bounty_submissions
+  // filtered by approved + the closed bounty ids, then a profiles fetch
+  // for the unique user ids. Cheap because completed buckets are small.
+  useEffect(() => {
+    if (tab !== "completed") return;
+    const closedIds = (bounties || []).filter(b => b.status === "closed").map(b => b.id);
+    if (closedIds.length === 0) { setCompletedWinners({}); return; }
+    let cancelled = false;
+    (async () => {
+      setWinnersLoading(true);
+      try {
+        const { data: subs, error } = await supabase
+          .from("bounty_submissions")
+          .select("id, bounty_id, user_id, reward_cents, reward_points, reviewed_at, status")
+          .in("bounty_id", closedIds)
+          .eq("status", "approved")
+          .order("reviewed_at", { ascending: true });
+        if (cancelled) return;
+        if (error) { console.warn("[winners] subs fetch failed", error); setWinnersLoading(false); return; }
+        const userIds = Array.from(new Set((subs || []).map(s => s.user_id).filter(Boolean)));
+        let profMap = {};
+        if (userIds.length > 0) {
+          const { data: profs } = await supabase
+            .from("profiles")
+            .select("id, handle, full_name, avatar_url")
+            .in("id", userIds);
+          (profs || []).forEach(p => { profMap[p.id] = p; });
+        }
+        if (cancelled) return;
+        const byBounty = {};
+        (subs || []).forEach(s => {
+          (byBounty[s.bounty_id] = byBounty[s.bounty_id] || []).push({ ...s, profile: profMap[s.user_id] || null });
+        });
+        setCompletedWinners(byBounty);
+      } catch (e) { console.warn("[winners] fetch threw", e); }
+      finally { if (!cancelled) setWinnersLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [tab, bounties]);
   const filtered = useMemo(() => {
     const all = bounties || [];
     if (tab === "draft") return all.filter(b => b.status === "draft");
@@ -32339,6 +32386,10 @@ function BountiesAdminScreen({ bounties, reviewQueue, onLoadReviewQueue, onBack,
         {tab !== "review" && filtered.map(b => {
           const diffColor = b.difficulty === "Hard" ? T.red : b.difficulty === "Easy" ? T.green : T.copper;
           const slotsLeft = (b.total_slots || 1) - (b.claimed_slots || 0);
+          // Winners list for completed bounties — pulled from the bulk
+          // fetch above; surfaced under the card so admin can see who
+          // got paid + how much without opening the editor.
+          const winners = tab === "completed" ? (completedWinners[b.id] || []) : [];
           return (
             <button key={b.id} onClick={() => onOpenEditor(b.id)} style={{ background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 12, padding: 14, cursor: "pointer", textAlign: "left", display: "flex", flexDirection: "column", gap: 8 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
@@ -32365,6 +32416,48 @@ function BountiesAdminScreen({ bounties, reviewQueue, onLoadReviewQueue, onBack,
                   {b.claimed_slots || 0}/{b.total_slots || 1} CLAIMED
                 </span>
               </div>
+              {tab === "completed" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4, paddingTop: 10, borderTop: `1px solid ${T.charcoal}` }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <Trophy size={11} color={T.copper} />
+                    <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 700, letterSpacing: 1 }}>
+                      {winners.length === 0 ? (winnersLoading ? "LOADING WINNERS…" : "NO WINNERS RECORDED") : `${winners.length} WINNER${winners.length === 1 ? "" : "S"}`}
+                    </span>
+                  </div>
+                  {winners.map(w => {
+                    const p = w.profile;
+                    const name = (p && (p.full_name || p.handle)) || "User";
+                    const handle = (p && p.handle) ? `@${p.handle}` : "";
+                    const initial = (name.charAt(0) || "?").toUpperCase();
+                    const awardedAt = w.reviewed_at ? new Date(w.reviewed_at).toLocaleDateString() : "";
+                    return (
+                      <div key={w.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <div style={{ width: 24, height: 24, borderRadius: "50%", background: T.charcoal, overflow: "hidden", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          {p && p.avatar_url
+                            ? <img src={p.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                            : <span style={{ fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.white }}>{initial}</span>}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+                          <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+                          {(handle || awardedAt) && (
+                            <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>
+                              {handle}{handle && awardedAt ? " · " : ""}{awardedAt && `approved ${awardedAt}`}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                          {(w.reward_cents || 0) > 0 && (
+                            <span style={{ fontFamily: sans, fontSize: 11, color: T.green, fontWeight: 700 }}>${((w.reward_cents || 0) / 100).toFixed(0)}</span>
+                          )}
+                          {(w.reward_points || 0) > 0 && (
+                            <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600 }}>+{w.reward_points}p</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </button>
           );
         })}
