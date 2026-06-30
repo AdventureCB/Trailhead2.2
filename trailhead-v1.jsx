@@ -12418,7 +12418,7 @@ function TripPinFullscreen({ initialPins, initialPhotos, onClose, onSave, curren
   );
 }
 
-function TripReportEditor({ trip, onClose, onSave, onPublish, onDelete, onAddRouteManual, onAddRouteLive, currentUserId, userBuilds }) {
+function TripReportEditor({ trip, onClose, onSave, onPublish, onDelete, onAddRouteManual, onAddRouteLive, currentUserId, userBuilds, bountySubmissionId, onSubmitForBountyReview }) {
   const safe = trip || {};
   const isMine = currentUserId && safe.user_id === currentUserId;
   const isPlan = safe.kind === "plan";
@@ -12970,17 +12970,35 @@ function TripReportEditor({ trip, onClose, onSave, onPublish, onDelete, onAddRou
         {/* Publish + Delete (owner only) */}
         {isMine && (
           <div style={{ padding: "12px 16px 16px", borderTop: `1px solid ${T.charcoal}` }}>
-            {safe.status === "draft" ? (
-              <button
-                onClick={() => setConfirmingPublish(true)}
-                disabled={!hasRoute}
-                style={{ width: "100%", padding: "14px", borderRadius: 10, background: hasRoute ? T.green : T.charcoal, border: "none", cursor: hasRoute ? "pointer" : "default", fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 1, opacity: hasRoute ? 1 : 0.5, marginBottom: 10 }}
-              >{hasRoute ? "PUBLISH TRIP REPORT" : "ADD A ROUTE TO PUBLISH"}</button>
+            {/* Bounty mode — swap PUBLISH for SUBMIT FOR REVIEW. The
+                draft stays as kind='report' / status='draft' until admin
+                approves; admin_approve_bounty flips it to published. */}
+            {bountySubmissionId ? (
+              safe.status === "draft" ? (
+                <button
+                  onClick={() => setConfirmingPublish(true)}
+                  disabled={!hasRoute}
+                  style={{ width: "100%", padding: "14px", borderRadius: 10, background: hasRoute ? T.red : T.charcoal, border: "none", cursor: hasRoute ? "pointer" : "default", fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 1, opacity: hasRoute ? 1 : 0.5, marginBottom: 10 }}
+                >{hasRoute ? "SUBMIT FOR ADMIN REVIEW" : "ADD A ROUTE TO SUBMIT"}</button>
+              ) : (
+                <div style={{ padding: "12px", borderRadius: 8, background: `${T.copper}15`, border: `1px solid ${T.copper}40`, marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
+                  <CheckCircle size={14} color={T.copper} />
+                  <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600 }}>Bounty submitted — waiting for admin review</span>
+                </div>
+              )
             ) : (
-              <div style={{ padding: "12px", borderRadius: 8, background: `${T.green}15`, border: `1px solid ${T.green}40`, marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
-                <CheckCircle size={14} color={T.green} />
-                <span style={{ fontFamily: sans, fontSize: 11, color: T.green, fontWeight: 600 }}>Published — visible to the community</span>
-              </div>
+              safe.status === "draft" ? (
+                <button
+                  onClick={() => setConfirmingPublish(true)}
+                  disabled={!hasRoute}
+                  style={{ width: "100%", padding: "14px", borderRadius: 10, background: hasRoute ? T.green : T.charcoal, border: "none", cursor: hasRoute ? "pointer" : "default", fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 1, opacity: hasRoute ? 1 : 0.5, marginBottom: 10 }}
+                >{hasRoute ? "PUBLISH TRIP REPORT" : "ADD A ROUTE TO PUBLISH"}</button>
+              ) : (
+                <div style={{ padding: "12px", borderRadius: 8, background: `${T.green}15`, border: `1px solid ${T.green}40`, marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
+                  <CheckCircle size={14} color={T.green} />
+                  <span style={{ fontFamily: sans, fontSize: 11, color: T.green, fontWeight: 600 }}>Published — visible to the community</span>
+                </div>
+              )
             )}
             <button
               onClick={() => setConfirmingDelete(true)}
@@ -12995,11 +13013,30 @@ function TripReportEditor({ trip, onClose, onSave, onPublish, onDelete, onAddRou
       {confirmingPublish && createPortal(
         <div onClick={() => setConfirmingPublish(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 1500 }}>
           <div onClick={e => e.stopPropagation()} style={{ background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 12, padding: 20, width: "100%", maxWidth: 360 }}>
-            <p style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, margin: "0 0 8px" }}>Publish this trip report?</p>
-            <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 16px", lineHeight: 1.5 }}>Anyone in the community will be able to read it. You can still edit after publishing.</p>
+            <p style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, margin: "0 0 8px" }}>
+              {bountySubmissionId ? "Submit this for admin review?" : "Publish this trip report?"}
+            </p>
+            <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "0 0 16px", lineHeight: 1.5 }}>
+              {bountySubmissionId
+                ? "Admin reviews submitted bounties before publishing. You'll be notified when it's approved (or if changes are needed)."
+                : "Anyone in the community will be able to read it. You can still edit after publishing."}
+            </p>
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={() => setConfirmingPublish(false)} style={{ flex: 1, padding: "11px", borderRadius: 8, background: T.charcoal, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 600 }}>CANCEL</button>
-              <button onClick={async () => { setConfirmingPublish(false); await handleSave(); await onPublish(); }} style={{ flex: 1, padding: "11px", borderRadius: 8, background: T.green, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>PUBLISH</button>
+              <button
+                onClick={async () => {
+                  setConfirmingPublish(false);
+                  await handleSave();
+                  if (bountySubmissionId && onSubmitForBountyReview) {
+                    await onSubmitForBountyReview();
+                  } else {
+                    await onPublish();
+                  }
+                }}
+                style={{ flex: 1, padding: "11px", borderRadius: 8, background: bountySubmissionId ? T.red : T.green, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}
+              >
+                {bountySubmissionId ? "SUBMIT" : "PUBLISH"}
+              </button>
             </div>
           </div>
         </div>,
@@ -20509,7 +20546,7 @@ function BountyHistoryModal({ onLoad, onClose }) {
 }
 
 /* ─── RANKS / LEADERBOARD SCREEN ─── */
-function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, currentUserId, currentProfile, onLoadLeaderboard, onViewUser, bounties: bountiesFromDB, mySubmissions, isGuest, onGuestTap, onClaimBounty, onSaveBountyDraft, onSubmitBountyRPC, onWithdrawBounty, onUploadBountyPhotos, earnings, onOpenDM, onLoadProfileById, onSendDemoProposal, onSendDmInvite, onRefreshGiftCard, onRequestPayout, onLoadBountyHistory, onLoadGiftCardCode }) {
+function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, currentUserId, currentProfile, onLoadLeaderboard, onViewUser, bounties: bountiesFromDB, mySubmissions, isGuest, onGuestTap, onClaimBounty, onSaveBountyDraft, onSubmitBountyRPC, onWithdrawBounty, onUploadBountyPhotos, earnings, onOpenDM, onLoadProfileById, onSendDemoProposal, onSendDmInvite, onRefreshGiftCard, onRequestPayout, onLoadBountyHistory, onLoadGiftCardCode, onClaimRouteReportBounty, onOpenRouteReportEditor }) {
   const [tab, setTab] = useState("overview"); // overview | leaderboard | bounty | badges
   // Leaderboard state. lbScope = global | following | weekly; lbData[scope]
   // caches rows so switching tabs is instant after the first fetch. Refresh
@@ -20741,14 +20778,30 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
   const startBounty = async (bountyId) => {
     if (isGuest && onGuestTap) { onGuestTap(); return; }
     if (!onClaimBounty) return;
+    const bounty = bounties.find(b => b.id === bountyId);
+    // Route Report flow: route through TripReportEditor instead of the
+    // generic form. The participant gets the full trip-report editor
+    // experience (per-pin notes + photos + reorder + route data).
+    if (bounty && bounty.category === "Route Report" && onClaimRouteReportBounty) {
+      setClaimError(null);
+      setClaimingId(bountyId);
+      const res = await onClaimRouteReportBounty(bountyId, bounty.title);
+      setClaimingId(null);
+      if (res && res.error) {
+        setClaimError({ bountyId, message: res.error });
+        setTimeout(() => setClaimError(prev => prev && prev.bountyId === bountyId ? null : prev), 6000);
+        return;
+      }
+      // Editor opens at root via setEditingTripId inside the helper.
+      setExpandedBounty(null);
+      return;
+    }
     setClaimError(null);
     setClaimingId(bountyId);
     const res = await onClaimBounty(bountyId);
     setClaimingId(null);
     if (res && res.error) {
       console.error("[claim_bounty]", res.error);
-      // Surface the server message so the user sees why the tap did nothing.
-      // Friendlier wording for the most common case.
       const msg = /all slots (are )?(claimed|filled)/i.test(res.error)
         ? "All submission slots are filled — this bounty is done."
         : /deadline/i.test(res.error) ? "This bounty has expired."
@@ -20758,12 +20811,20 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
       setTimeout(() => setClaimError(prev => prev && prev.bountyId === bountyId ? null : prev), 6000);
       return;
     }
-    // Open the form so user can start editing. We don't pass a draft —
-    // submission was just created so it's empty.
     setActiveBountyFormId(bountyId);
     setExpandedBounty(null);
   };
   const resumeBounty = (bountyId) => {
+    const bounty = bounties.find(b => b.id === bountyId);
+    const sub = mySubsByBountyId[bountyId];
+    // Route Report resume → open the linked trip via TripReportEditor.
+    if (bounty && bounty.category === "Route Report" && onOpenRouteReportEditor && sub) {
+      const tripId = sub.draft && sub.draft.trip_report_id;
+      if (tripId) {
+        onOpenRouteReportEditor(sub.id, tripId);
+        return;
+      }
+    }
     setActiveBountyFormId(bountyId);
   };
   const saveDraftFromForm = async (bountyId, fields) => {
@@ -46462,6 +46523,64 @@ export default function Trailhead() {
       return { ok: true, data: row };
     } catch (e) { console.error("[submit_bounty] failed", e); return { error: "Network error" }; }
   };
+
+  // ── Route Report bounties via TripReportEditor (Phase 8.5) ──
+  // Route Report bounty claim opens TripReportEditor pointed at a paired
+  // draft trip_report. The bounty submission's draft jsonb stores the
+  // trip_report_id pointer; the trip carries the actual content. On
+  // admin approval, admin_approve_bounty flips that trip_report to
+  // published instead of inserting a new row.
+  const claimRouteReportBounty = async (bountyId, bountyTitle) => {
+    const claimRes = await claimBounty(bountyId);
+    if (claimRes.error) return claimRes;
+    const submissionId = claimRes.data && claimRes.data.submission_id;
+    if (!submissionId) return { error: "Claim succeeded but no submission id" };
+    // Reclaim path: if a submission already exists w/ a linked trip, reuse it.
+    const existing = myBountySubmissions.find(s => s.id === submissionId);
+    let tripId = existing && existing.draft && existing.draft.trip_report_id;
+    if (!tripId) {
+      const newTrip = await createTripDraft({
+        name: bountyTitle || "Untitled trip report",
+        kind: "report",
+      });
+      if (!newTrip || !newTrip.id) return { error: "Couldn't create paired trip draft" };
+      // Tag the trip w/ the bounty link so admin queries can find it.
+      try {
+        await supabase.from("trip_reports").update({ bounty_submission_id: submissionId }).eq("id", newTrip.id);
+        setTripReports(prev => prev.map(t => t.id === newTrip.id ? { ...t, bounty_submission_id: submissionId } : t));
+      } catch (e) { console.warn("[claimRouteReportBounty] tag failed (non-fatal)", e); }
+      // Save trip_report_id into the bounty submission's draft so the
+      // RESUME path knows which trip to open + admin RPC knows what to
+      // publish.
+      await saveBountyDraft(submissionId, { trip_report_id: newTrip.id });
+      tripId = newTrip.id;
+    }
+    return { ok: true, submissionId, tripId };
+  };
+
+  // Bounty context for the trip editor — when set, TripReportEditor
+  // swaps its PUBLISH button for SUBMIT FOR REVIEW that fires
+  // submitRouteReportFromEditor below.
+  const [routeReportBountyCtx, setRouteReportBountyCtx] = useState(null); // { submissionId, tripId } | null
+  const openRouteReportBountyEditor = (submissionId, tripId) => {
+    if (!submissionId || !tripId) return;
+    setRouteReportBountyCtx({ submissionId, tripId });
+    setEditingTripId(tripId);
+  };
+  const submitRouteReportFromEditor = async () => {
+    if (!routeReportBountyCtx) return { error: "No bounty context" };
+    const { submissionId, tripId } = routeReportBountyCtx;
+    // submit_bounty validates required fields against form_config, but
+    // for Route Report bounties the form_config is just a placeholder
+    // (real data lives on the trip_report). Server accepts the
+    // {trip_report_id: <uuid>} draft as non-empty.
+    const res = await submitBountySubmission(submissionId, { trip_report_id: tripId });
+    if (res && !res.error) {
+      setRouteReportBountyCtx(null);
+      setEditingTripId(null);
+    }
+    return res;
+  };
   // ── Admin bounty review queue (Phase 6) ──
   // Admin-only fetch of all submitted submissions w/ bounty + submitter
   // snapshot. Triggered when admin opens the REVIEW tab; refreshed on
@@ -52726,7 +52845,7 @@ export default function Trailhead() {
             {screen === "ranks" && (isGuest
               ? <GuestGateScreen title="RANKS REQUIRE AN ACCOUNT" subtitle="Sign in to see the leaderboard and start earning points from your posts, routes and builds." onSignIn={goToLoginFromGuest} />
               : (isAdmin || isBetaTester)
-                ? <RanksScreen myPoints={myTotalPoints} pointsBreakdown={friendlyPointsBreakdown} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentProfile={currentProfile} onLoadLeaderboard={loadLeaderboard} onViewUser={openUserProfile} bounties={bounties} mySubmissions={myBountySubmissions} isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onClaimBounty={claimBounty} onSaveBountyDraft={saveBountyDraft} onSubmitBountyRPC={submitBountySubmission} onWithdrawBounty={withdrawBountySubmission} onUploadBountyPhotos={uploadBountyPhotoFiles} earnings={bountyEarnings} onOpenDM={openDM} onLoadProfileById={loadProfileById} onSendDemoProposal={sendDemoProposalCard} onSendDmInvite={sendDmInvite} onRefreshGiftCard={refreshGiftCardBalance} onRequestPayout={requestBountyPayout} onLoadBountyHistory={loadBountyHistory} onLoadGiftCardCode={loadGiftCardCode} />
+                ? <RanksScreen myPoints={myTotalPoints} pointsBreakdown={friendlyPointsBreakdown} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentProfile={currentProfile} onLoadLeaderboard={loadLeaderboard} onViewUser={openUserProfile} bounties={bounties} mySubmissions={myBountySubmissions} isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onClaimBounty={claimBounty} onSaveBountyDraft={saveBountyDraft} onSubmitBountyRPC={submitBountySubmission} onWithdrawBounty={withdrawBountySubmission} onUploadBountyPhotos={uploadBountyPhotoFiles} earnings={bountyEarnings} onOpenDM={openDM} onLoadProfileById={loadProfileById} onSendDemoProposal={sendDemoProposalCard} onSendDmInvite={sendDmInvite} onRefreshGiftCard={refreshGiftCardBalance} onRequestPayout={requestBountyPayout} onLoadBountyHistory={loadBountyHistory} onLoadGiftCardCode={loadGiftCardCode} onClaimRouteReportBounty={claimRouteReportBounty} onOpenRouteReportEditor={openRouteReportBountyEditor} />
                 : <div style={{ padding: 32, textAlign: "center", fontFamily: serif, fontSize: 14, color: T.tertiary, lineHeight: 1.6 }}>Ranks is coming in a future release.</div>
             )}
             {screen === "admin" && (isAdmin
@@ -52968,7 +53087,7 @@ export default function Trailhead() {
             trip={trip}
             userBuilds={userBuilds}
             currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id}
-            onClose={() => setEditingTripId(null)}
+            onClose={() => { setEditingTripId(null); setRouteReportBountyCtx(null); }}
             onSave={(updates) => updateTripDraft(trip.id, updates)}
             onPublish={async () => {
               const updated = await publishTripDraft(trip.id);
@@ -52977,9 +53096,12 @@ export default function Trailhead() {
             onDelete={async () => {
               await deleteTripDraft(trip.id);
               setEditingTripId(null);
+              setRouteReportBountyCtx(null);
             }}
             onAddRouteManual={() => { setPendingTripDraftId(trip.id); setEditingTripId(null); setShowTripPinFullscreen(true); }}
             onAddRouteLive={() => { setPendingTripDraftId(trip.id); setEditingTripId(null); setShowRecorder(true); }}
+            bountySubmissionId={routeReportBountyCtx && routeReportBountyCtx.tripId === trip.id ? routeReportBountyCtx.submissionId : null}
+            onSubmitForBountyReview={submitRouteReportFromEditor}
           />
         );
       })()}
