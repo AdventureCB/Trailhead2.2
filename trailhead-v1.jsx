@@ -12492,9 +12492,15 @@ function TripReportEditor({ trip, onClose, onSave, onPublish, onDelete, onAddRou
   useEffect(() => {
     if (!isMine) return;
     if (!safe.start_lat || !safe.start_lng) return;
-    const needsLabel = !(safe.start_label || "").trim();
-    const needsRegion = !(safe.region || "").trim();
-    const needsState = !safe.state_code;
+    // Also gate on the LOCAL state — if the user has already typed
+    // a label / picked a state / entered a region, an in-flight
+    // geocode response should NOT overwrite their input. Without
+    // these local checks the user's selection gets clobbered the
+    // moment the mapbox call resolves (since safe.state_code is
+    // still null in the DB until they SAVE).
+    const needsLabel = !(safe.start_label || "").trim() && !(trailheadLabel || "").trim();
+    const needsRegion = !(safe.region || "").trim() && !(region || "").trim();
+    const needsState = !safe.state_code && !stateCode;
     if (!needsLabel && !needsRegion && !needsState) return;
     let cancelled = false;
     mapboxReverseGeocodeRich(safe.start_lng, safe.start_lat).then(info => {
@@ -12515,7 +12521,7 @@ function TripReportEditor({ trip, onClose, onSave, onPublish, onDelete, onAddRou
       if (Object.keys(updates).length > 0) onSave(updates);
     });
     return () => { cancelled = true; };
-  }, [safe.start_lat, safe.start_lng, safe.start_label, safe.region, safe.state_code, isMine]);
+  }, [safe.start_lat, safe.start_lng, safe.start_label, safe.region, safe.state_code, isMine, stateCode, region, trailheadLabel]);
 
   const TERRAIN_OPTIONS = ["Dirt/Gravel", "Rock/Slickrock", "Sand", "Mud", "Snow", "Mixed", "Pavement"];
   const DIFFICULTY_OPTIONS = ["Easy", "Moderate", "Hard", "Expert"];
