@@ -20231,7 +20231,7 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
    keep state stable across RanksScreen re-renders. */
 const MIN_PAYOUT_CENTS = 2500;
 
-function BountyEarningsCard({ earnings, currentProfile, onRefreshGiftCard, onRequestPayout, onLoadBountyHistory, onClearGiftCardCode }) {
+function BountyEarningsCard({ earnings, currentProfile, onRefreshGiftCard, onRequestPayout, onLoadBountyHistory, onLoadGiftCardCode }) {
   const pending = (earnings && earnings.total_pending_cents) || 0;
   const paid = (earnings && earnings.total_paid_cents) || 0;
   const balance = (currentProfile && currentProfile.lpo_gift_card_balance_cents) || 0;
@@ -20309,9 +20309,8 @@ function BountyEarningsCard({ earnings, currentProfile, onRefreshGiftCard, onReq
           hasCard={hasCard}
           last4={last4}
           syncedAt={currentProfile && currentProfile.lpo_gift_card_synced_at}
-          code={currentProfile && currentProfile.lpo_gift_card_code}
           onRefresh={() => onRefreshGiftCard()}
-          onClearCode={onClearGiftCardCode}
+          onLoadCode={onLoadGiftCardCode}
           onClose={() => setShowGiftCard(false)}
         />
       )}
@@ -20330,12 +20329,26 @@ function BountyEarningsCard({ earnings, currentProfile, onRefreshGiftCard, onReq
    "SHOP NOW" deeplinks to LPO with the gift card pre-applied if the
    customer is signed in (gift card is linked via shopify_customer_id).
    When no card yet exists, copy invites the user to earn one. */
-function GiftCardModal({ balance, hasCard, last4, syncedAt, code, onRefresh, onClearCode, onClose }) {
+function GiftCardModal({ balance, hasCard, last4, syncedAt, onRefresh, onLoadCode, onClose }) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [code, setCode] = useState(null);             // null = not yet fetched
   const [codeRevealed, setCodeRevealed] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
-  const [clearing, setClearing] = useState(false);
+  // Lazy-fetch the code on modal open. Stored in a dedicated owner-only
+  // table (user_gift_card_codes) — separate from profiles since profiles
+  // is publicly readable. Code stays in DB permanently; user can pull it
+  // up whenever they need it for checkout.
+  useEffect(() => {
+    if (!hasCard || !onLoadCode) return;
+    let cancelled = false;
+    onLoadCode().then(res => {
+      if (cancelled) return;
+      if (res && res.error) { setError(res.error); return; }
+      setCode((res && res.code) || "");
+    });
+    return () => { cancelled = true; };
+  }, [hasCard]);
   const handleRefresh = async () => {
     if (refreshing) return;
     setRefreshing(true); setError("");
@@ -20352,14 +20365,6 @@ function GiftCardModal({ balance, hasCard, last4, syncedAt, code, onRefresh, onC
     } catch (e) {
       setError("Couldn't copy — long-press the code to select it.");
     }
-  };
-  const handleClearCode = async () => {
-    if (!code || clearing) return;
-    if (!confirm("Hide this code forever? Make sure you've saved it somewhere safe (notes app, screenshot, etc.) — Shopify never shows it again.")) return;
-    setClearing(true);
-    const res = onClearCode ? await onClearCode() : null;
-    if (res && res.error) setError(res.error);
-    setClearing(false);
   };
   const fmtSynced = syncedAt ? new Date(syncedAt).toLocaleString() : "never";
   return (
@@ -20388,19 +20393,16 @@ function GiftCardModal({ balance, hasCard, last4, syncedAt, code, onRefresh, onC
                 <div style={{ fontFamily: sans, fontSize: 11, color: "rgba(255,255,255,0.8)", letterSpacing: 2, fontWeight: 600, marginTop: 8 }}>•••• {last4}</div>
               )}
             </div>
-            {/* Code reveal — only when freshly issued. Shopify gives us
-                the code ONLY in the create response. Capture happens
-                server-side, stored on profile.lpo_gift_card_code until
-                the user explicitly clears it after saving. */}
+            {/* Redemption code — owner-only, stored permanently in
+                user_gift_card_codes. Hidden behind a REVEAL gate so
+                accidental screen-shares don't expose it. Toggleable
+                — user can hide it back any time. */}
             {code && (
               <div style={{ background: `${T.copper}10`, border: `1px solid ${T.copper}40`, borderRadius: 10, padding: "14px 14px", marginBottom: 14 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
                   <Gift size={14} color={T.copper} />
-                  <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 1 }}>YOUR REDEMPTION CODE</span>
+                  <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 1 }}>REDEMPTION CODE</span>
                 </div>
-                <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.5, margin: "0 0 10px" }}>
-                  Save this somewhere safe — Shopify only shows it once. Once you've stored it (notes app, screenshot), tap GOT IT below to hide it forever.
-                </p>
                 {codeRevealed ? (
                   <>
                     <div style={{ background: T.darkBg, border: `1px solid ${T.copper}30`, borderRadius: 6, padding: "10px 12px", marginBottom: 8, fontFamily: "monospace", fontSize: 14, color: T.white, fontWeight: 600, letterSpacing: 1, wordBreak: "break-all", userSelect: "all" }}>
@@ -20411,9 +20413,9 @@ function GiftCardModal({ balance, hasCard, last4, syncedAt, code, onRefresh, onC
                         style={{ flex: 1, padding: "10px", background: T.copper, color: T.charcoal, border: "none", borderRadius: 6, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}>
                         {codeCopied ? "COPIED ✓" : "COPY CODE"}
                       </button>
-                      <button onClick={handleClearCode} disabled={clearing}
-                        style={{ flex: 1, padding: "10px", background: T.darkCard, color: T.tertiary, border: `1px solid ${T.charcoal}`, borderRadius: 6, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, cursor: clearing ? "wait" : "pointer" }}>
-                        {clearing ? "HIDING…" : "GOT IT — HIDE"}
+                      <button onClick={() => setCodeRevealed(false)}
+                        style={{ flex: 1, padding: "10px", background: T.darkCard, color: T.tertiary, border: `1px solid ${T.charcoal}`, borderRadius: 6, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}>
+                        HIDE
                       </button>
                     </div>
                   </>
@@ -20442,8 +20444,8 @@ function GiftCardModal({ balance, hasCard, last4, syncedAt, code, onRefresh, onC
             {error && <div style={{ marginTop: 8, fontFamily: sans, fontSize: 11, color: T.red, textAlign: "center" }}>{error}</div>}
             <div style={{ marginTop: 14, padding: "10px 12px", background: T.darkCard, borderRadius: 8, fontFamily: serif, fontSize: 11, color: T.tertiary, lineHeight: 1.5 }}>
               {code
-                ? "Save the code above — Shopify only displays it once. If you sign in to your customer account at lonepeakoverland.com, the gift card will auto-apply at checkout; otherwise paste the code into the gift card field at checkout."
-                : "If you sign in to your customer account at lonepeakoverland.com, your gift card auto-applies at checkout. If you need the code again, contact support — Shopify can resend it to your email."}
+                ? "Sign into your customer account at lonepeakoverland.com to have the gift card auto-apply at checkout — or paste the code above into the gift card field at checkout."
+                : "If you sign in to your customer account at lonepeakoverland.com, your gift card auto-applies at checkout. If you need the code, contact support — Shopify can resend it to your email."}
             </div>
           </>
         )}
@@ -20507,7 +20509,7 @@ function BountyHistoryModal({ onLoad, onClose }) {
 }
 
 /* ─── RANKS / LEADERBOARD SCREEN ─── */
-function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, currentUserId, currentProfile, onLoadLeaderboard, onViewUser, bounties: bountiesFromDB, mySubmissions, isGuest, onGuestTap, onClaimBounty, onSaveBountyDraft, onSubmitBountyRPC, onWithdrawBounty, onUploadBountyPhotos, earnings, onOpenDM, onLoadProfileById, onSendDemoProposal, onSendDmInvite, onRefreshGiftCard, onRequestPayout, onLoadBountyHistory, onClearGiftCardCode }) {
+function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, currentUserId, currentProfile, onLoadLeaderboard, onViewUser, bounties: bountiesFromDB, mySubmissions, isGuest, onGuestTap, onClaimBounty, onSaveBountyDraft, onSubmitBountyRPC, onWithdrawBounty, onUploadBountyPhotos, earnings, onOpenDM, onLoadProfileById, onSendDemoProposal, onSendDmInvite, onRefreshGiftCard, onRequestPayout, onLoadBountyHistory, onLoadGiftCardCode }) {
   const [tab, setTab] = useState("overview"); // overview | leaderboard | bounty | badges
   // Leaderboard state. lbScope = global | following | weekly; lbData[scope]
   // caches rows so switching tabs is instant after the first fetch. Refresh
@@ -20873,7 +20875,7 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
             onRefreshGiftCard={onRefreshGiftCard}
             onRequestPayout={onRequestPayout}
             onLoadBountyHistory={onLoadBountyHistory}
-            onClearGiftCardCode={onClearGiftCardCode}
+            onLoadGiftCardCode={onLoadGiftCardCode}
           />
           {/* Lifetime + breakdown still surfaces below for context. */}
           <div style={{ padding: "0 16px 10px", fontFamily: sans, fontSize: 11, color: T.tertiary, letterSpacing: 0.5 }}>
@@ -46526,18 +46528,22 @@ export default function Trailhead() {
       return { ok: true, data: (data || []).map(r => ({ ...r, bounty_title: titleMap[r.bounty_id] || "Bounty" })) };
     } catch (e) { console.error("[loadPendingSubmissionsForUser] failed", e); return { error: "Network error" }; }
   };
-  // After the user taps "GOT IT — HIDE" on the freshly-revealed gift
-  // card code, null the column so the code is no longer retrievable
-  // from our DB. Owner-only RPC via auth.uid().
-  const clearGiftCardCode = async () => {
+  // Owner-only lookup of the unmasked gift card code, lazy-loaded when
+  // the VIEW GIFT CARD modal opens. Lives in its own table
+  // (user_gift_card_codes) with strict owner-SELECT RLS — separate
+  // from profiles since profiles is public-readable.
+  const loadGiftCardCode = async () => {
     const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
     if (!uid) return { error: "Not authenticated" };
     try {
-      const { error } = await supabase.rpc("clear_my_gift_card_code");
-      if (error) { console.error("[clearGiftCardCode]", error); return { error: error.message }; }
-      setCurrentProfile(prev => prev ? { ...prev, lpo_gift_card_code: null } : prev);
-      return { ok: true };
-    } catch (e) { console.error("[clearGiftCardCode] failed", e); return { error: "Network error" }; }
+      const { data, error } = await supabase
+        .from("user_gift_card_codes")
+        .select("code")
+        .eq("user_id", uid)
+        .maybeSingle();
+      if (error) { console.error("[loadGiftCardCode]", error); return { error: error.message }; }
+      return { ok: true, code: (data && data.code) || "" };
+    } catch (e) { console.error("[loadGiftCardCode] failed", e); return { error: "Network error" }; }
   };
   // Admin issues a payout via shopify-bounty-payout. method='gift_card'
   // (default) or 'manual'. submission_ids should be the rows being cleared
@@ -52598,7 +52604,7 @@ export default function Trailhead() {
             {screen === "ranks" && (isGuest
               ? <GuestGateScreen title="RANKS REQUIRE AN ACCOUNT" subtitle="Sign in to see the leaderboard and start earning points from your posts, routes and builds." onSignIn={goToLoginFromGuest} />
               : (isAdmin || isBetaTester)
-                ? <RanksScreen myPoints={myTotalPoints} pointsBreakdown={friendlyPointsBreakdown} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentProfile={currentProfile} onLoadLeaderboard={loadLeaderboard} onViewUser={openUserProfile} bounties={bounties} mySubmissions={myBountySubmissions} isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onClaimBounty={claimBounty} onSaveBountyDraft={saveBountyDraft} onSubmitBountyRPC={submitBountySubmission} onWithdrawBounty={withdrawBountySubmission} onUploadBountyPhotos={uploadBountyPhotoFiles} earnings={bountyEarnings} onOpenDM={openDM} onLoadProfileById={loadProfileById} onSendDemoProposal={sendDemoProposalCard} onSendDmInvite={sendDmInvite} onRefreshGiftCard={refreshGiftCardBalance} onRequestPayout={requestBountyPayout} onLoadBountyHistory={loadBountyHistory} onClearGiftCardCode={clearGiftCardCode} />
+                ? <RanksScreen myPoints={myTotalPoints} pointsBreakdown={friendlyPointsBreakdown} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentProfile={currentProfile} onLoadLeaderboard={loadLeaderboard} onViewUser={openUserProfile} bounties={bounties} mySubmissions={myBountySubmissions} isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onClaimBounty={claimBounty} onSaveBountyDraft={saveBountyDraft} onSubmitBountyRPC={submitBountySubmission} onWithdrawBounty={withdrawBountySubmission} onUploadBountyPhotos={uploadBountyPhotoFiles} earnings={bountyEarnings} onOpenDM={openDM} onLoadProfileById={loadProfileById} onSendDemoProposal={sendDemoProposalCard} onSendDmInvite={sendDmInvite} onRefreshGiftCard={refreshGiftCardBalance} onRequestPayout={requestBountyPayout} onLoadBountyHistory={loadBountyHistory} onLoadGiftCardCode={loadGiftCardCode} />
                 : <div style={{ padding: 32, textAlign: "center", fontFamily: serif, fontSize: 14, color: T.tertiary, lineHeight: 1.6 }}>Ranks is coming in a future release.</div>
             )}
             {screen === "admin" && (isAdmin

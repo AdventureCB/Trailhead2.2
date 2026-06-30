@@ -419,18 +419,28 @@ Deno.serve(async (req) => {
       lpo_gift_card_balance_cents: updatedBalanceCents,
       lpo_gift_card_synced_at: new Date().toISOString(),
     };
-    // Only set the code when we just minted a fresh card — Shopify
-    // never returns it again, so for top-ups we leave the column
-    // untouched (either NULL from prior clear, or stale from the
-    // initial issuance that the user hasn't cleared yet).
-    if (freshGiftCardCode) {
-      cacheUpdate.lpo_gift_card_code = freshGiftCardCode;
-    }
     const { error: upErr } = await sb
       .from("profiles")
       .update(cacheUpdate)
       .eq("id", userId);
     if (upErr) console.warn("[shopify-bounty-payout] profile cache update failed", upErr);
+
+    // Persist the unmasked code to its own owner-only table. profiles
+    // has a public SELECT policy so the code can't live there — see
+    // 20260630_gift_card_code_permanent.sql for the dedicated
+    // user_gift_card_codes table with strict owner-only RLS.
+    // Only written on FRESH creates — top-ups don't generate a new code.
+    if (freshGiftCardCode && shopifyGiftCardId) {
+      const { error: codeErr } = await sb
+        .from("user_gift_card_codes")
+        .upsert({
+          user_id: userId,
+          code: freshGiftCardCode,
+          gift_card_id: shopifyGiftCardId,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "user_id" });
+      if (codeErr) console.warn("[shopify-bounty-payout] gift card code store failed", codeErr);
+    }
   }
 
   // ── 8) Flip submissions to paid (trigger recomputes bounty_earnings) ──
