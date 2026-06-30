@@ -12629,7 +12629,7 @@ function TripReportEditor({ trip, onClose, onSave, onPublish, onDelete, onAddRou
             <span style={{ fontFamily: sans, fontSize: 9, color: T.green, letterSpacing: 0.5 }}>SAVED ✓</span>
           )}
         </div>
-        <button onClick={handleSave} disabled={saving || !name.trim()} style={{ background: name.trim() && !saving ? T.copper : T.charcoal, border: "none", cursor: name.trim() && !saving ? "pointer" : "default", padding: "8px 14px", borderRadius: 8, fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5, opacity: name.trim() && !saving ? 1 : 0.5 }}>{saving ? "…" : "SAVE"}</button>
+        <button onClick={handleSave} disabled={saving || !name.trim()} title={bountySubmissionId ? "Save your draft (not yet submitted)" : "Save"} style={{ background: name.trim() && !saving ? T.copper : T.charcoal, border: "none", cursor: name.trim() && !saving ? "pointer" : "default", padding: "8px 14px", borderRadius: 8, fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5, opacity: name.trim() && !saving ? 1 : 0.5 }}>{saving ? "…" : (bountySubmissionId ? "SAVE DRAFT" : "SAVE")}</button>
       </div>
 
       <div style={{ flex: 1, overflowY: "auto", padding: "0 0 32px" }}>
@@ -46555,6 +46555,12 @@ export default function Trailhead() {
       await saveBountyDraft(submissionId, { trip_report_id: newTrip.id });
       tripId = newTrip.id;
     }
+    // Open the editor immediately after claim. Without this the user
+    // sees nothing happen — they'd have to tap RESUME to get into the
+    // editor. The bounty context is set so the SUBMIT FOR REVIEW button
+    // shows up.
+    setRouteReportBountyCtx({ submissionId, tripId });
+    setEditingTripId(tripId);
     return { ok: true, submissionId, tripId };
   };
 
@@ -53100,7 +53106,7 @@ export default function Trailhead() {
             }}
             onAddRouteManual={() => { setPendingTripDraftId(trip.id); setEditingTripId(null); setShowTripPinFullscreen(true); }}
             onAddRouteLive={() => { setPendingTripDraftId(trip.id); setEditingTripId(null); setShowRecorder(true); }}
-            bountySubmissionId={routeReportBountyCtx && routeReportBountyCtx.tripId === trip.id ? routeReportBountyCtx.submissionId : null}
+            bountySubmissionId={routeReportBountyCtx ? routeReportBountyCtx.submissionId : null}
             onSubmitForBountyReview={submitRouteReportFromEditor}
           />
         );
