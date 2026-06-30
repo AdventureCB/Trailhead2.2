@@ -378,7 +378,12 @@ Deno.serve(async (req) => {
         return code === "GIFT_CARD_DISABLED"
           || code === "GIFT_CARD_EXPIRED"
           || code === "GIFT_CARD_NOT_FOUND"
-          || /disabled|expired|not found|cannot be credited|inactive/.test(msg);
+          // Shopify returns code='INVALID' + message='The gift card is
+          // deactivated.' when an admin disables a card via the Shopify
+          // Admin UI — pattern-match the message for that + similar
+          // unusable states. Don't whitelist code='INVALID' alone since
+          // it's used for many other validation failures too.
+          || /deactivated|disabled|expired|not found|cannot be credited|inactive/.test(msg);
       });
       if (errs.length > 0 && !isCardDead) {
         return json({ ok: false, error: "Gift card credit rejected", detail: errs }, 502);
