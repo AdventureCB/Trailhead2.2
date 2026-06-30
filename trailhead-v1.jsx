@@ -32729,16 +32729,43 @@ function BountyDraftRenderer({ bounty, draft }) {
   );
 }
 
-/* ─── BountySubmissionReviewScreen — admin review surface (Phase 6) ─── */
-function BountySubmissionReviewScreen({ submission, onBack, onApprove, onRequestChanges, onReject }) {
+/* ─── BountySubmissionReviewScreen — admin review surface (Phase 6 + 8) ─── */
+function BountySubmissionReviewScreen({ submission, onBack, onApprove, onRequestChanges, onReject, forumCategoriesList }) {
   const [reviewerNotes, setReviewerNotes] = useState("");
   const [action, setAction] = useState(null); // "approve" | "changes" | "reject" | null
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  // Publish options stub — Phase 8 wires the actual feed/forum/trip create.
-  // For Phase 6 we just record the admin's intent in the submission's draft.
+  // Publish options — Phase 8 wires the actual artifact create at approval.
+  // destination drives the routing; forum_thread also needs category +
+  // subcategory slugs (collected via pickers below).
   const [publishAs, setPublishAs] = useState("user"); // "user" | "lpo"
-  const [publishKind, setPublishKind] = useState("none"); // "none" | "feed" | "forum" | "trip"
+  const [destination, setDestination] = useState("none"); // "none" | "trip_report" | "forum_thread"
+  const [forumCategorySlug, setForumCategorySlug] = useState("");
+  const [forumSubcategorySlug, setForumSubcategorySlug] = useState("");
+  // Per-category default pre-fill — matches Kyle's spec routing. Admin can
+  // override before confirming. Set once when the modal opens based on the
+  // bounty's category, then admin-mutable.
+  useEffect(() => {
+    const cat = (submission && submission.bounty && submission.bounty.category) || "";
+    if (cat === "Route Report") setDestination("trip_report");
+    else if (cat === "Gear Review") {
+      setDestination("forum_thread");
+      setForumCategorySlug("gear-reviews");
+    } else if (cat === "Build Feature") {
+      setDestination("forum_thread");
+      setForumCategorySlug("inspiration");
+      setForumSubcategorySlug("build-showcases");
+    } else if (cat === "Content Creation") {
+      setDestination("forum_thread");
+    }
+  }, [submission && submission.id]);
+  // Available subcategories for the selected forum category. Updates when
+  // forumCategorySlug changes — admin can switch cat and subs follow.
+  const subOptions = useMemo(() => {
+    if (!forumCategorySlug) return [];
+    const cat = (forumCategoriesList || []).find(c => c.slug === forumCategorySlug);
+    return (cat && cat.subs) ? cat.subs : [];
+  }, [forumCategorySlug, forumCategoriesList]);
   if (!submission) {
     return (
       <div style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}>
@@ -32759,7 +32786,23 @@ function BountySubmissionReviewScreen({ submission, onBack, onApprove, onRequest
     setBusy(true); setError("");
     let res;
     if (action === "approve") {
-      const publishOpts = publishKind !== "none" ? { publish_as: publishAs, publish_kind: publishKind } : null;
+      // Validate publish_options before sending — server raises on bad
+      // forum_thread payloads but better to catch them client-side first.
+      let publishOpts = null;
+      if (destination !== "none") {
+        if (destination === "forum_thread") {
+          if (!forumCategorySlug) { setError("Pick a forum category."); setBusy(false); return; }
+          if (!forumSubcategorySlug) { setError("Pick a subcategory."); setBusy(false); return; }
+        }
+        publishOpts = {
+          destination,
+          publish_as: publishAs,
+          ...(destination === "forum_thread" ? {
+            forum_category_slug: forumCategorySlug,
+            forum_subcategory_slug: forumSubcategorySlug,
+          } : {}),
+        };
+      }
       res = await onApprove(submission.id, reviewerNotes.trim() || null, publishOpts);
     } else if (action === "changes") {
       if (!reviewerNotes.trim()) { setError("Reviewer notes required when requesting changes."); setBusy(false); return; }
@@ -32830,30 +32873,72 @@ function BountySubmissionReviewScreen({ submission, onBack, onApprove, onRequest
             <textarea value={reviewerNotes} onChange={(e) => setReviewerNotes(e.target.value)} placeholder={action === "approve" ? "Reviewer notes (optional, sent in approval notification)" : "Reviewer notes (required — explain what needs to change OR why rejected)"} rows={4} style={{ width: "100%", padding: "10px 12px", borderRadius: 6, border: `1px solid ${T.charcoal}`, background: T.darkBg, color: T.white, fontFamily: serif, fontSize: 13, boxSizing: "border-box", resize: "vertical", lineHeight: 1.5 }} />
             {action === "approve" && (
               <div style={{ background: T.darkCard, borderRadius: 8, padding: 12, border: `1px solid ${T.charcoal}` }}>
-                <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 700, marginBottom: 8 }}>PUBLISH OPTIONS (PHASE 8)</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 700, marginBottom: 8 }}>PUBLISH OPTIONS</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   <div>
                     <label style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, display: "block", marginBottom: 4 }}>Publish as</label>
                     <div style={{ display: "flex", gap: 4 }}>
-                      {["user", "lpo"].map(p => (
-                        <button key={p} onClick={() => setPublishAs(p)} style={{ flex: 1, padding: "6px", borderRadius: 4, border: publishAs === p ? `1px solid ${T.copper}` : `1px solid ${T.charcoal}`, background: publishAs === p ? `${T.copper}18` : "none", color: publishAs === p ? T.copper : T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}>{p === "lpo" ? "LPO" : "USER"}</button>
+                      {[
+                        { k: "user", label: "PARTICIPANT" },
+                        { k: "lpo", label: "LPO" },
+                      ].map(p => (
+                        <button key={p.k} onClick={() => setPublishAs(p.k)} style={{ flex: 1, padding: "6px", borderRadius: 4, border: publishAs === p.k ? `1px solid ${T.copper}` : `1px solid ${T.charcoal}`, background: publishAs === p.k ? `${T.copper}18` : "none", color: publishAs === p.k ? T.copper : T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}>{p.label}</button>
                       ))}
+                    </div>
+                    <div style={{ fontFamily: serif, fontSize: 10, color: T.tertiary, marginTop: 4, lineHeight: 1.4 }}>
+                      {publishAs === "lpo"
+                        ? "Author = you. A 'Submitted by @handle for a $X bounty' footer credits the participant."
+                        : "Author = the participant. A 'From bounty' chip links back to the source."}
                     </div>
                   </div>
                   <div>
-                    <label style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, display: "block", marginBottom: 4 }}>Publish to</label>
+                    <label style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, display: "block", marginBottom: 4 }}>Destination</label>
                     <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                       {[
                         { k: "none", label: "DON'T PUBLISH" },
-                        { k: "feed", label: "FEED" },
-                        { k: "forum", label: "FORUM" },
-                        { k: "trip", label: "TRIP REPORT" },
+                        { k: "trip_report", label: "TRIP REPORT" },
+                        { k: "forum_thread", label: "FORUM THREAD" },
                       ].map(p => (
-                        <button key={p.k} onClick={() => setPublishKind(p.k)} style={{ flex: "1 0 auto", padding: "6px 8px", borderRadius: 4, border: publishKind === p.k ? `1px solid ${T.copper}` : `1px solid ${T.charcoal}`, background: publishKind === p.k ? `${T.copper}18` : "none", color: publishKind === p.k ? T.copper : T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}>{p.label}</button>
+                        <button key={p.k} onClick={() => setDestination(p.k)} style={{ flex: "1 0 auto", padding: "6px 8px", borderRadius: 4, border: destination === p.k ? `1px solid ${T.copper}` : `1px solid ${T.charcoal}`, background: destination === p.k ? `${T.copper}18` : "none", color: destination === p.k ? T.copper : T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}>{p.label}</button>
                       ))}
                     </div>
-                    <div style={{ fontFamily: serif, fontSize: 10, color: T.tertiary, marginTop: 6, lineHeight: 1.5 }}>Phase 8 will act on this — for now it's stored as intent and the approval still records reward + fires the user notif.</div>
                   </div>
+                  {destination === "forum_thread" && (
+                    <>
+                      <div>
+                        <label style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, display: "block", marginBottom: 4 }}>Forum category</label>
+                        <select
+                          value={forumCategorySlug}
+                          onChange={(e) => { setForumCategorySlug(e.target.value); setForumSubcategorySlug(""); }}
+                          style={{ width: "100%", padding: "8px 10px", borderRadius: 4, background: T.darkBg, color: T.white, border: `1px solid ${T.charcoal}`, fontFamily: sans, fontSize: 12 }}
+                        >
+                          <option value="">— pick a category —</option>
+                          {(forumCategoriesList || []).map(c => (
+                            <option key={c.slug} value={c.slug}>{c.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, display: "block", marginBottom: 4 }}>Subcategory</label>
+                        <select
+                          value={forumSubcategorySlug}
+                          onChange={(e) => setForumSubcategorySlug(e.target.value)}
+                          disabled={!forumCategorySlug || subOptions.length === 0}
+                          style={{ width: "100%", padding: "8px 10px", borderRadius: 4, background: T.darkBg, color: T.white, border: `1px solid ${T.charcoal}`, fontFamily: sans, fontSize: 12, opacity: (!forumCategorySlug || subOptions.length === 0) ? 0.6 : 1 }}
+                        >
+                          <option value="">— pick a subcategory —</option>
+                          {subOptions.map(s => (
+                            <option key={s.slug} value={s.slug}>{s.name}</option>
+                          ))}
+                        </select>
+                        {forumCategorySlug && subOptions.length === 0 && (
+                          <div style={{ fontFamily: serif, fontSize: 10, color: T.copper, marginTop: 4, lineHeight: 1.4 }}>
+                            No subcategories under this category yet. Add one via the forum admin first.
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             )}
@@ -52640,6 +52725,7 @@ export default function Trailhead() {
                       onApprove={adminApproveBountyAction}
                       onRequestChanges={adminRequestChangesOnBounty}
                       onReject={adminRejectBountyAction}
+                      forumCategoriesList={forumCategoriesList}
                     />
                   : editingBountyId !== null
                   ? <BountyEditor
