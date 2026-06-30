@@ -32858,10 +32858,10 @@ function BountyLinkedTripPreview({ trip }) {
   const distance = trip.distance_mi ? `${Number(trip.distance_mi).toFixed(1)} MI` : null;
   const elevGain = trip.elev_gain_ft ? `+${Math.round(trip.elev_gain_ft).toLocaleString()} FT` : null;
   const maxElev = trip.max_elev_ft ? `${Math.round(trip.max_elev_ft).toLocaleString()} FT` : null;
-  // Resolve per-pin photo URLs once so we can both (a) render them in the
-  // pin card and (b) exclude them from the bottom gallery. Mirrors the
-  // gridEntries dedup in TripReportDetail — pin-attributed photos should
-  // appear only inside their card, not also in the flat photo grid.
+  // Per-pin photo URL map — used to render the matching photo inside the
+  // pin's card. We DON'T use this to filter the bottom gallery (showing a
+  // photo in both places is acceptable; hiding a photo because of a wonky
+  // coord-match is not).
   const pinPhotosByIdx = useMemo(() => {
     const out = {};
     pins.forEach((p, i) => {
@@ -32870,16 +32870,8 @@ function BountyLinkedTripPreview({ trip }) {
     });
     return out;
   }, [pins, photos]);
-  const attributedUrls = useMemo(() => new Set(Object.values(pinPhotosByIdx)), [pinPhotosByIdx]);
-  const unattributedPhotos = useMemo(() => {
-    return photos.filter(p => {
-      const url = typeof p === "string" ? p : (p && p.url) || "";
-      return url && !attributedUrls.has(url);
-    });
-  }, [photos, attributedUrls]);
-  // Lightbox state for pin clicks on the embedded map. RouteMapPreview
-  // emits onPhotoSelect(idx) for tapped photo pins; we open the popup here
-  // so admins can verify the photo lines up with the pin.
+  // Lightbox state for pin clicks on the embedded map + bottom-grid taps.
+  // RouteMapPreview emits onPhotoSelect(idx) for tapped photo pins.
   const [selectedPhotoUrl, setSelectedPhotoUrl] = useState(null);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -32982,12 +32974,15 @@ function BountyLinkedTripPreview({ trip }) {
           </div>
         </div>
       )}
-      {/* Photo grid — only photos NOT already shown inside a pin card. */}
-      {unattributedPhotos.length > 0 && (
+      {/* Photo grid — every photo on the trip. Pin-attributed photos may
+          also render in their pin card above; one extra thumbnail here is
+          a much better outcome than a photo silently disappearing because
+          coord-matching got too aggressive. */}
+      {photos.length > 0 && (
         <div>
           <div style={{ fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 1.5, fontWeight: 700, marginBottom: 8 }}>PHOTOS</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6 }}>
-            {unattributedPhotos.map((p, i) => {
+            {photos.map((p, i) => {
               const url = typeof p === "string" ? p : (p && p.url) || "";
               if (!url) return null;
               return (
