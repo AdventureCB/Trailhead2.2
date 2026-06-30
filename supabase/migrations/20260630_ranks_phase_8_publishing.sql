@@ -74,6 +74,11 @@ $$;
 revoke all on function public.publish_unique_slug(text, text, text) from public;
 
 -- ── Re-define admin_approve_bounty with publishing wired in ──
+-- Drop first because we're changing the return shape (added 3 new uuid
+-- columns for the published_X_id values). `create or replace` can't change
+-- the return type of an existing function — Postgres raises 42P13.
+drop function if exists public.admin_approve_bounty(uuid, text, jsonb);
+
 create or replace function public.admin_approve_bounty(
   p_submission_id uuid,
   p_reviewer_notes text default null,
