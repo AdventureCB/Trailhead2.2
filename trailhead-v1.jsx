@@ -12708,7 +12708,7 @@ function TripReportEditor({ trip, onClose, onSave, onPublish, onDelete, onAddRou
               <RouteMapPreview pins={initialPins} points={rd.points || []} photos={photos} />
               {isMine && (
                 <button
-                  onClick={onAddRouteManual}
+                  onClick={async () => { await handleSave(); if (onAddRouteManual) onAddRouteManual(); }}
                   style={{ position: "absolute", top: 10, right: 10, zIndex: 5, display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 8, background: `${T.darkBg}EE`, border: `1px solid ${T.copper}60`, cursor: "pointer", backdropFilter: "blur(8px)", boxShadow: "0 2px 8px rgba(0,0,0,0.4)" }}
                   aria-label="Edit route pins"
                 >
@@ -12721,12 +12721,16 @@ function TripReportEditor({ trip, onClose, onSave, onPublish, onDelete, onAddRou
             <div style={{ ...cardStyle, padding: 20, textAlign: "center" }}>
               <Map size={28} color={T.tertiary} strokeWidth={1} style={{ opacity: 0.5, marginBottom: 10 }} />
               <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "0 0 14px" }}>No route attached yet — required to publish.</p>
+              {/* Save the editor's text fields BEFORE handing off to the
+                  route step. Otherwise the editor unmounts and description /
+                  name / region / etc. are lost on remount (state init reads
+                  from the trip prop, which still has the un-saved nulls). */}
               <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={onAddRouteLive} style={{ flex: 1, padding: "10px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                <button onClick={async () => { await handleSave(); if (onAddRouteLive) onAddRouteLive(); }} style={{ flex: 1, padding: "10px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
                   <Radio size={14} color={T.white} />
                   <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>LIVE</span>
                 </button>
-                <button onClick={onAddRouteManual} style={{ flex: 1, padding: "10px", borderRadius: 8, background: T.copper, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                <button onClick={async () => { await handleSave(); if (onAddRouteManual) onAddRouteManual(); }} style={{ flex: 1, padding: "10px", borderRadius: 8, background: T.copper, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
                   <Map size={14} color={T.white} />
                   <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>MANUAL</span>
                 </button>
