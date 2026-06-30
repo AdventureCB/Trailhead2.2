@@ -32706,18 +32706,44 @@ function BountyDraftRenderer({ bounty, draft }) {
         }
         if (section.type === "route_builder") {
           if (!val) return null;
-          // Quick summary card — Phase 8 can render the full map.
+          const hasGeometry = (val.pins && val.pins.length > 0) || (val.points && val.points.length > 0);
           return (
-            <div key={section.id} style={{ background: T.darkCard, borderRadius: 8, padding: "10px 12px", margin: "6px 0", border: `1px solid ${T.charcoal}` }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+            <div key={section.id} style={{ margin: "12px 0", borderRadius: 12, overflow: "hidden", border: `1px solid ${T.charcoal}` }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", background: T.darkCard }}>
                 <Route size={12} color={T.copper} />
-                <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 0.5 }}>ROUTE ATTACHED</span>
+                <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 0.8 }}>ROUTE ATTACHED</span>
+                {val.name && <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, marginLeft: "auto" }}>{val.name}</span>}
               </div>
-              {val.name && <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600 }}>{val.name}</div>}
-              <div style={{ display: "flex", gap: 10, marginTop: 4, fontFamily: sans, fontSize: 11, color: T.tertiary }}>
-                {val.distance && <span>{val.distance}</span>}
-                {val.duration && <span>{val.duration}</span>}
-                {val.elevGain && <span>{val.elevGain}</span>}
+              {hasGeometry && (
+                <div style={{ width: "100%", height: 220, background: T.charcoal, position: "relative" }}>
+                  <RouteMapPreview pins={val.pins} points={val.points} photos={val.photos} />
+                </div>
+              )}
+              <div style={{ padding: "10px 14px", background: T.darkCard, display: "flex", gap: 16, flexWrap: "wrap" }}>
+                {val.distance && val.distance !== "—" && (
+                  <div style={{ display: "flex", flexDirection: "column" }}>
+                    <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.5 }}>DISTANCE</span>
+                    <span style={{ fontFamily: sans, fontSize: 13, color: T.copper, fontWeight: 700 }}>{val.distance}</span>
+                  </div>
+                )}
+                {val.duration && val.duration !== "—" && (
+                  <div style={{ display: "flex", flexDirection: "column" }}>
+                    <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.5 }}>TIME</span>
+                    <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700 }}>{val.duration}</span>
+                  </div>
+                )}
+                {val.elevGain && val.elevGain !== "—" && (
+                  <div style={{ display: "flex", flexDirection: "column" }}>
+                    <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.5 }}>ELEV GAIN</span>
+                    <span style={{ fontFamily: sans, fontSize: 13, color: T.green, fontWeight: 700 }}>{val.elevGain}</span>
+                  </div>
+                )}
+                {val.pins && val.pins.length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column" }}>
+                    <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.5 }}>WAYPOINTS</span>
+                    <span style={{ fontFamily: sans, fontSize: 13, color: T.copper, fontWeight: 700 }}>{val.pins.length}</span>
+                  </div>
+                )}
               </div>
             </div>
           );
@@ -46307,6 +46333,17 @@ export default function Trailhead() {
     if (!isAdmin) return { error: "Not authorized" };
     const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
     if (!uid) return { error: "Not authenticated" };
+    // Auto-populate form_config from the category template. Phase 8's
+    // admin_approve_bounty RPC needs form_config to know how to map
+    // draft fields → published artifact columns. Without this, admin
+    // saves a bounty w/ form_config=null, participant submits, admin
+    // approves with destination=trip_report, and the publish step
+    // silently no-ops (RPC's `if v_form_config is not null` gate fails).
+    const tplKey = (patch && patch.form_template_key) || (patch && patch.category) || "Content Creation";
+    const seededFormConfig = (patch && patch.form_config)
+      || (BOUNTY_FORM_TEMPLATES[tplKey]
+            ? { sections: JSON.parse(JSON.stringify(BOUNTY_FORM_TEMPLATES[tplKey].sections || [])) }
+            : null);
     const payload = {
       title: (patch && patch.title) || "Untitled bounty",
       description: (patch && patch.description) || null,
@@ -46320,8 +46357,8 @@ export default function Trailhead() {
       starts_at: (patch && patch.starts_at) || null,
       deadline_at: (patch && patch.deadline_at) || new Date(Date.now() + 30 * 86400000).toISOString(),
       status: (patch && patch.status) || "draft",
-      form_template_key: (patch && patch.form_template_key) || (patch && patch.category) || "Content Creation",
-      form_config: (patch && patch.form_config) || null,
+      form_template_key: tplKey,
+      form_config: seededFormConfig,
       created_by: uid,
       // Demo Request fields — null unless category=Demo Request.
       demo_lat: patch && typeof patch.demo_lat === "number" ? patch.demo_lat : null,
