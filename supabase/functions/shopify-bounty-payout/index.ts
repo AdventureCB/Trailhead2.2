@@ -82,6 +82,29 @@ async function isAdmin(sb: ReturnType<typeof createClient>, userId: string): Pro
   return !!(data && (data as any).role === "admin");
 }
 
+// GraphQL Admin API helper. Used for gift card topup adjustments —
+// Shopify deprecated the REST /gift_cards/{id}/adjustments.json
+// endpoint (returns 404 in 2026-04) and routes via GraphQL's
+// giftCardCredit mutation, which requires write_gift_card_transactions
+// scope (separate from write_gift_cards). All other gift card ops still
+// use REST since the create + customer flows work fine there.
+async function shopifyGraphqlFetch(query: string, variables: Record<string, unknown>): Promise<{ status: number; body: any }> {
+  const url = `https://${SHOPIFY_DOMAIN}/admin/api/${API_VERSION}/graphql.json`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "X-Shopify-Access-Token": SHOPIFY_TOKEN!,
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+    },
+    body: JSON.stringify({ query, variables }),
+  });
+  let body: any = null;
+  const text = await res.text();
+  try { body = text ? JSON.parse(text) : null; } catch { body = { _raw: text }; }
+  return { status: res.status, body };
+}
+
 async function shopifyFetch(path: string, init: RequestInit = {}): Promise<{ status: number; body: any }> {
   const url = `https://${SHOPIFY_DOMAIN}/admin/api/${API_VERSION}${path}`;
   const res = await fetch(url, {
@@ -295,34 +318,62 @@ Deno.serve(async (req) => {
       updatedBalanceCents = Math.round(Number(gc.balance || amountCents / 100) * 100);
       updatedLast4 = String(gc.last_characters || gc.code?.slice(-4) || "").slice(-4) || null;
     } else {
-      // Top-up existing card via gift_card_adjustments.
-      // amount is in store currency; positive = add to card. Docs show
-      // amount as a NUMBER (10.0), not a string — sending a string can
-      // cause Shopify to return 404 "Not Found" on the adjustment.
-      const adjBody = {
-        adjustment: {
-          amount: Number((amountCents / 100).toFixed(2)),
+      // Top-up via GraphQL giftCardCredit mutation. The REST adjustments
+      // endpoint (/gift_cards/{id}/adjustments.json) returns 404 in
+      // 2026-04 — Shopify moved adjustments to GraphQL only. Requires
+      // the `write_gift_card_transactions` scope (separate from
+      // `write_gift_cards`) and the gift card ID in GID format.
+      const giftCardGid = `gid://shopify/GiftCard/${targetProfile.lpo_gift_card_id}`;
+      const creditMutation = `mutation giftCardCredit($id: ID!, $creditInput: GiftCardCreditInput!) {
+        giftCardCredit(id: $id, creditInput: $creditInput) {
+          giftCardCreditTransaction {
+            id
+            giftCard { id balance { amount currencyCode } maskedCode }
+          }
+          userErrors { field message code }
+        }
+      }`;
+      const creditVars = {
+        id: giftCardGid,
+        creditInput: {
+          creditAmount: {
+            amount: (amountCents / 100).toFixed(2),
+            currencyCode: "USD",
+          },
           note: `Trailhead bounty payout · ${userId.slice(0, 8)}`,
         },
       };
-      const { status, body } = await shopifyFetch(
-        `/gift_cards/${targetProfile.lpo_gift_card_id}/adjustments.json`,
-        { method: "POST", body: JSON.stringify(adjBody) },
-      );
-      if (status < 200 || status >= 300 || !body?.adjustment?.id) {
-        return json({ ok: false, error: "Shopify adjustment failed", detail: body }, 502);
+      const { status: gqlStatus, body: gqlBody } = await shopifyGraphqlFetch(creditMutation, creditVars);
+      if (gqlStatus < 200 || gqlStatus >= 300) {
+        return json({ ok: false, error: "Shopify GraphQL adjustment failed (HTTP error)", detail: gqlBody, status: gqlStatus }, 502);
+      }
+      const credit = gqlBody?.data?.giftCardCredit;
+      if (!credit) {
+        return json({ ok: false, error: "GraphQL response missing giftCardCredit payload", detail: gqlBody }, 502);
+      }
+      if (Array.isArray(credit.userErrors) && credit.userErrors.length > 0) {
+        return json({ ok: false, error: "Gift card credit rejected", detail: credit.userErrors }, 502);
+      }
+      const txn = credit.giftCardCreditTransaction;
+      if (!txn || !txn.id) {
+        return json({ ok: false, error: "GraphQL response missing transaction id", detail: gqlBody }, 502);
       }
       payoutMethod = "shopify_gift_card_topup";
-      shopifyAdjustmentId = String(body.adjustment.id);
-      // Re-fetch the gift card to pull the updated balance — adjustments
-      // response doesn't include it.
-      const { body: gcBody } = await shopifyFetch(`/gift_cards/${targetProfile.lpo_gift_card_id}.json`);
-      if (gcBody?.gift_card) {
-        updatedBalanceCents = Math.round(Number(gcBody.gift_card.balance || 0) * 100);
-        updatedLast4 = String(gcBody.gift_card.last_characters || updatedLast4 || "").slice(-4) || updatedLast4;
+      // Store the numeric portion of the GID — easier to filter on + UI consistency.
+      shopifyAdjustmentId = String(txn.id).replace(/^gid:\/\/shopify\/[^/]+\//, "");
+      const balanceAmount = txn?.giftCard?.balance?.amount;
+      if (balanceAmount != null) {
+        updatedBalanceCents = Math.round(Number(balanceAmount) * 100);
       } else {
         // Fallback: optimistic local add.
         updatedBalanceCents = updatedBalanceCents + amountCents;
+      }
+      // Pull updated last4 from masked code if available — usually
+      // unchanged from create but defensive in case Shopify rotates it.
+      const masked = txn?.giftCard?.maskedCode || "";
+      if (masked) {
+        const tail = masked.replace(/[^A-Za-z0-9]/g, "").slice(-4);
+        if (tail) updatedLast4 = tail;
       }
     }
   }
