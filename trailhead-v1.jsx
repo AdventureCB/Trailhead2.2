@@ -32857,14 +32857,37 @@ function BountyLinkedTripPreview({ trip }) {
   const rd = (trip && trip.route_data) || {};
   const pins = Array.isArray(rd.pins) ? rd.pins : [];
   const points = Array.isArray(rd.points) ? rd.points : [];
-  const photos = Array.isArray(rd.photos) ? rd.photos : [];
+  // Photo source: prefer route_data.photos (canonical), but also harvest any
+  // URL-bearing pin.photo (legacy + RouteRecorder-saved pins) so we never
+  // miss images that ended up in a non-canonical location. Dedup by URL —
+  // the gallery is for display, not data.
+  const rdPhotos = Array.isArray(rd.photos) ? rd.photos : [];
+  const photos = useMemo(() => {
+    const seen = new Set();
+    const out = [];
+    const add = (raw) => {
+      const url = typeof raw === "string" ? raw : (raw && raw.url) || "";
+      if (!url || seen.has(url)) return;
+      seen.add(url);
+      out.push(typeof raw === "string" ? { url: raw } : raw);
+    };
+    rdPhotos.forEach(add);
+    // Pin-attached URLs (skip the `photo:true` boolean flag — that means
+    // "I have a coord-matched entry in rdPhotos", which we already added).
+    pins.forEach(p => {
+      if (!p || !p.photo) return;
+      if (typeof p.photo === "string") add({ url: p.photo, lat: p.lat, lng: p.lng });
+      else if (p.photo && p.photo.url) add({ url: p.photo.url, lat: p.lat, lng: p.lng });
+    });
+    return out;
+  }, [rdPhotos, pins]);
   const hasRoute = pins.length > 0 || points.length > 0;
   const distance = trip.distance_mi ? `${Number(trip.distance_mi).toFixed(1)} MI` : null;
   const elevGain = trip.elev_gain_ft ? `+${Math.round(trip.elev_gain_ft).toLocaleString()} FT` : null;
   const maxElev = trip.max_elev_ft ? `${Math.round(trip.max_elev_ft).toLocaleString()} FT` : null;
-  // Per-pin photo URL map — used to render the matching photo inside the
-  // pin's card. We DON'T use this to filter the bottom gallery (showing a
-  // photo in both places is acceptable; hiding a photo because of a wonky
+  // Per-pin photo URL — used to render the matching photo inside the pin's
+  // card. We don't use this to filter the bottom gallery (showing a photo
+  // in both places is acceptable; hiding a photo because of a wonky
   // coord-match is not).
   const pinPhotosByIdx = useMemo(() => {
     const out = {};
@@ -32935,16 +32958,19 @@ function BountyLinkedTripPreview({ trip }) {
                 if (url) setSelectedPhotoUrl(url);
               }}
             />
-            {selectedPhotoUrl && (
-              <div onClick={() => setSelectedPhotoUrl(null)} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, cursor: "pointer" }}>
-                <img src={txImg(selectedPhotoUrl, 1200)} alt="" style={{ maxWidth: "92%", maxHeight: "92%", borderRadius: 8, objectFit: "contain" }} />
-                <button onClick={(e) => { e.stopPropagation(); setSelectedPhotoUrl(null); }} style={{ position: "absolute", top: 10, right: 10, background: "rgba(0,0,0,0.6)", border: "none", borderRadius: "50%", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-                  <X size={16} color="#fff" />
-                </button>
-              </div>
-            )}
           </div>
         </div>
+      )}
+      {/* Lightbox — portaled to body so it covers the full viewport, not
+          just the map's 240px container. */}
+      {selectedPhotoUrl && createPortal(
+        <div onClick={() => setSelectedPhotoUrl(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1600, cursor: "pointer", padding: 20, boxSizing: "border-box" }}>
+          <img src={txImg(selectedPhotoUrl, 1200)} alt="" style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 8, objectFit: "contain" }} />
+          <button onClick={(e) => { e.stopPropagation(); setSelectedPhotoUrl(null); }} style={{ position: "absolute", top: 16, right: 16, background: "rgba(0,0,0,0.6)", border: "none", borderRadius: "50%", width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+            <X size={18} color="#fff" />
+          </button>
+        </div>,
+        document.body
       )}
       {/* Per-pin notes + photos. Photo URL resolved once via the memoized
           map above (coord-match against route_data.photos[] or pin.photo
