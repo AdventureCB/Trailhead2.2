@@ -32822,6 +32822,28 @@ function BountyDraftRenderer({ bounty, draft }) {
   );
 }
 
+/* Pin → photo URL resolver. Mirrors the matching logic in RouteMapPreview:
+   try coord-match (0.0005 tolerance) against the route_data.photos[]
+   array first, then fall back to sequential index, then to pin.photo
+   itself if it's a URL/object. Returns null when no photo is associated. */
+function resolvePinPhotoUrl(pin, photos, pinIdx) {
+  if (!pin) return null;
+  const list = Array.isArray(photos) ? photos : [];
+  // Coord match
+  if (pin.lat != null && pin.lng != null) {
+    const matched = list.find(ph => ph && ph.lat != null && ph.lng != null
+      && Math.abs(ph.lat - pin.lat) < 0.0005
+      && Math.abs(ph.lng - pin.lng) < 0.0005);
+    if (matched) return matched.url || (typeof matched === "string" ? matched : null);
+  }
+  // pin.photo fallback (string URL OR {url})
+  if (pin.photo) {
+    if (typeof pin.photo === "string") return pin.photo;
+    if (pin.photo && pin.photo.url) return pin.photo.url;
+  }
+  return null;
+}
+
 /* ─── BountyLinkedTripPreview — admin review render for Route Report
    submissions, which keep their real data on a linked trip_reports row
    (not in the form-template draft jsonb). Reads the trip fields directly
@@ -32886,20 +32908,26 @@ function BountyLinkedTripPreview({ trip }) {
           </div>
         </div>
       )}
-      {/* Per-pin notes + photos */}
-      {pins.filter(p => p.note || p.photo).length > 0 && (
+      {/* Per-pin notes + photos. pin.photo is typically a boolean (TRUE
+          when there's a matching photo in route_data.photos[]). The actual
+          photo URL lives in photos[] with lat/lng matching the pin's
+          coords — mirrors the trip-detail / RouteMapPreview matching
+          pattern. */}
+      {pins.filter((p, i) => p.note || p.photo || p.label || resolvePinPhotoUrl(p, photos, i)).length > 0 && (
         <div>
-          <div style={{ fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 1.5, fontWeight: 700, marginBottom: 8 }}>WAYPOINT NOTES</div>
+          <div style={{ fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 1.5, fontWeight: 700, marginBottom: 8 }}>WAYPOINTS</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {pins.map((p, i) => {
-              if (!p.note && !p.photo) return null;
+              const pinPhotoUrl = resolvePinPhotoUrl(p, photos, i);
+              if (!p.note && !pinPhotoUrl && !p.label) return null;
               return (
                 <div key={i} style={{ background: T.darkCard, borderRadius: 8, padding: "10px 12px", display: "flex", gap: 10, alignItems: "flex-start" }}>
                   <div style={{ width: 24, height: 24, borderRadius: "50%", background: T.copper, color: T.charcoal, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: sans, fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{i + 1}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    {p.note && <div style={{ fontFamily: serif, fontSize: 13, color: T.warmStone, lineHeight: 1.5, marginBottom: p.photo ? 8 : 0, whiteSpace: "pre-wrap" }}>{p.note}</div>}
-                    {p.photo && typeof p.photo === "string" && (
-                      <img src={txImg(p.photo, 320)} alt="" style={{ width: "100%", maxWidth: 220, height: 140, objectFit: "cover", borderRadius: 6, display: "block" }} />
+                    {p.label && <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, marginBottom: 4 }}>{p.label}</div>}
+                    {p.note && <div style={{ fontFamily: serif, fontSize: 13, color: T.warmStone, lineHeight: 1.5, marginBottom: pinPhotoUrl ? 8 : 0, whiteSpace: "pre-wrap" }}>{p.note}</div>}
+                    {pinPhotoUrl && (
+                      <img src={txImg(pinPhotoUrl, 480)} alt="" style={{ width: "100%", maxWidth: 280, aspectRatio: "16 / 10", objectFit: "cover", borderRadius: 6, display: "block" }} />
                     )}
                   </div>
                 </div>
@@ -50504,7 +50532,16 @@ export default function Trailhead() {
     const rd = trip.route_data || {};
     const pins = Array.isArray(rd.pins) ? rd.pins : [];
     const photos = Array.isArray(rd.photos) ? rd.photos.map(p => typeof p === "string" ? p : (p && p.url) || null).filter(Boolean) : [];
-    const heroImg = trip.hero_img || (photos[0] || null);
+    // Hero fallback chain: explicit hero_img wins; else use the static map
+    // preview if the trip has start coords (mirrors what TripReportDetail
+    // does for the in-app hero); else fall through to the first photo.
+    // Without this, Route Report bounty trips that didn't set hero_img
+    // would render the first pin photo on the feed card instead of the
+    // map — confusing since the map is what makes a trip a trip.
+    const tripMapUrl = (trip.start_lat != null && trip.start_lng != null)
+      ? tripStaticMapUrl(trip.start_lat, trip.start_lng, "trip")
+      : null;
+    const heroImg = trip.hero_img || tripMapUrl || (photos[0] || null);
     const distanceLabel = trip.distance_mi != null ? `${Number(trip.distance_mi).toFixed(1)} mi` : null;
     const durationLabel = trip.duration_min != null ? `${Math.floor(trip.duration_min / 60)}h ${trip.duration_min % 60}m` : null;
     const elevationLabel = trip.elev_gain_ft != null ? `+${Number(trip.elev_gain_ft).toLocaleString()} ft` : null;
