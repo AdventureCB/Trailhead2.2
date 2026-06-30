@@ -12584,12 +12584,6 @@ function TripReportEditor({ trip, onClose, onSave, onPublish, onDelete, onAddRou
     const distNum = distanceMi.trim() === "" ? null : parseFloat(distanceMi);
     const elevGainNum = elevGainFt.trim() === "" ? null : parseInt(elevGainFt, 10);
     const maxElevNum = maxElevFt.trim() === "" ? null : parseInt(maxElevFt, 10);
-    // Auto-derive hero_img from the first uploaded photo if the trip doesn't
-    // have one yet. Only accept http(s) URLs — never data: / blob:.
-    const firstPhotoUrl = uploadedPhotos.length > 0
-      ? (typeof uploadedPhotos[0] === "string" ? uploadedPhotos[0] : (uploadedPhotos[0] && uploadedPhotos[0].url) || null)
-      : null;
-    const heroCandidate = firstPhotoUrl && /^https?:\/\//.test(firstPhotoUrl) ? firstPhotoUrl : null;
     const partyNum = partySize.trim() === "" ? null : parseInt(partySize, 10);
     const updates = {
       name: name.trim(),
@@ -12614,7 +12608,6 @@ function TripReportEditor({ trip, onClose, onSave, onPublish, onDelete, onAddRou
       updates.party_size = isNaN(partyNum) ? null : partyNum;
       updates.visibility = visibility === "public" ? "public" : "private";
     }
-    if (heroCandidate && !safe.hero_img) updates.hero_img = heroCandidate;
     await onSave(updates);
     setSaving(false);
     setSavedTick(Date.now());
@@ -13619,8 +13612,15 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
       const isVid = typeof raw === "object" && raw && raw.type === "video";
       entries.push({ url, isVid, source, pinIdx });
     };
+    // Walk pins FIRST so coord-matched pin photos take "pin" source — they
+    // surface on the pin card, and the URL gets added to `seen` so the
+    // gallery branch won't duplicate them when iterating `photos`.
+    pins.forEach((p, i) => {
+      const url = resolvePinPhotoUrl(p, photos, i);
+      if (url) add(url, "pin", i);
+      else if (p && p.photo && typeof p.photo === "object") add(p.photo, "pin", i);
+    });
     photos.forEach(p => add(p, "gallery"));
-    pins.forEach((p, i) => { if (p && p.photo) add(p.photo, "pin", i); });
     return entries;
   }, [photos, pins]);
   const carouselUrlList = useMemo(
@@ -14186,12 +14186,16 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
                     ) : hasNote ? (
                       <p style={{ fontFamily: serif, fontSize: 13, color: T.warmStone, margin: 0, lineHeight: 1.5 }}>{p.note}</p>
                     ) : null}
-                    {/* Per-pin photo — read-only thumbnail. Tap opens the
-                        merged carousel at this photo. stopPropagation so
-                        the surrounding card's tap-to-highlight doesn't
-                        also fire when the user is reaching for the photo. */}
-                    {!canEditInline && p && p.photo && (() => {
-                      const pinPhotoUrl = typeof p.photo === "string" ? p.photo : (p.photo && p.photo.url) || "";
+                    {/* Per-pin photo — read-only thumbnail. resolvePinPhotoUrl
+                        covers BOTH `pin.photo` as a URL/object (RouteRecorder
+                        legacy shape) AND the `pin.photo === true` boolean
+                        flag + coord-matched entry in `route_data.photos[]`
+                        (TripPinFullscreen shape, which the bounty / Route
+                        Report flow uses). Tap opens the carousel at that
+                        photo. stopPropagation so the surrounding card's
+                        tap-to-highlight doesn't also fire. */}
+                    {!canEditInline && (() => {
+                      const pinPhotoUrl = resolvePinPhotoUrl(p, photos, i);
                       if (!pinPhotoUrl) return null;
                       return (
                         <div
@@ -51321,14 +51325,15 @@ export default function Trailhead() {
       return null;
     }
     const rd = t.route_data;
-    const heroFromPhotos = Array.isArray(rd.photos) && rd.photos[0] ? (rd.photos[0].url || rd.photos[0]) : null;
     const updates = {
       status: "published",
       published_at: new Date().toISOString(),
     };
-    // Only adopt the hero candidate if it's a stable URL — never persist a
-    // data:/blob: hero (those don't survive a reload and bloat realtime).
-    if (!t.hero_img && heroFromPhotos && /^https?:\/\//.test(heroFromPhotos)) updates.hero_img = heroFromPhotos;
+    // hero_img is intentionally NOT auto-derived from the first photo any
+    // more — the route map is the natural visual identity of a trip
+    // report, and TripReportCard / shareTripToFeed fall back to it when
+    // hero_img is null. Users who want a hero photo can still set one
+    // explicitly (currently via direct DB or future UI).
     if (!t.distance_mi && rd.distanceMi) updates.distance_mi = rd.distanceMi;
     if (!t.duration_min && rd.duration) updates.duration_min = Math.round((rd.duration || 0) / 60);
     if (!t.elev_gain_ft && rd.elevGainFt) updates.elev_gain_ft = rd.elevGainFt;
