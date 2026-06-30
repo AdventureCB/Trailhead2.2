@@ -296,10 +296,12 @@ Deno.serve(async (req) => {
       updatedLast4 = String(gc.last_characters || gc.code?.slice(-4) || "").slice(-4) || null;
     } else {
       // Top-up existing card via gift_card_adjustments.
-      // amount is in store currency; positive = add to card.
+      // amount is in store currency; positive = add to card. Docs show
+      // amount as a NUMBER (10.0), not a string — sending a string can
+      // cause Shopify to return 404 "Not Found" on the adjustment.
       const adjBody = {
         adjustment: {
-          amount: (amountCents / 100).toFixed(2),
+          amount: Number((amountCents / 100).toFixed(2)),
           note: `Trailhead bounty payout · ${userId.slice(0, 8)}`,
         },
       };
