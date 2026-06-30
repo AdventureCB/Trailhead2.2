@@ -32858,6 +32858,29 @@ function BountyLinkedTripPreview({ trip }) {
   const distance = trip.distance_mi ? `${Number(trip.distance_mi).toFixed(1)} MI` : null;
   const elevGain = trip.elev_gain_ft ? `+${Math.round(trip.elev_gain_ft).toLocaleString()} FT` : null;
   const maxElev = trip.max_elev_ft ? `${Math.round(trip.max_elev_ft).toLocaleString()} FT` : null;
+  // Resolve per-pin photo URLs once so we can both (a) render them in the
+  // pin card and (b) exclude them from the bottom gallery. Mirrors the
+  // gridEntries dedup in TripReportDetail — pin-attributed photos should
+  // appear only inside their card, not also in the flat photo grid.
+  const pinPhotosByIdx = useMemo(() => {
+    const out = {};
+    pins.forEach((p, i) => {
+      const url = resolvePinPhotoUrl(p, photos, i);
+      if (url) out[i] = url;
+    });
+    return out;
+  }, [pins, photos]);
+  const attributedUrls = useMemo(() => new Set(Object.values(pinPhotosByIdx)), [pinPhotosByIdx]);
+  const unattributedPhotos = useMemo(() => {
+    return photos.filter(p => {
+      const url = typeof p === "string" ? p : (p && p.url) || "";
+      return url && !attributedUrls.has(url);
+    });
+  }, [photos, attributedUrls]);
+  // Lightbox state for pin clicks on the embedded map. RouteMapPreview
+  // emits onPhotoSelect(idx) for tapped photo pins; we open the popup here
+  // so admins can verify the photo lines up with the pin.
+  const [selectedPhotoUrl, setSelectedPhotoUrl] = useState(null);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       {/* Hero */}
@@ -32900,25 +32923,43 @@ function BountyLinkedTripPreview({ trip }) {
           )}
         </div>
       )}
-      {/* Route map */}
+      {/* Route map — onPhotoSelect lifts the photo modal up to this
+          component so map taps surface the photo inline (mirrors the
+          trip-detail map lightbox flow). */}
       {hasRoute && (
         <div style={{ borderRadius: 12, overflow: "hidden", border: `1px solid ${T.charcoal}` }}>
           <div style={{ width: "100%", height: 240, background: T.charcoal, position: "relative" }}>
-            <RouteMapPreview pins={pins} points={points} photos={photos} />
+            <RouteMapPreview
+              pins={pins}
+              points={points}
+              photos={photos}
+              onPhotoSelect={(idx) => {
+                const p = photos[idx];
+                const url = typeof p === "string" ? p : (p && p.url) || null;
+                if (url) setSelectedPhotoUrl(url);
+              }}
+            />
+            {selectedPhotoUrl && (
+              <div onClick={() => setSelectedPhotoUrl(null)} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, cursor: "pointer" }}>
+                <img src={txImg(selectedPhotoUrl, 1200)} alt="" style={{ maxWidth: "92%", maxHeight: "92%", borderRadius: 8, objectFit: "contain" }} />
+                <button onClick={(e) => { e.stopPropagation(); setSelectedPhotoUrl(null); }} style={{ position: "absolute", top: 10, right: 10, background: "rgba(0,0,0,0.6)", border: "none", borderRadius: "50%", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+                  <X size={16} color="#fff" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
-      {/* Per-pin notes + photos. pin.photo is typically a boolean (TRUE
-          when there's a matching photo in route_data.photos[]). The actual
-          photo URL lives in photos[] with lat/lng matching the pin's
-          coords — mirrors the trip-detail / RouteMapPreview matching
-          pattern. */}
-      {pins.filter((p, i) => p.note || p.photo || p.label || resolvePinPhotoUrl(p, photos, i)).length > 0 && (
+      {/* Per-pin notes + photos. Photo URL resolved once via the memoized
+          map above (coord-match against route_data.photos[] or pin.photo
+          fallback). Photos shown here are then excluded from the bottom
+          grid so a pin photo never appears twice. */}
+      {pins.filter((p, i) => p.note || pinPhotosByIdx[i] || p.label).length > 0 && (
         <div>
           <div style={{ fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 1.5, fontWeight: 700, marginBottom: 8 }}>WAYPOINTS</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {pins.map((p, i) => {
-              const pinPhotoUrl = resolvePinPhotoUrl(p, photos, i);
+              const pinPhotoUrl = pinPhotosByIdx[i];
               if (!p.note && !pinPhotoUrl && !p.label) return null;
               return (
                 <div key={i} style={{ background: T.darkCard, borderRadius: 8, padding: "10px 12px", display: "flex", gap: 10, alignItems: "flex-start" }}>
@@ -32927,7 +32968,12 @@ function BountyLinkedTripPreview({ trip }) {
                     {p.label && <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, marginBottom: 4 }}>{p.label}</div>}
                     {p.note && <div style={{ fontFamily: serif, fontSize: 13, color: T.warmStone, lineHeight: 1.5, marginBottom: pinPhotoUrl ? 8 : 0, whiteSpace: "pre-wrap" }}>{p.note}</div>}
                     {pinPhotoUrl && (
-                      <img src={txImg(pinPhotoUrl, 480)} alt="" style={{ width: "100%", maxWidth: 280, aspectRatio: "16 / 10", objectFit: "cover", borderRadius: 6, display: "block" }} />
+                      <img
+                        src={txImg(pinPhotoUrl, 480)}
+                        alt=""
+                        onClick={() => setSelectedPhotoUrl(pinPhotoUrl)}
+                        style={{ width: "100%", maxWidth: 280, aspectRatio: "16 / 10", objectFit: "cover", borderRadius: 6, display: "block", cursor: "pointer" }}
+                      />
                     )}
                   </div>
                 </div>
@@ -32936,14 +32982,24 @@ function BountyLinkedTripPreview({ trip }) {
           </div>
         </div>
       )}
-      {/* Photo grid */}
-      {photos.length > 0 && (
+      {/* Photo grid — only photos NOT already shown inside a pin card. */}
+      {unattributedPhotos.length > 0 && (
         <div>
           <div style={{ fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 1.5, fontWeight: 700, marginBottom: 8 }}>PHOTOS</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6 }}>
-            {photos.map((p, i) => (
-              <img key={i} src={txImg(p.url || p, 320)} alt="" style={{ width: "100%", aspectRatio: "1/1", objectFit: "cover", borderRadius: 6 }} />
-            ))}
+            {unattributedPhotos.map((p, i) => {
+              const url = typeof p === "string" ? p : (p && p.url) || "";
+              if (!url) return null;
+              return (
+                <img
+                  key={i}
+                  src={txImg(url, 320)}
+                  alt=""
+                  onClick={() => setSelectedPhotoUrl(url)}
+                  style={{ width: "100%", aspectRatio: "1/1", objectFit: "cover", borderRadius: 6, cursor: "pointer" }}
+                />
+              );
+            })}
           </div>
         </div>
       )}
