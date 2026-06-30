@@ -32822,6 +32822,124 @@ function BountyDraftRenderer({ bounty, draft }) {
   );
 }
 
+/* ─── BountyLinkedTripPreview — admin review render for Route Report
+   submissions, which keep their real data on a linked trip_reports row
+   (not in the form-template draft jsonb). Reads the trip fields directly
+   and renders hero / name / description / route map / per-pin notes +
+   photos / stats — same data the participant edited via TripReportEditor. */
+function BountyLinkedTripPreview({ trip }) {
+  const rd = (trip && trip.route_data) || {};
+  const pins = Array.isArray(rd.pins) ? rd.pins : [];
+  const points = Array.isArray(rd.points) ? rd.points : [];
+  const photos = Array.isArray(rd.photos) ? rd.photos : [];
+  const hasRoute = pins.length > 0 || points.length > 0;
+  const distance = trip.distance_mi ? `${Number(trip.distance_mi).toFixed(1)} MI` : null;
+  const elevGain = trip.elev_gain_ft ? `+${Math.round(trip.elev_gain_ft).toLocaleString()} FT` : null;
+  const maxElev = trip.max_elev_ft ? `${Math.round(trip.max_elev_ft).toLocaleString()} FT` : null;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {/* Hero */}
+      {trip.hero_img && (
+        <div style={{ borderRadius: 12, overflow: "hidden", border: `1px solid ${T.charcoal}` }}>
+          <img src={txImg(trip.hero_img, 600)} alt={trip.name || ""} style={{ width: "100%", maxHeight: 260, objectFit: "cover", display: "block" }} />
+        </div>
+      )}
+      {/* Name + description */}
+      <div>
+        <div style={{ fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 1.5, fontWeight: 700, marginBottom: 6 }}>LINKED TRIP REPORT</div>
+        <h2 style={{ fontFamily: sans, fontSize: 22, color: T.white, fontWeight: 700, margin: "0 0 8px", lineHeight: 1.2 }}>{trip.name || "(untitled)"}</h2>
+        {trip.description && (
+          <p style={{ fontFamily: serif, fontSize: 14, color: T.warmStone, lineHeight: 1.6, margin: 0, whiteSpace: "pre-wrap" }}>{trip.description}</p>
+        )}
+      </div>
+      {/* Location / state */}
+      {(trip.start_label || trip.region || trip.state_code) && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <MapPin size={13} color={T.copper} />
+          <span style={{ fontFamily: sans, fontSize: 12, color: T.tertiary }}>
+            {[trip.start_label, trip.region, trip.state_code].filter(Boolean).join(" · ")}
+          </span>
+        </div>
+      )}
+      {/* Stats row */}
+      {(distance || elevGain || maxElev || pins.length > 0) && (
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", background: T.darkCard, padding: "10px 14px", borderRadius: 8 }}>
+          {distance && (
+            <div><div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.5 }}>DISTANCE</div><div style={{ fontFamily: sans, fontSize: 13, color: T.copper, fontWeight: 700 }}>{distance}</div></div>
+          )}
+          {elevGain && (
+            <div><div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.5 }}>ELEV GAIN</div><div style={{ fontFamily: sans, fontSize: 13, color: T.green, fontWeight: 700 }}>{elevGain}</div></div>
+          )}
+          {maxElev && (
+            <div><div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.5 }}>MAX ELEV</div><div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700 }}>{maxElev}</div></div>
+          )}
+          {pins.length > 0 && (
+            <div><div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.5 }}>WAYPOINTS</div><div style={{ fontFamily: sans, fontSize: 13, color: T.copper, fontWeight: 700 }}>{pins.length}</div></div>
+          )}
+        </div>
+      )}
+      {/* Route map */}
+      {hasRoute && (
+        <div style={{ borderRadius: 12, overflow: "hidden", border: `1px solid ${T.charcoal}` }}>
+          <div style={{ width: "100%", height: 240, background: T.charcoal, position: "relative" }}>
+            <RouteMapPreview pins={pins} points={points} photos={photos} />
+          </div>
+        </div>
+      )}
+      {/* Per-pin notes + photos */}
+      {pins.filter(p => p.note || p.photo).length > 0 && (
+        <div>
+          <div style={{ fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 1.5, fontWeight: 700, marginBottom: 8 }}>WAYPOINT NOTES</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {pins.map((p, i) => {
+              if (!p.note && !p.photo) return null;
+              return (
+                <div key={i} style={{ background: T.darkCard, borderRadius: 8, padding: "10px 12px", display: "flex", gap: 10, alignItems: "flex-start" }}>
+                  <div style={{ width: 24, height: 24, borderRadius: "50%", background: T.copper, color: T.charcoal, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: sans, fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{i + 1}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    {p.note && <div style={{ fontFamily: serif, fontSize: 13, color: T.warmStone, lineHeight: 1.5, marginBottom: p.photo ? 8 : 0, whiteSpace: "pre-wrap" }}>{p.note}</div>}
+                    {p.photo && typeof p.photo === "string" && (
+                      <img src={txImg(p.photo, 320)} alt="" style={{ width: "100%", maxWidth: 220, height: 140, objectFit: "cover", borderRadius: 6, display: "block" }} />
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      {/* Photo grid */}
+      {photos.length > 0 && (
+        <div>
+          <div style={{ fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 1.5, fontWeight: 700, marginBottom: 8 }}>PHOTOS</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6 }}>
+            {photos.map((p, i) => (
+              <img key={i} src={txImg(p.url || p, 320)} alt="" style={{ width: "100%", aspectRatio: "1/1", objectFit: "cover", borderRadius: 6 }} />
+            ))}
+          </div>
+        </div>
+      )}
+      {/* Terrain + tags */}
+      {(Array.isArray(trip.terrains) && trip.terrains.length > 0) && (
+        <div>
+          <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 700, marginBottom: 6 }}>TERRAIN</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {trip.terrains.map(t => <span key={t} style={{ fontFamily: sans, fontSize: 10, color: T.copper, background: `${T.copper}18`, padding: "4px 10px", borderRadius: 12, fontWeight: 600 }}>{t}</span>)}
+          </div>
+        </div>
+      )}
+      {(Array.isArray(trip.tags) && trip.tags.length > 0) && (
+        <div>
+          <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 700, marginBottom: 6 }}>TAGS</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {trip.tags.map(t => <span key={t} style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, background: T.darkCard, padding: "4px 10px", borderRadius: 12 }}>#{t}</span>)}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── BountySubmissionReviewScreen — admin review surface (Phase 6 + 8) ─── */
 function BountySubmissionReviewScreen({ submission, onBack, onApprove, onRequestChanges, onReject, forumCategoriesList }) {
   const [reviewerNotes, setReviewerNotes] = useState("");
@@ -32859,6 +32977,27 @@ function BountySubmissionReviewScreen({ submission, onBack, onApprove, onRequest
     const cat = (forumCategoriesList || []).find(c => c.slug === forumCategorySlug);
     return (cat && cat.subs) ? cat.subs : [];
   }, [forumCategorySlug, forumCategoriesList]);
+  // Route Report submissions store their real data on a linked trip_report
+  // (referenced by submission.draft.trip_report_id) rather than in the
+  // form-template draft fields. Fetch the trip so we can render it inline
+  // for the admin — otherwise BountyDraftRenderer just shows empty form
+  // sections since the draft is essentially `{ trip_report_id: <uuid> }`.
+  const linkedTripId = submission && submission.draft && submission.draft.trip_report_id;
+  const [linkedTrip, setLinkedTrip] = useState(null);
+  const [linkedTripLoading, setLinkedTripLoading] = useState(false);
+  useEffect(() => {
+    if (!linkedTripId) { setLinkedTrip(null); return; }
+    let cancelled = false;
+    setLinkedTripLoading(true);
+    supabase.from("trip_reports").select("*").eq("id", linkedTripId).maybeSingle()
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) console.error("[BountySubmissionReviewScreen] trip fetch failed", error);
+        setLinkedTrip(data || null);
+        setLinkedTripLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [linkedTripId]);
   if (!submission) {
     return (
       <div style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}>
@@ -32939,9 +33078,24 @@ function BountySubmissionReviewScreen({ submission, onBack, onApprove, onRequest
         </div>
       </div>
 
-      {/* Rendered draft */}
+      {/* Rendered submission content. Route Report submissions store their
+          real data on a linked trip_report (not in the draft form fields),
+          so render the trip inline here. Other submission types use the
+          generic BountyDraftRenderer that walks form_config sections. */}
       <div style={{ padding: "12px 16px 24px", borderBottom: `1px solid ${T.charcoal}40` }}>
-        <BountyDraftRenderer bounty={bounty} draft={submission.draft || {}} />
+        {linkedTripId ? (
+          linkedTripLoading ? (
+            <div style={{ padding: 24, fontFamily: serif, fontSize: 12, color: T.tertiary, textAlign: "center" }}>Loading linked trip report…</div>
+          ) : !linkedTrip ? (
+            <div style={{ padding: 16, fontFamily: serif, fontSize: 12, color: T.red, background: `${T.red}10`, border: `1px solid ${T.red}40`, borderRadius: 8 }}>
+              Couldn't load the linked trip report (id: <code style={{ fontFamily: "monospace", fontSize: 10 }}>{linkedTripId}</code>). It may have been deleted.
+            </div>
+          ) : (
+            <BountyLinkedTripPreview trip={linkedTrip} />
+          )
+        ) : (
+          <BountyDraftRenderer bounty={bounty} draft={submission.draft || {}} />
+        )}
       </div>
 
       {/* Action panel */}
