@@ -288,6 +288,11 @@ Deno.serve(async (req) => {
   let shopifyAdjustmentId: string | null = null;
   let updatedBalanceCents: number = Number(targetProfile.lpo_gift_card_balance_cents || 0);
   let updatedLast4: string | null = targetProfile.lpo_gift_card_last4 || null;
+  // Captured only when we mint a NEW card (Shopify won't return the
+  // full code on top-ups or subsequent fetches). Used by the cache
+  // update below to populate profiles.lpo_gift_card_code for one-time
+  // display in the user's VIEW GIFT CARD modal.
+  let freshGiftCardCode: string | null = null;
 
   if (method === "manual") {
     payoutMethod = "manual";
@@ -317,6 +322,12 @@ Deno.serve(async (req) => {
       shopifyGiftCardId = String(gc.id);
       updatedBalanceCents = Math.round(Number(gc.balance || amountCents / 100) * 100);
       updatedLast4 = String(gc.last_characters || gc.code?.slice(-4) || "").slice(-4) || null;
+      // CAPTURE THE FULL CODE — only returned on create. Stash on the
+      // profile (below in cache update) so the user's VIEW GIFT CARD
+      // modal can display it once. User clears it by tapping "Got it" →
+      // clear_my_gift_card_code RPC. Transient deliverable, not a
+      // persistent secret.
+      freshGiftCardCode = (gc.code && String(gc.code).trim()) || null;
     } else {
       // Top-up via GraphQL giftCardCredit mutation. The REST adjustments
       // endpoint (/gift_cards/{id}/adjustments.json) returns 404 in
@@ -402,14 +413,22 @@ Deno.serve(async (req) => {
 
   // ── 7) Update profile gift card cache (only for Shopify branches) ──
   if (payoutMethod !== "manual") {
+    const cacheUpdate: Record<string, unknown> = {
+      lpo_gift_card_id: shopifyGiftCardId,
+      lpo_gift_card_last4: updatedLast4,
+      lpo_gift_card_balance_cents: updatedBalanceCents,
+      lpo_gift_card_synced_at: new Date().toISOString(),
+    };
+    // Only set the code when we just minted a fresh card — Shopify
+    // never returns it again, so for top-ups we leave the column
+    // untouched (either NULL from prior clear, or stale from the
+    // initial issuance that the user hasn't cleared yet).
+    if (freshGiftCardCode) {
+      cacheUpdate.lpo_gift_card_code = freshGiftCardCode;
+    }
     const { error: upErr } = await sb
       .from("profiles")
-      .update({
-        lpo_gift_card_id: shopifyGiftCardId,
-        lpo_gift_card_last4: updatedLast4,
-        lpo_gift_card_balance_cents: updatedBalanceCents,
-        lpo_gift_card_synced_at: new Date().toISOString(),
-      })
+      .update(cacheUpdate)
       .eq("id", userId);
     if (upErr) console.warn("[shopify-bounty-payout] profile cache update failed", upErr);
   }
