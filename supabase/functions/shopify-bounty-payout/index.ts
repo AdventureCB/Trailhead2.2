@@ -149,6 +149,91 @@ Deno.serve(async (req) => {
   const { data: authRow } = await sb.auth.admin.getUserById(userId);
   const targetEmail = authRow?.user?.email || null;
 
+  // ── 3b) Resolve or create the Shopify customer ──
+  // Gift cards MUST be attached to a customer record to (a) show a name
+  // in the Shopify admin and (b) auto-apply at checkout for the signed-
+  // in shopper. We cache the resolved customer_id on profiles so we
+  // only do the search/create dance once per user.
+  if (method !== "manual" && !targetProfile.shopify_customer_id) {
+    if (!targetEmail) {
+      return json({ ok: false, error: "Target user has no email — Shopify customer lookup requires one. Add an email to the auth user before issuing a gift card." }, 400);
+    }
+    // Split full_name into first/last for the Shopify customer record.
+    // Shopify is lenient — if we can't split, send full_name as first
+    // and leave last blank.
+    const fullName = (targetProfile.full_name || targetProfile.handle || "Trailhead User").trim();
+    const nameParts = fullName.split(/\s+/);
+    const firstName = nameParts[0] || "Trailhead";
+    const lastName = nameParts.slice(1).join(" ") || "";
+
+    // Search by exact email first — avoids duplicate customer records
+    // when the user already shops at lonepeakoverland.com.
+    const searchUrl = `/customers/search.json?query=${encodeURIComponent(`email:${targetEmail}`)}`;
+    const { status: searchStatus, body: searchBody } = await shopifyFetch(searchUrl);
+    let resolvedCustomerId: string | null = null;
+    if (searchStatus >= 200 && searchStatus < 300 && Array.isArray(searchBody?.customers) && searchBody.customers.length > 0) {
+      // Pick the first match. Shopify returns exact-email matches first.
+      resolvedCustomerId = String(searchBody.customers[0].id);
+    } else {
+      // No existing customer — create one. tax_exempt:false, send_email_invite:false
+      // so they aren't surprised by an unrelated email. They'll be linked
+      // automatically when they next sign in / checkout.
+      const createBody = {
+        customer: {
+          email: targetEmail,
+          first_name: firstName,
+          last_name: lastName,
+          verified_email: true,                          // we own the auth flow, the email is verified
+          accepts_marketing: false,                       // don't opt into LPO marketing without consent
+          note: `Auto-created by Trailhead bounty payout · profile ${userId.slice(0, 8)}`,
+          tags: "trailhead-bounty-recipient",
+        },
+      };
+      const { status: createStatus, body: createBodyResp } = await shopifyFetch("/customers.json", {
+        method: "POST",
+        body: JSON.stringify(createBody),
+      });
+      if (createStatus < 200 || createStatus >= 300 || !createBodyResp?.customer?.id) {
+        return json({ ok: false, error: "Shopify customer create failed", detail: createBodyResp }, 502);
+      }
+      resolvedCustomerId = String(createBodyResp.customer.id);
+    }
+    // Cache on the profile so subsequent gift card top-ups skip this step.
+    targetProfile.shopify_customer_id = resolvedCustomerId;
+    const { error: cacheErr } = await sb
+      .from("profiles")
+      .update({ shopify_customer_id: resolvedCustomerId })
+      .eq("id", userId);
+    if (cacheErr) console.warn("[shopify-bounty-payout] shopify_customer_id cache failed", cacheErr);
+  }
+
+  // ── 3c) Belt-and-suspenders: if the user already has a gift card but it
+  // was created BEFORE we shipped customer-linking (or somehow lost the
+  // link), patch it now. Idempotent — Shopify accepts the same customer_id
+  // again without complaining. Non-fatal on failure since the card still
+  // works for top-ups regardless. ──
+  if (method !== "manual" && targetProfile.lpo_gift_card_id && targetProfile.shopify_customer_id) {
+    try {
+      const { status: updStatus, body: updBody } = await shopifyFetch(
+        `/gift_cards/${targetProfile.lpo_gift_card_id}.json`,
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            gift_card: {
+              id: Number(targetProfile.lpo_gift_card_id),
+              customer_id: Number(targetProfile.shopify_customer_id),
+            },
+          }),
+        },
+      );
+      if (updStatus < 200 || updStatus >= 300) {
+        console.warn("[shopify-bounty-payout] existing gift card customer attach failed (non-fatal)", updStatus, updBody);
+      }
+    } catch (e) {
+      console.warn("[shopify-bounty-payout] existing gift card customer attach threw (non-fatal)", e);
+    }
+  }
+
   // ── 4) Validate submissions (if any provided) ──
   // submission_ids is OPTIONAL — admin can record a payout that isn't
   // tied to specific submissions (e.g. one-off bonus). When provided,
