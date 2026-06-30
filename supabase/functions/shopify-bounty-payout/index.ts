@@ -299,15 +299,15 @@ Deno.serve(async (req) => {
     if (!reference) return json({ ok: false, error: "reference required for manual payouts" }, 400);
   } else {
     // Shopify gift card path.
-    if (!targetProfile.lpo_gift_card_id) {
-      // Create a new gift card with initial_value = amountCents/100.
-      // value is in store currency (USD for LPO). note tags admin trace.
+    // Extracted helpers so the topup branch can fall through to create
+    // when the existing card is dead (disabled / expired / not found).
+    const createNewCard = async (): Promise<{ ok: true } | { ok: false; error: string; detail: any }> => {
       const createBody = {
         gift_card: {
           initial_value: (amountCents / 100).toFixed(2),
           note: `Trailhead bounty payout · ${userId.slice(0, 8)}`,
           customer_id: targetProfile.shopify_customer_id || undefined,
-          template_suffix: undefined, // use store default
+          template_suffix: undefined,
         },
       };
       const { status, body } = await shopifyFetch("/gift_cards.json", {
@@ -315,25 +315,27 @@ Deno.serve(async (req) => {
         body: JSON.stringify(createBody),
       });
       if (status < 200 || status >= 300 || !body?.gift_card?.id) {
-        return json({ ok: false, error: "Shopify gift_cards create failed", detail: body }, 502);
+        return { ok: false, error: "Shopify gift_cards create failed", detail: body };
       }
       const gc = body.gift_card;
       payoutMethod = "shopify_gift_card_new";
       shopifyGiftCardId = String(gc.id);
       updatedBalanceCents = Math.round(Number(gc.balance || amountCents / 100) * 100);
       updatedLast4 = String(gc.last_characters || gc.code?.slice(-4) || "").slice(-4) || null;
-      // CAPTURE THE FULL CODE — only returned on create. Stash on the
-      // profile (below in cache update) so the user's VIEW GIFT CARD
-      // modal can display it once. User clears it by tapping "Got it" →
-      // clear_my_gift_card_code RPC. Transient deliverable, not a
-      // persistent secret.
+      // CAPTURE THE FULL CODE — only returned on create. Persisted to
+      // user_gift_card_codes (owner-only RLS) below in cache update.
       freshGiftCardCode = (gc.code && String(gc.code).trim()) || null;
+      return { ok: true };
+    };
+
+    if (!targetProfile.lpo_gift_card_id) {
+      const r = await createNewCard();
+      if (!r.ok) return json({ ok: false, error: r.error, detail: r.detail }, 502);
     } else {
       // Top-up via GraphQL giftCardCredit mutation. The REST adjustments
-      // endpoint (/gift_cards/{id}/adjustments.json) returns 404 in
-      // 2026-04 — Shopify moved adjustments to GraphQL only. Requires
-      // the `write_gift_card_transactions` scope (separate from
-      // `write_gift_cards`) and the gift card ID in GID format.
+      // endpoint returns 404 in 2026-04 — Shopify moved adjustments to
+      // GraphQL only. Requires `write_gift_card_transactions` scope and
+      // gift card ID in GID format.
       const giftCardGid = `gid://shopify/GiftCard/${targetProfile.lpo_gift_card_id}`;
       const creditMutation = `mutation giftCardCredit($id: ID!, $creditInput: GiftCardCreditInput!) {
         giftCardCredit(id: $id, creditInput: $creditInput) {
@@ -362,29 +364,55 @@ Deno.serve(async (req) => {
       if (!credit) {
         return json({ ok: false, error: "GraphQL response missing giftCardCredit payload", detail: gqlBody }, 502);
       }
-      if (Array.isArray(credit.userErrors) && credit.userErrors.length > 0) {
-        return json({ ok: false, error: "Gift card credit rejected", detail: credit.userErrors }, 502);
+
+      // Detect a card that can't accept credit (deactivated, expired,
+      // doesn't exist anymore) and gracefully fall back to minting a
+      // new card. Without this, an admin who disables a user's card
+      // in Shopify Admin would block all future payouts until they
+      // manually clear lpo_gift_card_id in the DB. Pattern-match on
+      // Shopify's userError codes + messages.
+      const errs: Array<{ code?: string; message?: string; field?: string[] }> = credit.userErrors || [];
+      const isCardDead = errs.length > 0 && errs.some(e => {
+        const code = (e.code || "").toUpperCase();
+        const msg = (e.message || "").toLowerCase();
+        return code === "GIFT_CARD_DISABLED"
+          || code === "GIFT_CARD_EXPIRED"
+          || code === "GIFT_CARD_NOT_FOUND"
+          || /disabled|expired|not found|cannot be credited|inactive/.test(msg);
+      });
+      if (errs.length > 0 && !isCardDead) {
+        return json({ ok: false, error: "Gift card credit rejected", detail: errs }, 502);
       }
-      const txn = credit.giftCardCreditTransaction;
-      if (!txn || !txn.id) {
-        return json({ ok: false, error: "GraphQL response missing transaction id", detail: gqlBody }, 502);
-      }
-      payoutMethod = "shopify_gift_card_topup";
-      // Store the numeric portion of the GID — easier to filter on + UI consistency.
-      shopifyAdjustmentId = String(txn.id).replace(/^gid:\/\/shopify\/[^/]+\//, "");
-      const balanceAmount = txn?.giftCard?.balance?.amount;
-      if (balanceAmount != null) {
-        updatedBalanceCents = Math.round(Number(balanceAmount) * 100);
+      if (isCardDead) {
+        // Existing card unusable — mint a new one. The user's
+        // shopify_customer_id stays the same so the new card attaches
+        // to the same customer record. user_gift_card_codes upsert
+        // below overwrites the old code with the new one.
+        console.warn("[shopify-bounty-payout] existing gift card unusable; minting new card", { gift_card_id: targetProfile.lpo_gift_card_id, errors: errs });
+        const r = await createNewCard();
+        if (!r.ok) return json({ ok: false, error: r.error, detail: r.detail }, 502);
       } else {
-        // Fallback: optimistic local add.
-        updatedBalanceCents = updatedBalanceCents + amountCents;
-      }
-      // Pull updated last4 from masked code if available — usually
-      // unchanged from create but defensive in case Shopify rotates it.
-      const masked = txn?.giftCard?.maskedCode || "";
-      if (masked) {
-        const tail = masked.replace(/[^A-Za-z0-9]/g, "").slice(-4);
-        if (tail) updatedLast4 = tail;
+        const txn = credit.giftCardCreditTransaction;
+        if (!txn || !txn.id) {
+          return json({ ok: false, error: "GraphQL response missing transaction id", detail: gqlBody }, 502);
+        }
+        payoutMethod = "shopify_gift_card_topup";
+        // Store the numeric portion of the GID — easier to filter on + UI consistency.
+        shopifyAdjustmentId = String(txn.id).replace(/^gid:\/\/shopify\/[^/]+\//, "");
+        const balanceAmount = txn?.giftCard?.balance?.amount;
+        if (balanceAmount != null) {
+          updatedBalanceCents = Math.round(Number(balanceAmount) * 100);
+        } else {
+          // Fallback: optimistic local add.
+          updatedBalanceCents = updatedBalanceCents + amountCents;
+        }
+        // Pull updated last4 from masked code if available — usually
+        // unchanged from create but defensive in case Shopify rotates it.
+        const masked = txn?.giftCard?.maskedCode || "";
+        if (masked) {
+          const tail = masked.replace(/[^A-Za-z0-9]/g, "").slice(-4);
+          if (tail) updatedLast4 = tail;
+        }
       }
     }
   }
