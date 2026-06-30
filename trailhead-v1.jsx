@@ -53048,6 +53048,14 @@ export default function Trailhead() {
       {showTripPinFullscreen && pendingTripDraftId && (() => {
         const trip = tripReports.find(t => t.id === pendingTripDraftId);
         const rd = (trip && trip.route_data) || {};
+        // In bounty mode, return to TripReportEditor (which has the
+        // SUBMIT FOR REVIEW button + bounty-aware UX) instead of
+        // TripReportDetail (which would render normal PUBLISH actions).
+        const isBountyTrip = routeReportBountyCtx && routeReportBountyCtx.tripId === pendingTripDraftId;
+        const returnToEditor = (id) => {
+          if (isBountyTrip) setEditingTripId(id);
+          else openTripDetailForEdit(id);
+        };
         return (
           <TripPinFullscreen
             initialPins={Array.isArray(rd.pins) ? rd.pins : []}
@@ -53057,9 +53065,7 @@ export default function Trailhead() {
               const id = pendingTripDraftId;
               setShowTripPinFullscreen(false);
               setPendingTripDraftId(null);
-              // Drop back into the detail page (edit mode) on close even
-              // without saving so the user doesn't lose their place.
-              if (id) openTripDetailForEdit(id);
+              if (id) returnToEditor(id);
             }}
             onSave={(routeData) => {
               const startPin = (routeData.pins && routeData.pins[0]) || (routeData.points && routeData.points[0]) || null;
@@ -53086,7 +53092,7 @@ export default function Trailhead() {
               updateTripDraft(id, updates);
               setShowTripPinFullscreen(false);
               setPendingTripDraftId(null);
-              openTripDetailForEdit(id);
+              returnToEditor(id);
             }}
           />
         );
@@ -53423,7 +53429,16 @@ export default function Trailhead() {
           // skip the post-recording RouteDetailsForm and let onSave fire
           // straight through.
           skipDetailsForm={!!pendingTripDraftId}
-          onClose={() => { setShowRecorder(false); setPendingTripDraftId(null); }}
+          onClose={() => {
+            const id = pendingTripDraftId;
+            const isBountyTrip = id && routeReportBountyCtx && routeReportBountyCtx.tripId === id;
+            setShowRecorder(false);
+            setPendingTripDraftId(null);
+            // Bounty mode: bounce back into TripReportEditor so the
+            // user keeps the SUBMIT FOR REVIEW button. Normal mode:
+            // do nothing (recorder was opened standalone).
+            if (isBountyTrip && id) setEditingTripId(id);
+          }}
           onSave={async (routeData) => {
             const id = "rec_route_" + Date.now();
             const distMi = routeData.distance ? (routeData.distance / 1609.34).toFixed(1) : "—";
@@ -53491,12 +53506,17 @@ export default function Trailhead() {
               if (routeData.tags) updates.tags = routeData.tags;
               updateTripDraft(pendingTripDraftId, updates);
               const draftIdForEditor = pendingTripDraftId;
+              const isBountyTrip = routeReportBountyCtx && routeReportBountyCtx.tripId === draftIdForEditor;
               setPendingTripDraftId(null);
               setShowRecorder(false);
-              // Drop the user on the detail page in edit mode so they
-              // can fill in title / description / metadata inline (same
-              // surface as plans).
-              openTripDetailForEdit(draftIdForEditor);
+              // For bounty-mode trips, return to TripReportEditor (has
+              // the SUBMIT FOR REVIEW button). For normal trips, drop
+              // into TripReportDetail edit mode as before.
+              if (isBountyTrip) {
+                setEditingTripId(draftIdForEditor);
+              } else {
+                openTripDetailForEdit(draftIdForEditor);
+              }
               return;
             }
             setUserRoutes(prev => [{
