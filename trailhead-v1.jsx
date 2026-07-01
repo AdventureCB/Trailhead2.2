@@ -124,11 +124,10 @@ function getUserRank(points) {
 // when false so we don't have to thread `isAdmin` through every render
 // site (~10 across feed, forum, comments). The `Trailhead` root updates
 // this via a useEffect any time the viewer's role changes. Defaults to
-// false so first render before hydrate doesn't flash a rank icon for
-// non-admins. Ranks is a v2 feature — gated to admins + opted-in beta
-// testers (profiles.is_beta_tester=true) until it ships to GA. The beta
-// flag was repurposed from gear drops once that feature went GA.
-let RANKS_VISIBLE_TO_VIEWER = false;
+// true — Ranks (points, badges, bounties, leaderboard) went GA 2026-07-01
+// (Phase 9 public launch). Hidden for guests only; every signed-in user
+// sees rank icons everywhere they're rendered.
+let RANKS_VISIBLE_TO_VIEWER = true;
 function RankBadge({ points, size = 12 }) {
   if (!RANKS_VISIBLE_TO_VIEWER) return null;
   const rank = getUserRank(points);
@@ -4130,7 +4129,7 @@ function BottomNav({ active, onNav, isGuest, isAdmin, isBetaTester }) {
     { key: "forum", label: "Forum", icon: Compass },
     { key: "routes", label: "Maps", icon: Map },
     { key: "builds", label: "Builds", icon: Wrench },
-    (!isGuest && (isAdmin || isBetaTester)) ? { key: "ranks", label: "Ranks", icon: Trophy } : null,
+    !isGuest ? { key: "ranks", label: "Ranks", icon: Trophy } : null,
   ].filter(Boolean);
   return (
     <div style={{ display: "flex", position: "sticky", bottom: 0, background: T.darkCard, padding: "10px 0 max(10px, env(safe-area-inset-bottom))", borderTop: `1px solid ${T.charcoal}`, zIndex: 100, flexShrink: 0 }}>
@@ -50024,11 +50023,10 @@ export default function Trailhead() {
     return () => { try { supabase.removeChannel(ch); } catch {} };
   }, [supabaseSession && supabaseSession.user && supabaseSession.user.id, isGuest]);
   // Keep the module-level rank-visibility flag in sync with viewer role.
-  // Set during render (NOT in a useEffect) so the same render pass that
-  // flips isAdmin also shows/hides every RankBadge child component. An
-  // effect would lag one paint behind, briefly hiding badges on admin
-  // login or briefly flashing them after demotion.
-  RANKS_VISIBLE_TO_VIEWER = !!isAdmin || !!isBetaTester;
+  // Post GA (2026-07-01) ranks are visible to every signed-in user; only
+  // guests are gated out. Set during render (NOT in a useEffect) so
+  // sign-in / sign-out flips take effect the same paint they're detected.
+  RANKS_VISIBLE_TO_VIEWER = !isGuest;
   // Shared-link URL parsing now happens synchronously via parseInitialSharedLink()
   // above, seeded into initial useState values. This avoids the React reconciliation
   // error (removeChild NotFoundError) that occurred when we swapped LoginScreen for
@@ -52994,7 +52992,7 @@ export default function Trailhead() {
     { key: "forum", label: "Forum", icon: Compass },
     { key: "routes", label: "Maps", icon: Map },
     { key: "builds", label: "Builds", icon: Wrench },
-    (!isGuest && (isAdmin || isBetaTester)) ? { key: "ranks", label: "Ranks", icon: Trophy } : null,
+    !isGuest ? { key: "ranks", label: "Ranks", icon: Trophy } : null,
     (!isGuest && isAdmin) ? { key: "admin", label: "Admin", icon: Shield } : null,
   ].filter(Boolean);
   const myFullName = (currentProfile && currentProfile.full_name) || "You";
@@ -53322,9 +53320,7 @@ export default function Trailhead() {
             )}
             {screen === "ranks" && (isGuest
               ? <GuestGateScreen title="RANKS REQUIRE AN ACCOUNT" subtitle="Sign in to see the leaderboard and start earning points from your posts, routes and builds." onSignIn={goToLoginFromGuest} />
-              : (isAdmin || isBetaTester)
-                ? <RanksScreen myPoints={myTotalPoints} pointsBreakdown={friendlyPointsBreakdown} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentProfile={currentProfile} onLoadLeaderboard={loadLeaderboard} onViewUser={openUserProfile} bounties={bounties} mySubmissions={myBountySubmissions} isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onClaimBounty={claimBounty} onSaveBountyDraft={saveBountyDraft} onSubmitBountyRPC={submitBountySubmission} onWithdrawBounty={withdrawBountySubmission} onUploadBountyPhotos={uploadBountyPhotoFiles} earnings={bountyEarnings} onOpenDM={openDM} onLoadProfileById={loadProfileById} onSendDemoProposal={sendDemoProposalCard} onSendDmInvite={sendDmInvite} onRefreshGiftCard={refreshGiftCardBalance} onRequestPayout={requestBountyPayout} onLoadBountyHistory={loadBountyHistory} onLoadGiftCardCode={loadGiftCardCode} onClaimRouteReportBounty={claimRouteReportBounty} onOpenRouteReportEditor={openRouteReportBountyEditor} userBuilds={userBuilds} />
-                : <div style={{ padding: 32, textAlign: "center", fontFamily: serif, fontSize: 14, color: T.tertiary, lineHeight: 1.6 }}>Ranks is coming in a future release.</div>
+              : <RanksScreen myPoints={myTotalPoints} pointsBreakdown={friendlyPointsBreakdown} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentProfile={currentProfile} onLoadLeaderboard={loadLeaderboard} onViewUser={openUserProfile} bounties={bounties} mySubmissions={myBountySubmissions} isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onClaimBounty={claimBounty} onSaveBountyDraft={saveBountyDraft} onSubmitBountyRPC={submitBountySubmission} onWithdrawBounty={withdrawBountySubmission} onUploadBountyPhotos={uploadBountyPhotoFiles} earnings={bountyEarnings} onOpenDM={openDM} onLoadProfileById={loadProfileById} onSendDemoProposal={sendDemoProposalCard} onSendDmInvite={sendDmInvite} onRefreshGiftCard={refreshGiftCardBalance} onRequestPayout={requestBountyPayout} onLoadBountyHistory={loadBountyHistory} onLoadGiftCardCode={loadGiftCardCode} onClaimRouteReportBounty={claimRouteReportBounty} onOpenRouteReportEditor={openRouteReportBountyEditor} userBuilds={userBuilds} />
             )}
             {screen === "admin" && (isAdmin
               ? (adminSubScreen === "geardrops"
