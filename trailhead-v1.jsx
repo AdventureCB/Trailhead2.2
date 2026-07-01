@@ -8328,6 +8328,14 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
 .th-rb ul li{list-style-type:disc}
 .th-rb ol li{list-style-type:decimal}
 .th-rb a{color:#C49A6C;text-decoration:underline;cursor:pointer}
+.th-rb a.th-build-cta{display:flex;gap:12px;align-items:center;text-decoration:none;background:#1A1A1A;border:1px solid #C49A6C40;border-radius:10px;padding:12px;margin:16px 0;color:#fff;transition:border-color 0.15s}
+.th-rb a.th-build-cta:hover{border-color:#C49A6C}
+.th-rb a.th-build-cta img{width:72px;height:72px;border-radius:6px;object-fit:cover;flex-shrink:0;margin:0;background:#0d0d0d}
+.th-rb a.th-build-cta .th-build-cta-body{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.th-rb a.th-build-cta .th-build-cta-eyebrow{font-family:Trebuchet MS,Gill Sans,sans-serif;font-size:9px;color:#C49A6C;letter-spacing:1.2px;font-weight:700}
+.th-rb a.th-build-cta strong{font-family:Trebuchet MS,Gill Sans,sans-serif;font-size:15px;font-weight:700;color:#fff;line-height:1.25}
+.th-rb a.th-build-cta .th-build-cta-meta{font-family:Trebuchet MS,Gill Sans,sans-serif;font-size:11px;color:#8B7D6B;letter-spacing:0.3px}
+.th-rb a.th-build-cta .th-build-cta-arrow{color:#C49A6C;font-size:20px;flex-shrink:0;padding:0 6px}
 .th-rb b,.th-rb strong{font-weight:700;color:#fff}
 .th-rb u{text-decoration:underline}
 .th-rb strike,.th-rb s{text-decoration:line-through}
@@ -19125,7 +19133,7 @@ function resolveObjectFit(obj) {
 }
 
 /* ─── BOUNTY RESPONSE FORM ─── */
-function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUploadPhotos, currentUserId }) {
+function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUploadPhotos, currentUserId, userBuilds }) {
   // Phase 6 polish: prefer bounty.form_config (admin-customized prompts) over
   // the module-level BOUNTY_FORM_TEMPLATES. Falls back to the template
   // referenced by form_template_key, then to the bounty's category, then to
@@ -19997,6 +20005,65 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
             );
           }
 
+          if (section.type === "build_select") {
+            // Value is a build id (uuid string). Rendered as a dropdown of
+            // the participant's builds. Empty state prompts them to add a
+            // build first via ProfileScreen → BUILDS. Prefilled default_value
+            // resolves to a build id the admin can seed on the section.
+            const selectedId = fields[section.id] || "";
+            const builds = Array.isArray(userBuilds) ? userBuilds : [];
+            const selected = builds.find(b => b.id === selectedId);
+            return (
+              <div key={section.id} style={{ margin: "12px 0" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <Wrench size={14} color={T.copper} />
+                  <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>{section.label}</span>
+                  {section.required && <span style={{ fontFamily: sans, fontSize: 9, color: T.red }}>REQUIRED</span>}
+                </div>
+                {builds.length === 0 ? (
+                  <div style={{ padding: 14, fontFamily: serif, fontSize: 12, color: T.tertiary, textAlign: "center", background: T.darkCard, border: `1px dashed ${T.charcoal}`, borderRadius: 8, lineHeight: 1.4 }}>
+                    You don't have any builds yet. Add one from your profile → BUILDS, then come back here.
+                  </div>
+                ) : (
+                  <>
+                    <select
+                      value={selectedId}
+                      onChange={e => updateField(section.id, e.target.value)}
+                      style={{ width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.warmStone, fontFamily: serif, fontSize: 14, outline: "none", boxSizing: "border-box", cursor: "pointer" }}
+                    >
+                      <option value="">— Pick one of your builds —</option>
+                      {builds.map(b => {
+                        const label = [b.year, b.make, b.model, b.trim].filter(Boolean).join(" ").trim();
+                        return (
+                          <option key={b.id} value={b.id}>
+                            {b.name || label || "(Untitled build)"}{label && b.name ? ` · ${label}` : ""}
+                          </option>
+                        );
+                      })}
+                    </select>
+                    {selected && (
+                      <div style={{ marginTop: 8, display: "flex", gap: 10, alignItems: "center", background: T.darkCard, border: `1px solid ${T.copper}30`, borderRadius: 8, padding: "8px 10px" }}>
+                        {selected.hero_img ? (
+                          <img src={txImg(selected.hero_img, 160)} alt="" style={{ width: 56, height: 56, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} />
+                        ) : (
+                          <div style={{ width: 56, height: 56, borderRadius: 6, background: T.charcoal, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            <Wrench size={20} color={T.tertiary} />
+                          </div>
+                        )}
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selected.name || "(Untitled build)"}</div>
+                          <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 2, letterSpacing: 0.4 }}>
+                            {[selected.year, selected.make, selected.model, selected.trim].filter(Boolean).join(" ")}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          }
+
           if (section.type === "url") {
             // Value is a {url, text} object — url is the target, text is
             // the visible link label. Backward-compat: plain string is
@@ -20620,7 +20687,7 @@ function BountyHistoryModal({ onLoad, onClose }) {
 }
 
 /* ─── RANKS / LEADERBOARD SCREEN ─── */
-function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, currentUserId, currentProfile, onLoadLeaderboard, onViewUser, bounties: bountiesFromDB, mySubmissions, isGuest, onGuestTap, onClaimBounty, onSaveBountyDraft, onSubmitBountyRPC, onWithdrawBounty, onUploadBountyPhotos, earnings, onOpenDM, onLoadProfileById, onSendDemoProposal, onSendDmInvite, onRefreshGiftCard, onRequestPayout, onLoadBountyHistory, onLoadGiftCardCode, onClaimRouteReportBounty, onOpenRouteReportEditor }) {
+function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, currentUserId, currentProfile, onLoadLeaderboard, onViewUser, bounties: bountiesFromDB, mySubmissions, isGuest, onGuestTap, onClaimBounty, onSaveBountyDraft, onSubmitBountyRPC, onWithdrawBounty, onUploadBountyPhotos, earnings, onOpenDM, onLoadProfileById, onSendDemoProposal, onSendDmInvite, onRefreshGiftCard, onRequestPayout, onLoadBountyHistory, onLoadGiftCardCode, onClaimRouteReportBounty, onOpenRouteReportEditor, userBuilds }) {
   const [tab, setTab] = useState("overview"); // overview | leaderboard | bounty | badges
   // Leaderboard state. lbScope = global | following | weekly; lbData[scope]
   // caches rows so switching tabs is instant after the first fetch. Refresh
@@ -21544,6 +21611,7 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
               onSubmit={submitFromForm}
               onUploadPhotos={onUploadBountyPhotos}
               currentUserId={currentUserId}
+              userBuilds={userBuilds}
               onClose={() => setActiveBountyFormId(null)}
             />
       )}
@@ -32827,6 +32895,18 @@ function BountyDraftRenderer({ bounty, draft }) {
             </div>
           );
         }
+        if (section.type === "build_select") {
+          if (!val) return null;
+          // Admin preview: show a compact card so reviewer sees the target build.
+          // Falls back to just the id when we don't have build metadata handy.
+          return (
+            <div key={section.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0" }}>
+              <Wrench size={12} color={T.copper} />
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600 }}>{section.label.toUpperCase()}</span>
+              <a href={`/builds/${val}`} target="_blank" rel="noopener noreferrer" style={{ fontFamily: sans, fontSize: 12, color: T.copper, wordBreak: "break-all" }}>Open build →</a>
+            </div>
+          );
+        }
         if (section.type === "hero_image") {
           const url = val && val.url;
           if (!url || url.startsWith("blob:")) return null;
@@ -34279,6 +34359,7 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
     if (type === "select") { seed.options = ["Option A", "Option B"]; }
     if (type === "rating") { seed.max = 5; }
     if (type === "url") { seed.placeholder = "https://example.com/product"; seed.label = "Link"; }
+    if (type === "build_select") { seed.label = "Choose a Build"; seed.placeholder = "— Pick one of your builds —"; }
     setBounty(prev => {
       if (!prev) return prev;
       const baseConfig = ensureFormConfig(prev);
@@ -34943,6 +35024,7 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
                   { k: "select", label: "Dropdown" },
                   { k: "rating", label: "Rating (stars)" },
                   { k: "url", label: "URL / link" },
+                  { k: "build_select", label: "Build selector" },
                   { k: "route_builder", label: "Route builder" },
                 ];
                 return (
@@ -53234,7 +53316,7 @@ export default function Trailhead() {
             {screen === "ranks" && (isGuest
               ? <GuestGateScreen title="RANKS REQUIRE AN ACCOUNT" subtitle="Sign in to see the leaderboard and start earning points from your posts, routes and builds." onSignIn={goToLoginFromGuest} />
               : (isAdmin || isBetaTester)
-                ? <RanksScreen myPoints={myTotalPoints} pointsBreakdown={friendlyPointsBreakdown} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentProfile={currentProfile} onLoadLeaderboard={loadLeaderboard} onViewUser={openUserProfile} bounties={bounties} mySubmissions={myBountySubmissions} isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onClaimBounty={claimBounty} onSaveBountyDraft={saveBountyDraft} onSubmitBountyRPC={submitBountySubmission} onWithdrawBounty={withdrawBountySubmission} onUploadBountyPhotos={uploadBountyPhotoFiles} earnings={bountyEarnings} onOpenDM={openDM} onLoadProfileById={loadProfileById} onSendDemoProposal={sendDemoProposalCard} onSendDmInvite={sendDmInvite} onRefreshGiftCard={refreshGiftCardBalance} onRequestPayout={requestBountyPayout} onLoadBountyHistory={loadBountyHistory} onLoadGiftCardCode={loadGiftCardCode} onClaimRouteReportBounty={claimRouteReportBounty} onOpenRouteReportEditor={openRouteReportBountyEditor} />
+                ? <RanksScreen myPoints={myTotalPoints} pointsBreakdown={friendlyPointsBreakdown} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentProfile={currentProfile} onLoadLeaderboard={loadLeaderboard} onViewUser={openUserProfile} bounties={bounties} mySubmissions={myBountySubmissions} isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onClaimBounty={claimBounty} onSaveBountyDraft={saveBountyDraft} onSubmitBountyRPC={submitBountySubmission} onWithdrawBounty={withdrawBountySubmission} onUploadBountyPhotos={uploadBountyPhotoFiles} earnings={bountyEarnings} onOpenDM={openDM} onLoadProfileById={loadProfileById} onSendDemoProposal={sendDemoProposalCard} onSendDmInvite={sendDmInvite} onRefreshGiftCard={refreshGiftCardBalance} onRequestPayout={requestBountyPayout} onLoadBountyHistory={loadBountyHistory} onLoadGiftCardCode={loadGiftCardCode} onClaimRouteReportBounty={claimRouteReportBounty} onOpenRouteReportEditor={openRouteReportBountyEditor} userBuilds={userBuilds} />
                 : <div style={{ padding: 32, textAlign: "center", fontFamily: serif, fontSize: 14, color: T.tertiary, lineHeight: 1.6 }}>Ranks is coming in a future release.</div>
             )}
             {screen === "admin" && (isAdmin
