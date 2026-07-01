@@ -144,6 +144,8 @@ ${_}`}var yn=class extends Error{constructor({message:r,code:n,cause:i,name:l}){
 .th-rb img{max-width:100%;border-radius:8px;display:block;margin:8px 0}
 .th-rb figure{display:block;margin:14px 0}
 .th-rb figure img{margin:0 0 6px}
+.th-rb figure video{display:block;width:100%;max-width:100%;border-radius:8px;margin:0 0 6px;background:#000}
+.th-rb video{display:block;width:100%;max-width:100%;border-radius:8px;margin:8px 0;background:#000}
 .th-rb figcaption{display:block;font-size:12px;color:#8B7D6B;font-style:italic;line-height:1.4;padding:2px 4px}
 .th-rb p{display:block;margin:6px 0;font-size:14px}
 .th-rb div{display:block;margin:4px 0}
