@@ -21273,9 +21273,21 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
         <div>
           {/* Header */}
           <div style={{ padding: "16px 16px 8px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
               <Target size={18} color={T.red} />
               <h2 style={{ fontFamily: sans, fontSize: 18, color: T.white, margin: 0, fontWeight: 700 }}>Bounty Board</h2>
+              <a
+                href="/forum/bounties/how-bounties-work"
+                onClick={e => {
+                  // Full-page nav triggers a fresh boot which routes via
+                  // __INITIAL_SHARED_LINK — works but janky. Keep as-is for
+                  // the MVP; upgrade to setPendingThread SPA nav later.
+                }}
+                style={{ display: "inline-flex", alignItems: "center", gap: 4, fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600, letterSpacing: 0.3, textDecoration: "none", padding: "3px 8px", borderRadius: 4, border: `1px solid ${T.copper}40`, background: `${T.copper}10`, marginLeft: 4 }}
+              >
+                <BookOpen size={11} color={T.copper} />
+                Learn more
+              </a>
             </div>
             <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: 0, lineHeight: 1.5 }}>Complete bounties to earn cash credit and bonus points. All submissions are reviewed by admins before rewards are issued.</p>
           </div>
