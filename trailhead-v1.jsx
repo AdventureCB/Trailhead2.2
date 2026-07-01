@@ -8315,6 +8315,9 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
 .th-rb h2{display:block;font-size:21px;font-weight:700;color:#fff;margin:12px 0 6px;font-family:Trebuchet MS,Gill Sans,sans-serif;line-height:1.3}
 .th-rb h3{display:block;font-size:17px;font-weight:600;color:#fff;margin:10px 0 4px;font-family:Trebuchet MS,Gill Sans,sans-serif;line-height:1.3}
 .th-rb img{max-width:100%;border-radius:8px;display:block;margin:8px 0}
+.th-rb figure{display:block;margin:14px 0}
+.th-rb figure img{margin:0 0 6px}
+.th-rb figcaption{display:block;font-size:12px;color:#8B7D6B;font-style:italic;line-height:1.4;padding:2px 4px}
 .th-rb p{display:block;margin:6px 0;font-size:14px}
 .th-rb div{display:block;margin:4px 0}
 .th-rb ul{display:block;list-style-type:disc;padding-left:24px;margin:8px 0}
@@ -19979,6 +19982,33 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
                     );
                   })}
                 </div>
+              </div>
+            );
+          }
+
+          if (section.type === "url") {
+            const value = fields[section.id] || "";
+            const trimmed = value.trim();
+            const isValid = trimmed === "" || /^https?:\/\/[^\s]+/i.test(trimmed);
+            return (
+              <div key={section.id} style={{ margin: "12px 0" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <Link2 size={14} color={T.copper} />
+                  <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>{section.label}</span>
+                  {section.required && <span style={{ fontFamily: sans, fontSize: 9, color: T.red }}>REQUIRED</span>}
+                </div>
+                <input
+                  type="url"
+                  value={value}
+                  onChange={(e) => updateField(section.id, e.target.value)}
+                  placeholder={section.placeholder || "https://…"}
+                  style={{ width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${isValid ? T.charcoal : T.red}80`, color: T.warmStone, fontFamily: serif, fontSize: 14, outline: "none", boxSizing: "border-box" }}
+                  onFocus={e => e.target.style.borderColor = T.copper + "80"}
+                  onBlur={e => e.target.style.borderColor = isValid ? T.charcoal : T.red + "80"}
+                />
+                {!isValid && (
+                  <div style={{ fontFamily: sans, fontSize: 10, color: T.red, marginTop: 4 }}>URL must start with http:// or https://</div>
+                )}
               </div>
             );
           }
@@ -32749,6 +32779,19 @@ function BountyDraftRenderer({ bounty, draft }) {
             </div>
           );
         }
+        if (section.type === "url") {
+          if (!val || !val.trim()) return null;
+          const href = val.trim();
+          const safe = /^https?:\/\//i.test(href);
+          return (
+            <div key={section.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", flexWrap: "wrap" }}>
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600 }}>{section.label.toUpperCase()}</span>
+              {safe
+                ? <a href={href} target="_blank" rel="noopener noreferrer nofollow" style={{ fontFamily: sans, fontSize: 12, color: T.copper, wordBreak: "break-all" }}>{href}</a>
+                : <span style={{ fontFamily: sans, fontSize: 12, color: T.tertiary, wordBreak: "break-all" }}>{href}</span>}
+            </div>
+          );
+        }
         if (section.type === "hero_image") {
           const url = val && val.url;
           if (!url || url.startsWith("blob:")) return null;
@@ -34200,6 +34243,7 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
     if (type === "tag_select") { seed.options = ["Option A", "Option B"]; }
     if (type === "select") { seed.options = ["Option A", "Option B"]; }
     if (type === "rating") { seed.max = 5; }
+    if (type === "url") { seed.placeholder = "https://example.com/product"; seed.label = "Link"; }
     setBounty(prev => {
       if (!prev) return prev;
       const baseConfig = ensureFormConfig(prev);
@@ -34843,6 +34887,7 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
                   { k: "tag_select", label: "Tag select" },
                   { k: "select", label: "Dropdown" },
                   { k: "rating", label: "Rating (stars)" },
+                  { k: "url", label: "URL / link" },
                   { k: "route_builder", label: "Route builder" },
                 ];
                 return (
