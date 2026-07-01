@@ -22470,7 +22470,7 @@ function BugReportForm({ currentUserId, currentUserHandle, onClose, onSubmitted 
 }
 
 /* ─── PROFILE SCREEN (Own Profile) ─── */
-function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, initialUserBio, initialIsPublic, onViewUser, onLogout, userBuilds, onAddBuild, onUpdateBuild, onDeleteBuild, profilePic, onSetProfilePic, notifPrefs, onSetNotifPrefs, feedItems, onDeletePost, onEditPost, onUpdateConvoy, onGoToPost, myPoints: myPointsProp, onSaveProfile, followerCount, followingCount, convoyRsvps, onSubscribePush, onUnsubscribePush, renderFeedScopedTo, onViewBuild, savedRoutes, onUnsaveRoute, onStartNav, myTripPlans, onOpenTripPlan, onNewTripPlan, isAdmin, currentRole, savedTrips, onUnsaveTrip, onOpenSavedTrip, pendingScroll, onConsumePendingScroll, onOpenAdminDashboard, onOpenAmbassadorDashboard, onOpenContentPartnerDashboard, isContentPartner, onOpenFollowList }) {
+function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, initialUserBio, initialIsPublic, onViewUser, onLogout, userBuilds, onAddBuild, onUpdateBuild, onDeleteBuild, profilePic, onSetProfilePic, notifPrefs, onSetNotifPrefs, feedItems, onDeletePost, onEditPost, onUpdateConvoy, onGoToPost, myPoints: myPointsProp, onSaveProfile, followerCount, followingCount, convoyRsvps, onSubscribePush, onUnsubscribePush, renderFeedScopedTo, onViewBuild, savedRoutes, onUnsaveRoute, onStartNav, myTripPlans, onOpenTripPlan, onNewTripPlan, isAdmin, currentRole, savedTrips, onUnsaveTrip, onOpenSavedTrip, pendingScroll, onConsumePendingScroll, onOpenAdminDashboard, onOpenAmbassadorDashboard, onOpenContentPartnerDashboard, isContentPartner, isGravelGuide, onOpenFollowList }) {
   const [isPublic, setIsPublic] = useState(initialIsPublic == null ? true : !!initialIsPublic);
   const [activeTab, setActiveTab] = useState("builds");
   const [activeBuild, setActiveBuild] = useState(0);
@@ -23049,6 +23049,16 @@ function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, init
               <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, letterSpacing: 1, fontWeight: 600 }}>PARTNERSHIP</span>
             </button>
           )}
+          {/* Gravel Guide status — public label + entry point to the
+              guide hub (bounty authoring + Demo Request oversight).
+              Non-admin gravel guides tap this to reach their tools;
+              admins see it too since they inherit the role. */}
+          {isGravelGuide && (
+            <button onClick={onOpenAdminDashboard} style={{ display: "flex", alignItems: "center", gap: 6, background: T.darkCard, padding: "10px 20px", borderRadius: 8, border: `1px solid ${T.green}40`, cursor: "pointer" }}>
+              <UserCheck size={14} color={T.green} />
+              <span style={{ fontFamily: sans, fontSize: 11, color: T.green, letterSpacing: 1, fontWeight: 600 }}>GRAVEL GUIDE</span>
+            </button>
+          )}
         </div>
 
         {/* Follow Requests (only when private) */}
@@ -23537,7 +23547,7 @@ function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, init
 }
 
 /* ─── OTHER USER PROFILE (Public view / Follow logic) ─── */
-function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, isAdmin, onAdminUpdateUserRole, onAdminDeclineAmbassador, onAdminToggleModerator, onAdminToggleBetaTester, onAdminToggleContentPartner, onAdminViewAsAmbassador, onReportContent, followingIds, onFollow, onUnfollow, fetchFollowCounts, renderFeedScopedTo, currentProfile, convoyRsvps, onViewBuild, allBuilds, onLoadAllBuilds, onlineUserIds, allTripPlans, onOpenTripPlan, onOpenFollowList }) {
+function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, isAdmin, onAdminUpdateUserRole, onAdminDeclineAmbassador, onAdminToggleModerator, onAdminToggleBetaTester, onAdminToggleContentPartner, onAdminToggleGravelGuide, onAdminViewAsAmbassador, onReportContent, followingIds, onFollow, onUnfollow, fetchFollowCounts, renderFeedScopedTo, currentProfile, convoyRsvps, onViewBuild, allBuilds, onLoadAllBuilds, onlineUserIds, allTripPlans, onOpenTripPlan, onOpenFollowList }) {
   // Trigger the cross-user builds load — the builds tab below filters
   // allBuilds for the viewed user. Root is idempotent via a ref.
   useEffect(() => { if (typeof onLoadAllBuilds === "function") onLoadAllBuilds(); }, []);
@@ -23621,6 +23631,7 @@ function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, isAdmin,
           isModerator: !!data.is_moderator,
           isBetaTester: !!data.is_beta_tester,
           isContentPartner: !!data.is_content_partner,
+          isGravelGuide: !!data.is_gravel_guide,
           builds: [], trips: [], activity: [],
         });
         // Side-fetch ambassador tier so the admin role-picker knows
@@ -23781,6 +23792,16 @@ function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, isAdmin,
         </div>
         <h2 style={{ fontFamily: sans, fontSize: 20, color: T.white, margin: "0 0 2px", fontWeight: 700 }}>{p.name}</h2>
         <span style={{ fontFamily: sans, fontSize: 13, color: T.tertiary, display: "block", marginBottom: 4 }}>{p.handle}</span>
+        {/* Public "Gravel Guide" pill — indicates the user can author
+            bounties + oversee Demo Requests. Rendered for everyone
+            viewing the profile, not just admins. Green to match the
+            role's tone (helper / community leader). */}
+        {p.isGravelGuide && (
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 5, background: `${T.green}18`, padding: "3px 10px", borderRadius: 12, marginBottom: 8, border: `1px solid ${T.green}40` }}>
+            <UserCheck size={11} color={T.green} strokeWidth={1.8} />
+            <span style={{ fontFamily: sans, fontSize: 10, color: T.green, letterSpacing: 1, fontWeight: 700 }}>GRAVEL GUIDE</span>
+          </div>
+        )}
         {isAdmin && (() => { const rank = getUserRank(p.points); const RIcon = RANK_ICON_MAP[rank.icon] || Star; return (
           <div style={{ display: "inline-flex", alignItems: "center", gap: 5, background: `${rank.color}18`, padding: "4px 12px", borderRadius: 12, marginBottom: 14 }}>
             <RIcon size={13} color={rank.color} strokeWidth={1.5} />
@@ -23924,6 +23945,31 @@ function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, isAdmin,
                   </div>
                   <span style={{ width: 36, height: 20, borderRadius: 10, background: isBeta ? T.green : T.charcoal, position: "relative", flexShrink: 0, transition: "background 120ms" }}>
                     <span style={{ position: "absolute", top: 2, left: isBeta ? 18 : 2, width: 16, height: 16, borderRadius: "50%", background: T.white, transition: "left 120ms" }} />
+                  </span>
+                </button>
+              );
+            })()}
+
+            {/* Gravel Guide toggle — grants the user bounty-authoring +
+                Demo Request progress oversight. Public "Gravel Guide" pill
+                surfaces on their profile once enabled. Independent of role
+                / ambassador / content_partner status. */}
+            {onAdminToggleGravelGuide && (() => {
+              const isGuide = !!p.isGravelGuide;
+              return (
+                <button onClick={() => {
+                  if (!confirm(isGuide ? "Remove Gravel Guide role from this user?" : "Grant Gravel Guide role? They'll be able to author bounties, see progress on Demo Request submissions, and wear a public Gravel Guide pill on their profile.")) return;
+                  onAdminToggleGravelGuide(resolvedTargetId, !isGuide).then(res => {
+                    if (res && res.ok) setDbProfile(prev => prev ? { ...prev, isGravelGuide: !isGuide } : prev);
+                    else if (res && res.error) alert("Gravel Guide toggle failed: " + res.error);
+                  });
+                }} style={{ marginTop: 8, width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", background: isGuide ? `${T.green}25` : T.darkCard, border: `1px solid ${isGuide ? T.green : T.charcoal}`, borderRadius: 8, cursor: "pointer" }}>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
+                    <span style={{ fontFamily: sans, fontSize: 11, color: isGuide ? T.green : T.white, fontWeight: 700, letterSpacing: 0.5 }}>GRAVEL GUIDE</span>
+                    <span style={{ fontFamily: serif, fontSize: 10, color: T.tertiary, lineHeight: 1.3 }}>Can create bounties + oversee Demo Requests.</span>
+                  </div>
+                  <span style={{ width: 36, height: 20, borderRadius: 10, background: isGuide ? T.green : T.charcoal, position: "relative", flexShrink: 0, transition: "background 120ms" }}>
+                    <span style={{ position: "absolute", top: 2, left: isGuide ? 18 : 2, width: 16, height: 16, borderRadius: "50%", background: T.white, transition: "left 120ms" }} />
                   </span>
                 </button>
               );
@@ -35109,17 +35155,22 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
   );
 }
 
-function AdminHubScreen({ onBack, onSelect, openReportCount, openBugCount }) {
+function AdminHubScreen({ onBack, onSelect, openReportCount, openBugCount, isAdmin, isGravelGuide }) {
+  // Non-admin gravel guides only see their two cards (BOUNTIES + DEMO
+  // PROGRESS). Admins see the full grid. isAdmin already implies gravel
+  // guide inheritance, so guide-only viewers land here with isAdmin=false.
+  const guideOnly = !isAdmin && !!isGravelGuide;
   const cards = [
-    { key: "reports",    label: "REPORTS",    desc: "User-submitted content reports awaiting review.",  icon: Flag,           badge: openReportCount, color: T.red },
-    { key: "bugs",       label: "BUG REPORTS", desc: "In-app bug submissions + admin discussion.",      icon: AlertTriangle,  badge: openBugCount,    color: T.red },
-    { key: "moderation", label: "MODERATION", desc: "AI auto-moderation logs and blocked uploads.",     icon: ShieldCheck,    color: T.copper },
-    { key: "discounts",  label: "AMBASSADORS",  desc: "Ambassador commission analytics, discount codes, bulk promo templates.", icon: Tag,           color: T.copper },
-    { key: "partners",   label: "CONTENT PARTNERS", desc: "Influencer creator contracts, quotas, and delivery tracking.", icon: Camera, color: T.copper },
-    GEAR_DROPS_ENABLED && { key: "geardrops", label: "GEAR DROPS", desc: "Sponsored events: route + prize + race mechanics.", icon: Gift, color: T.green },
+    !guideOnly && { key: "reports",    label: "REPORTS",    desc: "User-submitted content reports awaiting review.",  icon: Flag,           badge: openReportCount, color: T.red },
+    !guideOnly && { key: "bugs",       label: "BUG REPORTS", desc: "In-app bug submissions + admin discussion.",      icon: AlertTriangle,  badge: openBugCount,    color: T.red },
+    !guideOnly && { key: "moderation", label: "MODERATION", desc: "AI auto-moderation logs and blocked uploads.",     icon: ShieldCheck,    color: T.copper },
+    !guideOnly && { key: "discounts",  label: "AMBASSADORS",  desc: "Ambassador commission analytics, discount codes, bulk promo templates.", icon: Tag,           color: T.copper },
+    !guideOnly && { key: "partners",   label: "CONTENT PARTNERS", desc: "Influencer creator contracts, quotas, and delivery tracking.", icon: Camera, color: T.copper },
+    !guideOnly && GEAR_DROPS_ENABLED && { key: "geardrops", label: "GEAR DROPS", desc: "Sponsored events: route + prize + race mechanics.", icon: Gift, color: T.green },
     { key: "bounties",   label: "BOUNTIES",   desc: "Quests, brief authoring, rewards, slot management.", icon: Target,        color: T.green },
-    { key: "push",       label: "PUSH",       desc: "Broadcast push notifications and view history.",   icon: Bell,           color: T.copper },
-    { key: "analytics",  label: "ANALYTICS",  desc: "Active users, signups, posts, engagement.",        icon: TrendingUp,     color: T.green },
+    { key: "demo-progress", label: "DEMO PROGRESS", desc: "Live status of every Demo Request submission: claim → schedule → proof → review.", icon: UserCheck, color: T.green },
+    !guideOnly && { key: "push",       label: "PUSH",       desc: "Broadcast push notifications and view history.",   icon: Bell,           color: T.copper },
+    !guideOnly && { key: "analytics",  label: "ANALYTICS",  desc: "Active users, signups, posts, engagement.",        icon: TrendingUp,     color: T.green },
   ].filter(Boolean);
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}>
@@ -35127,8 +35178,10 @@ function AdminHubScreen({ onBack, onSelect, openReportCount, openBugCount }) {
         <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
           <ChevronLeft size={20} color={T.white} />
         </button>
-        <Shield size={16} color={T.red} />
-        <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, letterSpacing: 0.8 }}>ADMIN</span>
+        {guideOnly
+          ? <UserCheck size={16} color={T.green} />
+          : <Shield size={16} color={T.red} />}
+        <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, letterSpacing: 0.8 }}>{guideOnly ? "GUIDE" : "ADMIN"}</span>
       </div>
       <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
         {cards.map(c => {
@@ -35150,6 +35203,157 @@ function AdminHubScreen({ onBack, onSelect, openReportCount, openBugCount }) {
             </button>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+/* ─── DemoBountyProgressScreen ──────────────────────────────────────────
+   Admin + Gravel Guide view of every Demo Request bounty submission with
+   its step-by-step progress. Loads via admin_demo_bounty_progress RPC.
+   Gravel guides see only demos on bounties they own; admins see all.
+
+   Progress steps rendered as a 4-dot machine:
+     1. CLAIMED    — submission row exists (always green if visible)
+     2. SCHEDULED  — draft.scheduled_at set
+     3. PROOF      — draft.proof_photo set
+     4. REVIEWED   — bounty_submissions.reviewed_at set (green=approved,
+                     red=rejected, copper=changes_requested)
+
+   Rows sort active-first, most recent activity first. Tap a row → opens
+   admin review (when submission is 'submitted'). No inline actions —
+   admin-side approve/reject already lives on BountySubmissionReviewScreen. */
+function DemoBountyProgressScreen({ onBack, onLoad, onOpenReview, currentUserId, isAdmin }) {
+  const [rows, setRows] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState("");
+  const [refreshTick, setRefreshTick] = React.useState(0);
+  React.useEffect(() => {
+    if (!onLoad) return;
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    onLoad(200).then(res => {
+      if (cancelled) return;
+      if (res && res.error) setError(res.error);
+      else setRows(Array.isArray(res && res.data) ? res.data : []);
+      setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [refreshTick]);
+
+  const formatWhen = (ts) => {
+    if (!ts) return "";
+    try {
+      const d = new Date(ts);
+      const now = Date.now();
+      const diff = now - d.getTime();
+      if (diff < 60000) return "just now";
+      if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+      if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+      if (diff < 30 * 86400000) return `${Math.floor(diff / 86400000)}d ago`;
+      return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    } catch { return ""; }
+  };
+  const formatAbs = (ts) => {
+    if (!ts) return "";
+    try { return new Date(ts).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }); }
+    catch { return ""; }
+  };
+
+  const StepDot = ({ done, color, label, ts }) => (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, minWidth: 60 }}>
+      <div style={{ width: 14, height: 14, borderRadius: "50%", background: done ? color : T.charcoal, border: `2px solid ${done ? color : T.tertiary}40`, boxShadow: done ? `0 0 6px ${color}66` : "none" }} />
+      <span style={{ fontFamily: sans, fontSize: 8, color: done ? color : T.tertiary, letterSpacing: 0.5, fontWeight: 700 }}>{label}</span>
+      {ts && <span style={{ fontFamily: sans, fontSize: 8, color: T.tertiary }}>{ts}</span>}
+    </div>
+  );
+  const StepBar = ({ done, color }) => (
+    <div style={{ flex: 1, height: 2, background: done ? color : T.charcoal, marginTop: 6, opacity: done ? 0.9 : 0.4 }} />
+  );
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 16px", borderBottom: `1px solid ${T.charcoal}` }}>
+        <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+          <ChevronLeft size={20} color={T.white} />
+        </button>
+        <UserCheck size={16} color={T.green} />
+        <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, letterSpacing: 0.8 }}>DEMO PROGRESS</span>
+        <button onClick={() => setRefreshTick(t => t + 1)} disabled={loading} style={{ marginLeft: "auto", background: "none", border: `1px solid ${T.charcoal}`, borderRadius: 4, padding: "4px 10px", cursor: loading ? "wait" : "pointer", fontFamily: sans, fontSize: 10, color: T.tertiary, fontWeight: 700, letterSpacing: 0.5 }}>{loading ? "…" : "REFRESH"}</button>
+      </div>
+      <div style={{ padding: 16 }}>
+        {loading ? (
+          <div style={{ padding: 40, textAlign: "center", fontFamily: serif, fontSize: 13, color: T.tertiary }}>Loading demo progress…</div>
+        ) : error ? (
+          <div style={{ padding: 16, fontFamily: serif, fontSize: 12, color: T.red, background: `${T.red}10`, border: `1px solid ${T.red}40`, borderRadius: 8 }}>{error}</div>
+        ) : rows.length === 0 ? (
+          <div style={{ padding: 40, textAlign: "center", fontFamily: serif, fontSize: 13, color: T.tertiary, lineHeight: 1.5 }}>
+            No Demo Request submissions yet.{!isAdmin && <><br/>Gravel guides only see demos on bounties they created.</>}
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {rows.map(row => {
+              const claimed = !!row.claimed_at;
+              const scheduled = !!row.scheduled_at;
+              const proofed = !!row.proof_photo_url;
+              const reviewed = !!row.reviewed_at;
+              const isApproved = row.status === "approved";
+              const isRejected = row.status === "rejected";
+              const isChanges = row.status === "changes_requested";
+              const isSubmitted = row.status === "submitted";
+              const reviewColor = isApproved ? T.green : isRejected ? T.red : isChanges ? T.copper : (reviewed ? T.tertiary : T.tertiary);
+              const statusPill = (row.status || "").toUpperCase().replace(/_/g, " ");
+              const statusColor = row.status === "approved" ? T.green
+                : row.status === "submitted" ? T.copper
+                : row.status === "changes_requested" ? T.copper
+                : row.status === "rejected" ? T.red
+                : row.status === "withdrawn" ? T.tertiary
+                : T.tertiary;
+              return (
+                <div key={row.submission_id} style={{ background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10, padding: 14 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.bounty_title || "Demo Request"}</div>
+                      <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 2, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                        <span>@{row.participant_handle || "user"}</span>
+                        {row.customer_handle && (
+                          <>
+                            <span>·</span>
+                            <span>with @{row.customer_handle}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: statusColor, padding: "3px 8px", borderRadius: 4, letterSpacing: 0.6, fontWeight: 700, flexShrink: 0 }}>{statusPill || "CLAIMED"}</span>
+                  </div>
+
+                  <div style={{ display: "flex", alignItems: "flex-start" }}>
+                    <StepDot done={claimed} color={T.green} label="CLAIMED" ts={formatWhen(row.claimed_at)} />
+                    <StepBar done={scheduled} color={T.green} />
+                    <StepDot done={scheduled} color={T.green} label="SCHEDULED" ts={formatWhen(row.scheduled_at)} />
+                    <StepBar done={proofed} color={T.green} />
+                    <StepDot done={proofed} color={T.green} label="PROOF" ts={row.submitted_at ? formatWhen(row.submitted_at) : ""} />
+                    <StepBar done={reviewed} color={reviewColor} />
+                    <StepDot done={reviewed} color={reviewColor} label={isRejected ? "REJECTED" : isApproved ? "APPROVED" : isChanges ? "CHANGES" : "REVIEWED"} ts={formatWhen(row.reviewed_at)} />
+                  </div>
+
+                  {(row.scheduled_location || row.demo_location_label) && (
+                    <div style={{ marginTop: 10, padding: "6px 10px", background: T.darkBg, borderRadius: 6, fontFamily: serif, fontSize: 12, color: T.warmStone, display: "flex", alignItems: "center", gap: 6 }}>
+                      <MapPin size={11} color={T.copper} />
+                      <span>{row.scheduled_location || row.demo_location_label}</span>
+                      {row.scheduled_at && <span style={{ color: T.tertiary, marginLeft: "auto", fontSize: 11 }}>{formatAbs(row.scheduled_at)}</span>}
+                    </div>
+                  )}
+
+                  {isSubmitted && onOpenReview && (
+                    <button onClick={() => onOpenReview(row.submission_id)} style={{ marginTop: 10, width: "100%", padding: "8px 12px", borderRadius: 6, background: T.copper, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>OPEN FOR REVIEW →</button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -42732,6 +42936,12 @@ export default function Trailhead() {
   // the dashboard wouldn't render anything meaningful without a contract
   // row (the admin sees partner data via the admin Content Partners tab).
   const isContentPartner = !!(currentProfile && currentProfile.is_content_partner);
+  // Gravel Guide = user role that can create bounties + see progress on
+  // Demo Request submissions. Public label ("Gravel Guide" pill) surfaces
+  // on the profile. Independent of role / is_ambassador so someone can be
+  // both an ambassador AND a gravel guide. Admins always inherit — the
+  // demo-progress view + admin hub is already theirs.
+  const isGravelGuide = isAdmin || !!(currentProfile && currentProfile.is_gravel_guide);
 
   // ─── Stripe return handler ────────────────────────────────────────
   // Fires once after the ambassador returns from Stripe-hosted onboarding
@@ -46792,6 +47002,43 @@ export default function Trailhead() {
       return { ok: true };
     } catch (e) {
       console.error("[adminToggleUserContentPartner] failed", e);
+      return { error: "Network error" };
+    }
+  };
+
+  // Admin-only: flip a user's `is_gravel_guide` flag. Gravel Guides can
+  // author bounties + see progress on Demo Request submissions. Wraps the
+  // admin_grant_gravel_guide RPC (which asserts is_admin server-side and
+  // does the UPDATE). Independent of role / is_ambassador — a single user
+  // can be an ambassador AND a gravel guide.
+  const adminToggleUserGravelGuide = async (targetUid, makeGravelGuide) => {
+    if (!isAdmin || !targetUid) return { error: "Not authorized" };
+    try {
+      const { data, error } = await supabase.rpc("admin_grant_gravel_guide", {
+        p_target_uid: targetUid,
+        p_grant: !!makeGravelGuide,
+      });
+      if (error) return { error: error.message || "Update failed" };
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row) return { error: "Update blocked — profile not found?" };
+      return { ok: true, is_gravel_guide: !!row.is_gravel_guide };
+    } catch (e) {
+      console.error("[adminToggleUserGravelGuide] failed", e);
+      return { error: "Network error" };
+    }
+  };
+
+  // Load demo request progress for admins + gravel guides. Server RPC
+  // returns per-submission timestamps + snapshots so the UI can render
+  // the step machine without any follow-up joins. Admins see every demo;
+  // gravel guides see only demos on bounties they created.
+  const loadDemoBountyProgress = async (limit = 100) => {
+    try {
+      const { data, error } = await supabase.rpc("admin_demo_bounty_progress", { p_limit: limit });
+      if (error) { console.error("[loadDemoBountyProgress] error", error); return { error: error.message }; }
+      return { ok: true, data: Array.isArray(data) ? data : [] };
+    } catch (e) {
+      console.error("[loadDemoBountyProgress] failed", e);
       return { error: "Network error" };
     }
   };
@@ -53005,7 +53252,7 @@ export default function Trailhead() {
     { key: "routes", label: "Maps", icon: Map },
     { key: "builds", label: "Builds", icon: Wrench },
     !isGuest ? { key: "ranks", label: "Ranks", icon: Trophy } : null,
-    (!isGuest && isAdmin) ? { key: "admin", label: "Admin", icon: Shield } : null,
+    (!isGuest && (isAdmin || isGravelGuide)) ? { key: "admin", label: isAdmin ? "Admin" : "Guide", icon: Shield } : null,
   ].filter(Boolean);
   const myFullName = (currentProfile && currentProfile.full_name) || "You";
   const myHandle = (currentProfile && currentProfile.handle) || "";
@@ -53282,9 +53529,9 @@ export default function Trailhead() {
           />
         ) : isProfile ? (
           isOtherProfile ? (
-            <OtherProfileScreen userId={profileStack[1]} onBack={goBack} onMessage={(user) => openDM(user)} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} onAdminUpdateUserRole={adminUpdateUserRole} onAdminDeclineAmbassador={adminDeclineAmbassadorRequest} onAdminToggleModerator={adminToggleUserModerator} onAdminToggleBetaTester={adminToggleUserBetaTester} onAdminToggleContentPartner={adminToggleUserContentPartner} onAdminViewAsAmbassador={adminViewAsAmbassador} onReportContent={requireAuth(openContentReport)} followingIds={followingIds} onFollow={requireAuth(followUser)} onUnfollow={requireAuth(unfollowUser)} fetchFollowCounts={fetchFollowCounts} onOpenFollowList={requireAuth(openFollowList)} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} allBuilds={allBuilds} onLoadAllBuilds={loadAllBuildsOnce} onlineUserIds={onlineUserIds} allTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} />
+            <OtherProfileScreen userId={profileStack[1]} onBack={goBack} onMessage={(user) => openDM(user)} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} onAdminUpdateUserRole={adminUpdateUserRole} onAdminDeclineAmbassador={adminDeclineAmbassadorRequest} onAdminToggleModerator={adminToggleUserModerator} onAdminToggleBetaTester={adminToggleUserBetaTester} onAdminToggleContentPartner={adminToggleUserContentPartner} onAdminToggleGravelGuide={adminToggleUserGravelGuide} onAdminViewAsAmbassador={adminViewAsAmbassador} onReportContent={requireAuth(openContentReport)} followingIds={followingIds} onFollow={requireAuth(followUser)} onUnfollow={requireAuth(unfollowUser)} fetchFollowCounts={fetchFollowCounts} onOpenFollowList={requireAuth(openFollowList)} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} allBuilds={allBuilds} onLoadAllBuilds={loadAllBuildsOnce} onlineUserIds={onlineUserIds} allTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} />
           ) : (
-            <ProfileScreen onOpenFollowList={openFollowList} onOpenAdminDashboard={() => { setProfileStack([]); setScreen("admin"); if (typeof window !== "undefined") window.history.pushState({}, "", "/admin"); }} onOpenAmbassadorDashboard={() => { setProfileStack([]); setScreen("ambassador"); }} onOpenContentPartnerDashboard={() => setShowContentPartnerDashboard(true)} isContentPartner={isContentPartner} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} currentRole={currentRole} convoyRsvps={convoyRsvps} followerCount={myFollowerCount} followingCount={myFollowingCount} onSubscribePush={subscribeToPush} onUnsubscribePush={unsubscribeFromPush} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} savedRoutes={savedRoutes} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} savedTrips={(() => { const ids = savedTripIds || {}; const pool = [...(allTripReports || []), ...(allTripPlans || [])]; const seen = {}; const out = []; pool.forEach(t => { if (t && t.id && ids[t.id] && !seen[t.id]) { seen[t.id] = true; out.push(t); } }); return out; })()} onUnsaveTrip={requireAuth(toggleSaveTrip)} onOpenSavedTrip={(t) => { if (!t) return; if (t.slug) setPendingTripNav(t.slug); else setDetailTripId(t.id); }} pendingScroll={pendingProfileScroll} onConsumePendingScroll={() => setPendingProfileScroll(null)} onStartNav={(route) => setActiveNavRoute(route)} myTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} onNewTripPlan={requireAuth(() => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("routes"); enterPlanBuilder(); })} initialUserName={(currentProfile && currentProfile.full_name) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name) || null} initialUserHandle={(currentProfile && currentProfile.handle) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle) || null} initialUserBio={currentProfile ? currentProfile.bio : null} initialIsPublic={currentProfile ? currentProfile.is_public : null} onSaveProfile={saveProfile} onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={deleteBuild} profilePic={profilePic} onSetProfilePic={requestProfilePicCrop} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => deletePost(id)} onEditPost={(id, newText) => updatePost(id, { title: newText })} onUpdateConvoy={(convoyId, updates) => {
+            <ProfileScreen onOpenFollowList={openFollowList} onOpenAdminDashboard={() => { setProfileStack([]); setScreen("admin"); if (typeof window !== "undefined") window.history.pushState({}, "", "/admin"); }} onOpenAmbassadorDashboard={() => { setProfileStack([]); setScreen("ambassador"); }} onOpenContentPartnerDashboard={() => setShowContentPartnerDashboard(true)} isContentPartner={isContentPartner} isGravelGuide={isGravelGuide} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} currentRole={currentRole} convoyRsvps={convoyRsvps} followerCount={myFollowerCount} followingCount={myFollowingCount} onSubscribePush={subscribeToPush} onUnsubscribePush={unsubscribeFromPush} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} savedRoutes={savedRoutes} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} savedTrips={(() => { const ids = savedTripIds || {}; const pool = [...(allTripReports || []), ...(allTripPlans || [])]; const seen = {}; const out = []; pool.forEach(t => { if (t && t.id && ids[t.id] && !seen[t.id]) { seen[t.id] = true; out.push(t); } }); return out; })()} onUnsaveTrip={requireAuth(toggleSaveTrip)} onOpenSavedTrip={(t) => { if (!t) return; if (t.slug) setPendingTripNav(t.slug); else setDetailTripId(t.id); }} pendingScroll={pendingProfileScroll} onConsumePendingScroll={() => setPendingProfileScroll(null)} onStartNav={(route) => setActiveNavRoute(route)} myTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} onNewTripPlan={requireAuth(() => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("routes"); enterPlanBuilder(); })} initialUserName={(currentProfile && currentProfile.full_name) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name) || null} initialUserHandle={(currentProfile && currentProfile.handle) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle) || null} initialUserBio={currentProfile ? currentProfile.bio : null} initialIsPublic={currentProfile ? currentProfile.is_public : null} onSaveProfile={saveProfile} onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={deleteBuild} profilePic={profilePic} onSetProfilePic={requestProfilePicCrop} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => deletePost(id)} onEditPost={(id, newText) => updatePost(id, { title: newText })} onUpdateConvoy={(convoyId, updates) => {
               updatePost(convoyId, updates);
               // DM going/maybe responders that the convoy was updated.
               const convoy = feedItemsRef.current.find(p => p.id === convoyId);
@@ -53334,7 +53581,7 @@ export default function Trailhead() {
               ? <GuestGateScreen title="RANKS REQUIRE AN ACCOUNT" subtitle="Sign in to see the leaderboard and start earning points from your posts, routes and builds." onSignIn={goToLoginFromGuest} />
               : <RanksScreen myPoints={myTotalPoints} pointsBreakdown={friendlyPointsBreakdown} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentProfile={currentProfile} onLoadLeaderboard={loadLeaderboard} onViewUser={openUserProfile} bounties={bounties} mySubmissions={myBountySubmissions} isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onClaimBounty={claimBounty} onSaveBountyDraft={saveBountyDraft} onSubmitBountyRPC={submitBountySubmission} onWithdrawBounty={withdrawBountySubmission} onUploadBountyPhotos={uploadBountyPhotoFiles} earnings={bountyEarnings} onOpenDM={openDM} onLoadProfileById={loadProfileById} onSendDemoProposal={sendDemoProposalCard} onSendDmInvite={sendDmInvite} onRefreshGiftCard={refreshGiftCardBalance} onRequestPayout={requestBountyPayout} onLoadBountyHistory={loadBountyHistory} onLoadGiftCardCode={loadGiftCardCode} onClaimRouteReportBounty={claimRouteReportBounty} onOpenRouteReportEditor={openRouteReportBountyEditor} userBuilds={userBuilds} />
             )}
-            {screen === "admin" && (isAdmin
+            {screen === "admin" && ((isAdmin || isGravelGuide)
               ? (adminSubScreen === "geardrops"
                 ? (editingGearDropId
                   ? <GearDropEditor
@@ -53447,11 +53694,21 @@ export default function Trailhead() {
                       }
                     }}
                   />
+                : adminSubScreen === "demo-progress"
+                ? <DemoBountyProgressScreen
+                    onBack={() => setAdminSubScreen(null)}
+                    onLoad={loadDemoBountyProgress}
+                    onOpenReview={(sid) => { setAdminSubScreen("bounties"); setReviewingSubmissionId(sid); loadBountyReviewQueue(); }}
+                    currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id}
+                    isAdmin={isAdmin}
+                  />
                 : <AdminHubScreen
                     onBack={() => { setScreen("feed"); if (typeof window !== "undefined" && window.location.pathname === "/admin") window.history.pushState({}, "", "/"); }}
                     onSelect={(k) => setAdminSubScreen(k)}
                     openReportCount={pendingReportCount}
                     openBugCount={openBugCount}
+                    isAdmin={isAdmin}
+                    isGravelGuide={isGravelGuide}
                   />)
               : <div style={{ padding: 32, textAlign: "center", fontFamily: serif, fontSize: 14, color: T.tertiary, lineHeight: 1.6 }}>Not authorized.</div>
             )}
