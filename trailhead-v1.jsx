@@ -19176,6 +19176,15 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
         init[s.id] = s.default_value ? { ...s.default_value, _locked: true } : null;
       }
       else if (s.type === "rating") { init[s.id] = Number(s.default_value) || 0; }
+      else if (s.type === "url") {
+        // URL sections carry a {url, text} pair so the admin can prefill
+        // AND the user can override the display text. Legacy default_value
+        // strings are lifted into the url slot.
+        const d = s.default_value;
+        init[s.id] = (d && typeof d === "object")
+          ? { url: d.url || "", text: d.text || "" }
+          : { url: typeof d === "string" ? d : "", text: "" };
+      }
       else { init[s.id] = s.default_value || ""; }
     });
     // Overlay saved draft. For fixed sections, prefill wins (drop any draft
@@ -19987,9 +19996,17 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
           }
 
           if (section.type === "url") {
-            const value = fields[section.id] || "";
-            const trimmed = value.trim();
+            // Value is a {url, text} object — url is the target, text is
+            // the visible link label. Backward-compat: plain string is
+            // treated as a bare URL with empty text.
+            const raw = fields[section.id];
+            const value = (raw && typeof raw === "object")
+              ? { url: raw.url || "", text: raw.text || "" }
+              : { url: typeof raw === "string" ? raw : "", text: "" };
+            const trimmed = value.url.trim();
             const isValid = trimmed === "" || /^https?:\/\/[^\s]+/i.test(trimmed);
+            const setUrl = (v) => updateField(section.id, { ...value, url: v });
+            const setText = (v) => updateField(section.id, { ...value, text: v });
             return (
               <div key={section.id} style={{ margin: "12px 0" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
@@ -19997,15 +20014,26 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
                   <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>{section.label}</span>
                   {section.required && <span style={{ fontFamily: sans, fontSize: 9, color: T.red }}>REQUIRED</span>}
                 </div>
-                <input
-                  type="url"
-                  value={value}
-                  onChange={(e) => updateField(section.id, e.target.value)}
-                  placeholder={section.placeholder || "https://…"}
-                  style={{ width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${isValid ? T.charcoal : T.red}80`, color: T.warmStone, fontFamily: serif, fontSize: 14, outline: "none", boxSizing: "border-box" }}
-                  onFocus={e => e.target.style.borderColor = T.copper + "80"}
-                  onBlur={e => e.target.style.borderColor = isValid ? T.charcoal : T.red + "80"}
-                />
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <input
+                    type="url"
+                    value={value.url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    placeholder={section.placeholder || "https://…"}
+                    style={{ width: "100%", padding: "12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${isValid ? T.charcoal : T.red}80`, color: T.warmStone, fontFamily: serif, fontSize: 14, outline: "none", boxSizing: "border-box" }}
+                    onFocus={e => e.target.style.borderColor = T.copper + "80"}
+                    onBlur={e => e.target.style.borderColor = isValid ? T.charcoal : T.red + "80"}
+                  />
+                  <input
+                    type="text"
+                    value={value.text}
+                    onChange={(e) => setText(e.target.value)}
+                    placeholder="Link display text (optional — defaults to the URL)"
+                    style={{ width: "100%", padding: "10px 12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}80`, color: T.warmStone, fontFamily: serif, fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                    onFocus={e => e.target.style.borderColor = T.copper + "80"}
+                    onBlur={e => e.target.style.borderColor = T.charcoal + "80"}
+                  />
+                </div>
                 {!isValid && (
                   <div style={{ fontFamily: sans, fontSize: 10, color: T.red, marginTop: 4 }}>URL must start with http:// or https://</div>
                 )}
@@ -32780,14 +32808,19 @@ function BountyDraftRenderer({ bounty, draft }) {
           );
         }
         if (section.type === "url") {
-          if (!val || !val.trim()) return null;
-          const href = val.trim();
+          // val may be plain string (legacy) or {url, text} object.
+          const asObj = (val && typeof val === "object")
+            ? { url: val.url || "", text: val.text || "" }
+            : { url: typeof val === "string" ? val : "", text: "" };
+          const href = asObj.url.trim();
+          if (!href) return null;
+          const linkText = asObj.text.trim() || href;
           const safe = /^https?:\/\//i.test(href);
           return (
             <div key={section.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", flexWrap: "wrap" }}>
               <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600 }}>{section.label.toUpperCase()}</span>
               {safe
-                ? <a href={href} target="_blank" rel="noopener noreferrer nofollow" style={{ fontFamily: sans, fontSize: 12, color: T.copper, wordBreak: "break-all" }}>{href}</a>
+                ? <a href={href} target="_blank" rel="noopener noreferrer nofollow" style={{ fontFamily: sans, fontSize: 12, color: T.copper, wordBreak: "break-all" }}>{linkText}</a>
                 : <span style={{ fontFamily: sans, fontSize: 12, color: T.tertiary, wordBreak: "break-all" }}>{href}</span>}
             </div>
           );
@@ -34794,6 +34827,26 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
                           <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>0 = no default</span>
                         </div>
                       )}
+                      {s.type === "url" && (() => {
+                        // default_value is a {url, text} object. Backward-compat:
+                        // if a legacy string is present, lift it into the url slot.
+                        const dv = (s.default_value && typeof s.default_value === "object")
+                          ? { url: s.default_value.url || "", text: s.default_value.text || "" }
+                          : { url: typeof s.default_value === "string" ? s.default_value : "", text: "" };
+                        const patch = (partial) => updateSection(s.id, { default_value: { ...dv, ...partial } });
+                        return (
+                          <div style={{ borderTop: `1px solid ${T.charcoal}`, paddingTop: 8, display: "flex", flexDirection: "column", gap: 8 }}>
+                            <div>
+                              <FieldLabel>Prefilled URL (optional — participant can override)</FieldLabel>
+                              <input value={dv.url} onChange={(e) => patch({ url: e.target.value })} placeholder="https://…" style={{ ...inputStyle, padding: "8px 10px", fontSize: 12 }} />
+                            </div>
+                            <div>
+                              <FieldLabel>Prefilled link text (optional — what the user sees; participant can override)</FieldLabel>
+                              <input value={dv.text} onChange={(e) => patch({ text: e.target.value })} placeholder="e.g. Learn more, Buy on Amazon, Manufacturer site" style={{ ...inputStyle, padding: "8px 10px", fontSize: 12 }} />
+                            </div>
+                          </div>
+                        );
+                      })()}
                       {s.type === "photos" && (
                         <div style={{ borderTop: `1px solid ${T.charcoal}`, paddingTop: 8 }}>
                           <FieldLabel>Prefilled media (optional — admin-supplied starter)</FieldLabel>
