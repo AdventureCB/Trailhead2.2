@@ -277,6 +277,12 @@ const BADGE_CATEGORIES = [
     { name: "Bounty Champion", desc: "Complete 25 bounties", goal: 25 },
     { name: "Bounty Legend", desc: "Complete 100 bounties", goal: 100 },
   ]},
+  { name: "Demo Specialist", slug: "demo_specialist", icon: UserCheck, metricLabel: "demos completed", tiers: [
+    { name: "First Demo", desc: "Complete your first demo request", goal: 1 },
+    { name: "Demo Regular", desc: "Complete 3 demo requests", goal: 3 },
+    { name: "Demo Pro", desc: "Complete 10 demo requests", goal: 10 },
+    { name: "Demo Legend", desc: "Complete 25 demo requests", goal: 25 },
+  ]},
 ];
 // MY_BADGE_PROGRESS used to be a static const here. Now it's hydrated at
 // runtime by Trailhead root from get_badge_progress RPC + mutated in
@@ -291,6 +297,7 @@ const MY_BADGE_PROGRESS = {
   "Shutterbug": 0,
   "First Responder": 0,
   "Bounty Hunter": 0,
+  "Demo Specialist": 0,
 };
 function getBadgeTierForCategory(catName) {
   const cat = BADGE_CATEGORIES.find(c => c.name === catName);
