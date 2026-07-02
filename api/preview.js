@@ -565,6 +565,38 @@ async function resolveEntity(type, id) {
       },
     };
   }
+  if (type === "bounty") {
+    // Only surface non-draft bounties in previews (RLS-consistent with the
+    // client — drafts aren't publicly visible).
+    const row = await supabaseFetch(
+      "bounties",
+      `id=eq.${encodeURIComponent(id)}&status=neq.draft&select=title,description,category,difficulty,hero_img,reward_cents,reward_points,deadline_at,total_slots,claimed_slots&limit=1`
+    );
+    if (!row) return null;
+    const rewardBits = [];
+    if (row.reward_cents > 0) rewardBits.push(`$${(row.reward_cents / 100).toFixed(0)}`);
+    if (row.reward_points > 0) rewardBits.push(`${row.reward_points} pts`);
+    const rewardLabel = rewardBits.join(" + ");
+    const description = [
+      rewardLabel ? `Reward: ${rewardLabel}` : null,
+      row.category ? row.category : null,
+      row.description ? String(row.description).replace(/<[^>]+>/g, " ").slice(0, 160) : null,
+    ].filter(Boolean).join(" · ");
+    return {
+      title: `${row.title || "Bounty"} · Trailhead Bounty`,
+      description: description || "Earn cash credit + points completing a bounty on Trailhead.",
+      image: row.hero_img || null,
+      imageAlt: `${row.title || "Bounty"} — ${row.category || "Community bounty"}`,
+      jsonLd: { kind: "Bounty", name: row.title, description: row.description, category: row.category, reward: rewardLabel },
+      breadcrumb: {
+        items: [
+          { name: "Trailhead", url: null },
+          { name: "Bounties", url: null },
+          { name: row.title || "Bounty", url: null },
+        ],
+      },
+    };
+  }
   // Generic feed posts (and route posts which share the /post/:id URL).
   // Falls through hero_img → first non-video photo → embedded route
   // polyline if it's a ROUTES post → null.
@@ -1415,6 +1447,7 @@ module.exports = async function handler(req, res) {
     type === "gear-drop" ? `/drops/${id}` :
     type === "spot" ? `/spots/${id}` :
     type === "build" ? `/builds/${id}` :
+    type === "bounty" ? `/bounties/${id}` :
     type === "post" || type === "route" ? `/post/${id}` :
     type === "forum-thread" ? `/forum/${sub}/${slug}` :
     type === "forum-sub" ? `/forum/${sub}` :

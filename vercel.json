@@ -10,6 +10,7 @@
     { "source": "/drops/:slug", "destination": "/api/preview?type=gear-drop&id=:slug" },
     { "source": "/spots/:id", "destination": "/api/preview?type=spot&id=:id" },
     { "source": "/builds/:id", "destination": "/api/preview?type=build&id=:id" },
+    { "source": "/bounties/:id", "destination": "/api/preview?type=bounty&id=:id" },
     { "source": "/post/:id", "destination": "/api/preview?type=post&id=:id" },
     { "source": "/forum/:sub/:slug", "destination": "/api/preview?type=forum-thread&sub=:sub&slug=:slug" },
     { "source": "/forum/:sub", "destination": "/api/preview?type=forum-sub&sub=:sub" },

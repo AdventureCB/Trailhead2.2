@@ -2253,6 +2253,7 @@ function ShareIntentSheet({ target, onClose, onOpenShareCompose, onShowToast }) 
       case "route": return { url: `${origin}/post/${data.id}`,   title: data.title || "Route",            label: "ROUTE",        accent: T.copper };
       case "post":  return { url: `${origin}/post/${data.id}`,   title: data.title || data.body || "Post", label: "POST",        accent: T.copper };
       case "gear_drop": return { url: data.slug ? `${origin}/drops/${data.slug}` : origin, title: data.title || "Gear drop", label: "GEAR DROP", accent: T.green };
+      case "bounty": return { url: `${origin}/bounties/${data.id}`, title: data.title || "Bounty", label: "BOUNTY", accent: T.red };
       default:      return { url: origin,                        title: "Trailhead",                       label: "SHARE",        accent: T.copper };
     }
   })();
@@ -5242,7 +5243,7 @@ function ImageCarousel({ images, startIndex, onClose }) {
 // Feed posts are now persisted to public.posts and hydrated on sign-in.
 // The legacy defaultFeedItems seed array was removed once the backend landed.
 
-function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShareCompose, onOpenShareIntent, onViewBuild, onOpenTripDetail, onOpenConvoy, feedItems, onUpdateFeed, onUpdatePost, likedPostIds, onTogglePostLike, postComments, onAddComment, onDeleteComment, likedCommentIds, onToggleCommentLike, currentUserId, currentUserName, currentUserHandle, currentUserAvatar, isAdmin, isModerator, isBetaTester, onDeletePost, onEditPost, onAddNotification, forumUserReplies, forumViewCounts, savedRoutes, onSaveRoute, onUnsaveRoute, onStartNav, onStartDirections, onAwardPoints, isGuest, onGuestTap, pendingPostNav, onConsumePendingPostNav, onSharedPostMissing, convoyRsvps, onRsvpConvoy, onSearchUsers, filterFn, hideFilters, onlineUserIds, tripReports, tripPlans, tripAuthors, onNewTripReport, onOpenTripDraft, onOpenSpotOnMap, onOpenHQOnMap, onLoadMore, hasMore, loadingMore, onLoadTripRouteData, onReportContent, activeFilter: controlledFilter, setActiveFilter: setControlledFilter, gearDrops, gearDropWinners, myGearDropRuns, onOpenGearDrop }) {
+function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShareCompose, onOpenShareIntent, onViewBuild, onOpenTripDetail, onOpenConvoy, feedItems, onUpdateFeed, onUpdatePost, likedPostIds, onTogglePostLike, postComments, onAddComment, onDeleteComment, likedCommentIds, onToggleCommentLike, currentUserId, currentUserName, currentUserHandle, currentUserAvatar, isAdmin, isModerator, isBetaTester, onDeletePost, onEditPost, onAddNotification, forumUserReplies, forumViewCounts, savedRoutes, onSaveRoute, onUnsaveRoute, onStartNav, onStartDirections, onAwardPoints, isGuest, onGuestTap, pendingPostNav, onConsumePendingPostNav, onSharedPostMissing, convoyRsvps, onRsvpConvoy, onSearchUsers, filterFn, hideFilters, onlineUserIds, tripReports, tripPlans, tripAuthors, onNewTripReport, onOpenTripDraft, onOpenSpotOnMap, onOpenHQOnMap, onOpenBountyById, onLoadMore, hasMore, loadingMore, onLoadTripRouteData, onReportContent, activeFilter: controlledFilter, setActiveFilter: setControlledFilter, gearDrops, gearDropWinners, myGearDropRuns, onOpenGearDrop }) {
   // Infinite-scroll sentinel — bottom of the feed list. When it scrolls
   // into view, ask the root to load the next page. Disabled when the
   // active filter is anything but ALL (filter-narrowed lists don't drive
@@ -5823,7 +5824,43 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
                 <ChevronRight size={16} color={T.red} />
               </div>
             )}
-            {item.title && !item.spotId && !item.hqShare && !item.planId && !item.gearDropId && editingFeedPost !== item.id && (
+            {/* Shared BOUNTY card — reward chips + category + optional
+                hero image. Tap opens /bounties/<id> which lands on Ranks
+                → BOUNTIES with the bounty expanded. */}
+            {item.bountyId && (
+              <div onClick={() => onOpenBountyById && onOpenBountyById(item.bountyId)}
+                   style={{ borderRadius: 10, overflow: "hidden", border: `1px solid ${T.red}50`, marginBottom: 10, background: `${T.charcoal}80`, cursor: "pointer" }}>
+                {item.image && (
+                  <div style={{ width: "100%", height: 140, background: T.charcoal, backgroundImage: `url(${item.image})`, backgroundSize: "cover", backgroundPosition: "center" }} />
+                )}
+                <div style={{ padding: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                    <Target size={12} color={T.red} />
+                    <span style={{ fontFamily: sans, fontSize: 9, color: T.red, letterSpacing: 1.2, fontWeight: 700 }}>BOUNTY{item.bountyCategory ? ` · ${(item.bountyCategory + "").toUpperCase()}` : ""}</span>
+                  </div>
+                  <div style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, marginBottom: 6 }}>{item.title}</div>
+                  {item.body && <div style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, marginBottom: 8, lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{item.body}</div>}
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    {(item.bountyRewardCents || 0) > 0 && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                        <DollarSign size={13} color={T.green} />
+                        <span style={{ fontFamily: sans, fontSize: 14, color: T.green, fontWeight: 700 }}>${(item.bountyRewardCents / 100).toFixed(0)}</span>
+                      </div>
+                    )}
+                    {(item.bountyRewardPoints || 0) > 0 && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                        <Zap size={12} color={T.copper} />
+                        <span style={{ fontFamily: sans, fontSize: 12, color: T.copper, fontWeight: 600 }}>+{item.bountyRewardPoints} pts</span>
+                      </div>
+                    )}
+                    <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 4, fontFamily: sans, fontSize: 11, color: T.red, fontWeight: 700, letterSpacing: 0.5 }}>
+                      VIEW BOUNTY <ChevronRight size={12} color={T.red} />
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+            {item.title && !item.spotId && !item.hqShare && !item.planId && !item.gearDropId && !item.bountyId && editingFeedPost !== item.id && (
               <p style={{ fontFamily: serif, fontSize: 15, color: T.white, margin: "0 0 8px", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{item.title}</p>
             )}
             {item.location && (
@@ -20693,8 +20730,18 @@ function BountyHistoryModal({ onLoad, onClose }) {
 }
 
 /* ─── RANKS / LEADERBOARD SCREEN ─── */
-function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, currentUserId, currentProfile, onLoadLeaderboard, onViewUser, bounties: bountiesFromDB, mySubmissions, isGuest, onGuestTap, onClaimBounty, onSaveBountyDraft, onSubmitBountyRPC, onWithdrawBounty, onUploadBountyPhotos, earnings, onOpenDM, onLoadProfileById, onSendDemoProposal, onSendDmInvite, onRefreshGiftCard, onRequestPayout, onLoadBountyHistory, onLoadGiftCardCode, onClaimRouteReportBounty, onOpenRouteReportEditor, userBuilds }) {
+function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, currentUserId, currentProfile, onLoadLeaderboard, onViewUser, bounties: bountiesFromDB, mySubmissions, isGuest, onGuestTap, onClaimBounty, onSaveBountyDraft, onSubmitBountyRPC, onWithdrawBounty, onUploadBountyPhotos, earnings, onOpenDM, onLoadProfileById, onSendDemoProposal, onSendDmInvite, onRefreshGiftCard, onRequestPayout, onLoadBountyHistory, onLoadGiftCardCode, onClaimRouteReportBounty, onOpenRouteReportEditor, userBuilds, onOpenShareIntent, pendingBountyId, onConsumePendingBountyId }) {
   const [tab, setTab] = useState("overview"); // overview | leaderboard | bounty | badges
+  // Deep-link bounce: when the app boots with /bounties/<id>, root sets
+  // pendingBountyId. Snap to the BOUNTIES tab + surface the specific
+  // bounty (expanded state lives inside the tab render).
+  const [pendingExpandBountyId, setPendingExpandBountyId] = useState(pendingBountyId || null);
+  useEffect(() => {
+    if (!pendingBountyId) return;
+    setTab("bounty");
+    setPendingExpandBountyId(pendingBountyId);
+    if (onConsumePendingBountyId) onConsumePendingBountyId();
+  }, [pendingBountyId]);
   // Leaderboard state. lbScope = global | following | weekly; lbData[scope]
   // caches rows so switching tabs is instant after the first fetch. Refresh
   // button forces a re-fetch.
@@ -20908,6 +20955,17 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
 
   const [bountyFilter, setBountyFilter] = useState("OPEN");
   const [expandedBounty, setExpandedBounty] = useState(null);
+  // If a deep link / pending nav requested a specific bounty, expand it
+  // once the bounties list has hydrated. Cleared after use so re-renders
+  // don't fight user collapses.
+  useEffect(() => {
+    if (!pendingExpandBountyId) return;
+    if (!Array.isArray(bountiesFromDB)) return;
+    const exists = bountiesFromDB.some(b => b.id === pendingExpandBountyId);
+    if (!exists) return;
+    setExpandedBounty(pendingExpandBountyId);
+    setPendingExpandBountyId(null);
+  }, [pendingExpandBountyId, bountiesFromDB]);
   // Active bounty form/overlay — track by ID, derive the full row from
   // `bounties` on every render so accept/claim/save updates flow through
   // without forcing the overlay to be closed + reopened.
@@ -21413,7 +21471,7 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
                   {expanded && (
                     <div style={{ padding: "0 16px 14px", borderTop: `1px solid ${T.charcoal}44` }}>
                       <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "12px 0", lineHeight: 1.6 }}>{b.desc}</p>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12, alignItems: "center" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                           <Clock size={11} color={T.tertiary} />
                           <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>Due {b.deadline}</span>
@@ -21422,6 +21480,15 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
                           <Users size={11} color={T.tertiary} />
                           <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{b.claimed || 0} started · {b.completed || 0}/{b.slots} completed</span>
                         </div>
+                        {onOpenShareIntent && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); onOpenShareIntent({ kind: "bounty", data: b }); }}
+                            style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4, background: T.charcoal, border: `1px solid ${T.copper}30`, padding: "5px 10px", borderRadius: 6, cursor: "pointer" }}
+                          >
+                            <Share2 size={11} color={T.copper} />
+                            <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600, letterSpacing: 0.5 }}>SHARE</span>
+                          </button>
+                        )}
                       </div>
                       {/* When all submission slots are filled the bounty is
                           effectively closed — server's claim_bounty RPC
@@ -33762,7 +33829,7 @@ function BountyIssuePayoutModal({ row, method, onLoadPendingSubmissionsForUser, 
   );
 }
 
-function BountiesAdminScreen({ bounties, reviewQueue, onLoadReviewQueue, onBack, onOpenEditor, onNewBounty, onOpenReview, onLoadPayoutQueue, onLoadPendingSubmissionsForUser, onIssuePayout, onRefreshGiftCard }) {
+function BountiesAdminScreen({ bounties, reviewQueue, onLoadReviewQueue, onBack, onOpenEditor, onNewBounty, onOpenReview, onLoadPayoutQueue, onLoadPendingSubmissionsForUser, onIssuePayout, onRefreshGiftCard, onLoadClaimants }) {
   const [tab, setTab] = useState("review"); // review | draft | open | completed | archived | payouts
   // Approved-submission map for the COMPLETED tab. Keyed by bounty_id →
   // array of winner rows ({user_id, handle, full_name, avatar_url,
@@ -33771,6 +33838,29 @@ function BountiesAdminScreen({ bounties, reviewQueue, onLoadReviewQueue, onBack,
   // bounty_submissions → profiles for every bounty in the closed bucket.
   const [completedWinners, setCompletedWinners] = useState({});
   const [winnersLoading, setWinnersLoading] = useState(false);
+  // Per-bounty claimants — expanded rows cache. Keyed bounty_id → array
+  // of {submission_id, participant, status, timestamps}. Lazy-loaded on
+  // first "SHOW CLAIMANTS" tap so admins with 100+ open bounties don't
+  // eat the round-trip for bounties they never open.
+  const [expandedClaimants, setExpandedClaimants] = useState({}); // { [bountyId]: rows[] }
+  const [loadingClaimants, setLoadingClaimants] = useState({}); // { [bountyId]: bool }
+  const toggleClaimants = async (bountyId) => {
+    if (!bountyId) return;
+    if (expandedClaimants[bountyId] != null) {
+      // Already loaded → collapse.
+      setExpandedClaimants(prev => { const next = { ...prev }; delete next[bountyId]; return next; });
+      return;
+    }
+    if (!onLoadClaimants) return;
+    setLoadingClaimants(prev => ({ ...prev, [bountyId]: true }));
+    try {
+      const res = await onLoadClaimants(bountyId);
+      if (res && res.ok) setExpandedClaimants(prev => ({ ...prev, [bountyId]: res.data || [] }));
+      else if (res && res.error) console.warn("[claimants]", res.error);
+    } finally {
+      setLoadingClaimants(prev => { const next = { ...prev }; delete next[bountyId]; return next; });
+    }
+  };
   const counts = useMemo(() => {
     const c = { draft: 0, open: 0, review: (reviewQueue || []).length, completed: 0, archived: 0 };
     (bounties || []).forEach(b => {
@@ -34016,6 +34106,67 @@ function BountiesAdminScreen({ bounties, reviewQueue, onLoadReviewQueue, onBack,
                   })}
                 </div>
               )}
+              {/* Claimants — expandable list of every submission on this
+                  bounty w/ status timeline. Loaded lazily on first tap.
+                  Hidden on the ARCHIVED tab (dead data) but useful on
+                  DRAFT / OPEN / COMPLETED. */}
+              {tab !== "archived" && onLoadClaimants && (b.claimed_slots || 0) > 0 && (() => {
+                const rows = expandedClaimants[b.id];
+                const isLoading = !!loadingClaimants[b.id];
+                const isOpen = rows != null;
+                return (
+                  <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 4, paddingTop: 10, borderTop: `1px solid ${T.charcoal}` }}>
+                    <button onClick={() => toggleClaimants(b.id)} disabled={isLoading} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: isLoading ? "wait" : "pointer", padding: 0, color: T.copper }}>
+                      <Users size={11} color={T.copper} />
+                      <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, fontWeight: 700, letterSpacing: 1 }}>
+                        {isLoading ? "LOADING…" : isOpen ? `HIDE CLAIMANTS (${rows.length})` : `SHOW CLAIMANTS (${b.claimed_slots || 0})`}
+                      </span>
+                      <ChevronDown size={11} color={T.copper} style={{ marginLeft: "auto", transform: isOpen ? "rotate(180deg)" : "none", transition: "transform 120ms" }} />
+                    </button>
+                    {isOpen && rows.length === 0 && (
+                      <div style={{ marginTop: 8, fontFamily: serif, fontSize: 11, color: T.tertiary, fontStyle: "italic" }}>No claims found.</div>
+                    )}
+                    {isOpen && rows.length > 0 && (
+                      <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+                        {rows.map(c => {
+                          const name = c.participant_name || c.participant_handle || "User";
+                          const handle = c.participant_handle ? `@${c.participant_handle}` : "";
+                          const initial = (name.charAt(0) || "?").toUpperCase();
+                          const statusColor = c.status === "approved" ? T.green
+                            : c.status === "submitted" ? T.copper
+                            : c.status === "changes_requested" ? T.copper
+                            : c.status === "rejected" ? T.red
+                            : c.status === "withdrawn" ? T.tertiary
+                            : c.status === "in_progress" ? T.copper
+                            : T.tertiary;
+                          const statusLabel = (c.status || "claimed").toUpperCase().replace(/_/g, " ");
+                          const activityAt = c.reviewed_at || c.submitted_at || c.claimed_at;
+                          const activityAtStr = activityAt ? new Date(activityAt).toLocaleDateString() : "";
+                          const canOpenReview = c.status === "submitted" && onOpenReview;
+                          return (
+                            <div key={c.submission_id} onClick={() => canOpenReview && onOpenReview(c.submission_id)} style={{ display: "flex", alignItems: "center", gap: 8, background: T.darkBg, padding: "8px 10px", borderRadius: 6, cursor: canOpenReview ? "pointer" : "default" }}>
+                              <div style={{ width: 24, height: 24, borderRadius: "50%", background: T.charcoal, overflow: "hidden", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                {c.participant_avatar
+                                  ? <img src={c.participant_avatar} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                  : <span style={{ fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.white }}>{initial}</span>}
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+                                <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+                                {(handle || activityAtStr) && (
+                                  <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>
+                                    {handle}{handle && activityAtStr ? " · " : ""}{activityAtStr}
+                                  </span>
+                                )}
+                              </div>
+                              <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: statusColor, padding: "2px 7px", borderRadius: 3, letterSpacing: 0.5, fontWeight: 700, flexShrink: 0 }}>{statusLabel}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </button>
           );
         })}
@@ -41365,6 +41516,42 @@ function DMScreen({ onClose, onViewUser, initialConvId, initialMessage, initialS
                       </div>
                     </div>
                     );
+                  })() : msg.sharedPost && msg.sharedPost.type === "bounty" ? (() => {
+                    const sp = msg.sharedPost;
+                    const rewardCents = sp.rewardCents || 0;
+                    const rewardPts = sp.rewardPoints || 0;
+                    return (
+                      <div onClick={() => onOpenPost && onOpenPost(sp)} style={{ borderRadius: 8, overflow: "hidden", border: `1px solid ${T.red}40`, marginBottom: msg.text ? 8 : 0, background: isMe ? "rgba(0,0,0,0.15)" : `${T.charcoal}80`, cursor: "pointer" }}>
+                        {sp.image && !sp.image.startsWith("blob:") && !sp.image.startsWith("data:") && (
+                          <img src={txImg(sp.image, 480)} alt="" style={{ width: "100%", height: 110, objectFit: "cover", display: "block" }} />
+                        )}
+                        <div style={{ padding: "10px 12px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                            <Target size={12} color={T.red} />
+                            <span style={{ fontFamily: sans, fontSize: 9, color: T.red, letterSpacing: 1.2, fontWeight: 700 }}>BOUNTY{sp.category ? ` · ${(sp.category + "").toUpperCase()}` : ""}</span>
+                          </div>
+                          <p style={{ fontFamily: serif, fontSize: 13, color: T.white, margin: 0, lineHeight: 1.4, fontWeight: 600 }}>{sp.title}</p>
+                          {sp.body && (
+                            <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "4px 0 0", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{sp.body}</p>
+                          )}
+                          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8, flexWrap: "wrap" }}>
+                            {rewardCents > 0 && (
+                              <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                                <DollarSign size={12} color={T.green} />
+                                <span style={{ fontFamily: sans, fontSize: 13, color: T.green, fontWeight: 700 }}>${(rewardCents / 100).toFixed(0)}</span>
+                              </div>
+                            )}
+                            {rewardPts > 0 && (
+                              <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                                <Zap size={11} color={T.copper} />
+                                <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 600 }}>+{rewardPts} pts</span>
+                              </div>
+                            )}
+                            <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: 10, color: T.red, fontWeight: 700, letterSpacing: 0.5 }}>VIEW BOUNTY →</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
                   })() : msg.sharedPost && (msg.sharedPost.type === "camping_spot" || msg.sharedPost.type === "trip_report" || msg.sharedPost.type === "hq") ? (() => {
                     // Place-share card — camping spots, trip reports, HQ.
                     // No author chip (the convo header already attributes
@@ -42274,6 +42461,13 @@ const __INITIAL_SHARED_LINK = (function() {
     if (buildMatch) {
       try { window.history.replaceState(null, "", "/"); } catch (e) {}
       return { kind: "build", id: decodeURIComponent(buildMatch[1]) };
+    }
+    // /bounties/<id> — public bounty deep link. Resolves to the Ranks →
+    // BOUNTIES tab w/ the bounty expanded. Slug not currently supported —
+    // bounty ids are uuids. Keep URL visible so social shares stay pretty.
+    const bountyMatch = path.match(/^\/bounties\/(.+?)\/?$/);
+    if (bountyMatch) {
+      return { kind: "bounty", id: decodeURIComponent(bountyMatch[1]) };
     }
     if (/^\/hq\/?$/.test(path)) {
       try { window.history.replaceState(null, "", "/"); } catch (e) {}
@@ -44630,6 +44824,7 @@ export default function Trailhead() {
     if (initialSharedLink.kind === "spot" || initialSharedLink.kind === "hq") return "routes";
     if (initialSharedLink.kind === "build") return "builds";
     if (initialSharedLink.kind === "forum-thread" || initialSharedLink.kind === "forum-sub" || initialSharedLink.kind === "forum-landing") return "forum";
+    if (initialSharedLink.kind === "bounty") return "ranks";
     // Admin landing is gated by an isAdmin-aware useEffect below — at boot
     // time we don't know the role yet, so cold-boot to feed and promote
     // once auth resolves.
@@ -45698,6 +45893,23 @@ export default function Trailhead() {
   // by id when not). Setting either also forces screen → "routes".
   const [pendingSpotNav, setPendingSpotNav] = useState(initialSharedLink && initialSharedLink.kind === "spot" ? initialSharedLink.id : null);
   const [pendingHQOpen, setPendingHQOpen] = useState(!!(initialSharedLink && initialSharedLink.kind === "hq"));
+  // Bounty deep-link — /bounties/<id>. Seeded from initial URL parse and
+  // consumed by RanksScreen once the BOUNTIES tab surfaces + the bounty
+  // has hydrated in `bounties`.
+  const [pendingBountyId, setPendingBountyId] = useState(
+    (initialSharedLink && initialSharedLink.kind === "bounty") ? initialSharedLink.id : null
+  );
+  // Programmatic route to a specific bounty — fired by feed card taps + DM
+  // shared-bounty card taps. Pushes /bounties/<id> to the URL so a copy-
+  // link on the address bar works, then routes to Ranks → BOUNTIES.
+  const openBountyById = (bountyId) => {
+    if (!bountyId) return;
+    setScreen("ranks");
+    setPendingBountyId(bountyId);
+    if (typeof window !== "undefined") {
+      try { window.history.pushState({}, "", `/bounties/${bountyId}`); } catch (_) {}
+    }
+  };
   // Plan-popup deep-link slug — used only when something explicitly
   // wants to open the popup-on-map (vs. the detail page). Initial URL
   // hits go through pendingTripNav above, which now resolves both kinds.
@@ -47024,6 +47236,22 @@ export default function Trailhead() {
       return { ok: true, is_gravel_guide: !!row.is_gravel_guide };
     } catch (e) {
       console.error("[adminToggleUserGravelGuide] failed", e);
+      return { error: "Network error" };
+    }
+  };
+
+  // Load per-bounty claimants for admin + gravel guide. Server-side gate:
+  // admins can inspect any bounty; guides can inspect only their own.
+  // Rows include the participant snapshot + status timeline so the caller
+  // can render a compact list without joining separately.
+  const loadBountyClaimants = async (bountyId) => {
+    if (!bountyId) return { error: "bounty id required" };
+    try {
+      const { data, error } = await supabase.rpc("admin_bounty_claimants", { p_bounty_id: bountyId });
+      if (error) { console.error("[loadBountyClaimants] error", error); return { error: error.message }; }
+      return { ok: true, data: Array.isArray(data) ? data : [] };
+    } catch (e) {
+      console.error("[loadBountyClaimants] failed", e);
       return { error: "Network error" };
     }
   };
@@ -51314,6 +51542,42 @@ export default function Trailhead() {
     showErrorToast("HQ shared to your feed");
   };
 
+  // Share a bounty to the feed. POST-type inline card with reward chips
+  // + category badge + CLAIM CTA. Tap-to-open routes to /bounties/<id>
+  // which snaps to the Ranks → BOUNTIES tab w/ the bounty expanded.
+  const shareBountyToFeed = (bounty, captionRaw) => {
+    if (!bounty || !bounty.id) return;
+    const caption = (captionRaw || "").trim();
+    const meName = (currentProfile && currentProfile.full_name) || "You";
+    const meHandle = (currentProfile && currentProfile.handle) || "";
+    const meInitial = meName.charAt(0).toUpperCase();
+    const rewardCents = bounty.reward_cents != null ? bounty.reward_cents : (bounty.reward != null ? bounty.reward : 0);
+    const rewardPts = bounty.reward_points != null ? bounty.reward_points : (bounty.rewardPts != null ? bounty.rewardPts : 0);
+    addPost({
+      id: "shared_bounty_" + Date.now(),
+      type: "POST",
+      user: meName,
+      handle: meHandle ? `@${meHandle}` : undefined,
+      initial: meInitial,
+      time: Date.now(),
+      title: bounty.title,
+      caption: caption || null,
+      body: bounty.desc || bounty.description || null,
+      subtitle: "Shared a bounty",
+      image: bounty.hero_img || null,
+      likes: 0,
+      comments: 0,
+      bountyId: bounty.id,
+      bountyCategory: bounty.category || null,
+      bountyDifficulty: bounty.difficulty || null,
+      bountyRewardCents: rewardCents,
+      bountyRewardPoints: rewardPts,
+      bountyDeadline: bounty.deadline || bounty.deadline_at || null,
+    });
+    awardPoints(POINTS.feedPost, "Feed Post");
+    showErrorToast("Bounty shared to your feed");
+  };
+
   // openShareCompose — convenience wrapper that accepts either:
   //   (a) the modal's generic shape (already includes onSubmit), OR
   //   (b) a simple { kind, action, data } for known share types and
@@ -51382,6 +51646,37 @@ export default function Trailhead() {
         onSubmit: action === "feed"
           ? (caption) => shareGearDropToFeed(data, caption)
           : sendDm({ id: "gear_drop_" + data.id, type: "gear_drop", gearDropId: data.id, gearDropSlug: data.slug || null, title: data.title || "Untitled Drop", body: [data.brand_partner_name, startsAtLabel].filter(Boolean).join(" · ") || null, image: img, url: data.slug ? `${origin}/drops/${data.slug}` : null }),
+      });
+      return;
+    }
+    if (kind === "bounty") {
+      const b = data;
+      const rewardCents = b.reward_cents != null ? b.reward_cents : (b.reward != null ? b.reward : 0);
+      const rewardPts = b.reward_points != null ? b.reward_points : (b.rewardPts != null ? b.rewardPts : 0);
+      const rewardLabel = [
+        rewardCents > 0 ? `$${(rewardCents / 100).toFixed(0)}` : null,
+        rewardPts > 0 ? `${rewardPts} pts` : null,
+      ].filter(Boolean).join(" + ") || null;
+      const cardBody = [b.category, rewardLabel].filter(Boolean).join(" · ") || (b.desc || null);
+      const img = b.hero_img || null;
+      setShareComposeTarget({
+        action, accent: T.red, IconComponent: Target,
+        cardLabel: "BOUNTY", cardCta: "VIEW BOUNTY",
+        cardTitle: b.title, cardBody, cardImage: img,
+        onSubmit: action === "feed"
+          ? (caption) => shareBountyToFeed(b, caption)
+          : sendDm({
+              id: "bounty_" + b.id,
+              type: "bounty",
+              bountyId: b.id,
+              title: b.title,
+              body: cardBody,
+              image: img,
+              rewardCents,
+              rewardPoints: rewardPts,
+              category: b.category || null,
+              url: `${origin}/bounties/${b.id}`,
+            }),
       });
       return;
     }
@@ -53198,6 +53493,7 @@ export default function Trailhead() {
       onOpenTripDetail={(slug) => { if (!slug) return; setPendingTripNav(slug); }}
       onOpenSpotOnMap={(id) => setPendingSpotNav(id)}
       onOpenHQOnMap={() => setPendingHQOpen(true)}
+      onOpenBountyById={openBountyById}
       tripReports={allTripReports}
       tripAuthors={tripAuthors}
       onNewTripReport={() => setShowTripCreator(true)}
@@ -53579,7 +53875,7 @@ export default function Trailhead() {
             )}
             {screen === "ranks" && (isGuest
               ? <GuestGateScreen title="RANKS REQUIRE AN ACCOUNT" subtitle="Sign in to see the leaderboard and start earning points from your posts, routes and builds." onSignIn={goToLoginFromGuest} />
-              : <RanksScreen myPoints={myTotalPoints} pointsBreakdown={friendlyPointsBreakdown} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentProfile={currentProfile} onLoadLeaderboard={loadLeaderboard} onViewUser={openUserProfile} bounties={bounties} mySubmissions={myBountySubmissions} isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onClaimBounty={claimBounty} onSaveBountyDraft={saveBountyDraft} onSubmitBountyRPC={submitBountySubmission} onWithdrawBounty={withdrawBountySubmission} onUploadBountyPhotos={uploadBountyPhotoFiles} earnings={bountyEarnings} onOpenDM={openDM} onLoadProfileById={loadProfileById} onSendDemoProposal={sendDemoProposalCard} onSendDmInvite={sendDmInvite} onRefreshGiftCard={refreshGiftCardBalance} onRequestPayout={requestBountyPayout} onLoadBountyHistory={loadBountyHistory} onLoadGiftCardCode={loadGiftCardCode} onClaimRouteReportBounty={claimRouteReportBounty} onOpenRouteReportEditor={openRouteReportBountyEditor} userBuilds={userBuilds} />
+              : <RanksScreen myPoints={myTotalPoints} pointsBreakdown={friendlyPointsBreakdown} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentProfile={currentProfile} onLoadLeaderboard={loadLeaderboard} onViewUser={openUserProfile} bounties={bounties} mySubmissions={myBountySubmissions} isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onClaimBounty={claimBounty} onSaveBountyDraft={saveBountyDraft} onSubmitBountyRPC={submitBountySubmission} onWithdrawBounty={withdrawBountySubmission} onUploadBountyPhotos={uploadBountyPhotoFiles} earnings={bountyEarnings} onOpenDM={openDM} onLoadProfileById={loadProfileById} onSendDemoProposal={sendDemoProposalCard} onSendDmInvite={sendDmInvite} onRefreshGiftCard={refreshGiftCardBalance} onRequestPayout={requestBountyPayout} onLoadBountyHistory={loadBountyHistory} onLoadGiftCardCode={loadGiftCardCode} onClaimRouteReportBounty={claimRouteReportBounty} onOpenRouteReportEditor={openRouteReportBountyEditor} userBuilds={userBuilds} onOpenShareIntent={openShareIntent} pendingBountyId={pendingBountyId} onConsumePendingBountyId={() => setPendingBountyId(null)} />
             )}
             {screen === "admin" && ((isAdmin || isGravelGuide)
               ? (adminSubScreen === "geardrops"
@@ -53641,6 +53937,7 @@ export default function Trailhead() {
                       onLoadPendingSubmissionsForUser={loadPendingSubmissionsForUser}
                       onIssuePayout={issueBountyPayout}
                       onRefreshGiftCard={refreshGiftCardBalance}
+                      onLoadClaimants={loadBountyClaimants}
                     />)
                 : adminSubScreen === "partners"
                 ? (editingContentPartnerId !== null
@@ -54453,6 +54750,9 @@ export default function Trailhead() {
             } else if (sp.type === "hq") {
               setProfileStack([]); setShowRecovery(false); setShowCompose(false);
               setPendingHQOpen(true);
+            } else if (sp.type === "bounty" && sp.bountyId) {
+              setProfileStack([]); setShowRecovery(false); setShowCompose(false);
+              openBountyById(sp.bountyId);
             } else {
               setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("feed");
               // Convoy invites carry convoyId; regular shared posts carry id.
