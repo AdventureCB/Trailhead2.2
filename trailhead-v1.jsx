@@ -33463,6 +33463,29 @@ function BountySubmissionReviewScreen({ submission, onBack, onApprove, onRequest
         )}
       </div>
 
+      {/* Reopened-review banner — surfaces when admin comes back to a
+          submission that's already been sent back with changes_requested.
+          Prior reviewer notes are shown inline so admin remembers what
+          they asked for; they can still approve as-is if they change
+          their mind. */}
+      {submission.status === "changes_requested" && (
+        <div style={{ padding: "10px 16px", background: `${T.copper}15`, borderBottom: `1px solid ${T.copper}40`, display: "flex", alignItems: "flex-start", gap: 8 }}>
+          <AlertTriangle size={14} color={T.copper} style={{ marginTop: 2, flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1, fontWeight: 700, marginBottom: 2 }}>CHANGES REQUESTED</div>
+            <div style={{ fontFamily: serif, fontSize: 12, color: T.warmStone, lineHeight: 1.4 }}>
+              The participant has this submission back for edits. You can still approve the original content as-is (or reject) if you've changed your mind.
+            </div>
+            {submission.reviewer_notes && (
+              <div style={{ marginTop: 6, padding: "6px 10px", background: T.darkCard, borderRadius: 4, fontFamily: serif, fontSize: 11, color: T.tertiary, borderLeft: `2px solid ${T.copper}` }}>
+                <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 0.6, fontWeight: 700, display: "block", marginBottom: 2 }}>YOUR PRIOR NOTES</span>
+                {submission.reviewer_notes}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Submitter card */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: `1px solid ${T.charcoal}40` }}>
         <div style={{ width: 36, height: 36, borderRadius: "50%", background: T.charcoal, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -33506,9 +33529,13 @@ function BountySubmissionReviewScreen({ submission, onBack, onApprove, onRequest
         <div style={{ display: "flex", gap: 6 }}>
           {[
             { key: "approve", label: "APPROVE", color: T.green },
-            { key: "changes", label: "REQUEST CHANGES", color: T.copper },
+            // REQUEST CHANGES is a no-op when the submission is already in
+            // changes_requested — the participant hasn't re-submitted, so
+            // there's nothing new to review. Hide it so the reviewer picks
+            // between APPROVE or REJECT.
+            (submission.status !== "changes_requested") && { key: "changes", label: "REQUEST CHANGES", color: T.copper },
             { key: "reject", label: "REJECT", color: T.red },
-          ].map(a => {
+          ].filter(Boolean).map(a => {
             const active = action === a.key;
             return (
               <button key={a.key} onClick={() => setAction(a.key)} style={{ flex: 1, padding: "10px 8px", borderRadius: 6, border: active ? `1px solid ${a.color}` : `1px solid ${T.charcoal}`, background: active ? `${a.color}25` : T.darkCard, color: active ? a.color : T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}>
@@ -34142,7 +34169,11 @@ function BountiesAdminScreen({ bounties, reviewQueue, onLoadReviewQueue, onBack,
                           const statusLabel = (c.status || "claimed").toUpperCase().replace(/_/g, " ");
                           const activityAt = c.reviewed_at || c.submitted_at || c.claimed_at;
                           const activityAtStr = activityAt ? new Date(activityAt).toLocaleDateString() : "";
-                          const canOpenReview = c.status === "submitted" && onOpenReview;
+                          // Submitted rows go straight to the review screen; a
+                          // changes_requested row is ALSO openable so admin can
+                          // change their mind and approve as-is (server-side
+                          // gate widened to accept both states).
+                          const canOpenReview = (c.status === "submitted" || c.status === "changes_requested") && onOpenReview;
                           return (
                             <div key={c.submission_id} onClick={() => canOpenReview && onOpenReview(c.submission_id)} style={{ display: "flex", alignItems: "center", gap: 8, background: T.darkBg, padding: "8px 10px", borderRadius: 6, cursor: canOpenReview ? "pointer" : "default" }}>
                               <div style={{ width: 24, height: 24, borderRadius: "50%", background: T.charcoal, overflow: "hidden", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -44862,6 +44893,24 @@ export default function Trailhead() {
   // `null` keeps BountiesAdminScreen rendered; setting to a uuid mounts
   // BountySubmissionReviewScreen as a sub-route.
   const [reviewingSubmissionId, setReviewingSubmissionId] = useState(null);
+  // Off-queue submission cache — used when we reopen a submission that
+  // isn't in the fresh review queue (e.g. changes_requested), so admin
+  // can still see the participant's content + change their mind and
+  // approve as-is. Cleared when reviewingSubmissionId is cleared.
+  const [reviewingSubmissionCache, setReviewingSubmissionCache] = useState(null);
+  const openBountyReviewById = async (submissionId) => {
+    if (!submissionId) return;
+    setAdminSubScreen("bounties");
+    setReviewingSubmissionId(submissionId);
+    // If the submission is already in the queue, the mount picks it up
+    // and we're done. Otherwise fetch it fresh so the review screen has
+    // something to render.
+    const inQueue = (bountyReviewQueue || []).some(s => s.id === submissionId);
+    if (inQueue) { setReviewingSubmissionCache(null); return; }
+    const res = await loadBountySubmissionForReview(submissionId);
+    if (res && res.ok) setReviewingSubmissionCache(res.data);
+    else if (res && res.error) console.warn("[openBountyReviewById]", res.error);
+  };
   // Partner-facing dashboard overlay — toggled from the user's own profile
   // when isContentPartner is true.
   const [showContentPartnerDashboard, setShowContentPartnerDashboard] = useState(false);
@@ -47236,6 +47285,37 @@ export default function Trailhead() {
       return { ok: true, is_gravel_guide: !!row.is_gravel_guide };
     } catch (e) {
       console.error("[adminToggleUserGravelGuide] failed", e);
+      return { error: "Network error" };
+    }
+  };
+
+  // Load a single bounty_submission by id (any status) w/ bounty + submitter
+  // snapshots. Used when reopening a submission whose status has moved
+  // OUT of the review queue (e.g. 'changes_requested' — participant is
+  // reworking it, but admin might want to change their mind and approve
+  // the original content anyway).
+  const loadBountySubmissionForReview = async (submissionId) => {
+    if (!submissionId) return { error: "submission id required" };
+    try {
+      const { data: sub, error } = await supabase
+        .from("bounty_submissions")
+        .select("id, bounty_id, user_id, status, draft, submitted_at, created_at, reviewer_notes, reward_cents, reward_points")
+        .eq("id", submissionId)
+        .maybeSingle();
+      if (error) { console.error("[loadBountySubmissionForReview] error", error); return { error: error.message }; }
+      if (!sub) return { error: "Submission not found" };
+      const [bRes, pRes] = await Promise.all([
+        supabase.from("bounties").select("id, title, category, difficulty, reward_cents, reward_points, form_template_key, form_config, demo_lat, demo_lng, demo_radius_m, demo_customer_user_id, demo_location_label").eq("id", sub.bounty_id).maybeSingle(),
+        supabase.from("profiles").select("id, full_name, handle, avatar_url").eq("id", sub.user_id).maybeSingle(),
+      ]);
+      const decorated = {
+        ...sub,
+        bounty: (bRes && bRes.data) || null,
+        submitter: (pRes && pRes.data) || null,
+      };
+      return { ok: true, data: decorated };
+    } catch (e) {
+      console.error("[loadBountySubmissionForReview] failed", e);
       return { error: "Network error" };
     }
   };
@@ -53905,8 +53985,8 @@ export default function Trailhead() {
                 : adminSubScreen === "bounties"
                 ? (reviewingSubmissionId
                   ? <BountySubmissionReviewScreen
-                      submission={bountyReviewQueue.find(s => s.id === reviewingSubmissionId)}
-                      onBack={() => { setReviewingSubmissionId(null); loadBountyReviewQueue(); }}
+                      submission={bountyReviewQueue.find(s => s.id === reviewingSubmissionId) || reviewingSubmissionCache}
+                      onBack={() => { setReviewingSubmissionId(null); setReviewingSubmissionCache(null); loadBountyReviewQueue(); }}
                       onApprove={adminApproveBountyAction}
                       onRequestChanges={adminRequestChangesOnBounty}
                       onReject={adminRejectBountyAction}
@@ -53932,7 +54012,7 @@ export default function Trailhead() {
                       onBack={() => setAdminSubScreen(null)}
                       onOpenEditor={(id) => setEditingBountyId(id)}
                       onNewBounty={() => setEditingBountyId("")}
-                      onOpenReview={(id) => setReviewingSubmissionId(id)}
+                      onOpenReview={openBountyReviewById}
                       onLoadPayoutQueue={loadAdminPayoutQueue}
                       onLoadPendingSubmissionsForUser={loadPendingSubmissionsForUser}
                       onIssuePayout={issueBountyPayout}
@@ -53995,7 +54075,7 @@ export default function Trailhead() {
                 ? <DemoBountyProgressScreen
                     onBack={() => setAdminSubScreen(null)}
                     onLoad={loadDemoBountyProgress}
-                    onOpenReview={(sid) => { setAdminSubScreen("bounties"); setReviewingSubmissionId(sid); loadBountyReviewQueue(); }}
+                    onOpenReview={openBountyReviewById}
                     currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id}
                     isAdmin={isAdmin}
                   />
