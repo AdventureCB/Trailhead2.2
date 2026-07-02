@@ -19175,8 +19175,258 @@ function resolveObjectFit(obj) {
   return (obj && obj.fit === "contain") ? "contain" : "cover";
 }
 
+/* ─── CampSpotPickerOverlay ──────────────────────────────────────────
+   Fullscreen modal that lets a participant place a camping spot on the
+   map + fill its details (name / description / spot type / fee / photos).
+   Save creates the spot via onAddCampingSpot (which persists to
+   public.camping_spots — so it lands on the explore map immediately),
+   then returns the created row to the caller. Used by the bounty response
+   form's `camp_spot` section. */
+function CampSpotPickerOverlay({ initialCenter, initial, onCancel, onSave, onAddCampingSpot, onUploadPhotos }) {
+  const mapRef = useRef(null);
+  const mapInst = useRef(null);
+  const markerRef = useRef(null);
+  const [pos, setPos] = useState(initial && initial.lat != null ? { lat: initial.lat, lng: initial.lng } : null);
+  const [name, setName] = useState((initial && initial.name) || "");
+  const [description, setDescription] = useState((initial && initial.description) || "");
+  const [spotType, setSpotType] = useState((initial && initial.spot_type) || "unknown");
+  const [fee, setFee] = useState((initial && initial.fee) || "unknown");
+  const [photos, setPhotos] = useState(Array.isArray(initial && initial.photos) ? initial.photos.slice() : []);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [uploadingCount, setUploadingCount] = useState(0);
+  const fileRef = useRef(null);
+
+  // Mount the Mapbox map once. Center = existing pin, else provided
+  // initialCenter, else continental-US default.
+  useEffect(() => {
+    if (!mapRef.current || mapInst.current) return;
+    let cancelled = false;
+    (async () => {
+      let mapboxgl;
+      try { mapboxgl = await loadMapbox(); } catch (e) { return; }
+      if (cancelled || !mapRef.current) return;
+      const c = pos || initialCenter || { lat: 39.5, lng: -105 };
+      const map = new mapboxgl.Map({
+        container: mapRef.current,
+        style: MAPBOX_STYLE,
+        center: [c.lng, c.lat],
+        zoom: pos || initialCenter ? 12 : 4,
+        attributionControl: false,
+      });
+      map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), "top-right");
+      mapInst.current = map;
+      // Drop marker on tap. Reuses a single marker so subsequent taps
+      // move it rather than stacking.
+      map.on("click", (e) => {
+        setPos({ lat: e.lngLat.lat, lng: e.lngLat.lng });
+      });
+      // If we already have a position, seed the marker on load.
+      map.on("load", () => {
+        if (pos) placeMarker(pos);
+      });
+    })();
+    return () => {
+      cancelled = true;
+      if (markerRef.current) { try { markerRef.current.remove(); } catch (_) {} markerRef.current = null; }
+      if (mapInst.current) { try { mapInst.current.remove(); } catch (_) {} mapInst.current = null; }
+    };
+  }, []);
+
+  const placeMarker = (p) => {
+    if (!mapInst.current || !window.mapboxgl) return;
+    if (markerRef.current) { try { markerRef.current.remove(); } catch (_) {} markerRef.current = null; }
+    const el = buildEmojiMarkerEl(T.green, "⛺", 34);
+    markerRef.current = new window.mapboxgl.Marker({ element: el, draggable: true })
+      .setLngLat([p.lng, p.lat])
+      .addTo(mapInst.current);
+    markerRef.current.on("dragend", () => {
+      const ll = markerRef.current.getLngLat();
+      setPos({ lat: ll.lat, lng: ll.lng });
+    });
+  };
+  // Whenever pos changes, sync the marker + recenter softly.
+  useEffect(() => {
+    if (!mapInst.current || !window.mapboxgl) return;
+    if (!pos) return;
+    placeMarker(pos);
+    try { mapInst.current.easeTo({ center: [pos.lng, pos.lat], duration: 400 }); } catch (_) {}
+  }, [pos && pos.lat, pos && pos.lng]);
+
+  const runSearch = async () => {
+    const q = searchQuery.trim();
+    if (!q) { setSearchResults([]); return; }
+    setSearching(true);
+    try {
+      const rows = await mapboxGeocodeSearch(q, 6);
+      setSearchResults(Array.isArray(rows) ? rows : []);
+    } catch (e) { console.error("[camp_spot_picker] search failed", e); }
+    finally { setSearching(false); }
+  };
+
+  const handlePickFiles = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (e.target) e.target.value = "";
+    if (files.length === 0 || !onUploadPhotos) return;
+    setUploadingCount(c => c + files.length);
+    try {
+      const uploaded = await onUploadPhotos(files);
+      const clean = (Array.isArray(uploaded) ? uploaded : []).filter(u => u && u.url);
+      setPhotos(prev => [...prev, ...clean]);
+    } catch (err) { console.error("[camp_spot_picker] photo upload failed", err); }
+    finally { setUploadingCount(c => Math.max(0, c - files.length)); }
+  };
+  const removePhotoAt = (idx) => setPhotos(prev => prev.filter((_, i) => i !== idx));
+
+  const handleSave = async () => {
+    setError("");
+    if (!pos) { setError("Tap the map to place the spot."); return; }
+    if (!name.trim()) { setError("Give the spot a name."); return; }
+    if (!onAddCampingSpot) { setError("Save is unavailable in this context."); return; }
+    setSaving(true);
+    try {
+      const created = await onAddCampingSpot({
+        name: name.trim(),
+        description: description.trim() || null,
+        lat: pos.lat,
+        lng: pos.lng,
+        spot_type: spotType,
+        fee,
+        photos: photos.map(p => ({ url: p.url, alt: p.alt || "" })),
+        visibility: "public",
+      });
+      if (!created) { setError("Couldn't save the spot. Try again."); setSaving(false); return; }
+      onSave && onSave(created);
+    } catch (e) {
+      console.error("[camp_spot_picker] save failed", e);
+      setError((e && e.message) || "Save failed.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const SPOT_TYPES = [
+    { key: "unknown", label: "— pick type —" },
+    { key: "campground", label: "Campground" },
+    { key: "dispersed", label: "Dispersed / Free" },
+    { key: "boondocking", label: "Boondocking" },
+    { key: "rv_park", label: "RV Park" },
+    { key: "backcountry", label: "Backcountry" },
+    { key: "other", label: "Other" },
+  ];
+  const FEE_TYPES = [
+    { key: "unknown", label: "— pick fee —" },
+    { key: "free", label: "Free" },
+    { key: "paid", label: "Paid" },
+    { key: "reservation", label: "Reservation required" },
+  ];
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 1500, background: T.darkBg, display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 16px", background: T.charcoal, borderBottom: `1px solid ${T.darkCard}`, flexShrink: 0 }}>
+        <button onClick={onCancel} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><X size={18} color={T.white} /></button>
+        <Tent size={16} color={T.green} />
+        <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>ADD CAMPING SPOT</span>
+      </div>
+
+      <div style={{ position: "relative", height: "45%", minHeight: 220, background: T.charcoal, flexShrink: 0 }}>
+        <div ref={mapRef} style={{ width: "100%", height: "100%" }} />
+        {/* Search bar */}
+        <div style={{ position: "absolute", top: 10, left: 10, right: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={{ display: "flex", gap: 6, background: T.darkCard + "EE", borderRadius: 8, padding: 6, backdropFilter: "blur(6px)", boxShadow: "0 2px 8px rgba(0,0,0,0.4)" }}>
+            <input
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); runSearch(); } }}
+              placeholder="Search a place, town, or landmark…"
+              style={{ flex: 1, padding: "8px 10px", borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 12, outline: "none", boxSizing: "border-box" }}
+            />
+            <button onClick={runSearch} disabled={searching || !searchQuery.trim()} style={{ padding: "6px 12px", borderRadius: 6, background: searching ? T.charcoal : T.green, border: "none", cursor: searching || !searchQuery.trim() ? "wait" : "pointer", fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>{searching ? "…" : "GO"}</button>
+          </div>
+          {searchResults.length > 0 && (
+            <div style={{ background: T.darkCard + "F0", borderRadius: 8, maxHeight: 160, overflowY: "auto", backdropFilter: "blur(6px)" }}>
+              {searchResults.map((r, i) => (
+                <button key={i} onClick={() => { setPos({ lat: r.lat, lng: r.lng }); setSearchResults([]); setSearchQuery(""); }} style={{ display: "block", width: "100%", padding: "8px 12px", background: "none", border: "none", borderBottom: i < searchResults.length - 1 ? `1px solid ${T.charcoal}` : "none", textAlign: "left", cursor: "pointer", fontFamily: serif, fontSize: 12, color: T.white }}>
+                  {r.label || r.name || "(unnamed)"}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        {/* Coords chip */}
+        {pos ? (
+          <div style={{ position: "absolute", bottom: 10, left: 10, background: T.darkBg + "DD", padding: "6px 10px", borderRadius: 6, border: `1px solid ${T.green}40`, fontFamily: sans, fontSize: 10, color: T.green, letterSpacing: 0.6 }}>
+            {pos.lat.toFixed(5)}, {pos.lng.toFixed(5)}
+          </div>
+        ) : (
+          <div style={{ position: "absolute", bottom: 10, left: 10, right: 10, background: T.darkBg + "DD", padding: "8px 12px", borderRadius: 6, border: `1px solid ${T.copper}40`, fontFamily: serif, fontSize: 11, color: T.warmStone, textAlign: "center" }}>
+            Tap the map to place the spot. You can drag it to fine-tune.
+          </div>
+        )}
+      </div>
+
+      <div className="th-scroll" style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+        <div>
+          <label style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700, display: "block", marginBottom: 4 }}>NAME <span style={{ color: T.red }}>*</span></label>
+          <input value={name} onChange={e => setName(e.target.value.slice(0, 90))} placeholder="e.g. Elk Meadow Dispersed Camp" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none", boxSizing: "border-box" }} />
+        </div>
+        <div>
+          <label style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700, display: "block", marginBottom: 4 }}>DESCRIPTION</label>
+          <textarea value={description} onChange={e => setDescription(e.target.value.slice(0, 500))} placeholder="Access notes, cell coverage, water, terrain, best months…" rows={3} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", boxSizing: "border-box", resize: "vertical", lineHeight: 1.5 }} />
+        </div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <div style={{ flex: 1 }}>
+            <label style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700, display: "block", marginBottom: 4 }}>TYPE</label>
+            <select value={spotType} onChange={e => setSpotType(e.target.value)} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", boxSizing: "border-box" }}>
+              {SPOT_TYPES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+            </select>
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700, display: "block", marginBottom: 4 }}>FEE</label>
+            <select value={fee} onChange={e => setFee(e.target.value)} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", boxSizing: "border-box" }}>
+              {FEE_TYPES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+            </select>
+          </div>
+        </div>
+        <div>
+          <label style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700, display: "block", marginBottom: 6 }}>PHOTOS</label>
+          {photos.length > 0 && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, marginBottom: 8 }}>
+              {photos.map((p, i) => (
+                <div key={i} style={{ position: "relative", width: "100%", aspectRatio: "1/1", borderRadius: 6, overflow: "hidden", border: `1px solid ${T.charcoal}` }}>
+                  <img src={txImg(p.url, 240)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  <button onClick={() => removePhotoAt(i)} style={{ position: "absolute", top: 3, right: 3, background: "rgba(0,0,0,0.6)", border: "none", borderRadius: "50%", width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 }}>
+                    <X size={10} color={T.white} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <input ref={fileRef} type="file" accept="image/*" multiple onChange={handlePickFiles} style={{ display: "none" }} />
+          <button onClick={() => fileRef.current && fileRef.current.click()} disabled={uploadingCount > 0} style={{ width: "100%", padding: "10px", borderRadius: 8, background: T.darkCard, border: `1px dashed ${T.copper}50`, color: T.copper, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, cursor: uploadingCount > 0 ? "wait" : "pointer" }}>
+            {uploadingCount > 0 ? `UPLOADING ${uploadingCount}…` : "+ ADD PHOTO"}
+          </button>
+        </div>
+        {error && (
+          <div style={{ padding: "10px 12px", background: `${T.red}18`, border: `1px solid ${T.red}40`, borderRadius: 6, fontFamily: serif, fontSize: 12, color: T.red, lineHeight: 1.4 }}>{error}</div>
+        )}
+      </div>
+
+      <div style={{ display: "flex", gap: 8, padding: 12, borderTop: `1px solid ${T.charcoal}`, background: T.charcoal, flexShrink: 0 }}>
+        <button onClick={onCancel} style={{ flex: 1, padding: "12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, cursor: "pointer", fontFamily: sans, fontSize: 12, color: T.tertiary, fontWeight: 600, letterSpacing: 0.5 }}>CANCEL</button>
+        <button onClick={handleSave} disabled={saving || !pos || !name.trim() || uploadingCount > 0} style={{ flex: 2, padding: "12px", borderRadius: 8, background: (saving || !pos || !name.trim()) ? T.charcoal : T.green, border: "none", cursor: (saving || !pos || !name.trim()) ? "default" : "pointer", fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 0.5, opacity: (saving || !pos || !name.trim()) ? 0.5 : 1 }}>
+          {saving ? "SAVING…" : "SAVE SPOT"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ─── BOUNTY RESPONSE FORM ─── */
-function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUploadPhotos, currentUserId, userBuilds }) {
+function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUploadPhotos, currentUserId, userBuilds, onAddCampingSpot }) {
   // Phase 6 polish: prefer bounty.form_config (admin-customized prompts) over
   // the module-level BOUNTY_FORM_TEMPLATES. Falls back to the template
   // referenced by form_template_key, then to the bounty's category, then to
@@ -19238,6 +19488,12 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
           ? { url: d.url || "", text: d.text || "" }
           : { url: typeof d === "string" ? d : "", text: "" };
       }
+      else if (s.type === "camp_spot") {
+        // Value is a spot snapshot (id, name, lat, lng, photo_url, ...) —
+        // filled once the participant saves the picker overlay. Stays
+        // null until then.
+        init[s.id] = null;
+      }
       else { init[s.id] = s.default_value || ""; }
     });
     // Overlay saved draft. For fixed sections, prefill wins (drop any draft
@@ -19276,6 +19532,10 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
   const [activePhotoField, setActivePhotoField] = useState(null);
   // Route builder overlay: { fieldId, mode: "record" | "manual", editData? }
   const [routeBuilderOverlay, setRouteBuilderOverlay] = useState(null);
+  // Camp spot picker overlay — non-null field id means the overlay is
+  // open editing that section. Save populates the field with the created
+  // camping_spots row.
+  const [campSpotPickerFor, setCampSpotPickerFor] = useState(null);
   // Auto-save: 1.5s debounce after the user stops typing. Skips the initial
   // render so we don't fire a no-op save on mount. autoSavedAt is shown in
   // the header so the user trusts the form is persisting.
@@ -19483,6 +19743,35 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
     if (type === "h3") return "#C0A060";
     return T.tertiary;
   };
+
+  // ── Camp Spot Picker Overlay ──
+  // When open, replaces the response form until the participant saves or
+  // cancels. Save creates a new camping_spots row (visible on the explore
+  // map immediately) + writes the row snapshot into the section's field.
+  if (campSpotPickerFor) {
+    const fieldId = campSpotPickerFor;
+    return (
+      <CampSpotPickerOverlay
+        onCancel={() => setCampSpotPickerFor(null)}
+        onSave={(row) => {
+          updateField(fieldId, {
+            id: row.id,
+            name: row.name,
+            description: row.description || null,
+            lat: row.lat,
+            lng: row.lng,
+            spot_type: row.spot_type || "unknown",
+            fee: row.fee || "unknown",
+            photo_url: row.photo_url || null,
+            photos: Array.isArray(row.photos) ? row.photos : [],
+          });
+          setCampSpotPickerFor(null);
+        }}
+        onAddCampingSpot={onAddCampingSpot}
+        onUploadPhotos={onUploadPhotos}
+      />
+    );
+  }
 
   // ── Route Builder Overlay (live tracking or manual) ──
   if (routeBuilderOverlay) {
@@ -20044,6 +20333,55 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
                     );
                   })}
                 </div>
+              </div>
+            );
+          }
+
+          if (section.type === "camp_spot") {
+            // Value = spot snapshot ({id, name, lat, lng, photo_url|photos, description}).
+            // Null until participant creates one via the picker overlay.
+            const spot = fields[section.id] || null;
+            const previewImg = spot ? (spot.photo_url
+              || (Array.isArray(spot.photos) && spot.photos[0] && (spot.photos[0].url || spot.photos[0]))
+              || (spot.lat != null && spot.lng != null ? spotStaticMapUrl(spot.lat, spot.lng) : null)) : null;
+            return (
+              <div key={section.id} style={{ margin: "12px 0" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <Tent size={14} color={T.green} />
+                  <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>{section.label}</span>
+                  {section.required && <span style={{ fontFamily: sans, fontSize: 9, color: T.red }}>REQUIRED</span>}
+                </div>
+                {section.placeholder && !spot && (
+                  <div style={{ padding: 12, background: T.darkCard, border: `1px dashed ${T.charcoal}`, borderRadius: 8, fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.5, marginBottom: 8 }}>{section.placeholder}</div>
+                )}
+                {spot ? (
+                  <div style={{ background: T.darkCard, border: `1px solid ${T.green}40`, borderRadius: 10, overflow: "hidden" }}>
+                    {previewImg && (
+                      <div style={{ width: "100%", height: 140, background: T.charcoal, backgroundImage: `url(${previewImg})`, backgroundSize: "cover", backgroundPosition: "center" }} />
+                    )}
+                    <div style={{ padding: 12 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                        <span style={{ fontFamily: sans, fontSize: 9, color: T.green, letterSpacing: 1, fontWeight: 700 }}>SPOT ADDED</span>
+                        <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>· Visible on the explore map</span>
+                      </div>
+                      <div style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, marginBottom: 4 }}>{spot.name}</div>
+                      {spot.description && <div style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, marginBottom: 6, lineHeight: 1.4 }}>{spot.description}</div>}
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: sans, fontSize: 10, color: T.tertiary }}>
+                        <MapPin size={11} color={T.copper} />
+                        <span>{spot.lat != null && spot.lng != null ? `${Number(spot.lat).toFixed(5)}, ${Number(spot.lng).toFixed(5)}` : ""}</span>
+                      </div>
+                      <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                        <button onClick={() => setCampSpotPickerFor(section.id)} style={{ flex: 1, padding: "8px 10px", borderRadius: 6, background: T.charcoal, border: `1px solid ${T.copper}40`, color: T.copper, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}>ADD ANOTHER SPOT</button>
+                        <button onClick={() => updateField(section.id, null)} style={{ padding: "8px 12px", borderRadius: 6, background: "none", border: `1px solid ${T.red}40`, color: T.red, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}>UNLINK</button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <button onClick={() => setCampSpotPickerFor(section.id)} style={{ width: "100%", padding: "14px", borderRadius: 10, background: T.darkCard, border: `1px dashed ${T.green}60`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                    <Tent size={16} color={T.green} />
+                    <span style={{ fontFamily: sans, fontSize: 12, color: T.green, fontWeight: 700, letterSpacing: 0.5 }}>ADD CAMPING SPOT ON MAP</span>
+                  </button>
+                )}
               </div>
             );
           }
@@ -20730,7 +21068,7 @@ function BountyHistoryModal({ onLoad, onClose }) {
 }
 
 /* ─── RANKS / LEADERBOARD SCREEN ─── */
-function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, currentUserId, currentProfile, onLoadLeaderboard, onViewUser, bounties: bountiesFromDB, mySubmissions, isGuest, onGuestTap, onClaimBounty, onSaveBountyDraft, onSubmitBountyRPC, onWithdrawBounty, onUploadBountyPhotos, earnings, onOpenDM, onLoadProfileById, onSendDemoProposal, onSendDmInvite, onRefreshGiftCard, onRequestPayout, onLoadBountyHistory, onLoadGiftCardCode, onClaimRouteReportBounty, onOpenRouteReportEditor, userBuilds, onOpenShareIntent, pendingBountyId, onConsumePendingBountyId }) {
+function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, currentUserId, currentProfile, onLoadLeaderboard, onViewUser, bounties: bountiesFromDB, mySubmissions, isGuest, onGuestTap, onClaimBounty, onSaveBountyDraft, onSubmitBountyRPC, onWithdrawBounty, onUploadBountyPhotos, earnings, onOpenDM, onLoadProfileById, onSendDemoProposal, onSendDmInvite, onRefreshGiftCard, onRequestPayout, onLoadBountyHistory, onLoadGiftCardCode, onClaimRouteReportBounty, onOpenRouteReportEditor, userBuilds, onOpenShareIntent, pendingBountyId, onConsumePendingBountyId, onAddCampingSpot }) {
   const [tab, setTab] = useState("overview"); // overview | leaderboard | bounty | badges
   // Deep-link bounce: when the app boots with /bounties/<id>, root sets
   // pendingBountyId. Snap to the BOUNTIES tab + surface the specific
@@ -21697,6 +22035,7 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
               onUploadPhotos={onUploadBountyPhotos}
               currentUserId={currentUserId}
               userBuilds={userBuilds}
+              onAddCampingSpot={onAddCampingSpot}
               onClose={() => setActiveBountyFormId(null)}
             />
       )}
@@ -33038,6 +33377,36 @@ function BountyDraftRenderer({ bounty, draft }) {
             </div>
           );
         }
+        if (section.type === "camp_spot") {
+          if (!val || !val.id) return null;
+          const previewImg = val.photo_url
+            || (Array.isArray(val.photos) && val.photos[0] && (val.photos[0].url || val.photos[0]))
+            || (val.lat != null && val.lng != null ? spotStaticMapUrl(val.lat, val.lng) : null);
+          return (
+            <div key={section.id} style={{ padding: "6px 0" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                <Tent size={12} color={T.green} />
+                <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600 }}>{section.label.toUpperCase()}</span>
+              </div>
+              <div style={{ background: T.darkCard, border: `1px solid ${T.green}30`, borderRadius: 10, overflow: "hidden" }}>
+                {previewImg && (
+                  <div style={{ width: "100%", height: 140, background: T.charcoal, backgroundImage: `url(${previewImg})`, backgroundSize: "cover", backgroundPosition: "center" }} />
+                )}
+                <div style={{ padding: 10 }}>
+                  <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, marginBottom: 3 }}>{val.name || "(unnamed spot)"}</div>
+                  {val.description && <div style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, marginBottom: 6, lineHeight: 1.4 }}>{val.description}</div>}
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: sans, fontSize: 10, color: T.tertiary }}>
+                    <MapPin size={11} color={T.copper} />
+                    <span>{val.lat != null && val.lng != null ? `${Number(val.lat).toFixed(5)}, ${Number(val.lng).toFixed(5)}` : ""}</span>
+                    {val.spot_type && val.spot_type !== "unknown" && <span>· {val.spot_type}</span>}
+                    {val.fee && val.fee !== "unknown" && <span>· {val.fee}</span>}
+                  </div>
+                  <a href={`/spots/${val.id}`} target="_blank" rel="noopener noreferrer" style={{ display: "inline-block", marginTop: 8, fontFamily: sans, fontSize: 10, color: T.green, fontWeight: 700, letterSpacing: 0.5 }}>OPEN ON EXPLORE MAP →</a>
+                </div>
+              </div>
+            </div>
+          );
+        }
         if (section.type === "hero_image") {
           const url = val && val.url;
           if (!url || url.startsWith("blob:")) return null;
@@ -34606,6 +34975,7 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
     if (type === "rating") { seed.max = 5; }
     if (type === "url") { seed.placeholder = "https://example.com/product"; seed.label = "Link"; }
     if (type === "build_select") { seed.label = "Choose a Build"; seed.placeholder = "— Pick one of your builds —"; }
+    if (type === "camp_spot") { seed.label = "Add a Camping Spot"; seed.placeholder = "Tap to add — the spot will be visible on the explore map for the whole community."; }
     setBounty(prev => {
       if (!prev) return prev;
       const baseConfig = ensureFormConfig(prev);
@@ -35271,6 +35641,7 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
                   { k: "rating", label: "Rating (stars)" },
                   { k: "url", label: "URL / link" },
                   { k: "build_select", label: "Build selector" },
+                  { k: "camp_spot", label: "Camping spot" },
                   { k: "route_builder", label: "Route builder" },
                 ];
                 return (
@@ -53955,7 +54326,7 @@ export default function Trailhead() {
             )}
             {screen === "ranks" && (isGuest
               ? <GuestGateScreen title="RANKS REQUIRE AN ACCOUNT" subtitle="Sign in to see the leaderboard and start earning points from your posts, routes and builds." onSignIn={goToLoginFromGuest} />
-              : <RanksScreen myPoints={myTotalPoints} pointsBreakdown={friendlyPointsBreakdown} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentProfile={currentProfile} onLoadLeaderboard={loadLeaderboard} onViewUser={openUserProfile} bounties={bounties} mySubmissions={myBountySubmissions} isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onClaimBounty={claimBounty} onSaveBountyDraft={saveBountyDraft} onSubmitBountyRPC={submitBountySubmission} onWithdrawBounty={withdrawBountySubmission} onUploadBountyPhotos={uploadBountyPhotoFiles} earnings={bountyEarnings} onOpenDM={openDM} onLoadProfileById={loadProfileById} onSendDemoProposal={sendDemoProposalCard} onSendDmInvite={sendDmInvite} onRefreshGiftCard={refreshGiftCardBalance} onRequestPayout={requestBountyPayout} onLoadBountyHistory={loadBountyHistory} onLoadGiftCardCode={loadGiftCardCode} onClaimRouteReportBounty={claimRouteReportBounty} onOpenRouteReportEditor={openRouteReportBountyEditor} userBuilds={userBuilds} onOpenShareIntent={openShareIntent} pendingBountyId={pendingBountyId} onConsumePendingBountyId={() => setPendingBountyId(null)} />
+              : <RanksScreen myPoints={myTotalPoints} pointsBreakdown={friendlyPointsBreakdown} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentProfile={currentProfile} onLoadLeaderboard={loadLeaderboard} onViewUser={openUserProfile} bounties={bounties} mySubmissions={myBountySubmissions} isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onClaimBounty={claimBounty} onSaveBountyDraft={saveBountyDraft} onSubmitBountyRPC={submitBountySubmission} onWithdrawBounty={withdrawBountySubmission} onUploadBountyPhotos={uploadBountyPhotoFiles} earnings={bountyEarnings} onOpenDM={openDM} onLoadProfileById={loadProfileById} onSendDemoProposal={sendDemoProposalCard} onSendDmInvite={sendDmInvite} onRefreshGiftCard={refreshGiftCardBalance} onRequestPayout={requestBountyPayout} onLoadBountyHistory={loadBountyHistory} onLoadGiftCardCode={loadGiftCardCode} onClaimRouteReportBounty={claimRouteReportBounty} onOpenRouteReportEditor={openRouteReportBountyEditor} userBuilds={userBuilds} onOpenShareIntent={openShareIntent} pendingBountyId={pendingBountyId} onConsumePendingBountyId={() => setPendingBountyId(null)} onAddCampingSpot={addCampingSpot} />
             )}
             {screen === "admin" && ((isAdmin || isGravelGuide)
               ? (adminSubScreen === "geardrops"
