@@ -1268,7 +1268,11 @@ const DEFAULT_META = {
   title: "Trailhead · The overlanding community app by Lone Peak Overland",
   description:
     "Discover camping spots, plan trips, share builds, and connect with the overlanding community.",
-  image: null,
+  // Fallback for the miss path (entity couldn't be resolved). Keeps
+  // socials from rendering an image-less card when someone shares a
+  // stale / deleted link.
+  image: "https://trailhead.lonepeakoverland.com/summit-lp-logo.png",
+  imageAlt: "Trailhead by Lone Peak Overland",
 };
 
 function metaTagsFor({ title, description, image, imageAlt, url, article }) {
@@ -1477,11 +1481,16 @@ module.exports = async function handler(req, res) {
         authorName: meta.article.author && meta.article.author.name ? meta.article.author.name : null,
       }
     : null;
+  // Fall back to the app logo when the resolved entity doesn't have its
+  // own image. Prevents image-less social cards after we strip the baseline
+  // OG tags out of the SPA shell.
+  const resolvedImage = meta.image || DEFAULT_META.image;
+  const resolvedImageAlt = meta.imageAlt || (meta.image ? "" : DEFAULT_META.imageAlt);
   const tags = metaTagsFor({
     title: meta.title,
     description: meta.description,
-    image: meta.image,
-    imageAlt: meta.imageAlt || "",
+    image: resolvedImage,
+    imageAlt: resolvedImageAlt,
     url: canonicalUrl,
     article: articleMeta,
   });
@@ -1905,6 +1914,14 @@ module.exports = async function handler(req, res) {
   // Replace the existing <title> with our entity-specific one so browser
   // tabs / search results show a meaningful name even before the SPA mounts.
   html = html.replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(meta.title)}</title>`);
+  // STRIP the baseline Open Graph + Twitter meta tags that live in the SPA
+  // shell (deploy-v2.2/index.html). Without this, Facebook / Twitter /
+  // iMessage / Slack scrapers see BOTH the generic app-level tags AND our
+  // entity-specific ones, and per OG spec the FIRST occurrence wins — so
+  // every shared link fell back to the generic Trailhead logo + tagline.
+  // We only strip when we're about to replace them with entity-specific
+  // versions (which is always the case in the injection path below).
+  html = html.replace(/\s*<meta\s+(?:property|name)="(?:og:[a-z:_]+|twitter:[a-z:_]+|description|keywords)"[^>]*>\s*/gi, "");
   // Inject canonical link + BreadcrumbList + entity JSON-LD just before </head>.
   const headInjections = [canonicalTag, tags, breadcrumbLdTag, jsonLdTag].filter(Boolean).join("\n");
   html = html.replace("</head>", `${headInjections}\n</head>`);
