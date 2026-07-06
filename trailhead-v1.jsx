@@ -5046,10 +5046,19 @@ function MentionInput({ value, onChange, onKeyDown, placeholder, style, inputRef
   const [mentionQuery, setMentionQuery] = useState("");
   const [mentionActive, setMentionActive] = useState(false);
   const [cursorPos, setCursorPos] = useState(0);
+  // Async lookups from public.profiles when no `users` prop is passed.
+  // Kept in state so the suggestion dropdown re-renders as results arrive.
+  const [remoteUsers, setRemoteUsers] = useState([]);
+  const [remoteLoading, setRemoteLoading] = useState(false);
+  const remoteReqRef = useRef(0);
   const internalRef = useRef(null);
   const ref = inputRef || internalRef;
 
-  const mentionUsers = users || globalSearchUsers.filter(u => u.handle !== "KyleLPO");
+  // When the caller supplies a curated list (e.g. DM search / convoy
+  // invites), use it verbatim. Otherwise fall through to live profile
+  // search below.
+  const usingRemote = !users;
+  const localUsers = users || [];
 
   const handleChange = (e) => {
     const val = e.target.value;
@@ -5069,6 +5078,52 @@ function MentionInput({ value, onChange, onKeyDown, placeholder, style, inputRef
     }
   };
 
+  // Debounced live lookup against public.profiles. Fires only when the
+  // caller didn't supply a curated `users` list, the mention popup is
+  // open, and the query is at least 1 char. Bumps a request counter so
+  // late-arriving responses can't clobber the current query's results.
+  useEffect(() => {
+    if (!usingRemote) return;
+    if (!mentionActive) { setRemoteUsers([]); return; }
+    const q = mentionQuery.trim();
+    if (q.length === 0) {
+      // Empty query — clear so we don't show stale hits from the previous
+      // char. Wait for the user to type at least 1 letter before searching.
+      setRemoteUsers([]);
+      setRemoteLoading(false);
+      return;
+    }
+    const reqId = ++remoteReqRef.current;
+    setRemoteLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("id, full_name, handle, avatar_url")
+          .or(`handle.ilike.%${q}%,full_name.ilike.%${q}%`)
+          .limit(6);
+        if (reqId !== remoteReqRef.current) return; // stale response
+        if (error) { console.warn("[MentionInput] profile search failed", error); setRemoteUsers([]); }
+        else {
+          const rows = (data || [])
+            .filter(u => !!u.handle)
+            .map(u => ({
+              handle: u.handle,
+              name: u.full_name || u.handle,
+              avatar_url: u.avatar_url || null,
+              initial: (u.handle || u.full_name || "?").slice(0, 1).toUpperCase(),
+            }));
+          setRemoteUsers(rows);
+        }
+      } catch (e) {
+        if (reqId === remoteReqRef.current) { console.warn("[MentionInput] profile search threw", e); setRemoteUsers([]); }
+      } finally {
+        if (reqId === remoteReqRef.current) setRemoteLoading(false);
+      }
+    }, 180);
+    return () => clearTimeout(timer);
+  }, [usingRemote, mentionActive, mentionQuery]);
+
   const insertMention = (handle) => {
     const before = value.slice(0, cursorPos);
     const after = value.slice(cursorPos);
@@ -5086,9 +5141,11 @@ function MentionInput({ value, onChange, onKeyDown, placeholder, style, inputRef
     }, 0);
   };
 
-  const filtered = mentionUsers.filter(u =>
-    mentionQuery === "" || u.handle.toLowerCase().includes(mentionQuery) || u.name.toLowerCase().includes(mentionQuery)
-  ).slice(0, 5);
+  const filtered = usingRemote
+    ? remoteUsers.slice(0, 5)
+    : localUsers.filter(u =>
+        mentionQuery === "" || (u.handle || "").toLowerCase().includes(mentionQuery) || (u.name || "").toLowerCase().includes(mentionQuery)
+      ).slice(0, 5);
 
   const InputEl = multiline ? "textarea" : "input";
 
@@ -5107,13 +5164,23 @@ function MentionInput({ value, onChange, onKeyDown, placeholder, style, inputRef
         placeholder={placeholder}
         style={style}
       />
-      {mentionActive && filtered.length > 0 && (
+      {mentionActive && (filtered.length > 0 || (usingRemote && (remoteLoading || mentionQuery.length > 0))) && (
         <div style={{ position: "absolute", bottom: "100%", left: 0, right: 0, background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10, marginBottom: 4, maxHeight: 200, overflowY: "auto", zIndex: 300, boxShadow: "0 -4px 20px rgba(0,0,0,0.5)" }}>
+          {filtered.length === 0 && usingRemote && remoteLoading && (
+            <div style={{ padding: "10px 14px", fontFamily: sans, fontSize: 11, color: T.tertiary }}>Searching…</div>
+          )}
+          {filtered.length === 0 && usingRemote && !remoteLoading && mentionQuery.length > 0 && (
+            <div style={{ padding: "10px 14px", fontFamily: sans, fontSize: 11, color: T.tertiary }}>No users match “{mentionQuery}”</div>
+          )}
           {filtered.map(u => (
             <button key={u.handle} onClick={(e) => { e.preventDefault(); e.stopPropagation(); insertMention(u.handle); }} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "none", border: "none", borderBottom: `1px solid ${T.charcoal}20`, cursor: "pointer", textAlign: "left" }}>
-              <div style={{ width: 28, height: 28, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <span style={{ fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.white }}>{u.initial}</span>
-              </div>
+              {u.avatar_url ? (
+                <img src={u.avatar_url} alt="" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover", flexShrink: 0, background: T.charcoal }} />
+              ) : (
+                <div style={{ width: 28, height: 28, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <span style={{ fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.white }}>{u.initial}</span>
+                </div>
+              )}
               <div>
                 <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, display: "block" }}>@{u.handle}</span>
                 <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{u.name}</span>
