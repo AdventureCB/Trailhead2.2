@@ -773,6 +773,12 @@ if (!document.querySelector('style[data-trailhead-mapbox]')) {
       0%, 100% { opacity: 1; transform: scale(1); }
       50%      { opacity: 0.45; transform: scale(0.78); }
     }
+    /* Staged (chip) marker on the trip-pin editor — pulses gently until
+       the user picks WAYPOINT or CAMP so it reads as "pending". */
+    @keyframes th-staged-pulse {
+      0%, 100% { transform: scale(1); box-shadow: 0 2px 8px rgba(0,0,0,0.5); }
+      50%      { transform: scale(1.12); box-shadow: 0 4px 14px rgba(196,154,108,0.6); }
+    }
   `;
   document.head.appendChild(mbStyle);
 }
@@ -4989,6 +4995,47 @@ const formatPostTime = (t) => {
   const d = new Date(ts);
   const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   return months[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear();
+};
+
+// Parses a GPS coordinate string into { lat, lng } or null. Accepts common
+// formats users paste from Google Maps, Apple Maps, etc.:
+//   "40.7128, -74.0060"   "40.7128,-74.0060"   "40.7128 -74.0060"
+//   "40.7128° N, 74.0060° W"   "N 40.7128, W 74.0060"
+// Rejects out-of-range or malformed input by returning null.
+const parseLatLngString = (raw) => {
+  if (!raw || typeof raw !== "string") return null;
+  const s = raw.trim();
+  if (!s) return null;
+  // Strip common decorations: cardinal letters (converted to sign),
+  // degree symbols, multiple whitespace collapsed.
+  let cleaned = s
+    .replace(/[°º]/g, "")
+    .replace(/[,;]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  // Detect trailing / leading cardinal indicators (N/S/E/W) and translate
+  // them into signs before parsing numbers.
+  const cardinal = /([NnSsEeWw])/g;
+  const cardinals = cleaned.match(cardinal) || [];
+  let latSign = 1, lngSign = 1;
+  if (cardinals.length > 0) {
+    cardinals.forEach(c => {
+      const u = c.toUpperCase();
+      if (u === "S") latSign = -1;
+      if (u === "W") lngSign = -1;
+    });
+    cleaned = cleaned.replace(cardinal, "").replace(/\s+/g, " ").trim();
+  }
+  const parts = cleaned.split(" ").filter(Boolean);
+  if (parts.length !== 2) return null;
+  const lat = parseFloat(parts[0]);
+  const lng = parseFloat(parts[1]);
+  if (!isFinite(lat) || !isFinite(lng)) return null;
+  const finalLat = latSign * lat;
+  const finalLng = lngSign * lng;
+  if (finalLat < -90 || finalLat > 90) return null;
+  if (finalLng < -180 || finalLng > 180) return null;
+  return { lat: finalLat, lng: finalLng };
 };
 
 // Splits a plain-text string into an array of strings + <a> React nodes for any URLs it contains.
@@ -11408,12 +11455,15 @@ function RouteNavigation({ route, onClose, campingSpots, showCampingSpots, setSh
 }
 
 /* ─── Route Pin Map (for manual route entry) ─── */
-function RoutePinMap({ pins, setPins, linkingPhotoIdx, onLinkPin, onRoutePoints, onRouteStats, onPinSelect, fillParent }) {
+function RoutePinMap({ pins, setPins, linkingPhotoIdx, onLinkPin, onRoutePoints, onRouteStats, onPinSelect, fillParent, staged, onMapTap, mapRefExternal, mapReadyExternal }) {
   const mapRef = useRef(null);
   const mapInst = useRef(null);
   // Per-marker entries — { marker, el, idx } so we can re-render labels
   // without recreating the underlying mapboxgl.Marker.
   const markersRef = useRef([]);
+  // Staged (chip) marker — a separate handle so we can drop it independently
+  // of the pin array.
+  const stagedMarkerRef = useRef(null);
   const [ready, setReady] = useState(false);
   // Hold the latest setter callbacks in refs so the click handler binds
   // them lazily (Mapbox click listeners can only be attached once per
@@ -11426,6 +11476,12 @@ function RoutePinMap({ pins, setPins, linkingPhotoIdx, onLinkPin, onRoutePoints,
   // latest version even though the listener is attached only once.
   const onPinSelectRef = useRef(onPinSelect);
   useEffect(() => { onPinSelectRef.current = onPinSelect; }, [onPinSelect]);
+  // Optional map-tap intercept. When provided, tapping empty map fires
+  // this instead of the default append-to-pins behavior — used by
+  // TripPinFullscreen to stage a chip + surface the type picker before
+  // committing the pin.
+  const onMapTapRef = useRef(onMapTap);
+  useEffect(() => { onMapTapRef.current = onMapTap; }, [onMapTap]);
 
   useEffect(() => {
     let cancelled = false;
@@ -11466,8 +11522,13 @@ function RoutePinMap({ pins, setPins, linkingPhotoIdx, onLinkPin, onRoutePoints,
             paint: { "line-color": T.red, "line-width": 3, "line-opacity": 0.8 },
           });
         }
-        // Click to add pin (uses ref so latest setPins is always used).
+        // Click to add pin. If an onMapTap intercept is wired (e.g.
+        // TripPinFullscreen staging flow), route the tap through that;
+        // otherwise append to pins directly (legacy standalone manual
+        // route flow).
         map.on("click", (e) => {
+          const tap = onMapTapRef.current;
+          if (tap) { tap({ lat: e.lngLat.lat, lng: e.lngLat.lng }); return; }
           const fn = setPinsRef.current;
           if (fn) fn(prev => [...prev, { lat: e.lngLat.lat, lng: e.lngLat.lng }]);
         });
@@ -11502,14 +11563,16 @@ function RoutePinMap({ pins, setPins, linkingPhotoIdx, onLinkPin, onRoutePoints,
     // the user can both add and remove pins by index).
     markersRef.current.forEach(e => { try { e.marker.remove(); } catch (_) {} });
     markersRef.current = [];
-    // Add new markers — green start, red end, copper interior, green-w-camera for photo pins.
+    // Add new markers — green start, red end, copper interior, green-w-camera
+    // for photo pins, green tent for camp-type pins.
     pins.forEach((p, i) => {
       const isPhoto = !!p.photo;
-      const fill = isPhoto ? "#4A7C59" : (i === 0 ? T.green : i === pins.length - 1 ? T.red : T.copper);
-      const size = isPhoto ? 28 : 26;
+      const isCamp = p.type === "camp";
+      const fill = isPhoto ? "#4A7C59" : isCamp ? "#5B8C5A" : (i === 0 ? T.green : i === pins.length - 1 ? T.red : T.copper);
+      const size = isPhoto || isCamp ? 28 : 26;
       const el = document.createElement("div");
       el.style.cssText = `width:${size}px;height:${size}px;border-radius:50%;background:${fill};border:2px solid ${T.white};display:flex;align-items:center;justify-content:center;color:${T.white};font-family:sans-serif;font-weight:700;font-size:11px;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,0.4);`;
-      el.textContent = isPhoto ? "📷" : `${i + 1}`;
+      el.textContent = isPhoto ? "📷" : isCamp ? "⛺" : `${i + 1}`;
       el.addEventListener("click", (ev) => {
         ev.stopPropagation();
         if (typeof linkingPhotoIdx === "number" && onLinkPin) {
@@ -11589,6 +11652,28 @@ function RoutePinMap({ pins, setPins, linkingPhotoIdx, onLinkPin, onRoutePoints,
       onRouteStats && onRouteStats(null);
     }
   }, [pins, ready, linkingPhotoIdx]);
+
+  // Sync the staged (chip) marker. Shown when a caller stages a pending
+  // pin position (via tap or search) that hasn't been committed to the
+  // pins array yet — the type picker overlays the map to let the user
+  // pick WAYPOINT vs CAMP before committing.
+  useEffect(() => {
+    if (!mapInst.current || !ready || !window.mapboxgl) return;
+    if (stagedMarkerRef.current) { try { stagedMarkerRef.current.remove(); } catch (_) {} stagedMarkerRef.current = null; }
+    if (!staged || staged.lat == null || staged.lng == null) return;
+    const el = document.createElement("div");
+    el.style.cssText = `width:28px;height:28px;border-radius:50%;background:${T.copper};border:2px solid ${T.white};display:flex;align-items:center;justify-content:center;color:${T.white};font-family:sans-serif;font-weight:700;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,0.5);animation:th-staged-pulse 1.4s ease-in-out infinite;`;
+    el.textContent = "+";
+    const marker = new window.mapboxgl.Marker({ element: el }).setLngLat([staged.lng, staged.lat]).addTo(mapInst.current);
+    stagedMarkerRef.current = marker;
+  }, [staged && staged.lat, staged && staged.lng, ready]);
+
+  // Expose the underlying Mapbox map instance + ready flag to the parent
+  // when requested. Used by TripPinFullscreen to flyTo() search hits.
+  useEffect(() => {
+    if (mapRefExternal) mapRefExternal.current = mapInst.current;
+    if (mapReadyExternal) mapReadyExternal.current = ready;
+  }, [ready, mapRefExternal, mapReadyExternal]);
 
   // fillParent mode: render only the bare map filling its parent. The
   // surrounding label / clear-button / start-end legend belong to the
@@ -12419,7 +12504,56 @@ function TripPinFullscreen({ initialPins, initialPhotos, onClose, onSave, curren
   const [routeStats, setRouteStats] = useState(null);
   const [selectedIdx, setSelectedIdx] = useState(null);
   const [saving, setSaving] = useState(false);
+  // Staged tap/search position — set by map tap or "ADD TO MAP" in the
+  // search dropdown. When non-null, a chip renders on the map and the
+  // WAYPOINT / CAMP / CANCEL picker surfaces to let the user pick a type.
+  const [stagedPos, setStagedPos] = useState(null); // { lat, lng, label? } | null
+  // Search bar state — Mapbox place search + coord parser. Debounced fetch
+  // fires 250ms after the user pauses typing.
+  const [searchQ, setSearchQ] = useState("");
+  const [searchPlaces, setSearchPlaces] = useState([]);
+  const [searchOpen, setSearchOpen] = useState(false);
   const photoFileRef = useRef(null);
+  // Refs handed to RoutePinMap so we can flyTo() a search hit.
+  const mapInstRef = useRef(null);
+  const mapReadyRef = useRef(false);
+
+  // Debounced Mapbox place search — skips the fetch when the query
+  // already parses as a coordinate string.
+  useEffect(() => {
+    const q = searchQ.trim();
+    if (q.length < 2) { setSearchPlaces([]); return; }
+    if (parseLatLngString(q)) { setSearchPlaces([]); return; }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      const rows = await mapboxGeocodeSearch(q, 5);
+      if (!cancelled) setSearchPlaces(rows);
+    }, 250);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [searchQ]);
+
+  const coordMatch = parseLatLngString(searchQ.trim());
+  const searchHasResults = searchPlaces.length > 0 || !!coordMatch;
+
+  // Stage a position + fly the map to it. Used by search's "ADD TO MAP"
+  // button on both coord and place matches.
+  const stageAndFly = (lat, lng, label) => {
+    setStagedPos({ lat, lng, label: label || null });
+    setSearchOpen(false);
+    setSearchQ("");
+    setSearchPlaces([]);
+    if (mapInstRef.current && mapReadyRef.current) {
+      try { mapInstRef.current.flyTo({ center: [lng, lat], zoom: 13, duration: 600 }); } catch (_) {}
+    }
+  };
+
+  // Commit a staged pin to the pins array with the picked type. Used by
+  // the WAYPOINT / CAMP buttons in the picker.
+  const commitStagedAs = (type) => {
+    if (!stagedPos) return;
+    setPins(prev => [...prev, { lat: stagedPos.lat, lng: stagedPos.lng, type }]);
+    setStagedPos(null);
+  };
 
   // Wrap setPins so newly-placed pins auto-select, opening the sheet for
   // immediate photo association. Removals just shrink the array.
@@ -12524,7 +12658,11 @@ function TripPinFullscreen({ initialPins, initialPhotos, onClose, onSave, curren
 
   const selectedPin = selectedIdx != null ? pins[selectedIdx] : null;
   const selectedPhotos = selectedIdx != null ? photosForPin(selectedIdx) : [];
-  const pinLabel = (i) => i === 0 ? "Start" : i === pins.length - 1 ? "End" : `Pin ${i + 1}`;
+  const pinLabel = (i) => {
+    const p = pins[i];
+    if (p && p.type === "camp") return "Camp";
+    return i === 0 ? "Start" : i === pins.length - 1 ? "End" : `Pin ${i + 1}`;
+  };
 
   return (
     <div style={{ position: "fixed", top: 0, bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 430, zIndex: 1100, background: T.darkBg, display: "flex", flexDirection: "column" }}>
@@ -12552,17 +12690,113 @@ function TripPinFullscreen({ initialPins, initialPhotos, onClose, onSave, curren
             fillParent
             pins={pins}
             setPins={setPins}
+            staged={stagedPos}
+            onMapTap={(pos) => setStagedPos({ lat: pos.lat, lng: pos.lng, label: null })}
             onRoutePoints={setRoutePoints}
             onRouteStats={setRouteStats}
             onPinSelect={(i) => setSelectedIdx(i)}
+            mapRefExternal={mapInstRef}
+            mapReadyExternal={mapReadyRef}
           />
         </div>
 
-        {/* Help banner (only when no pins yet) */}
-        {pins.length === 0 && (
-          <div style={{ position: "absolute", top: 12, left: 12, right: 12, padding: "10px 14px", background: `${T.darkCard}EE`, border: `1px solid ${T.copper}40`, borderRadius: 8, backdropFilter: "blur(8px)", boxShadow: "0 4px 12px rgba(0,0,0,0.35)" }}>
-            <div style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5, marginBottom: 2 }}>TAP THE MAP TO DROP PINS</div>
-            <div style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.4 }}>The first pin is your start. Tap any pin afterward to add photos or remove it.</div>
+        {/* Search bar — Mapbox place search + GPS coord parsing. Coord
+            matches skip the geocoder and show a dedicated row with an
+            "ADD TO MAP" button; place matches also expose an ADD TO MAP
+            button so users can pick a landmark by name. Both actions stage
+            the pin position and open the WAYPOINT / CAMP picker below. */}
+        <div style={{ position: "absolute", top: 10, left: 10, right: 10, zIndex: 7 }}>
+          <div style={{ display: "flex", alignItems: "center", background: `${T.darkCard}F0`, backdropFilter: "blur(10px)", borderRadius: 10, padding: "10px 14px", border: `1px solid ${searchOpen ? T.copper : T.charcoal}`, boxShadow: "0 4px 12px rgba(0,0,0,0.4)", transition: "border-color 0.15s" }}>
+            <Search size={16} color={T.tertiary} />
+            <input
+              value={searchQ}
+              onChange={(e) => { setSearchQ(e.target.value); setSearchOpen(true); }}
+              onFocus={() => setSearchOpen(true)}
+              placeholder="Search place or paste GPS coordinates…"
+              style={{ flex: 1, marginLeft: 10, background: "transparent", border: "none", outline: "none", color: T.white, fontFamily: serif, fontSize: 13, minWidth: 0 }}
+            />
+            {searchQ && (
+              <button onClick={() => { setSearchQ(""); setSearchPlaces([]); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: T.tertiary }}>
+                <X size={14} />
+              </button>
+            )}
+          </div>
+          {searchOpen && searchQ.trim().length >= 2 && searchHasResults && (
+            <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, background: `${T.darkCard}F8`, border: `1px solid ${T.charcoal}`, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", overflow: "hidden", zIndex: 8, maxHeight: 320, overflowY: "auto" }}>
+              {coordMatch && (
+                <div>
+                  <div style={{ fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 1.5, fontWeight: 700, padding: "10px 14px 4px" }}>COORDINATES</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 14px" }}>
+                    <MapPin size={16} color={T.copper} style={{ flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>{coordMatch.lat.toFixed(5)}, {coordMatch.lng.toFixed(5)}</div>
+                      <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.4 }}>GPS coordinates</div>
+                    </div>
+                    <button onClick={() => stageAndFly(coordMatch.lat, coordMatch.lng, null)}
+                            style={{ background: T.copper, border: "none", cursor: "pointer", padding: "6px 10px", borderRadius: 6, fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 700, letterSpacing: 0.6, whiteSpace: "nowrap", flexShrink: 0 }}>
+                      ADD TO MAP
+                    </button>
+                  </div>
+                </div>
+              )}
+              {searchPlaces.length > 0 && (
+                <div>
+                  <div style={{ fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 1.5, fontWeight: 700, padding: coordMatch ? "10px 14px 4px" : "10px 14px 4px", borderTop: coordMatch ? `1px solid ${T.charcoal}` : "none" }}>PLACES</div>
+                  {searchPlaces.map((p, i) => (
+                    <div key={`sp_${i}`} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 14px", borderTop: i === 0 ? "none" : `1px solid ${T.charcoal}40` }}>
+                      <MapPin size={16} color={T.copper} style={{ flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0, fontFamily: serif, fontSize: 12, color: T.white, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis" }}>{p.label}</div>
+                      <button onClick={() => stageAndFly(p.lat, p.lng, p.label)}
+                              style={{ background: T.copper, border: "none", cursor: "pointer", padding: "6px 10px", borderRadius: 6, fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 700, letterSpacing: 0.6, whiteSpace: "nowrap", flexShrink: 0 }}>
+                        ADD TO MAP
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {searchOpen && searchQ.trim().length >= 2 && !searchHasResults && (
+            <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, background: `${T.darkCard}F8`, border: `1px solid ${T.charcoal}`, borderRadius: 10, padding: "12px 14px", zIndex: 8 }}>
+              <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>No matches yet…</span>
+            </div>
+          )}
+        </div>
+
+        {/* Help banner (only when no pins + no staged chip yet) */}
+        {pins.length === 0 && !stagedPos && !searchOpen && (
+          <div style={{ position: "absolute", top: 66, left: 12, right: 12, padding: "10px 14px", background: `${T.darkCard}EE`, border: `1px solid ${T.copper}40`, borderRadius: 8, backdropFilter: "blur(8px)", boxShadow: "0 4px 12px rgba(0,0,0,0.35)" }}>
+            <div style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5, marginBottom: 2 }}>TAP THE MAP OR SEARCH TO ADD A POINT</div>
+            <div style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.4 }}>Pick WAYPOINT or CAMP for each point. Search by place name or paste GPS coords.</div>
+          </div>
+        )}
+
+        {/* Staged type picker — appears once a tap or ADD TO MAP stages a
+            pending pin position. Same button set as the ExploreMap plan
+            builder: WAYPOINT / CAMP / CANCEL. */}
+        {stagedPos && (
+          <div style={{ position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 10, background: `${T.darkCard}F8`, border: `1px solid ${T.copper}50`, borderRadius: 10, padding: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <Plus size={13} color={T.copper} />
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 1.2 }}>ADD POINT</span>
+              <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, marginLeft: "auto", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 220 }}>
+                {stagedPos.label ? `${stagedPos.label} · ` : ""}{stagedPos.lat.toFixed(4)}, {stagedPos.lng.toFixed(4)}
+              </span>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => commitStagedAs("waypoint")}
+                      style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "12px 6px", background: T.copper, border: "none", borderRadius: 8, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>
+                <MapPin size={20} color={T.white} />WAYPOINT
+              </button>
+              <button onClick={() => commitStagedAs("camp")}
+                      style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "12px 6px", background: "#5B8C5A", border: "none", borderRadius: 8, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>
+                <Tent size={20} color={T.white} />CAMP
+              </button>
+              <button onClick={() => setStagedPos(null)}
+                      style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "12px 6px", background: T.charcoal, border: `1px solid ${T.tertiary}30`, borderRadius: 8, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, fontWeight: 700, letterSpacing: 0.5 }}>
+                <X size={20} color={T.tertiary} />CANCEL
+              </button>
+            </div>
           </div>
         )}
 
@@ -12570,8 +12804,8 @@ function TripPinFullscreen({ initialPins, initialPhotos, onClose, onSave, curren
         {selectedPin && (
           <div style={{ position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 6, background: `${T.darkCard}F5`, border: `1px solid ${T.charcoal}`, borderRadius: 10, padding: 14, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" }}>
             <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 10 }}>
-              <div style={{ width: 30, height: 30, borderRadius: "50%", background: selectedIdx === 0 ? T.green : selectedIdx === pins.length - 1 ? T.red : T.copper, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700 }}>{selectedIdx + 1}</span>
+              <div style={{ width: 30, height: 30, borderRadius: "50%", background: selectedPin && selectedPin.type === "camp" ? "#5B8C5A" : selectedIdx === 0 ? T.green : selectedIdx === pins.length - 1 ? T.red : T.copper, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700 }}>{selectedPin && selectedPin.type === "camp" ? "⛺" : selectedIdx + 1}</span>
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700 }}>{pinLabel(selectedIdx)}</div>
@@ -15702,10 +15936,12 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
   }, [mapReady]);
 
   // Debounced Mapbox geocode for the search input — fires 250ms after the
-  // user stops typing so we don't burn a request per keystroke.
+  // user stops typing so we don't burn a request per keystroke. Skipped
+  // when the input parses as GPS coordinates (no need to geocode).
   useEffect(() => {
     const q = query.trim();
     if (q.length < 2) { setPlaces([]); return; }
+    if (parseLatLngString(q)) { setPlaces([]); return; }
     let cancelled = false;
     const t = setTimeout(async () => {
       const rows = await mapboxGeocodeSearch(q, 5);
@@ -15719,6 +15955,7 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
   const spotMatches = (() => {
     const q = query.trim().toLowerCase();
     if (q.length < 2) return [];
+    if (parseLatLngString(q)) return [];
     const out = [];
     for (let i = 0; i < (campingSpots || []).length && out.length < 5; i++) {
       const s = campingSpots[i];
@@ -15726,7 +15963,9 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
     }
     return out;
   })();
-  const hasResults = (places.length + spotMatches.length) > 0;
+  // Coord match — recognized when the query parses as valid lat/lng.
+  const coordMatch = parseLatLngString(query.trim());
+  const hasResults = (places.length + spotMatches.length) > 0 || !!coordMatch;
 
   const flyTo = (lng, lat, zoom = 12) => {
     if (!mapInst.current) return;
@@ -15935,6 +16174,33 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
           </div>
           {searchOpen && query.trim().length >= 2 && hasResults && (
             <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, background: `${T.darkCard}F8`, border: `1px solid ${T.charcoal}`, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", overflow: "hidden", zIndex: 8, maxHeight: 320, overflowY: "auto" }}>
+              {coordMatch && (
+                <div>
+                  <div style={{ fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 1.5, fontWeight: 700, padding: "10px 14px 4px" }}>COORDINATES</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 14px" }}>
+                    <MapPin size={16} color={T.copper} style={{ flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}>{coordMatch.lat.toFixed(5)}, {coordMatch.lng.toFixed(5)}</div>
+                      <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 0.4 }}>GPS coordinates</div>
+                    </div>
+                    <button onClick={() => {
+                              flyTo(coordMatch.lng, coordMatch.lat, 13);
+                              setSearchOpen(false);
+                              setQuery("");
+                              setPlaces([]);
+                              // Stage a pin at the coord — the existing type
+                              // picker (WAYPOINT/CAMP/CANCEL when plan-active
+                              // or CAMP SITE/TRIP PLAN/CANCEL otherwise) will
+                              // surface once planTapPos is set.
+                              setPlanTapPos({ lat: coordMatch.lat, lng: coordMatch.lng });
+                              setSpotNotesPending(null);
+                            }}
+                            style={{ background: T.copper, border: "none", cursor: "pointer", padding: "6px 10px", borderRadius: 6, fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 700, letterSpacing: 0.6, whiteSpace: "nowrap", flexShrink: 0 }}>
+                      ADD TO MAP
+                    </button>
+                  </div>
+                </div>
+              )}
               {spotMatches.length > 0 && (
                 <div>
                   <div style={{ fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 1.5, fontWeight: 700, padding: "10px 14px 4px" }}>CAMPING SPOTS</div>
@@ -15954,11 +16220,24 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
                 <div>
                   <div style={{ fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 1.5, fontWeight: 700, padding: spotMatches.length > 0 ? "10px 14px 4px" : "10px 14px 4px", borderTop: spotMatches.length > 0 ? `1px solid ${T.charcoal}` : "none" }}>PLACES</div>
                   {places.map((p, i) => (
-                    <button key={`p_${i}`} onClick={() => { flyTo(p.lng, p.lat, 11); setSearchOpen(false); }}
-                            style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left", borderTop: i === 0 ? "none" : `1px solid ${T.charcoal}40` }}>
-                      <MapPin size={16} color={T.copper} style={{ flexShrink: 0 }} />
-                      <div style={{ fontFamily: serif, fontSize: 12, color: T.white, lineHeight: 1.4, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{p.label}</div>
-                    </button>
+                    <div key={`p_${i}`} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 14px", borderTop: i === 0 ? "none" : `1px solid ${T.charcoal}40` }}>
+                      <button onClick={() => { flyTo(p.lng, p.lat, 11); setSearchOpen(false); }}
+                              style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0, background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: 0 }}>
+                        <MapPin size={16} color={T.copper} style={{ flexShrink: 0 }} />
+                        <div style={{ fontFamily: serif, fontSize: 12, color: T.white, lineHeight: 1.4, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{p.label}</div>
+                      </button>
+                      <button onClick={() => {
+                                flyTo(p.lng, p.lat, 13);
+                                setSearchOpen(false);
+                                setQuery("");
+                                setPlaces([]);
+                                setPlanTapPos({ lat: p.lat, lng: p.lng });
+                                setSpotNotesPending(null);
+                              }}
+                              style={{ background: T.copper, border: "none", cursor: "pointer", padding: "6px 10px", borderRadius: 6, fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 700, letterSpacing: 0.6, whiteSpace: "nowrap", flexShrink: 0 }}>
+                        ADD TO MAP
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}
