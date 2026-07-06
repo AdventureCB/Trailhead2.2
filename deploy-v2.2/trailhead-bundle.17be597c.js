@@ -163,6 +163,14 @@ ${k}`}var cn=class extends Error{constructor({message:r,code:n,cause:i,name:l}){
 .th-rb a.th-build-cta strong{font-family:Trebuchet MS,Gill Sans,sans-serif;font-size:15px;font-weight:700;color:#fff;line-height:1.25}
 .th-rb a.th-build-cta .th-build-cta-meta{font-family:Trebuchet MS,Gill Sans,sans-serif;font-size:11px;color:#8B7D6B;letter-spacing:0.3px}
 .th-rb a.th-build-cta .th-build-cta-arrow{color:#C49A6C;font-size:20px;flex-shrink:0;padding:0 6px}
+.th-rb a.th-spot-cta{display:flex;gap:12px;align-items:center;text-decoration:none;background:#1A1A1A;border:1px solid #4A7C5940;border-radius:10px;padding:12px;margin:16px 0;color:#fff;transition:border-color 0.15s}
+.th-rb a.th-spot-cta:hover{border-color:#4A7C59}
+.th-rb a.th-spot-cta img{width:72px;height:72px;border-radius:6px;object-fit:cover;flex-shrink:0;margin:0;background:#0d0d0d}
+.th-rb a.th-spot-cta .th-spot-cta-body{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.th-rb a.th-spot-cta .th-spot-cta-eyebrow{font-family:Trebuchet MS,Gill Sans,sans-serif;font-size:9px;color:#4A7C59;letter-spacing:1.2px;font-weight:700}
+.th-rb a.th-spot-cta strong{font-family:Trebuchet MS,Gill Sans,sans-serif;font-size:15px;font-weight:700;color:#fff;line-height:1.25}
+.th-rb a.th-spot-cta .th-spot-cta-meta{font-family:Trebuchet MS,Gill Sans,sans-serif;font-size:11px;color:#8B7D6B;letter-spacing:0.3px}
+.th-rb a.th-spot-cta .th-spot-cta-arrow{color:#4A7C59;font-size:20px;flex-shrink:0;padding:0 6px}
 .th-rb b,.th-rb strong{font-weight:700;color:#fff}
 .th-rb u{text-decoration:underline}
 .th-rb strike,.th-rb s{text-decoration:line-through}
