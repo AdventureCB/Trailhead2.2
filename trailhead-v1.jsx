@@ -4991,6 +4991,56 @@ const formatPostTime = (t) => {
   return months[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear();
 };
 
+// Splits a plain-text string into an array of strings + <a> React nodes for any URLs it contains.
+// Matches http(s)://... and bare www.... Strips trailing punctuation that's clearly not part of the URL.
+const LINKIFY_URL_RE = /((?:https?:\/\/|www\.)[^\s<]+)/gi;
+const linkifyText = (text, linkStyle) => {
+  if (!text || typeof text !== "string") return text;
+  const parts = [];
+  let lastIdx = 0;
+  let m;
+  LINKIFY_URL_RE.lastIndex = 0;
+  while ((m = LINKIFY_URL_RE.exec(text)) !== null) {
+    const raw = m[0];
+    let url = raw;
+    // Balance any trailing closing paren/bracket that isn't matched inside the URL, then strip stray punctuation.
+    const trailingClosers = { ")": "(", "]": "[", "}": "{" };
+    while (url.length > 1 && trailingClosers[url[url.length - 1]]) {
+      const closer = url[url.length - 1];
+      const opener = trailingClosers[closer];
+      const opens = (url.match(new RegExp("\\" + opener, "g")) || []).length;
+      const closes = (url.match(new RegExp("\\" + closer, "g")) || []).length;
+      if (closes > opens) url = url.slice(0, -1);
+      else break;
+    }
+    while (url.length > 1 && /[.,!?;:'"]/.test(url[url.length - 1])) {
+      url = url.slice(0, -1);
+    }
+    const start = m.index;
+    const end = start + url.length;
+    if (start > lastIdx) parts.push(text.slice(lastIdx, start));
+    const href = /^https?:\/\//i.test(url) ? url : "https://" + url;
+    parts.push(
+      <a
+        key={"lnk-" + start}
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => e.stopPropagation()}
+        style={{ color: T.copper, textDecoration: "underline", wordBreak: "break-all", ...(linkStyle || {}) }}
+      >
+        {url}
+      </a>
+    );
+    lastIdx = end;
+    // If we chopped trailing chars off the raw match, keep the loop advancing past just what we consumed.
+    if (end < m.index + raw.length) LINKIFY_URL_RE.lastIndex = end;
+  }
+  if (lastIdx < text.length) parts.push(text.slice(lastIdx));
+  if (parts.length === 0) return text;
+  return parts;
+};
+
 /* ─── MENTION INPUT ─── */
 function MentionInput({ value, onChange, onKeyDown, placeholder, style, inputRef, users, multiline, onFocus, onBlur }) {
   const [mentionQuery, setMentionQuery] = useState("");
@@ -42056,7 +42106,7 @@ function DMScreen({ onClose, onViewUser, initialConvId, initialMessage, initialS
                       })}
                     </div>
                   )}
-                  {msg.text && <p style={{ fontFamily: serif, fontSize: 14, color: T.white, margin: 0, lineHeight: 1.5 }}>{msg.text}</p>}
+                  {msg.text && <p style={{ fontFamily: serif, fontSize: 14, color: T.white, margin: 0, lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{linkifyText(msg.text, { color: isMe ? T.white : T.copper })}</p>}
                   <span style={{ fontFamily: sans, fontSize: 9, color: isMe ? `${T.white}90` : T.tertiary, display: "block", textAlign: "right", marginTop: 4 }}>{formatPostTime(msg.time)}</span>
                 </div>
               </div>
