@@ -7504,16 +7504,28 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
     if (res && res.error) alert(res.error);
   };
   // Whether the viewer can create a subcategory in the currently selected
-  // category (used to show the +SUBCATEGORY button in the subs list view).
-  const canCreateSubcategory = !!(isAdmin || isAmbassador);
-  // Whether the viewer can edit/delete a given subcategory (admin = any;
-  // ambassador = own; user = none).
-  const canManageSub = (sub) => {
+  // category. Any signed-in user can create; delete is separately gated
+  // below so normal users can't remove subs (their own or otherwise).
+  const canCreateSubcategory = !!currentUserId;
+  // Whether the viewer can rename a given subcategory. Admin = any;
+  // owner (of any role) can rename their own.
+  const canEditSub = (sub) => {
+    if (!sub) return false;
+    if (isAdmin) return true;
+    if (sub.created_by && sub.created_by === currentUserId) return true;
+    return false;
+  };
+  // Whether the viewer can delete a given subcategory. Admin = any;
+  // ambassador owner = own; normal users = never (even their own).
+  const canDeleteSub = (sub) => {
     if (!sub) return false;
     if (isAdmin) return true;
     if (isAmbassador && sub.created_by && sub.created_by === currentUserId) return true;
     return false;
   };
+  // Overall "has any actions" flag — controls whether the … menu shows on
+  // a sub row at all.
+  const canManageSub = (sub) => canEditSub(sub) || canDeleteSub(sub);
   const [forumReplyText, setForumReplyText] = useState("");
   const [replyPhotos, setReplyPhotos] = useState([]);
   // Full-screen photo lightbox state — used by the marketplace listing
@@ -9141,8 +9153,12 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
                   )}
                   {showMenu && subMenuOpen === sub.id && (
                     <div onClick={(e) => e.stopPropagation()} style={{ position: "absolute", top: 44, right: 12, background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 6, overflow: "hidden", zIndex: 5, minWidth: 120, boxShadow: "0 4px 12px rgba(0,0,0,0.4)" }}>
-                      <button onClick={() => { setSubMenuOpen(null); setShowSubModal({ mode: "edit", sub }); }} style={{ display: "block", width: "100%", padding: "8px 12px", background: "none", border: "none", cursor: "pointer", textAlign: "left", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>EDIT</button>
-                      <button onClick={() => { setSubMenuOpen(null); handleDeleteSubcategory(sub); }} style={{ display: "block", width: "100%", padding: "8px 12px", background: "none", border: "none", borderTop: `1px solid ${T.charcoal}`, cursor: "pointer", textAlign: "left", fontFamily: sans, fontSize: 11, color: T.red, fontWeight: 600 }}>DELETE</button>
+                      {canEditSub(sub) && (
+                        <button onClick={() => { setSubMenuOpen(null); setShowSubModal({ mode: "edit", sub }); }} style={{ display: "block", width: "100%", padding: "8px 12px", background: "none", border: "none", cursor: "pointer", textAlign: "left", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>EDIT</button>
+                      )}
+                      {canDeleteSub(sub) && (
+                        <button onClick={() => { setSubMenuOpen(null); handleDeleteSubcategory(sub); }} style={{ display: "block", width: "100%", padding: "8px 12px", background: "none", border: "none", borderTop: canEditSub(sub) ? `1px solid ${T.charcoal}` : "none", cursor: "pointer", textAlign: "left", fontFamily: sans, fontSize: 11, color: T.red, fontWeight: 600 }}>DELETE</button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -53190,7 +53206,6 @@ export default function Trailhead() {
   // Subcategory CRUD — admin OR ambassador can INSERT (created_by must be
   // self per RLS); admin can edit/delete any, ambassador only own.
   const addForumSubcategory = async ({ category_id, name }) => {
-    if (!isAdmin && !isAmbassador) return { error: "Not authorized" };
     if (!category_id) return { error: "Missing category" };
     const baseSlug = forumSlugify(name || "");
     if (!baseSlug) return { error: "Name required" };
