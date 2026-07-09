@@ -624,7 +624,13 @@ async function mapboxDirections(from, to, opts = {}) {
     const wpStr = Array.isArray(opts.waypoints) && opts.waypoints.length > 0
       ? opts.waypoints.map(w => `${w.lng},${w.lat}`).join(";") + ";"
       : "";
-    const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${from.lng},${from.lat};${wpStr}${to.lng},${to.lat}?geometries=geojson&overview=full${stepsParam}&access_token=${MAPBOX_TOKEN}`;
+    // Profile selection. Default 'driving' is Mapbox's classified road
+    // network (highways / primary / secondary / etc.) and skips most
+    // OSM highway=track / small forest roads. 'walking' includes tracks,
+    // paths, and unclassified roads — the profile of choice when the
+    // trip runs on 4x4 trails or gravel service roads.
+    const profile = opts.profile || "driving";
+    const url = `https://api.mapbox.com/directions/v5/mapbox/${profile}/${from.lng},${from.lat};${wpStr}${to.lng},${to.lat}?geometries=geojson&overview=full${stepsParam}&access_token=${MAPBOX_TOKEN}`;
     const res = await fetch(url);
     if (!res.ok) return null;
     const data = await res.json();
@@ -663,6 +669,42 @@ async function mapboxDirections(from, to, opts = {}) {
     }
     return result;
   } catch (e) { console.error("[mapbox] directions failed", e); return null; }
+}
+
+// Smart routing wrapper — tries the driving profile first (fastest,
+// on-road, most accurate duration). If driving fails to return a route,
+// or if any input coordinate had to be snapped further than ~60m to
+// reach a classified road (the tell that a pin sits on a track/dirt
+// road the driving graph doesn't know), retry with the walking profile
+// so the polyline snaps to OSM tracks / paths / unclassified roads
+// (the thin white-with-yellow-casing lines in outdoors-v12).
+//
+// When the walking fallback is used, we recompute the duration from
+// distance at a nominal off-road driving pace (20 mph) so trip stats
+// don't display walking-pace time for a 4x4 route.
+async function mapboxDirectionsSmart(from, to, opts = {}) {
+  if (!from || !to) return null;
+  const SNAP_LIMIT_M = 60; // pin > 60m from a classified road → try walking
+  const DRIVING_MPS = 8.94; // 20 mph in m/s — heuristic for off-road pace
+  const driving = await mapboxDirections(from, to, opts);
+  const drivingBadSnap = driving && Array.isArray(driving.waypoints) && driving.waypoints.some(w => w.distance != null && w.distance > SNAP_LIMIT_M);
+  if (driving && !drivingBadSnap) return driving;
+  // Driving failed OR snapped too far — try walking, which uses a much
+  // wider road graph (tracks / paths / unclassified included).
+  const walking = await mapboxDirections(from, to, { ...opts, profile: "walking" });
+  if (!walking) return driving; // walking also failed → best effort
+  // If driving actually returned but had a bad snap, prefer walking only
+  // when its worst snap is materially better. Otherwise stick with driving.
+  if (driving && driving.geometry) {
+    const walkWorst = Array.isArray(walking.waypoints)
+      ? walking.waypoints.reduce((m, w) => Math.max(m, w.distance || 0), 0)
+      : 0;
+    const driveWorst = driving.waypoints.reduce((m, w) => Math.max(m, w.distance || 0), 0);
+    if (walkWorst >= driveWorst) return driving;
+  }
+  // Adopt walking geometry + distance; recompute duration for driving pace.
+  const dur = walking.distance > 0 ? walking.distance / DRIVING_MPS : walking.duration;
+  return { ...walking, duration: dur, durationText: formatSeconds(dur), usedFallback: true };
 }
 
 // Build a Mapbox Static Images URL centered on a camping spot, with a
@@ -2735,7 +2777,7 @@ function useGearDropPinBuilderLayer(mapRef, ready, pins, active, mode) {
     if (toFetch.length === 0) return;
     let cancelled = false;
     const timer = setTimeout(async () => {
-      const results = await Promise.all(toFetch.map(s => mapboxDirections(s.from, s.to)));
+      const results = await Promise.all(toFetch.map(s => mapboxDirectionsSmart(s.from, s.to)));
       if (cancelled) return;
       results.forEach((dir, idx) => {
         const { key } = toFetch[idx];
@@ -2971,7 +3013,7 @@ function usePlanBuilderLayer(mapRef, ready, points, onMarkerTap, endAnchorId, ac
     if (toFetch.length === 0) return;
     let cancelled = false;
     const timer = setTimeout(async () => {
-      const results = await Promise.all(toFetch.map(s => mapboxDirections(s.from, s.to)));
+      const results = await Promise.all(toFetch.map(s => mapboxDirectionsSmart(s.from, s.to)));
       if (cancelled) return;
       results.forEach((dir, idx) => {
         const { key } = toFetch[idx];
@@ -3628,6 +3670,10 @@ function MapOverlay({ coords, location, title, onClose, recoveryCtx, onRecoveryS
   const [gpsStatus, setGpsStatus] = useState(null); // null | "locating" | "failed"
   const [mapReady, setMapReady] = useState(false);
   const [dirError, setDirError] = useState(null);
+  // True when the driving profile couldn't route the leg and we fell back
+  // to walking geometry. Surfaces a soft liability warning to the user.
+  const [dirTrailFallback, setDirTrailFallback] = useState(false);
+  const [dirTrailWarnDismissed, setDirTrailWarnDismissed] = useState(false);
   const [routeSteps, setRouteSteps] = useState([]);
   const [currentStepIdx, setCurrentStepIdx] = useState(0);
   const [tripSummary, setTripSummary] = useState(null); // { distance, duration }
@@ -3744,9 +3790,13 @@ function MapOverlay({ coords, location, title, onClose, recoveryCtx, onRecoveryS
         return;
       }
 
-      const dir = await mapboxDirections(originPt, destPt, { steps: true });
+      const dir = await mapboxDirectionsSmart(originPt, destPt, { steps: true });
       if (cancelled) return;
       if (!dir) { setDirError("Could not find a route. Try a different starting location."); return; }
+      // Surface the trail-fallback warning when Mapbox couldn't route on
+      // the driving graph. Dismissable per session.
+      setDirTrailFallback(!!dir.usedFallback);
+      if (dir.usedFallback) setDirTrailWarnDismissed(false);
 
       // Hide the destination pin while the polyline is rendered (Google's
       // DirectionsRenderer drew its own A/B pins; we hand-roll the
@@ -4013,6 +4063,25 @@ function MapOverlay({ coords, location, title, onClose, recoveryCtx, onRecoveryS
           <div style={{ position: "absolute", bottom: 12, left: 12, right: 12, background: `${T.darkCard}F2`, backdropFilter: "blur(10px)", borderRadius: 12, padding: "12px 16px", zIndex: 400, display: "flex", alignItems: "center", gap: 8, border: `1px solid ${T.red}40` }}>
             <AlertTriangle size={14} color={T.red} />
             <span style={{ fontFamily: sans, fontSize: 12, color: T.white }}>{dirError}</span>
+          </div>
+        )}
+
+        {/* Trail-fallback warning — routed onto walking graph because the
+            driving graph couldn't snap the endpoints. Wording is soft:
+            plenty of trails allow vehicles, but the user should verify
+            before driving. Dismissible. */}
+        {!dirError && dirTrailFallback && !dirTrailWarnDismissed && (
+          <div style={{ position: "absolute", top: 12, left: 12, right: 12, background: `${T.darkCard}F5`, backdropFilter: "blur(10px)", border: `1px solid ${T.copper}80`, borderRadius: 12, padding: "10px 12px", zIndex: 400, display: "flex", alignItems: "flex-start", gap: 10, boxShadow: "0 6px 18px rgba(0,0,0,0.55)" }}>
+            <AlertTriangle size={16} color={T.copper} style={{ flexShrink: 0, marginTop: 1 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 1.2, marginBottom: 2 }}>TRAIL SEGMENT</div>
+              <p style={{ margin: 0, fontFamily: serif, fontSize: 12, color: T.white, lineHeight: 1.4 }}>
+                This route includes trails that may not allow vehicle access and could require walking. Please follow laws and posted trail restrictions.
+              </p>
+            </div>
+            <button onClick={() => setDirTrailWarnDismissed(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: T.tertiary, flexShrink: 0 }} title="Dismiss">
+              <X size={14} />
+            </button>
           </div>
         )}
       </div>
@@ -10762,6 +10831,12 @@ function RouteNavigation({ route, onClose, campingSpots, showCampingSpots, setSh
   const [mapReady, setMapReady] = useState(false);
   const [routeLoaded, setRouteLoaded] = useState(false);
   const [rerouting, setRerouting] = useState(false);
+  // Set when the driving profile couldn't route the pins (dead-end trail,
+  // unclassified road, etc.) and we fell back to walking geometry so the
+  // user still gets a routed line. Renders a liability-warning banner so
+  // the driver knows the leg may cross a non-motorized path.
+  const [usedTrailFallback, setUsedTrailFallback] = useState(false);
+  const [dismissedTrailWarning, setDismissedTrailWarning] = useState(false);
   // Step + progress state surfaced to the banner / bottom card.
   const [stepIdx, setStepIdx] = useState(0);
   const [distToManeuver, setDistToManeuver] = useState(null); // meters until current step's end
@@ -10862,10 +10937,13 @@ function RouteNavigation({ route, onClose, campingSpots, showCampingSpots, setSh
 
   // Build the directions URL for a {pins} chain. Voice + banner
   // instructions enabled with imperial units so we get pre-canned audio
-  // strings like "In 0.7 miles, turn right onto Main Street".
-  const buildDirectionsURL = (pinsChain) => {
+  // strings like "In 0.7 miles, turn right onto Main Street". Profile is
+  // 'driving' by default; walking is used as a fallback so we can still
+  // route the leg when the endpoints sit on OSM tracks / unclassified
+  // roads the driving graph excludes.
+  const buildDirectionsURL = (pinsChain, profile = "driving") => {
     const coordsStr = pinsChain.map(p => `${p.lng},${p.lat}`).join(";");
-    return `https://api.mapbox.com/directions/v5/mapbox/driving/${coordsStr}?geometries=geojson&overview=full&steps=true&voice_instructions=true&banner_instructions=true&voice_units=imperial&access_token=${MAPBOX_TOKEN}`;
+    return `https://api.mapbox.com/directions/v5/mapbox/${profile}/${coordsStr}?geometries=geojson&overview=full&steps=true&voice_instructions=true&banner_instructions=true&voice_units=imperial&access_token=${MAPBOX_TOKEN}`;
   };
 
   const applyRoute = (data) => {
@@ -10899,14 +10977,52 @@ function RouteNavigation({ route, onClose, campingSpots, showCampingSpots, setSh
   };
 
   const fetchRouteFromPins = async (pinsChain) => {
-    try {
-      const res = await fetch(buildDirectionsURL(pinsChain));
-      const data = res.ok ? await res.json() : null;
-      return applyRoute(data);
-    } catch (e) {
-      console.error("[nav] directions fetch failed", e);
-      return false;
+    // Snap threshold: any input coord snapped more than this from a
+    // classified road is a signal the driving graph can't route the pin
+    // (likely on a track / dirt road). Retry with walking to snap onto
+    // OSM's wider road+path graph.
+    const SNAP_LIMIT_M = 60;
+    const fetchProfile = async (profile) => {
+      try {
+        const res = await fetch(buildDirectionsURL(pinsChain, profile));
+        if (!res.ok) return null;
+        return await res.json();
+      } catch (e) {
+        console.error("[nav] directions fetch failed (" + profile + ")", e);
+        return null;
+      }
+    };
+    const worstSnap = (data) => {
+      const wps = (data && Array.isArray(data.waypoints)) ? data.waypoints : [];
+      let m = 0;
+      wps.forEach(w => { if (w && w.distance != null && w.distance > m) m = w.distance; });
+      return m;
+    };
+    const driving = await fetchProfile("driving");
+    const drivingHas = !!(driving && driving.routes && driving.routes[0]);
+    const drivingBad = drivingHas && worstSnap(driving) > SNAP_LIMIT_M;
+    if (drivingHas && !drivingBad) { setUsedTrailFallback(false); return applyRoute(driving); }
+    // Driving failed OR snapped too far — try walking, which uses a much
+    // wider road graph (tracks / paths / unclassified included).
+    const walking = await fetchProfile("walking");
+    const walkingHas = !!(walking && walking.routes && walking.routes[0]);
+    if (!walkingHas) {
+      // Walking also failed — fall back to whatever driving gave us so the
+      // UI at least renders something. If both are empty applyRoute(null)
+      // returns false and the caller shows a routing error.
+      setUsedTrailFallback(false);
+      return applyRoute(driving);
     }
+    // If driving DID return a route but had a bad snap, only prefer the
+    // walking result when its worst snap is materially better.
+    if (drivingHas) {
+      const w = worstSnap(walking);
+      const d = worstSnap(driving);
+      if (w >= d) { setUsedTrailFallback(false); return applyRoute(driving); }
+    }
+    setUsedTrailFallback(true);
+    setDismissedTrailWarning(false);
+    return applyRoute(walking);
   };
 
   // Initial map + route + position-watch wiring. Kept in one effect so
@@ -11284,6 +11400,25 @@ function RouteNavigation({ route, onClose, campingSpots, showCampingSpots, setSh
       <div style={{ flex: 1, position: "relative" }}>
         <div ref={mapRef} style={{ width: "100%", height: "100%" }} />
         {!mapReady && <ContentLoader accent={T.copper} spinnerSize={28} />}
+        {/* Trail-fallback warning — surfaces when Mapbox couldn't route the
+            leg on the classified driving graph and we fell back to walking.
+            Wording is deliberately soft: many trails legitimately allow
+            vehicles, and we don't want to scare users off legitimate
+            routes. Dismissible for the current leg. */}
+        {usedTrailFallback && !dismissedTrailWarning && (
+          <div style={{ position: "absolute", top: 12, left: 12, right: 12, zIndex: 12, background: `${T.darkCard}F5`, border: `1px solid ${T.copper}80`, borderRadius: 10, padding: "10px 12px", boxShadow: "0 6px 18px rgba(0,0,0,0.55)", backdropFilter: "blur(8px)", display: "flex", alignItems: "flex-start", gap: 10 }}>
+            <AlertTriangle size={16} color={T.copper} style={{ flexShrink: 0, marginTop: 1 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 1.2, marginBottom: 2 }}>TRAIL SEGMENT</div>
+              <p style={{ margin: 0, fontFamily: serif, fontSize: 12, color: T.white, lineHeight: 1.4 }}>
+                This route includes trails that may not allow vehicle access and could require walking. Please follow laws and posted trail restrictions.
+              </p>
+            </div>
+            <button onClick={() => setDismissedTrailWarning(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: T.tertiary, flexShrink: 0 }} title="Dismiss">
+              <X size={14} />
+            </button>
+          </div>
+        )}
         {/* Map controls — recenter (active+paused), mute toggle, layer toggle. */}
         {phase === "active" && (
           <button onClick={recenterChase} title="Re-center" style={{ position: "absolute", bottom: 200, right: 14, width: 46, height: 46, borderRadius: "50%", background: `${T.darkCard}F0`, border: `1px solid ${T.copper}50`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(0,0,0,0.5)" }}>
@@ -11598,7 +11733,7 @@ function RoutePinMap({ pins, setPins, linkingPhotoIdx, onLinkPin, onRoutePoints,
       const origin = routePins[0];
       const destination = routePins[routePins.length - 1];
       const waypoints = routePins.slice(1, -1);
-      mapboxDirections(origin, destination, { waypoints }).then(dir => {
+      mapboxDirectionsSmart(origin, destination, { waypoints }).then(dir => {
         if (!mapInst.current) return;
         if (!dir) {
           // Directions failed — fallback to straight-line through the route pins.
@@ -46370,7 +46505,7 @@ export default function Trailhead() {
     pushPoint(newPins[0].lat, newPins[0].lng);
     if (newPins.length >= 2) {
       const segResults = await Promise.all(
-        newPins.slice(0, -1).map((from, i) => mapboxDirections(from, newPins[i + 1]))
+        newPins.slice(0, -1).map((from, i) => mapboxDirectionsSmart(from, newPins[i + 1]))
       );
       segResults.forEach((dir, i) => {
         if (dir && typeof dir.duration === "number") totalSeconds += dir.duration;
@@ -46501,7 +46636,7 @@ export default function Trailhead() {
     pushPoint(planBuilderPoints[0].lat, planBuilderPoints[0].lng);
     if (planBuilderPoints.length >= 2) {
       const segResults = await Promise.all(
-        planBuilderPoints.slice(0, -1).map((from, i) => mapboxDirections(from, planBuilderPoints[i + 1]))
+        planBuilderPoints.slice(0, -1).map((from, i) => mapboxDirectionsSmart(from, planBuilderPoints[i + 1]))
       );
       segResults.forEach((dir, i) => {
         if (dir && typeof dir.duration === "number") totalSeconds += dir.duration;
@@ -48719,10 +48854,10 @@ export default function Trailhead() {
         try {
           const from = { lat: pos.coords.latitude, lng: pos.coords.longitude };
           const to = { lat: demoMapViewer.meeting_lat, lng: demoMapViewer.meeting_lng };
-          const dir = await mapboxDirections(from, to);
+          const dir = await mapboxDirectionsSmart(from, to);
           if (cancelled) return;
           if (dir) {
-            setDemoMapViewer(prev => prev ? { ...prev, travel: { durationText: dir.durationText, distanceText: dir.distanceText } } : prev);
+            setDemoMapViewer(prev => prev ? { ...prev, travel: { durationText: dir.durationText, distanceText: dir.distanceText, trailFallback: !!dir.usedFallback } } : prev);
           } else {
             setDemoMapViewer(prev => prev ? { ...prev, travel: { error: "No route found" } } : prev);
           }
@@ -55834,7 +55969,17 @@ export default function Trailhead() {
                 <>
                   <span style={{ fontFamily: sans, fontSize: 13, color: T.copper, fontWeight: 700 }}>{travel.durationText}</span>
                   {travel.distanceText && <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>· {travel.distanceText}</span>}
+                  {travel.trailFallback && (
+                    <span title="This route includes trails that may not allow vehicle access and could require walking. Please follow laws and posted trail restrictions." style={{ display: "inline-flex", alignItems: "center", gap: 4, fontFamily: sans, fontSize: 10, color: T.copper, background: `${T.copper}18`, padding: "2px 6px", borderRadius: 4, letterSpacing: 0.4 }}>
+                      <AlertTriangle size={10} />TRAIL
+                    </span>
+                  )}
                 </>
+              )}
+              {travel && travel.trailFallback && (
+                <p style={{ width: "100%", margin: "4px 0 0", fontFamily: serif, fontSize: 10, color: T.tertiary, lineHeight: 1.35, fontStyle: "italic" }}>
+                  Route includes trails that may not allow vehicles and could require walking. Follow posted restrictions.
+                </p>
               )}
               {canRoute && (
                 <button
