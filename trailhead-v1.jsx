@@ -45421,11 +45421,21 @@ export default function Trailhead() {
         const row = payload.new;
         if (!row || !row.trip_id) return;
         setSavedTripIds(prev => prev[row.trip_id] ? prev : { ...prev, [row.trip_id]: true });
+        // Fetch + cache the slim trip row so Profile → Saved resolves it
+        // on other devices. Skip if we already have it.
+        setSavedTripRows(prev => {
+          if (prev.some(r => r.id === row.trip_id)) return prev;
+          supabase.from("trip_reports").select("id, user_id, slug, name, description, kind, status, visibility, hero_img, distance_mi, duration_min, elev_gain_ft, max_elev_ft, region, state_code, terrains, tags, planned_start, planned_end, party_size, start_lat, start_lng, start_label, end_lat, end_lng, route_geom, view_count, created_at, updated_at, difficulty, build_id").eq("id", row.trip_id).maybeSingle().then(({ data }) => {
+            if (data) setSavedTripRows(cur => cur.some(r => r.id === row.trip_id) ? cur : [...cur, data]);
+          });
+          return prev;
+        });
       })
       .on("postgres_changes", { event: "DELETE", schema: "public", table: "saved_trips", filter: `user_id=eq.${uid}` }, (payload) => {
         const row = payload.old;
         if (!row || !row.trip_id) return;
         setSavedTripIds(prev => { if (!prev[row.trip_id]) return prev; const next = { ...prev }; delete next[row.trip_id]; return next; });
+        setSavedTripRows(prev => prev.filter(r => r.id !== row.trip_id));
       })
       // Profile updates — when any user changes their handle/name/avatar,
       // patch all their previous posts and comments in this client's feed
@@ -47242,6 +47252,13 @@ export default function Trailhead() {
   // via `hydrateSavedTrips`; mutations go through `toggleSaveTrip` which
   // patches optimistically then INSERTs/DELETEs `public.saved_trips`.
   const [savedTripIds, setSavedTripIds] = useState({});
+  // Slim rows for every trip/plan the viewer has bookmarked. Necessary
+  // because allTripReports / allTripPlans are otherwise built from
+  // (owned + viewport) slices, so a saved-but-not-in-viewport trip owned
+  // by another user disappears from Profile → Saved after refresh even
+  // though the saved_trips row persists in DB. Populated during
+  // hydrateSavedTrips + kept in sync by toggleSaveTrip + realtime.
+  const [savedTripRows, setSavedTripRows] = useState([]);
   const [activeNavRoute, setActiveNavRoute] = useState(null); // route data for in-app navigation
   // Single shared "Get Directions" entry — every directions button in
   // the app routes through here so we get one consistent in-app
@@ -47372,41 +47389,48 @@ export default function Trailhead() {
   // rows (drafts, edits) win over the lighter viewport snapshot.
   // Generic merger for the global+viewport union. Used by both the report
   // and plan slices below — same dedup-by-id + graft-geom behavior.
-  const mergeTripSlices = (globalRows, viewportRows) => {
-    // NOTE: `new Map()` won't work here — the lucide-react `Map` icon is
-    // imported into module scope and shadows the global Map constructor
-    // (same trap that bites `Image`). Plain object keyed by id is fine
-    // since trip ids are UUIDs / strings.
+  // Variadic — accepts N slices, first row seen for a given id wins, later
+  // slices supplement missing fields (viewport rows carry route_geom /
+  // end_lat / end_lng that owner slice may lack).
+  //
+  // NOTE: `new Map()` won't work here — the lucide-react `Map` icon is
+  // imported into module scope and shadows the global Map constructor
+  // (same trap that bites `Image`). Plain object keyed by id is fine
+  // since trip ids are UUIDs / strings.
+  const mergeTripSlices = (...slices) => {
     const byId = {};
     const order = [];
-    for (const t of globalRows) {
-      if (t && t.id != null && !(t.id in byId)) { byId[t.id] = t; order.push(t.id); }
-    }
-    for (const t of viewportRows) {
-      if (!t || t.id == null) continue;
-      const existing = byId[t.id];
-      if (!existing) { byId[t.id] = t; order.push(t.id); continue; }
-      const merged = { ...existing };
-      if (merged.end_lat == null && t.end_lat != null) merged.end_lat = t.end_lat;
-      if (merged.end_lng == null && t.end_lng != null) merged.end_lng = t.end_lng;
-      if (!Array.isArray(merged.route_geom) && Array.isArray(t.route_geom)) merged.route_geom = t.route_geom;
-      byId[t.id] = merged;
+    for (const slice of slices) {
+      for (const t of (slice || [])) {
+        if (!t || t.id == null) continue;
+        const existing = byId[t.id];
+        if (!existing) { byId[t.id] = t; order.push(t.id); continue; }
+        const merged = { ...existing };
+        if (merged.end_lat == null && t.end_lat != null) merged.end_lat = t.end_lat;
+        if (merged.end_lng == null && t.end_lng != null) merged.end_lng = t.end_lng;
+        if (!Array.isArray(merged.route_geom) && Array.isArray(t.route_geom)) merged.route_geom = t.route_geom;
+        byId[t.id] = merged;
+      }
     }
     return order.map(id => byId[id]);
   };
   // Reports slice — explicit kind filter so legacy code paths (feed, profile,
   // trip-detail overlay) never accidentally render plans. Rows without kind
-  // (pre-migration data, if any) fall through as reports.
+  // (pre-migration data, if any) fall through as reports. Saved rows join
+  // the union so Profile → Saved survives across refreshes even when the
+  // saved trip's coords aren't in the current map viewport.
   const allTripReports = useMemo(() => {
     const reportRows = (tripReports || []).filter(t => !t.kind || t.kind === "report");
-    return mergeTripSlices(reportRows, viewportTripReports);
-  }, [tripReports, viewportTripReports]);
+    const savedReports = (savedTripRows || []).filter(t => !t.kind || t.kind === "report");
+    return mergeTripSlices(reportRows, viewportTripReports, savedReports);
+  }, [tripReports, viewportTripReports, savedTripRows]);
   // Plans slice — owner sees own drafts + published; everyone sees published
   // PUBLIC plans via the bbox fetcher. Editor + planner tab read from this.
   const allTripPlans = useMemo(() => {
     const planRows = (tripReports || []).filter(t => t.kind === "plan");
-    return mergeTripSlices(planRows, viewportTripPlans);
-  }, [tripReports, viewportTripPlans]);
+    const savedPlans = (savedTripRows || []).filter(t => t.kind === "plan");
+    return mergeTripSlices(planRows, viewportTripPlans, savedPlans);
+  }, [tripReports, viewportTripPlans, savedTripRows]);
   // Threaded view counts derived from the live thread rows — fed into the
   // feed FORUM card + GlobalSearch result rows so their "X views" text
   // matches the source of truth without prop drilling the whole array.
@@ -52232,9 +52256,25 @@ export default function Trailhead() {
         .select("trip_id")
         .eq("user_id", uid);
       if (error) throw error;
+      const ids = (data || []).map(r => r.trip_id).filter(Boolean);
       const next = {};
-      (data || []).forEach(r => { if (r.trip_id) next[r.trip_id] = true; });
+      ids.forEach(id => { next[id] = true; });
       setSavedTripIds(next);
+      // Also fetch the full rows for every saved trip so Profile → Saved
+      // (and the SAVED chip on the detail page) resolve even when the
+      // saved trip's coords aren't in the current map viewport. Skip the
+      // heavy route_data jsonb — loaded lazily via loadTripRouteData
+      // when the user opens the detail page.
+      if (ids.length > 0) {
+        const { data: rows, error: rowErr } = await supabase
+          .from("trip_reports")
+          .select("id, user_id, slug, name, description, kind, status, visibility, hero_img, distance_mi, duration_min, elev_gain_ft, max_elev_ft, region, state_code, terrains, tags, planned_start, planned_end, party_size, start_lat, start_lng, start_label, end_lat, end_lng, route_geom, view_count, created_at, updated_at, difficulty, build_id")
+          .in("id", ids);
+        if (rowErr) { console.warn("[saved_trips] row fetch failed", rowErr); setSavedTripRows([]); }
+        else setSavedTripRows(rows || []);
+      } else {
+        setSavedTripRows([]);
+      }
     } catch (e) { console.warn("[saved_trips] hydrate failed", e); }
   };
   // Toggle a save on a trip/plan. Optimistic local patch + INSERT/DELETE
@@ -52250,6 +52290,25 @@ export default function Trailhead() {
       if (wasSaved) delete next[tripId]; else next[tripId] = true;
       return next;
     });
+    // Keep the savedTripRows slice in sync so Profile → Saved reflects
+    // the change immediately without requiring a hydrate roundtrip.
+    if (wasSaved) {
+      setSavedTripRows(prev => prev.filter(r => r.id !== tripId));
+    } else {
+      // Grab the trip's slim row from whichever slice currently holds it.
+      // If the row isn't in memory (edge case — bookmarked via a link
+      // without ever having it loaded), fetch it.
+      const inMemory = (tripReports || []).find(t => t.id === tripId)
+                    || (viewportTripReports || []).find(t => t.id === tripId)
+                    || (viewportTripPlans || []).find(t => t.id === tripId);
+      if (inMemory) {
+        setSavedTripRows(prev => prev.some(r => r.id === tripId) ? prev : [...prev, inMemory]);
+      } else {
+        supabase.from("trip_reports").select("id, user_id, slug, name, description, kind, status, visibility, hero_img, distance_mi, duration_min, elev_gain_ft, max_elev_ft, region, state_code, terrains, tags, planned_start, planned_end, party_size, start_lat, start_lng, start_label, end_lat, end_lng, route_geom, view_count, created_at, updated_at, difficulty, build_id").eq("id", tripId).maybeSingle().then(({ data }) => {
+          if (data) setSavedTripRows(prev => prev.some(r => r.id === tripId) ? prev : [...prev, data]);
+        });
+      }
+    }
     try {
       if (wasSaved) {
         const { error } = await supabase.from("saved_trips").delete().eq("user_id", uid).eq("trip_id", tripId);
@@ -52266,6 +52325,11 @@ export default function Trailhead() {
         if (wasSaved) next[tripId] = true; else delete next[tripId];
         return next;
       });
+      // Revert the row slice too — if we added a row and the INSERT failed,
+      // drop it; if we removed a row and the DELETE failed, we'd need the
+      // original row back but we don't have it cached. Realtime will
+      // reconcile on next event, and the next refresh runs hydrateSavedTrips.
+      if (!wasSaved) setSavedTripRows(prev => prev.filter(r => r.id !== tripId));
     }
   };
   // Toggle a trip-report like. Mirrors toggleBuildLike: optimistic local
