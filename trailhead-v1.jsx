@@ -13761,7 +13761,7 @@ const TripReportCard = memo(function TripReportCardImpl({ trip, author, onOpen }
 // title + author + difficulty/region pills → terrain/tag chips →
 // description → trip stats → trailhead + Get Directions → full route map
 // → per-pin notes → photo grid → footer with author profile link.
-function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onEdit, onUpdate, onDelete, onPublish, onEditPlanRoute, onLoadRouteData, onBumpView, isLiked, likeCount, onToggleLike, onShareToFeed, onStartDirections, onStartNav, onPlanConvoy, onReorderPins, initialEditMode, isSaved, onToggleSave, userBuilds }) {
+function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onEdit, onUpdate, onDelete, onPublish, onEditPlanRoute, onLoadRouteData, onBumpView, isLiked, likeCount, onToggleLike, onShareToFeed, onStartDirections, onStartNav, onPlanConvoy, onReorderPins, initialEditMode, isSaved, onToggleSave, onCopyToPlan, userBuilds }) {
   if (!trip) return null;
   const isPlan = trip.kind === "plan";
   const isOwner = !!(currentUserId && trip.user_id === currentUserId);
@@ -14269,6 +14269,21 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
                     style={{ background: isSaved ? `${T.copper}25` : T.charcoal, border: `1px solid ${isSaved ? T.copper : T.charcoal}`, padding: "6px 10px", borderRadius: 6, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
               <Bookmark size={13} color={isSaved ? T.copper : T.white} fill={isSaved ? T.copper : "transparent"} />
               <span style={{ fontFamily: sans, fontSize: 10, color: isSaved ? T.copper : T.white, fontWeight: 600, letterSpacing: 0.5 }}>{isSaved ? "SAVED" : "SAVE"}</span>
+            </button>
+          )}
+          {/* COPY TO PLAN — makes a private draft plan owned by the viewer
+              seeded with the source's route so they can turn it into a
+              convoy. Only for non-owners viewing a published REPORT (plans
+              already work as convoy sources; own trips can be shared as-is). */}
+          {trip.status === "published" && !isPlan && onCopyToPlan && (trip.user_id || trip.userId) !== currentUserId && (
+            <button onClick={async () => {
+                      const btn = "COPYING…";
+                      try { await onCopyToPlan(trip); } catch (e) { console.warn("[copyToPlan] failed", e); }
+                    }}
+                    title="Copy this trip as a private plan you can turn into a convoy"
+                    style={{ background: T.charcoal, border: `1px solid ${T.copper}40`, padding: "6px 10px", borderRadius: 6, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
+              <Route size={13} color={T.copper} />
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600, letterSpacing: 0.5 }}>COPY TO PLAN</span>
             </button>
           )}
           {trip.status === "published" && onShareToFeed && (
@@ -53132,6 +53147,62 @@ export default function Trailhead() {
     } catch (e) { console.error("[trip_reports] delete failed", e); }
   };
 
+  // Copy a published trip (typically someone else's) into a new draft
+  // plan owned by the current user. The source stays untouched — we
+  // create a fresh row with kind='plan', copy the route_data + summary
+  // stats, and open the new draft in the detail overlay so the user can
+  // rename / edit / hand it off to the convoy compose flow.
+  const copyTripAsPlan = async (sourceTrip) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) { showErrorToast("Sign in to copy a trip."); return null; }
+    if (!sourceTrip || !sourceTrip.id) return null;
+    // Fetch the full row when route_data is missing locally (bbox-loaded
+    // rows omit the heavy jsonb). Skip if it's already hydrated.
+    let full = sourceTrip;
+    if (!sourceTrip.route_data) {
+      try {
+        const { data, error } = await supabase.from("trip_reports").select("*").eq("id", sourceTrip.id).maybeSingle();
+        if (!error && data) full = { ...sourceTrip, ...data };
+      } catch (e) { console.warn("[copyTripAsPlan] fetch failed", e); }
+    }
+    const baseName = (full.name || "Trip").trim();
+    const copyName = `Copy of ${baseName}`;
+    const draft = await createTripDraft({ name: copyName, description: full.description || "", kind: "plan" });
+    if (!draft) return null;
+    // Deep-copy route_data so any future mutation on the plan can't leak
+    // back into the source in memory. Photos stay by URL — no re-upload
+    // needed since they're already public storage links.
+    let clonedRouteData = null;
+    try { clonedRouteData = full.route_data ? JSON.parse(JSON.stringify(full.route_data)) : null; }
+    catch (_) { clonedRouteData = full.route_data || null; }
+    // Preserve summary fields so the plan renders complete stats + map
+    // immediately. Recomputed on first edit if the user changes pins.
+    const summaryPatch = {
+      route_data: clonedRouteData,
+      start_lat: full.start_lat != null ? full.start_lat : null,
+      start_lng: full.start_lng != null ? full.start_lng : null,
+      start_label: full.start_label || null,
+      end_lat: full.end_lat != null ? full.end_lat : null,
+      end_lng: full.end_lng != null ? full.end_lng : null,
+      distance_mi: full.distance_mi != null ? full.distance_mi : null,
+      duration_min: full.duration_min != null ? full.duration_min : null,
+      elev_gain_ft: full.elev_gain_ft != null ? full.elev_gain_ft : null,
+      max_elev_ft: full.max_elev_ft != null ? full.max_elev_ft : null,
+      region: full.region || null,
+      state_code: full.state_code || null,
+      terrains: Array.isArray(full.terrains) ? full.terrains : null,
+      tags: Array.isArray(full.tags) ? full.tags : null,
+      hero_img: full.hero_img || null,
+      difficulty: full.difficulty || null,
+    };
+    try { await updateTripDraft(draft.id, summaryPatch); }
+    catch (e) { console.warn("[copyTripAsPlan] update failed", e); }
+    // Open the new plan in the detail overlay so the user can rename +
+    // start planning. Trip nav effects at root push the URL for us.
+    setDetailTripId(draft.id);
+    return draft.id;
+  };
+
   const addCampingSpot = async (spot) => {
     const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
     if (!uid || !spot || spot.lat == null || spot.lng == null) return null;
@@ -55295,6 +55366,7 @@ export default function Trailhead() {
               onStartDirections={requireAuth(startDirectionsTo)}
               onStartNav={requireAuth((route) => setActiveNavRoute(route))}
               onPlanConvoy={requireAuth(startConvoyFromPlan)}
+              onCopyToPlan={requireAuth(copyTripAsPlan)}
             />
           </div>
         );
