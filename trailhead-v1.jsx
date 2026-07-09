@@ -52314,8 +52314,15 @@ export default function Trailhead() {
         const { error } = await supabase.from("saved_trips").delete().eq("user_id", uid).eq("trip_id", tripId);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("saved_trips").insert({ user_id: uid, trip_id: tripId });
-        if (error && error.code !== "23505") throw error;
+        // upsert w/ ignoreDuplicates uses ON CONFLICT DO NOTHING so a
+        // pre-existing row doesn't bounce a 409 — silently keeps the
+        // saved state. Avoids the noisy browser network log for the
+        // "hydrate-hasn't-landed-yet, user taps SAVE, row already exists"
+        // race that shows up on refresh.
+        const { error } = await supabase
+          .from("saved_trips")
+          .upsert({ user_id: uid, trip_id: tripId }, { onConflict: "user_id,trip_id", ignoreDuplicates: true });
+        if (error) throw error;
       }
     } catch (e) {
       console.error("[saved_trips] toggle failed", e);
@@ -53230,19 +53237,37 @@ export default function Trailhead() {
       } catch (e) { console.warn("[copyTripAsPlan] fetch failed", e); }
     }
     const baseName = (full.name || "Trip").trim();
-    const copyName = `Copy of ${baseName}`;
+    // Suffix the copy name with a short base36 tail so createTripDraft's
+    // first slug attempt is essentially always unique — avoids the noisy
+    // 409/-2/-3 slug-collision retry chain in the browser console.
+    const rand = Math.random().toString(36).slice(2, 6);
+    const copyName = `Copy of ${baseName} (${rand})`;
     const draft = await createTripDraft({ name: copyName, description: full.description || "", kind: "plan" });
     if (!draft) return null;
-    // Deep-copy route_data so any future mutation on the plan can't leak
-    // back into the source in memory. Photos stay by URL — no re-upload
-    // needed since they're already public storage links.
+    // Open the new plan in the detail overlay right away so the user has
+    // something to look at while the route_data write finishes. Summary
+    // fields land within a few hundred ms; route_data (heavy jsonb) is
+    // written separately below and doesn't block the initial paint.
+    setDetailTripId(draft.id);
+    // Deep-copy route_data + strip the densified `points` array. That
+    // field alone can be 100+ KB on a real trip and was blowing past the
+    // Postgres statement timeout when written in the same UPDATE as the
+    // summary fields. The plan-builder densifies again on first edit /
+    // commit via mapboxDirectionsSmart, so we don't lose the route — the
+    // detail page just renders straight lines through pins until then.
     let clonedRouteData = null;
-    try { clonedRouteData = full.route_data ? JSON.parse(JSON.stringify(full.route_data)) : null; }
-    catch (_) { clonedRouteData = full.route_data || null; }
-    // Preserve summary fields so the plan renders complete stats + map
-    // immediately. Recomputed on first edit if the user changes pins.
+    try {
+      if (full.route_data) {
+        clonedRouteData = JSON.parse(JSON.stringify(full.route_data));
+        if (clonedRouteData && Array.isArray(clonedRouteData.points)) {
+          delete clonedRouteData.points;
+        }
+      }
+    } catch (_) { clonedRouteData = full.route_data || null; }
+    // First patch: summary fields only. Small + fast so the plan detail
+    // page has stats/hero/pins immediately even if the follow-up
+    // route_data write times out.
     const summaryPatch = {
-      route_data: clonedRouteData,
       start_lat: full.start_lat != null ? full.start_lat : null,
       start_lng: full.start_lng != null ? full.start_lng : null,
       start_label: full.start_label || null,
@@ -53260,10 +53285,13 @@ export default function Trailhead() {
       difficulty: full.difficulty || null,
     };
     try { await updateTripDraft(draft.id, summaryPatch); }
-    catch (e) { console.warn("[copyTripAsPlan] update failed", e); }
-    // Open the new plan in the detail overlay so the user can rename +
-    // start planning. Trip nav effects at root push the URL for us.
-    setDetailTripId(draft.id);
+    catch (e) { console.warn("[copyTripAsPlan] summary patch failed", e); }
+    // Second patch: route_data alone. If this times out the plan still
+    // exists with pins-only geometry via deriveTripGeom fallback.
+    if (clonedRouteData) {
+      try { await updateTripDraft(draft.id, { route_data: clonedRouteData }); }
+      catch (e) { console.warn("[copyTripAsPlan] route_data patch failed", e); }
+    }
     return draft.id;
   };
 
