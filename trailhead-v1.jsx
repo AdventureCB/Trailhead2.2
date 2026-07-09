@@ -34995,6 +34995,7 @@ function BountiesAdminScreen({ bounties, reviewQueue, onLoadReviewQueue, onBack,
                 <span style={{ fontFamily: sans, fontSize: 9, color: T.white, background: diffColor, padding: "2px 7px", borderRadius: 3, letterSpacing: 0.5, fontWeight: 600 }}>{(b.difficulty || "Medium").toUpperCase()}</span>
                 <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, background: T.charcoal, padding: "2px 7px", borderRadius: 3, letterSpacing: 0.5 }}>{(b.category || "Content").toUpperCase()}</span>
                 {b.multiple_winners && <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, background: `${T.copper}18`, padding: "2px 7px", borderRadius: 3, letterSpacing: 0.5, fontWeight: 600 }}>MULTI-WINNER</span>}
+                {b.visibility === "ambassador" && <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, background: `${T.copper}25`, padding: "2px 7px", borderRadius: 3, letterSpacing: 0.5, fontWeight: 700, border: `1px solid ${T.copper}60` }}>AMBASSADOR</span>}
                 <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.5 }}>{fmtRelative(b.deadline_at)}</span>
               </div>
               <div style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 600 }}>{b.title || "(untitled)"}</div>
@@ -35394,6 +35395,7 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
           status: "draft",
           form_template_key: "Content Creation",
           form_config: null,
+          visibility: "public",
         });
         setLoading(false);
         return;
@@ -35837,6 +35839,20 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
               <input type="number" min="2" step="1" value={bounty.total_slots || 1} onChange={(e) => patch({ total_slots: Math.max(2, Number(e.target.value)) })} style={{ ...inputStyle, width: 80 }} />
             </div>
           )}
+        </div>
+        {/* Visibility gate — 'ambassador' hides the bounty from everyone
+            except ambassadors + admins (enforced by RLS). Useful for
+            invite-only ambassador programs (e.g. exclusive product tests). */}
+        <div>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontFamily: sans, fontSize: 12, color: T.white }}>
+            <input type="checkbox" checked={bounty.visibility === "ambassador"} onChange={(e) => patch({ visibility: e.target.checked ? "ambassador" : "public" })} />
+            Ambassador-only visibility
+          </label>
+          <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 4, lineHeight: 1.4, letterSpacing: 0.3 }}>
+            {bounty.visibility === "ambassador"
+              ? "Only ambassadors + admins will see this bounty. Everyone else is blocked at the DB level."
+              : "Every signed-in user can see this bounty."}
+          </div>
         </div>
         {!isNew && (
           <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, letterSpacing: 0.5 }}>
@@ -48374,6 +48390,10 @@ export default function Trailhead() {
       status: (patch && patch.status) || "draft",
       form_template_key: tplKey,
       form_config: seededFormConfig,
+      // Visibility gate. 'public' = every signed-in user, 'ambassador' =
+      // ambassadors + admins only (RLS enforces). Defaults to public so
+      // existing admin flows are unchanged.
+      visibility: (patch && patch.visibility === "ambassador") ? "ambassador" : "public",
       created_by: uid,
       // Demo Request fields — null unless category=Demo Request.
       demo_lat: patch && typeof patch.demo_lat === "number" ? patch.demo_lat : null,
@@ -48391,7 +48411,7 @@ export default function Trailhead() {
   };
   const updateBounty = async (id, patch) => {
     if (!isAdmin || !id) return { error: "Not authorized" };
-    const allowedKeys = ["title", "description", "category", "difficulty", "hero_img", "reward_cents", "reward_points", "multiple_winners", "total_slots", "starts_at", "deadline_at", "status", "form_template_key", "form_config", "demo_lat", "demo_lng", "demo_radius_m", "demo_customer_user_id", "demo_location_label"];
+    const allowedKeys = ["title", "description", "category", "difficulty", "hero_img", "reward_cents", "reward_points", "multiple_winners", "total_slots", "starts_at", "deadline_at", "status", "form_template_key", "form_config", "visibility", "demo_lat", "demo_lng", "demo_radius_m", "demo_customer_user_id", "demo_location_label"];
     const payload = {};
     allowedKeys.forEach(k => { if (patch && k in patch) payload[k] = patch[k]; });
     if (Object.keys(payload).length === 0) return { ok: true };
