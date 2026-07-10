@@ -14271,21 +14271,6 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
               <span style={{ fontFamily: sans, fontSize: 10, color: isSaved ? T.copper : T.white, fontWeight: 600, letterSpacing: 0.5 }}>{isSaved ? "SAVED" : "SAVE"}</span>
             </button>
           )}
-          {/* COPY TO PLAN — makes a private draft plan owned by the viewer
-              seeded with the source's route so they can turn it into a
-              convoy. Only for non-owners viewing a published REPORT (plans
-              already work as convoy sources; own trips can be shared as-is). */}
-          {trip.status === "published" && !isPlan && onCopyToPlan && (trip.user_id || trip.userId) !== currentUserId && (
-            <button onClick={async () => {
-                      const btn = "COPYING…";
-                      try { await onCopyToPlan(trip); } catch (e) { console.warn("[copyToPlan] failed", e); }
-                    }}
-                    title="Copy this trip as a private plan you can turn into a convoy"
-                    style={{ background: T.charcoal, border: `1px solid ${T.copper}40`, padding: "6px 10px", borderRadius: 6, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
-              <Route size={13} color={T.copper} />
-              <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 600, letterSpacing: 0.5 }}>COPY TO PLAN</span>
-            </button>
-          )}
           {trip.status === "published" && onShareToFeed && (
             <button onClick={() => onShareToFeed(trip)} title="Share"
                     style={{ background: T.charcoal, border: `1px solid ${T.charcoal}`, padding: "6px 10px", borderRadius: 6, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
@@ -14672,6 +14657,19 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
                           style={{ flex: "1 1 100%", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 14px", borderRadius: 6, background: T.red, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>
                     <Users size={13} color={T.white} />
                     <span>PLAN A CONVOY FOR THIS TRIP</span>
+                  </button>
+                )}
+                {/* COPY TO PLAN — makes a private draft plan owned by the
+                    viewer seeded with the source's route so they can turn
+                    it into a convoy. Only for non-owners viewing a
+                    published REPORT (plans already work as convoy
+                    sources; own trips can be shared as-is). */}
+                {trip.status === "published" && !isPlan && onCopyToPlan && (trip.user_id || trip.userId) !== currentUserId && (
+                  <button onClick={() => onCopyToPlan(trip)}
+                          title="Copy this trip as a private plan you can turn into a convoy"
+                          style={{ flex: "1 1 100%", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 14px", borderRadius: 6, background: T.charcoal, border: `1px solid ${T.copper}80`, cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.copper, fontWeight: 700, letterSpacing: 0.5 }}>
+                    <Route size={13} color={T.copper} />
+                    <span>COPY AS PLAN</span>
                   </button>
                 )}
               </div>
@@ -46017,20 +46015,31 @@ export default function Trailhead() {
   };
   const adminAddManualOrder = async (payload) => {
     if (!isAdmin) return false;
+    const callInsert = () => supabase.rpc("admin_add_manual_order", {
+      p_ambassador_id:        payload.ambassadorId,
+      p_shopify_order_id:     payload.shopifyOrderId || null,
+      p_shopify_order_number: payload.shopifyOrderNumber || null,
+      p_subtotal:             payload.subtotal,
+      p_eligible:             payload.eligible,
+      p_classification:       payload.classification,
+      p_order_date:           payload.orderDate || null,
+      p_customer_email:       payload.customerEmail || null,
+      p_customer_name:        payload.customerName || null,
+      p_journey_id:           null,
+      p_reason:               payload.reason,
+    });
     try {
-      const { error } = await supabase.rpc("admin_add_manual_order", {
-        p_ambassador_id:        payload.ambassadorId,
-        p_shopify_order_id:     payload.shopifyOrderId || null,
-        p_shopify_order_number: payload.shopifyOrderNumber || null,
-        p_subtotal:             payload.subtotal,
-        p_eligible:             payload.eligible,
-        p_classification:       payload.classification,
-        p_order_date:           payload.orderDate || null,
-        p_customer_email:       payload.customerEmail || null,
-        p_customer_name:        payload.customerName || null,
-        p_journey_id:           null,
-        p_reason:               payload.reason,
-      });
+      let { error } = await callInsert();
+      // 23505 = shopify_order_id UNIQUE collision. If the existing row is
+      // soft-deleted (removed_at IS NOT NULL) the admin can safely re-add
+      // by hard-purging it first. Try that, then retry the insert.
+      if (error && error.code === "23505" && payload.shopifyOrderId) {
+        const { data: purged, error: purgeErr } = await supabase.rpc("admin_purge_soft_deleted_order", { p_shopify_order_id: payload.shopifyOrderId });
+        if (!purgeErr && Number(purged || 0) > 0) {
+          const retry = await callInsert();
+          error = retry.error;
+        }
+      }
       if (error) { console.error("[admin_add_manual_order]", error); showErrorToast(`Add failed: ${error.message || "unknown"}`); return false; }
       return true;
     } catch (e) { console.error("[admin_add_manual_order] threw", e); return false; }
