@@ -24521,7 +24521,7 @@ function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, init
 }
 
 /* ─── OTHER USER PROFILE (Public view / Follow logic) ─── */
-function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, isAdmin, onAdminUpdateUserRole, onAdminDeclineAmbassador, onAdminToggleModerator, onAdminToggleBetaTester, onAdminToggleContentPartner, onAdminToggleGravelGuide, onAdminViewAsAmbassador, onReportContent, followingIds, onFollow, onUnfollow, fetchFollowCounts, renderFeedScopedTo, currentProfile, convoyRsvps, onViewBuild, allBuilds, onLoadAllBuilds, onlineUserIds, allTripPlans, onOpenTripPlan, onOpenFollowList }) {
+function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, isAdmin, onAdminUpdateUserRole, onAdminDeclineAmbassador, onAdminToggleModerator, onAdminToggleBetaTester, onAdminToggleContentPartner, onAdminToggleGravelGuide, onAdminViewAsAmbassador, onReportContent, followingIds, onFollow, onUnfollow, fetchFollowCounts, renderFeedScopedTo, currentProfile, convoyRsvps, onViewBuild, allBuilds, onLoadAllBuilds, onlineUserIds, allTripPlans, allTripReports, onOpenTripPlan, onOpenFollowList }) {
   // Trigger the cross-user builds load — the builds tab below filters
   // allBuilds for the viewed user. Root is idempotent via a ref.
   useEffect(() => { if (typeof onLoadAllBuilds === "function") onLoadAllBuilds(); }, []);
@@ -24606,6 +24606,7 @@ function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, isAdmin,
           isBetaTester: !!data.is_beta_tester,
           isContentPartner: !!data.is_content_partner,
           isGravelGuide: !!data.is_gravel_guide,
+          bio: (typeof data.bio === "string" && data.bio.trim().length > 0) ? data.bio.trim() : null,
           builds: [], trips: [], activity: [],
         });
         // Side-fetch ambassador tier so the admin role-picker knows
@@ -24766,6 +24767,9 @@ function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, isAdmin,
         </div>
         <h2 style={{ fontFamily: sans, fontSize: 20, color: T.white, margin: "0 0 2px", fontWeight: 700 }}>{p.name}</h2>
         <span style={{ fontFamily: sans, fontSize: 13, color: T.tertiary, display: "block", marginBottom: 4 }}>{p.handle}</span>
+        {p.bio && (
+          <p style={{ fontFamily: serif, fontSize: 13, color: T.white, margin: "6px auto 8px", lineHeight: 1.45, maxWidth: 340, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{p.bio}</p>
+        )}
         {/* Public "Gravel Guide" pill — indicates the user can author
             bounties + oversee Demo Requests. Rendered for everyone
             viewing the profile, not just admins. Green to match the
@@ -25066,20 +25070,33 @@ function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, isAdmin,
                   <span style={{ fontFamily: serif, fontSize: 13, color: T.tertiary }}>{b.vehicle}</span>
                 </div>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", borderTop: `1px solid ${T.charcoal}` }}>
-                <div style={{ padding: 12, textAlign: "center", borderRight: `1px solid ${T.charcoal}` }}>
-                  <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block" }}>MILES</span>
-                  <span style={{ fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 }}>{b.miles}</span>
-                </div>
-                <div style={{ padding: 12, textAlign: "center", borderRight: `1px solid ${T.charcoal}` }}>
-                  <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block" }}>ELEVATION</span>
-                  <span style={{ fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 }}>{b.elevation}</span>
-                </div>
-                <div style={{ padding: 12, textAlign: "center" }}>
-                  <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block" }}>ROUTES</span>
-                  <span style={{ fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 }}>{b.routes}</span>
-                </div>
-              </div>
+              {(() => {
+                // Same aggregate as BuildsScreen's list + detail: sum
+                // published trip_reports linked to this build via
+                // build_id. `b.miles/elevation/routes` are only populated
+                // for the viewer's OWN builds inside BuildsScreen — on
+                // another user's profile they're undefined, which is
+                // why stats used to render blank here.
+                const linked = (allTripReports || []).filter(t => t && t.build_id === (b.rawId || b.id) && t.status === "published");
+                const totalMiles = linked.reduce((acc, t) => acc + (Number(t.distance_mi) || 0), 0);
+                const totalElev = linked.reduce((acc, t) => acc + (Number(t.elev_gain_ft) || 0), 0);
+                return (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", borderTop: `1px solid ${T.charcoal}` }}>
+                    <div style={{ padding: 12, textAlign: "center", borderRight: `1px solid ${T.charcoal}` }}>
+                      <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block" }}>MILES</span>
+                      <span style={{ fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 }}>{Math.round(totalMiles).toLocaleString()}</span>
+                    </div>
+                    <div style={{ padding: 12, textAlign: "center", borderRight: `1px solid ${T.charcoal}` }}>
+                      <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block" }}>ELEVATION</span>
+                      <span style={{ fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 }}>{Math.round(totalElev).toLocaleString()}</span>
+                    </div>
+                    <div style={{ padding: 12, textAlign: "center" }}>
+                      <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, display: "block" }}>TRIPS</span>
+                      <span style={{ fontFamily: sans, fontSize: 16, color: T.white, fontWeight: 700 }}>{linked.length}</span>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           ))}
 
@@ -46041,6 +46058,20 @@ export default function Trailhead() {
         }
       }
       if (error) { console.error("[admin_add_manual_order]", error); showErrorToast(`Add failed: ${error.message || "unknown"}`); return false; }
+      // Backdate the linked journey's confirmed_at to match the order_date
+      // when the admin added a past-dated order. The manual-add RPC stamps
+      // confirmed_at = now(), which causes backdated adds to bucket into
+      // the current-month pending payouts instead of the actual sale
+      // month. Only fires when we have a shopify_order_id to look up the
+      // linked journey (free-form no-id adds are self-consistent — they
+      // already show today).
+      if (payload.shopifyOrderId && payload.orderDate) {
+        const orderDate = new Date(payload.orderDate);
+        if (!isNaN(orderDate.getTime()) && orderDate.getTime() < Date.now() - 24 * 60 * 60 * 1000) {
+          const { error: bdErr } = await supabase.rpc("admin_backdate_journey_from_order", { p_shopify_order_id: payload.shopifyOrderId });
+          if (bdErr) console.warn("[admin_add_manual_order] backdate journey failed", bdErr);
+        }
+      }
       return true;
     } catch (e) { console.error("[admin_add_manual_order] threw", e); return false; }
   };
@@ -54612,7 +54643,19 @@ export default function Trailhead() {
       session={supabaseSession}
       onSetProfilePic={requestProfilePicCrop}
       onAddBuild={addBuild}
-      onComplete={() => setAuthState("install-pwa")}
+      onComplete={() => {
+        // Award profile-completion points ONCE per user. Uses the
+        // points_breakdown bucket the awardPoints RPC writes to as an
+        // idempotency check — if the user already has any profile_complete
+        // credit, skip (re-visiting the onboarding flow shouldn't
+        // re-award). Fire-and-forget; UI moves on regardless.
+        try {
+          const bd = (currentProfile && currentProfile.points_breakdown) || {};
+          const already = Number(bd.profile_complete || 0) > 0;
+          if (!already) awardPoints(POINTS.profileComplete, "Complete Profile");
+        } catch (e) { console.warn("[onboarding] profileComplete award failed", e); }
+        setAuthState("install-pwa");
+      }}
     />;
   }
   if (authState === "install-pwa") {
@@ -55022,7 +55065,7 @@ export default function Trailhead() {
           />
         ) : isProfile ? (
           isOtherProfile ? (
-            <OtherProfileScreen userId={profileStack[1]} onBack={goBack} onMessage={(user) => openDM(user)} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} onAdminUpdateUserRole={adminUpdateUserRole} onAdminDeclineAmbassador={adminDeclineAmbassadorRequest} onAdminToggleModerator={adminToggleUserModerator} onAdminToggleBetaTester={adminToggleUserBetaTester} onAdminToggleContentPartner={adminToggleUserContentPartner} onAdminToggleGravelGuide={adminToggleUserGravelGuide} onAdminViewAsAmbassador={adminViewAsAmbassador} onReportContent={requireAuth(openContentReport)} followingIds={followingIds} onFollow={requireAuth(followUser)} onUnfollow={requireAuth(unfollowUser)} fetchFollowCounts={fetchFollowCounts} onOpenFollowList={requireAuth(openFollowList)} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} allBuilds={allBuilds} onLoadAllBuilds={loadAllBuildsOnce} onlineUserIds={onlineUserIds} allTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} />
+            <OtherProfileScreen userId={profileStack[1]} onBack={goBack} onMessage={(user) => openDM(user)} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} onAdminUpdateUserRole={adminUpdateUserRole} onAdminDeclineAmbassador={adminDeclineAmbassadorRequest} onAdminToggleModerator={adminToggleUserModerator} onAdminToggleBetaTester={adminToggleUserBetaTester} onAdminToggleContentPartner={adminToggleUserContentPartner} onAdminToggleGravelGuide={adminToggleUserGravelGuide} onAdminViewAsAmbassador={adminViewAsAmbassador} onReportContent={requireAuth(openContentReport)} followingIds={followingIds} onFollow={requireAuth(followUser)} onUnfollow={requireAuth(unfollowUser)} fetchFollowCounts={fetchFollowCounts} onOpenFollowList={requireAuth(openFollowList)} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} allBuilds={allBuilds} onLoadAllBuilds={loadAllBuildsOnce} onlineUserIds={onlineUserIds} allTripPlans={allTripPlans} allTripReports={allTripReports} onOpenTripPlan={(id) => setDetailTripId(id)} />
           ) : (
             <ProfileScreen onOpenFollowList={openFollowList} onOpenAdminDashboard={() => { setProfileStack([]); setScreen("admin"); if (typeof window !== "undefined") window.history.pushState({}, "", "/admin"); }} onOpenAmbassadorDashboard={() => { setProfileStack([]); setScreen("ambassador"); }} onOpenContentPartnerDashboard={() => setShowContentPartnerDashboard(true)} isContentPartner={isContentPartner} isGravelGuide={isGravelGuide} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} currentRole={currentRole} convoyRsvps={convoyRsvps} followerCount={myFollowerCount} followingCount={myFollowingCount} onSubscribePush={subscribeToPush} onUnsubscribePush={unsubscribeFromPush} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} savedRoutes={savedRoutes} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} savedTrips={(() => { const ids = savedTripIds || {}; const pool = [...(allTripReports || []), ...(allTripPlans || [])]; const seen = {}; const out = []; pool.forEach(t => { if (t && t.id && ids[t.id] && !seen[t.id]) { seen[t.id] = true; out.push(t); } }); return out; })()} onUnsaveTrip={requireAuth(toggleSaveTrip)} onOpenSavedTrip={(t) => { if (!t) return; if (t.slug) setPendingTripNav(t.slug); else setDetailTripId(t.id); }} pendingScroll={pendingProfileScroll} onConsumePendingScroll={() => setPendingProfileScroll(null)} onStartNav={(route) => setActiveNavRoute(route)} myTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} onNewTripPlan={requireAuth(() => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("routes"); enterPlanBuilder(); })} initialUserName={(currentProfile && currentProfile.full_name) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name) || null} initialUserHandle={(currentProfile && currentProfile.handle) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle) || null} initialUserBio={currentProfile ? currentProfile.bio : null} initialIsPublic={currentProfile ? currentProfile.is_public : null} onSaveProfile={saveProfile} onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={deleteBuild} profilePic={profilePic} onSetProfilePic={requestProfilePicCrop} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => deletePost(id)} onEditPost={(id, newText) => updatePost(id, { title: newText })} onUpdateConvoy={(convoyId, updates) => {
               updatePost(convoyId, updates);
