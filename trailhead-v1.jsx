@@ -5170,6 +5170,23 @@ function MentionInput({ value, onChange, onKeyDown, placeholder, style, inputRef
   const internalRef = useRef(null);
   const ref = inputRef || internalRef;
 
+  // Auto-grow the multiline variant vertically as the user types so the
+  // text wraps naturally instead of side-scrolling in a single-line box.
+  // Height is reset to auto first, then measured against scrollHeight and
+  // capped at ~40vh so a runaway paste doesn't eat the whole viewport.
+  // Fires on every value change.
+  useEffect(() => {
+    if (!multiline) return;
+    const el = ref && ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const cap = Math.round(window.innerHeight * 0.4);
+    const next = Math.min(el.scrollHeight, cap);
+    el.style.height = next + "px";
+    // Show scroll only when content overflows the cap.
+    el.style.overflowY = el.scrollHeight > cap ? "auto" : "hidden";
+  }, [value, multiline]);
+
   // When the caller supplies a curated list (e.g. DM search / convoy
   // invites), use it verbatim. Otherwise fall through to live profile
   // search below.
@@ -8961,14 +8978,14 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
                   <X size={14} color={T.tertiary} />
                 </button>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <div style={{ flex: 1, position: "relative", display: "flex", alignItems: "center" }}>
-                  <MentionInput value={forumReplyText} onChange={setForumReplyText} onKeyDown={e => { if (e.key === "Enter" && (forumReplyText.trim() || replyPhotos.length > 0)) { submitReply(); } }} onFocus={isGuest ? (e) => { e.target && e.target.blur && e.target.blur(); onGuestTap && onGuestTap(); } : undefined} placeholder={`Reply to @${replyToReply.author}...`} style={{ flex: 1, padding: "10px 38px 10px 12px", borderRadius: 8, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", width: "100%" }} />
-                  <button onClick={() => replyFileRef.current && replyFileRef.current.click()} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", padding: 2, display: "flex", alignItems: "center" }}>
+              <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
+                <div style={{ flex: 1, position: "relative", display: "flex", alignItems: "stretch" }}>
+                  <MentionInput multiline value={forumReplyText} onChange={setForumReplyText} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && (forumReplyText.trim() || replyPhotos.length > 0)) { e.preventDefault(); submitReply(); } }} onFocus={isGuest ? (e) => { e.target && e.target.blur && e.target.blur(); onGuestTap && onGuestTap(); } : undefined} placeholder={`Reply to @${replyToReply.author}...`} style={{ flex: 1, padding: "10px 38px 10px 12px", borderRadius: 8, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, lineHeight: 1.4, outline: "none", width: "100%", minHeight: 40, resize: "none", boxSizing: "border-box" }} />
+                  <button onClick={() => replyFileRef.current && replyFileRef.current.click()} style={{ position: "absolute", right: 8, bottom: 8, background: "none", border: "none", cursor: "pointer", padding: 2, display: "flex", alignItems: "center" }}>
                     <Camera size={16} color={T.tertiary} />
                   </button>
                 </div>
-                <button onClick={submitReply} style={{ padding: "0 14px", borderRadius: 8, height: 40, background: (forumReplyText.trim() || replyPhotos.length > 0) ? T.red : T.charcoal, border: "none", cursor: (forumReplyText.trim() || replyPhotos.length > 0) ? "pointer" : "default", opacity: (forumReplyText.trim() || replyPhotos.length > 0) ? 1 : 0.4, display: "flex", alignItems: "center" }}>
+                <button onClick={submitReply} style={{ padding: "0 14px", borderRadius: 8, height: 40, background: (forumReplyText.trim() || replyPhotos.length > 0) ? T.red : T.charcoal, border: "none", cursor: (forumReplyText.trim() || replyPhotos.length > 0) ? "pointer" : "default", opacity: (forumReplyText.trim() || replyPhotos.length > 0) ? 1 : 0.4, display: "flex", alignItems: "center", flexShrink: 0 }}>
                   <ChevronRight size={16} color={T.white} />
                 </button>
               </div>
@@ -9002,16 +9019,16 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
         {!replyToReply && (
         <div style={{ margin: "16px 16px 0" }}>
           <input ref={replyFileRef} type="file" accept="image/*,video/*" multiple onChange={handleReplyPhoto} style={{ display: "none" }} />
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ flex: 1, position: "relative", display: "flex", alignItems: "center" }}>
-              <MentionInput value={forumReplyText} onChange={setForumReplyText} onKeyDown={e => {
-                if (e.key === "Enter" && (forumReplyText.trim() || replyPhotos.length > 0)) { submitReply(); }
-              }} onFocus={isGuest ? (e) => { e.target && e.target.blur && e.target.blur(); onGuestTap && onGuestTap(); } : undefined} placeholder={isGuest ? "Sign in to reply..." : "Write a reply..."} style={{ flex: 1, padding: "12px 38px 12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none", width: "100%" }} />
-              <button onClick={() => replyFileRef.current && replyFileRef.current.click()} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", padding: 2, display: "flex", alignItems: "center" }}>
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
+            <div style={{ flex: 1, position: "relative", display: "flex", alignItems: "stretch" }}>
+              <MentionInput multiline value={forumReplyText} onChange={setForumReplyText} onKeyDown={e => {
+                if (e.key === "Enter" && !e.shiftKey && (forumReplyText.trim() || replyPhotos.length > 0)) { e.preventDefault(); submitReply(); }
+              }} onFocus={isGuest ? (e) => { e.target && e.target.blur && e.target.blur(); onGuestTap && onGuestTap(); } : undefined} placeholder={isGuest ? "Sign in to reply..." : "Write a reply..."} style={{ flex: 1, padding: "12px 38px 12px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, lineHeight: 1.4, outline: "none", width: "100%", minHeight: 42, resize: "none", boxSizing: "border-box" }} />
+              <button onClick={() => replyFileRef.current && replyFileRef.current.click()} style={{ position: "absolute", right: 8, bottom: 10, background: "none", border: "none", cursor: "pointer", padding: 2, display: "flex", alignItems: "center" }}>
                 <Camera size={16} color={T.tertiary} />
               </button>
             </div>
-            <button onClick={submitReply} style={{ padding: "0 16px", borderRadius: 8, height: 42, background: (forumReplyText.trim() || replyPhotos.length > 0) ? T.red : T.charcoal, border: "none", cursor: (forumReplyText.trim() || replyPhotos.length > 0) ? "pointer" : "default", opacity: (forumReplyText.trim() || replyPhotos.length > 0) ? 1 : 0.4, display: "flex", alignItems: "center" }}>
+            <button onClick={submitReply} style={{ padding: "0 16px", borderRadius: 8, height: 42, background: (forumReplyText.trim() || replyPhotos.length > 0) ? T.red : T.charcoal, border: "none", cursor: (forumReplyText.trim() || replyPhotos.length > 0) ? "pointer" : "default", opacity: (forumReplyText.trim() || replyPhotos.length > 0) ? 1 : 0.4, display: "flex", alignItems: "center", flexShrink: 0 }}>
               <ChevronRight size={18} color={T.white} />
             </button>
           </div>
@@ -24529,6 +24546,12 @@ function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, isAdmin,
   const [tappedBadge, setTappedBadge] = useState(null);
   const [dbProfile, setDbProfile] = useState(null);
   const [dbLoading, setDbLoading] = useState(false);
+  // Badge progress for the target user. { categoryName: progressNumber }.
+  // Hydrated via get_badge_progress once resolvedTargetId is known. Local
+  // helper below reads from this map so the render can mirror the own-
+  // profile earned-badges grid without touching the module-scope
+  // MY_BADGE_PROGRESS (which belongs to the viewer, not the target).
+  const [otherBadgeProgress, setOtherBadgeProgress] = useState({});
   // Resolved auth user_id of the profile being viewed. May arrive as a handle
   // (seed users) or a uuid (real Supabase users); we normalize to uuid here so
   // follow CRUD always uses the FK-stable id. Null until the lookup lands.
@@ -24589,7 +24612,7 @@ function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, isAdmin,
           handle: "@" + (data.handle || "user"),
           badge: "Explorer",
           followers: 0, following: 0,
-          points: 0,
+          points: Number(data.points || 0),
           isPublic: true,
           initial: ((data.full_name || data.handle || "U").charAt(0)).toUpperCase(),
           avatarUrl: data.avatar_url || null,
@@ -24711,6 +24734,42 @@ function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, isAdmin,
     return () => { supabase.removeChannel(channel); };
   }, [resolvedTargetId]);
 
+  // Fetch the target user's badge progress once we have their uuid.
+  // get_badge_progress is granted to anon+authenticated so viewer role
+  // doesn't matter. Rows come back keyed by slug — we translate to the
+  // category display name here so the render helper below stays symmetric
+  // with the module-scope MY_BADGE_PROGRESS shape.
+  useEffect(() => {
+    if (!resolvedTargetId) { setOtherBadgeProgress({}); return; }
+    let cancelled = false;
+    supabase.rpc("get_badge_progress", { p_user_id: resolvedTargetId }).then(({ data, error }) => {
+      if (cancelled) return;
+      if (error) { console.warn("[OtherProfile] get_badge_progress failed", error); return; }
+      const bySlug = {};
+      (data || []).forEach(row => { if (row && row.category) bySlug[row.category] = row.progress || 0; });
+      const byName = {};
+      BADGE_CATEGORIES.forEach(cat => { byName[cat.name] = bySlug[cat.slug] || 0; });
+      setOtherBadgeProgress(byName);
+    });
+    return () => { cancelled = true; };
+  }, [resolvedTargetId]);
+
+  // Per-target-user version of getBadgeTierForCategory. Reads from
+  // otherBadgeProgress instead of module-scope MY_BADGE_PROGRESS so the
+  // grid shows THIS user's earned tiers, not the viewer's.
+  const getOtherBadgeTierForCategory = (catName) => {
+    const cat = BADGE_CATEGORIES.find(c => c.name === catName);
+    if (!cat) return { tier: -1 };
+    const progress = otherBadgeProgress[catName] || 0;
+    let highestTier = -1;
+    for (let i = cat.tiers.length - 1; i >= 0; i--) {
+      if (progress >= cat.tiers[i].goal) { highestTier = i; break; }
+    }
+    if (highestTier < 0) return { tier: -1 };
+    const color = BADGE_TIER_COLORS[Math.min(highestTier, BADGE_TIER_COLORS.length - 1)];
+    return { tier: highestTier, color, name: cat.tiers[highestTier].name };
+  };
+
   // Profile resolution. Order matters: seed match wins (it's static demo data
   // with no real DB row), then the live DB profile we fetched, then null.
   // Crucially we do NOT fall back to a different seed user — that hides
@@ -24780,13 +24839,45 @@ function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, isAdmin,
             <span style={{ fontFamily: sans, fontSize: 10, color: T.green, letterSpacing: 1, fontWeight: 700 }}>GRAVEL GUIDE</span>
           </div>
         )}
-        {isAdmin && (() => { const rank = getUserRank(p.points); const RIcon = RANK_ICON_MAP[rank.icon] || Star; return (
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 5, background: `${rank.color}18`, padding: "4px 12px", borderRadius: 12, marginBottom: 14 }}>
+        {(() => { const rank = getUserRank(p.points); const RIcon = RANK_ICON_MAP[rank.icon] || Star; return (
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 5, background: `${rank.color}18`, padding: "4px 12px", borderRadius: 12, marginBottom: 10 }}>
             <RIcon size={13} color={rank.color} strokeWidth={1.5} />
             <span style={{ fontFamily: sans, fontSize: 10, color: rank.color, letterSpacing: 1, fontWeight: 600 }}>{rank.name.toUpperCase()}</span>
-            <span style={{ fontFamily: sans, fontSize: 9, color: `${rank.color}90`, marginLeft: 2 }}>{p.points.toLocaleString()} pts</span>
+            <span style={{ fontFamily: sans, fontSize: 9, color: `${rank.color}90`, marginLeft: 2 }}>{(p.points || 0).toLocaleString()} pts</span>
           </div>
         ); })()}
+        {/* Earned badges grid — mirrors the own-profile render but reads
+            from the target user's badge progress (fetched above). Only
+            categories where the user has earned at least tier 0 show. */}
+        {(() => {
+          const earned = BADGE_CATEGORIES.map(cat => {
+            const info = getOtherBadgeTierForCategory(cat.name);
+            if (info.tier < 0) return null;
+            return { cat, info };
+          }).filter(Boolean);
+          if (earned.length === 0) return null;
+          return (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 8 }}>
+                {earned.map(({ cat, info }) => {
+                  const CatIcon = cat.icon;
+                  const isActive = tappedBadge === cat.name;
+                  return (
+                    <div key={cat.name} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                      <div onClick={() => setTappedBadge(isActive ? null : cat.name)}
+                           style={{ width: 38, height: 38, borderRadius: "50%", background: `${info.color}20`, border: `2px solid ${info.color}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "transform 0.15s", transform: isActive ? "scale(1.15)" : "scale(1)" }}>
+                        <CatIcon size={16} color={info.color} strokeWidth={2} />
+                      </div>
+                      {isActive && (
+                        <span style={{ fontFamily: sans, fontSize: 9, color: info.color, fontWeight: 600, textAlign: "center", maxWidth: 60, lineHeight: 1.2 }}>{info.name}</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Follow + Message Buttons */}
         <div style={{ display: "flex", justifyContent: "center", gap: 10, marginBottom: 16 }}>
@@ -42060,6 +42151,19 @@ function DMScreen({ onClose, onViewUser, initialConvId, initialMessage, initialS
   // prop so realtime updates (new messages, unread changes) flow through.
   const activeConvo = activeConvId ? conversations.find(c => c.id === activeConvId) || null : null;
   const [msgText, setMsgText] = useState(initialMessage || "");
+  // Ref on the DM textarea so the auto-resize effect below can measure
+  // scrollHeight and grow the box vertically as content flows. Cap at
+  // ~40vh so a runaway paste never eats the whole screen.
+  const msgFieldRef = useRef(null);
+  useEffect(() => {
+    const el = msgFieldRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const cap = Math.round(window.innerHeight * 0.4);
+    const next = Math.min(el.scrollHeight, cap);
+    el.style.height = next + "px";
+    el.style.overflowY = el.scrollHeight > cap ? "auto" : "hidden";
+  }, [msgText]);
   const [chatPhotos, setChatPhotos] = useState([]);
   const chatFileRef = useRef(null);
   const [pendingSharedPost, setPendingSharedPost] = useState(initialSharedPost || null);
@@ -42706,15 +42810,15 @@ function DMScreen({ onClose, onViewUser, initialConvId, initialMessage, initialS
         )}
 
         {/* Input bar */}
-        <div style={{ padding: "10px 16px max(10px, env(safe-area-inset-bottom))", background: T.charcoal, borderTop: (pendingSharedPost || chatPhotos.length > 0) ? "none" : `1px solid ${T.darkCard}`, display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+        <div style={{ padding: "10px 16px max(10px, env(safe-area-inset-bottom))", background: T.charcoal, borderTop: (pendingSharedPost || chatPhotos.length > 0) ? "none" : `1px solid ${T.darkCard}`, display: "flex", alignItems: "flex-end", gap: 10, flexShrink: 0 }}>
           <input ref={chatFileRef} type="file" accept="image/*,video/*" multiple onChange={handleChatFiles} style={{ display: "none" }} />
-          <button onClick={() => chatFileRef.current && chatFileRef.current.click()} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" }}>
+          <button onClick={() => chatFileRef.current && chatFileRef.current.click()} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", height: 36, alignItems: "center" }}>
             <Image size={20} color={T.tertiary} />
           </button>
-          <div style={{ flex: 1, display: "flex", alignItems: "center", background: T.darkCard, borderRadius: 20, padding: "8px 14px", border: `1px solid ${T.charcoal}` }}>
-            <input value={msgText} onChange={e => setMsgText(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }} placeholder={pendingSharedPost ? "Add a message..." : "Type a message..."} style={{ flex: 1, background: "none", border: "none", outline: "none", color: T.white, fontFamily: serif, fontSize: 13, padding: 0 }} />
+          <div style={{ flex: 1, display: "flex", alignItems: "stretch", background: T.darkCard, borderRadius: 20, padding: "8px 14px", border: `1px solid ${T.charcoal}` }}>
+            <textarea ref={msgFieldRef} rows={1} value={msgText} onChange={e => setMsgText(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }} placeholder={pendingSharedPost ? "Add a message..." : "Type a message..."} style={{ flex: 1, background: "none", border: "none", outline: "none", color: T.white, fontFamily: serif, fontSize: 13, lineHeight: 1.4, padding: 0, resize: "none", minHeight: 20, boxSizing: "border-box" }} />
           </div>
-          <button onClick={sendMessage} disabled={!msgText.trim() && !pendingSharedPost && chatPhotos.length === 0} style={{ background: (msgText.trim() || pendingSharedPost || chatPhotos.length > 0) ? T.red : T.charcoal, border: "none", cursor: (msgText.trim() || pendingSharedPost || chatPhotos.length > 0) ? "pointer" : "default", padding: 0, width: 36, height: 36, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", opacity: (msgText.trim() || pendingSharedPost || chatPhotos.length > 0) ? 1 : 0.4, transition: "all 0.15s" }}>
+          <button onClick={sendMessage} disabled={!msgText.trim() && !pendingSharedPost && chatPhotos.length === 0} style={{ background: (msgText.trim() || pendingSharedPost || chatPhotos.length > 0) ? T.red : T.charcoal, border: "none", cursor: (msgText.trim() || pendingSharedPost || chatPhotos.length > 0) ? "pointer" : "default", padding: 0, width: 36, height: 36, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", opacity: (msgText.trim() || pendingSharedPost || chatPhotos.length > 0) ? 1 : 0.4, transition: "all 0.15s", flexShrink: 0 }}>
             <Send size={16} color={T.white} style={{ marginLeft: 2 }} />
           </button>
         </div>
