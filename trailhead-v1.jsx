@@ -2,7 +2,7 @@ import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallba
 import { createRoot } from "react-dom/client";
 import { createPortal } from "react-dom";
 import { Heart, MessageCircle, MapPin, Clock, Mountain, ChevronRight, ChevronLeft, ChevronDown, Search, Plus, Home, Compass, Map, Wrench, Trophy, AlertTriangle, Navigation, Star, Share2, Bookmark, MoreHorizontal, MoreVertical, ArrowUp, ArrowRight, Users, Radio, CloudSun, CheckCircle, Target, Gift, ChevronUp, ExternalLink, Lock, Globe, Shield, ShieldCheck, UserPlus, UserCheck, Settings, Camera, Eye, EyeOff, X, Bell, ThumbsUp, UserPlus as UserPlusIcon, AtSign, Mail, Send, Image, Smartphone, Trash2, Edit2, Edit3, Award, Zap, TrendingUp, Flame, DollarSign, Route, Video, Play, Maximize2, Minimize2, LogOut, Binoculars, Layers, Tent, BookOpen, Link2, PlusSquare, Disc, Cog, MoveVertical, CircleDashed, Anchor, Tag, Flag, FileText, ZoomIn, ZoomOut, Crop } from "lucide-react";
-import { supabase } from "./supabase-client.js";
+import { supabase, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "./supabase-client.js";
 
 // Hard cap for any file uploaded to Supabase Storage. Free tier enforces
 // a 50 MB ceiling at the storage layer regardless of bucket settings, so we
@@ -5047,6 +5047,117 @@ const formatTime12h = (timeStr) => {
   if (h === 0) h = 12;
   return `${h}:${mins} ${ampm}`;
 };
+
+// ─── PAGE-VIEW ANALYTICS ─────────────────────────────────────────────────
+// Tracks every navigation as a row in public.page_views. Session_id lives
+// in sessionStorage (one per browser tab). Dwell time is patched onto the
+// previous row when the user moves on, or via fetch({keepalive:true}) in
+// a visibilitychange('hidden') handler so we don't lose the final view
+// on tab close.
+//
+// Guests + signed-in users both post — the RLS insert policy is open to
+// anon. Only admin can SELECT.
+const PAGE_VIEW_STATE = { sessionId: null, viewId: null, viewedAt: 0, initialized: false };
+const _getSessionId = () => {
+  try {
+    let sid = sessionStorage.getItem("th_session_id");
+    if (!sid) {
+      sid = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(36).slice(2, 10);
+      sessionStorage.setItem("th_session_id", sid);
+    }
+    return sid;
+  } catch (e) { return "sid_" + Date.now(); }
+};
+const _normalizePath = (path) => {
+  // Strip query + hash so /forum/foo?ref=x and /forum/foo group together.
+  if (!path || typeof path !== "string") return "/";
+  const clean = path.split("?")[0].split("#")[0];
+  return clean || "/";
+};
+const _patchPreviousDwell = (id, viewedAtMs, useKeepalive) => {
+  if (!id || !viewedAtMs) return;
+  const dwellMs = Math.max(0, Date.now() - viewedAtMs);
+  // Skip trivially-short dwell blips (< 250ms) — likely a redirect. Keeps
+  // the avg from being dragged down by transient states.
+  if (dwellMs < 250) return;
+  // Cap at 30 min so a tab left open overnight doesn't skew averages.
+  const capped = Math.min(dwellMs, 30 * 60 * 1000);
+  try {
+    if (useKeepalive) {
+      const url = `${SUPABASE_URL}/rest/v1/page_views?id=eq.${encodeURIComponent(id)}`;
+      fetch(url, {
+        method: "PATCH",
+        keepalive: true,
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": SUPABASE_PUBLISHABLE_KEY,
+          "Authorization": `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ duration_ms: capped }),
+      }).catch(() => {});
+    } else {
+      supabase.from("page_views").update({ duration_ms: capped }).eq("id", id).then(() => {}, () => {});
+    }
+  } catch (e) { /* best-effort */ }
+};
+const trackPageView = async (rawPath) => {
+  try {
+    const path = _normalizePath(rawPath || (typeof window !== "undefined" ? window.location.pathname : "/"));
+    // Patch the previous view's dwell before writing the new one.
+    if (PAGE_VIEW_STATE.viewId) {
+      _patchPreviousDwell(PAGE_VIEW_STATE.viewId, PAGE_VIEW_STATE.viewedAt, false);
+    }
+    const sessionId = PAGE_VIEW_STATE.sessionId || (PAGE_VIEW_STATE.sessionId = _getSessionId());
+    const uid = (typeof supabase !== "undefined" && supabase.auth) ? (await supabase.auth.getSession().catch(() => null))?.data?.session?.user?.id || null : null;
+    const now = Date.now();
+    const { data, error } = await supabase
+      .from("page_views")
+      .insert({ user_id: uid, session_id: sessionId, path })
+      .select("id")
+      .maybeSingle();
+    if (error) { console.warn("[page_views] insert failed", error); return; }
+    if (data && data.id) {
+      PAGE_VIEW_STATE.viewId = data.id;
+      PAGE_VIEW_STATE.viewedAt = now;
+    }
+  } catch (e) { /* best-effort */ }
+};
+// Install once at first import — monkey-patch history so every SPA
+// navigation triggers a pageview, listen to popstate for browser back/
+// forward, and use visibilitychange to send the final-view dwell via
+// fetch keepalive on tab close.
+const initPageViewTracker = () => {
+  if (PAGE_VIEW_STATE.initialized || typeof window === "undefined") return;
+  PAGE_VIEW_STATE.initialized = true;
+  try {
+    const origPush = history.pushState;
+    const origReplace = history.replaceState;
+    history.pushState = function (...args) {
+      const ret = origPush.apply(this, args);
+      // Defer one tick so the URL bar has updated before we read pathname.
+      setTimeout(() => trackPageView(window.location.pathname), 0);
+      return ret;
+    };
+    history.replaceState = function (...args) {
+      const ret = origReplace.apply(this, args);
+      setTimeout(() => trackPageView(window.location.pathname), 0);
+      return ret;
+    };
+    window.addEventListener("popstate", () => trackPageView(window.location.pathname));
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden" && PAGE_VIEW_STATE.viewId) {
+        _patchPreviousDwell(PAGE_VIEW_STATE.viewId, PAGE_VIEW_STATE.viewedAt, true);
+      }
+    });
+    // Initial view — fire once on module init after supabase is ready.
+    trackPageView(window.location.pathname);
+  } catch (e) { console.warn("[page_views] init failed", e); }
+};
+// Kick off after the module finishes evaluating (supabase client above is
+// already initialized). No-op if the browser doesn't support the APIs.
+if (typeof window !== "undefined") {
+  setTimeout(() => { try { initPageViewTracker(); } catch (e) {} }, 100);
+}
 
 const formatPostTime = (t) => {
   if (!t) return "";
@@ -25291,12 +25402,20 @@ function StackedBars({ series, height = 100 }) {
 }
 
 // Stat card — big number + label + optional pulse dot.
-function AdminStatCard({ label, value, pulse, accent }) {
+function AdminStatCard({ label, value, pulse, accent, onClick, expanded }) {
+  const clickable = typeof onClick === "function";
   return (
-    <div style={{ background: T.darkCard, borderRadius: 10, padding: 14, border: `1px solid ${T.charcoal}` }}>
+    <div onClick={clickable ? onClick : undefined}
+         role={clickable ? "button" : undefined}
+         style={{ background: T.darkCard, borderRadius: 10, padding: 14, border: `1px solid ${expanded ? T.copper : T.charcoal}`, cursor: clickable ? "pointer" : "default", position: "relative", transition: "border-color 0.15s" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
         {pulse && <span style={{ width: 8, height: 8, borderRadius: "50%", background: T.green, boxShadow: `0 0 6px ${T.green}` }} />}
         <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600, textTransform: "uppercase" }}>{label}</div>
+        {clickable && (
+          <span style={{ marginLeft: "auto", display: "flex", alignItems: "center" }}>
+            {expanded ? <ChevronUp size={12} color={T.tertiary} /> : <ChevronDown size={12} color={T.tertiary} />}
+          </span>
+        )}
       </div>
       <div style={{ fontFamily: serif, fontSize: 28, color: accent || T.white, fontWeight: 600, lineHeight: 1 }}>
         {value == null ? "—" : (typeof value === "string" ? value : Number(value).toLocaleString())}
@@ -36640,6 +36759,22 @@ function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserNam
   const [pushDeliveryStats, setPushDeliveryStats] = useState(null);
   const [pendingAmbassadors, setPendingAmbassadors] = useState([]);
   const [ambassadorsExpanded, setAmbassadorsExpanded] = useState(false);
+  // Live users list state. Fetched on demand when the admin taps the
+  // Live Now stat card. Threshold matches the heartbeat cadence (~60s)
+  // plus a buffer — anyone whose profiles.last_seen_at is within the
+  // last 3 minutes is considered live.
+  const [liveUsers, setLiveUsers] = useState([]);
+  const [liveNowExpanded, setLiveNowExpanded] = useState(false);
+  const [liveUsersLoading, setLiveUsersLoading] = useState(false);
+  // Page-view analytics. Overview headline stats come back in one row
+  // via admin_get_traffic_overview; per-path breakdown is a separate
+  // fetch that both expand panels share (total-views sorts by views,
+  // avg-session-time sorts by dwell descending client-side).
+  const [trafficOverview, setTrafficOverview] = useState(null);
+  const [trafficByPath, setTrafficByPath] = useState([]);
+  const [trafficByPathLoading, setTrafficByPathLoading] = useState(false);
+  const [totalViewsExpanded, setTotalViewsExpanded] = useState(false);
+  const [avgSessionExpanded, setAvgSessionExpanded] = useState(false);
   const [pushSegment, setPushSegment] = useState("all");
   const [pushRecipientCount, setPushRecipientCount] = useState(null);
   const [pushBody, setPushBody] = useState("");
@@ -36751,6 +36886,46 @@ function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserNam
       const { data } = await supabase.rpc("admin_get_pending_ambassadors", { p_limit: 50 });
       setPendingAmbassadors(data || []);
     } catch (e) { console.error("[admin] pending ambassadors", e); }
+  }, []);
+
+  // Fetch page-view analytics — overview stats + per-path breakdown.
+  // Overview is a single row and drives the two new stat cards;
+  // by-path is fetched on demand when either card expands.
+  const fetchTrafficOverview = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.rpc("admin_get_traffic_overview");
+      if (error) { console.error("[admin] traffic overview", error); return; }
+      const row = Array.isArray(data) ? data[0] : data;
+      setTrafficOverview(row || null);
+    } catch (e) { console.error("[admin] traffic overview threw", e); }
+  }, []);
+  const fetchTrafficByPath = useCallback(async () => {
+    setTrafficByPathLoading(true);
+    try {
+      const { data, error } = await supabase.rpc("admin_get_traffic_by_path", { p_limit: 100 });
+      if (error) { console.error("[admin] traffic by path", error); setTrafficByPath([]); }
+      else setTrafficByPath(data || []);
+    } catch (e) { console.error("[admin] traffic by path threw", e); setTrafficByPath([]); }
+    finally { setTrafficByPathLoading(false); }
+  }, []);
+
+  // Fetch the list of currently-live users. Direct client query — the
+  // profiles SELECT policy is public so no service-role RPC needed. Any
+  // user with last_seen_at inside the 3-minute window is considered live.
+  const fetchLiveUsersList = useCallback(async () => {
+    setLiveUsersLoading(true);
+    try {
+      const cutoff = new Date(Date.now() - 3 * 60 * 1000).toISOString();
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, handle, full_name, avatar_url, last_seen_at, role")
+        .gt("last_seen_at", cutoff)
+        .order("last_seen_at", { ascending: false })
+        .limit(200);
+      if (error) { console.error("[admin] live users", error); setLiveUsers([]); }
+      else setLiveUsers(data || []);
+    } catch (e) { console.error("[admin] live users threw", e); setLiveUsers([]); }
+    finally { setLiveUsersLoading(false); }
   }, []);
 
   const fetchUsersData = useCallback(async () => {
@@ -37650,6 +37825,7 @@ function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserNam
   };
 
   useEffect(() => { fetchOverview(); }, [fetchOverview]);
+  useEffect(() => { fetchTrafficOverview(); }, [fetchTrafficOverview]);
   useEffect(() => { if (tab === "users") fetchUsersData(); }, [tab, fetchUsersData]);
   useEffect(() => { if (tab === "content") fetchContentData(); }, [tab, fetchContentData]);
   useEffect(() => { if (tab === "push") fetchPushData(); }, [tab, fetchPushData]);
@@ -37788,9 +37964,9 @@ function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserNam
   // Overview auto-refresh every 30s so Live Now + Posts Today stay fresh.
   useEffect(() => {
     if (tab !== "overview") return;
-    const iv = setInterval(fetchOverview, 30000);
+    const iv = setInterval(() => { fetchOverview(); fetchTrafficOverview(); }, 30000);
     return () => clearInterval(iv);
-  }, [tab, fetchOverview]);
+  }, [tab, fetchOverview, fetchTrafficOverview]);
 
   // Realtime — push_broadcasts inserts trigger a history refetch (so the
   // join with sender profile lands fully formed).
@@ -37940,7 +38116,13 @@ function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserNam
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <AdminStatCard label="Total Users" value={overview ? overview.total_users : null} />
-              <AdminStatCard label="Live Now" value={overview ? overview.live_now : null} pulse accent={T.green} />
+              <AdminStatCard label="Live Now" value={overview ? overview.live_now : null} pulse accent={T.green}
+                             expanded={liveNowExpanded}
+                             onClick={() => {
+                               const next = !liveNowExpanded;
+                               setLiveNowExpanded(next);
+                               if (next) fetchLiveUsersList();
+                             }} />
               <AdminStatCard label="New Today" value={overview ? overview.new_today : null} accent={T.copper} />
               <AdminStatCard label="Posts Today" value={overview ? overview.posts_today : null} accent={T.copper} />
               <AdminStatCard label="DAU Today" value={overview ? overview.dau_today : null} />
@@ -37949,7 +38131,146 @@ function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserNam
               <AdminStatCard label="Stickiness" value={overview && overview.stickiness_pct != null ? `${Number(overview.stickiness_pct).toFixed(1)}%` : null} accent={T.copper} />
               <AdminStatCard label="Posts Total" value={overview ? overview.posts_total : null} />
               <AdminStatCard label="Pending Ambsdrs" value={overview ? overview.pending_ambassadors : null} accent={overview && overview.pending_ambassadors > 0 ? T.red : T.white} />
+              <AdminStatCard
+                label="Total Page Views"
+                value={trafficOverview ? Number(trafficOverview.total_views || 0) : null}
+                accent={T.copper}
+                expanded={totalViewsExpanded}
+                onClick={() => {
+                  const next = !totalViewsExpanded;
+                  setTotalViewsExpanded(next);
+                  if (next && trafficByPath.length === 0) fetchTrafficByPath();
+                }}
+              />
+              <AdminStatCard
+                label="Avg Session"
+                value={trafficOverview && trafficOverview.avg_session_duration_seconds != null
+                  ? (() => { const s = Math.round(Number(trafficOverview.avg_session_duration_seconds)); const mm = Math.floor(s / 60); const ss = s % 60; return `${mm}m ${String(ss).padStart(2, "0")}s`; })()
+                  : null}
+                accent={T.copper}
+                expanded={avgSessionExpanded}
+                onClick={() => {
+                  const next = !avgSessionExpanded;
+                  setAvgSessionExpanded(next);
+                  if (next && trafficByPath.length === 0) fetchTrafficByPath();
+                }}
+              />
             </div>
+            {/* Live users list — expands under the Live Now stat card
+                when the admin taps it. Renders every user with
+                last_seen_at inside the 3-minute heartbeat window;
+                tapping a row navigates to their profile. */}
+            {liveNowExpanded && (
+              <div style={{ background: T.darkCard, borderRadius: 10, padding: 14, border: `1px solid ${T.charcoal}` }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: T.green, boxShadow: `0 0 6px ${T.green}` }} />
+                  <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600 }}>LIVE NOW · {liveUsers.length}</div>
+                  <button onClick={() => fetchLiveUsersList()} disabled={liveUsersLoading} style={{ marginLeft: "auto", background: "none", border: "none", cursor: liveUsersLoading ? "default" : "pointer", padding: 2, display: "flex", alignItems: "center", opacity: liveUsersLoading ? 0.5 : 1 }} title="Refresh">
+                    <Radio size={12} color={T.tertiary} />
+                  </button>
+                </div>
+                {liveUsersLoading && liveUsers.length === 0 ? (
+                  <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, padding: "8px 0" }}>Loading…</div>
+                ) : liveUsers.length === 0 ? (
+                  <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, padding: "8px 0" }}>Nobody live right now.</div>
+                ) : (
+                  <div style={{ maxHeight: 320, overflowY: "auto" }}>
+                    {liveUsers.map((u, i) => {
+                      const secsAgo = u.last_seen_at ? Math.max(0, Math.floor((Date.now() - new Date(u.last_seen_at).getTime()) / 1000)) : null;
+                      const seenLabel = secsAgo == null ? "" : secsAgo < 60 ? `${secsAgo}s ago` : `${Math.floor(secsAgo / 60)}m ago`;
+                      return (
+                        <button key={u.id} onClick={() => onViewUser && onViewUser(u.handle || u.id)}
+                                style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", width: "100%", background: "none", border: "none", cursor: "pointer", borderBottom: i < liveUsers.length - 1 ? `1px solid ${T.charcoal}` : "none", textAlign: "left" }}>
+                          {u.avatar_url ? <img src={u.avatar_url} alt="" style={{ width: 30, height: 30, borderRadius: "50%", objectFit: "cover" }} /> : <SilhouetteAvatar size={30} />}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.full_name || "—"}</div>
+                            <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>
+                              @{u.handle || "user"}
+                              {u.role && u.role !== "user" && <span style={{ marginLeft: 6, color: u.role === "admin" ? T.red : T.copper, fontWeight: 700 }}>· {u.role.toUpperCase()}</span>}
+                            </div>
+                          </div>
+                          <span style={{ fontFamily: sans, fontSize: 9, color: T.green, fontWeight: 600, letterSpacing: 0.5, flexShrink: 0 }}>{seenLabel}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+            {/* Total Page Views expand — per-URL breakdown sorted by view count. */}
+            {totalViewsExpanded && (() => {
+              const sorted = [...trafficByPath].sort((a, b) => Number(b.views || 0) - Number(a.views || 0));
+              return (
+                <div style={{ background: T.darkCard, borderRadius: 10, padding: 14, border: `1px solid ${T.charcoal}` }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+                    <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600 }}>PAGE VIEWS BY URL · {sorted.length}</div>
+                    <button onClick={fetchTrafficByPath} disabled={trafficByPathLoading} title="Refresh" style={{ marginLeft: "auto", background: "none", border: "none", cursor: trafficByPathLoading ? "default" : "pointer", padding: 2, display: "flex", alignItems: "center", opacity: trafficByPathLoading ? 0.5 : 1 }}>
+                      <Radio size={12} color={T.tertiary} />
+                    </button>
+                  </div>
+                  {trafficByPathLoading && sorted.length === 0 ? (
+                    <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, padding: "8px 0" }}>Loading…</div>
+                  ) : sorted.length === 0 ? (
+                    <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, padding: "8px 0" }}>No page views tracked yet.</div>
+                  ) : (
+                    <div style={{ maxHeight: 380, overflowY: "auto" }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 60px 60px 60px", gap: 6, fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.8, fontWeight: 600, padding: "0 0 6px", borderBottom: `1px solid ${T.charcoal}` }}>
+                        <span>PATH</span>
+                        <span style={{ textAlign: "right" }}>VIEWS</span>
+                        <span style={{ textAlign: "right" }}>SESSIONS</span>
+                        <span style={{ textAlign: "right" }}>USERS</span>
+                      </div>
+                      {sorted.map((row, i) => (
+                        <div key={row.path + i} style={{ display: "grid", gridTemplateColumns: "1fr 60px 60px 60px", gap: 6, padding: "8px 0", borderBottom: i < sorted.length - 1 ? `1px solid ${T.charcoal}40` : "none", alignItems: "center" }}>
+                          <span style={{ fontFamily: sans, fontSize: 11, color: T.white, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={row.path}>{row.path}</span>
+                          <span style={{ fontFamily: sans, fontSize: 12, color: T.copper, fontWeight: 700, textAlign: "right" }}>{Number(row.views || 0).toLocaleString()}</span>
+                          <span style={{ fontFamily: sans, fontSize: 11, color: T.white, textAlign: "right" }}>{Number(row.unique_sessions || 0).toLocaleString()}</span>
+                          <span style={{ fontFamily: sans, fontSize: 11, color: T.white, textAlign: "right" }}>{Number(row.unique_users || 0).toLocaleString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+            {/* Avg Session expand — per-URL average dwell time. */}
+            {avgSessionExpanded && (() => {
+              // Skip rows with 0 dwell (nothing tracked yet) so the top of
+              // the list surfaces meaningful pages, not zero-blip transient
+              // redirects.
+              const sorted = [...trafficByPath].filter(r => Number(r.avg_dwell_seconds || 0) > 0).sort((a, b) => Number(b.avg_dwell_seconds || 0) - Number(a.avg_dwell_seconds || 0));
+              const fmtDwell = (s) => { const sec = Math.round(Number(s) || 0); const mm = Math.floor(sec / 60); const ss = sec % 60; return mm > 0 ? `${mm}m ${String(ss).padStart(2, "0")}s` : `${ss}s`; };
+              return (
+                <div style={{ background: T.darkCard, borderRadius: 10, padding: 14, border: `1px solid ${T.charcoal}` }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+                    <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600 }}>AVG DWELL BY URL · {sorted.length}</div>
+                    <button onClick={fetchTrafficByPath} disabled={trafficByPathLoading} title="Refresh" style={{ marginLeft: "auto", background: "none", border: "none", cursor: trafficByPathLoading ? "default" : "pointer", padding: 2, display: "flex", alignItems: "center", opacity: trafficByPathLoading ? 0.5 : 1 }}>
+                      <Radio size={12} color={T.tertiary} />
+                    </button>
+                  </div>
+                  {trafficByPathLoading && sorted.length === 0 ? (
+                    <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, padding: "8px 0" }}>Loading…</div>
+                  ) : sorted.length === 0 ? (
+                    <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, padding: "8px 0" }}>No dwell data yet — sessions need at least one navigation to record.</div>
+                  ) : (
+                    <div style={{ maxHeight: 380, overflowY: "auto" }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 90px 60px", gap: 6, fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.8, fontWeight: 600, padding: "0 0 6px", borderBottom: `1px solid ${T.charcoal}` }}>
+                        <span>PATH</span>
+                        <span style={{ textAlign: "right" }}>AVG DWELL</span>
+                        <span style={{ textAlign: "right" }}>VIEWS</span>
+                      </div>
+                      {sorted.map((row, i) => (
+                        <div key={row.path + i} style={{ display: "grid", gridTemplateColumns: "1fr 90px 60px", gap: 6, padding: "8px 0", borderBottom: i < sorted.length - 1 ? `1px solid ${T.charcoal}40` : "none", alignItems: "center" }}>
+                          <span style={{ fontFamily: sans, fontSize: 11, color: T.white, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={row.path}>{row.path}</span>
+                          <span style={{ fontFamily: sans, fontSize: 12, color: T.copper, fontWeight: 700, textAlign: "right" }}>{fmtDwell(row.avg_dwell_seconds)}</span>
+                          <span style={{ fontFamily: sans, fontSize: 11, color: T.white, textAlign: "right" }}>{Number(row.views || 0).toLocaleString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
             {/* Pending ambassadors expandable — only render if there are any. */}
             {overview && overview.pending_ambassadors > 0 && (
               <div style={{ background: T.darkCard, borderRadius: 10, padding: 14, border: `1px solid ${T.charcoal}` }}>
