@@ -5153,10 +5153,107 @@ const initPageViewTracker = () => {
     trackPageView(window.location.pathname);
   } catch (e) { console.warn("[page_views] init failed", e); }
 };
+// Stamps the session's inbound source (referrer + UTM) exactly once.
+// PK conflict on session_id silently no-ops when the sessionStorage id
+// is reused across reloads. /r/CODE ambassador links 302 to Shopify
+// server-side and never touch this function.
+const _initSessionSource = async () => {
+  try {
+    const sid = _getSessionId();
+    const params = new URLSearchParams(window.location.search);
+    const utmSource = params.get("utm_source") || null;
+    const utmMedium = params.get("utm_medium") || null;
+    const utmCampaign = params.get("utm_campaign") || null;
+    let referrerDomain = null;
+    if (document.referrer) {
+      try {
+        const u = new URL(document.referrer);
+        // Strip our own domain so self-referrals don't pollute source
+        // attribution (e.g. clicking around within trailhead.lonepeakoverland.com).
+        if (u.hostname && u.hostname !== window.location.hostname) {
+          referrerDomain = u.hostname;
+        }
+      } catch (_) {}
+    }
+    await supabase
+      .from("session_sources")
+      .upsert({
+        session_id: sid,
+        first_path: window.location.pathname || "/",
+        referrer_domain: referrerDomain,
+        utm_source: utmSource,
+        utm_medium: utmMedium,
+        utm_campaign: utmCampaign,
+      }, { onConflict: "session_id", ignoreDuplicates: true });
+  } catch (e) { /* best-effort */ }
+};
+// Called from the root component after a supabase.auth SIGNED_IN event
+// so we can retroactively link the current session's source row to the
+// user who just signed up / signed in. The RLS UPDATE policy only
+// permits linking a still-unlinked row.
+const _linkSessionToUser = async (uid) => {
+  if (!uid) return;
+  try {
+    const sid = _getSessionId();
+    if (!sid) return;
+    await supabase.from("session_sources")
+      .update({ user_id: uid })
+      .eq("session_id", sid)
+      .is("user_id", null);
+  } catch (e) { /* best-effort */ }
+};
+
+// Log a push notification click. Called from two places:
+//   1. The SW postMessage handler in the SPA (warm-tab flow) — receives
+//      notifId + notifType directly from the SW.
+//   2. Module init below — checks the URL for ?ntf=<id>&nt=<type>
+//      (cold-boot flow — SW's openWindow appended these). Strips the
+//      params from the URL bar after logging so they don't leak into
+//      subsequent pageviews or shared links.
+// De-duplicates via a per-session Set so a tap logged via URL doesn't
+// also get logged when the SPA later replays a postMessage.
+const _pushClickSeen = new Set();
+const logPushClick = async ({ notifId, notifType, path }) => {
+  try {
+    if (!notifId && !notifType) return;
+    const key = (notifId || "") + "|" + (notifType || "");
+    if (_pushClickSeen.has(key)) return;
+    _pushClickSeen.add(key);
+    const uid = (typeof supabase !== "undefined" && supabase.auth)
+      ? (await supabase.auth.getSession().catch(() => null))?.data?.session?.user?.id || null
+      : null;
+    await supabase.from("push_clicks").insert({
+      notification_id: notifId || null,
+      notif_type: notifType || null,
+      user_id: uid,
+      path: path || (typeof window !== "undefined" ? window.location.pathname : null),
+    });
+  } catch (e) { /* best-effort */ }
+};
+// Cold-boot: pull tracking params off the URL on module init, log, then
+// strip them so the URL bar reads cleanly and future shares don't leak.
+const _consumePushClickParams = () => {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const notifId = params.get("ntf");
+    const notifType = params.get("nt");
+    if (!notifId && !notifType) return;
+    logPushClick({ notifId, notifType, path: window.location.pathname });
+    params.delete("ntf");
+    params.delete("nt");
+    const qs = params.toString();
+    const newUrl = window.location.pathname + (qs ? ("?" + qs) : "") + window.location.hash;
+    window.history.replaceState(window.history.state, "", newUrl);
+  } catch (e) { /* best-effort */ }
+};
+
 // Kick off after the module finishes evaluating (supabase client above is
 // already initialized). No-op if the browser doesn't support the APIs.
 if (typeof window !== "undefined") {
-  setTimeout(() => { try { initPageViewTracker(); } catch (e) {} }, 100);
+  setTimeout(() => {
+    try { initPageViewTracker(); _initSessionSource(); _consumePushClickParams(); }
+    catch (e) {}
+  }, 100);
 }
 
 const formatPostTime = (t) => {
@@ -36752,11 +36849,35 @@ function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserNam
   const [topCreators, setTopCreators] = useState([]);
   const [engagement, setEngagement] = useState(null);
   const [recentSignups, setRecentSignups] = useState([]);
+  // Retention cohort matrix — long-form rows from admin_get_retention_cohorts.
+  // { cohort_month, cohort_size, month_offset, retained }[]. Client pivots
+  // into a matrix in the render below.
+  const [retentionCohorts, setRetentionCohorts] = useState([]);
+  // Feature adoption funnel — one row per surface with users_count / pct.
+  // { feature, users_count, total_users, pct, sort_order }[].
+  const [featureAdoption, setFeatureAdoption] = useState([]);
+  // Time-to-first-value — single-row headline stats + distribution buckets.
+  const [ttfv, setTtfv] = useState(null);
   const [mostFollowed, setMostFollowed] = useState([]);
   const [trendingPosts, setTrendingPosts] = useState([]);
   const [forumCatActivity, setForumCatActivity] = useState([]);
+  // Content velocity per surface — items + engagement + rate over the
+  // selected date range. Populated by admin_get_content_velocity in
+  // fetchContentData. Client sorts client-side by items DESC (matches
+  // the RPC's default order); a mode toggle below flips to rate DESC.
+  const [contentVelocity, setContentVelocity] = useState([]);
+  const [velocitySort, setVelocitySort] = useState("items"); // "items" | "rate"
+  // Convoy completion funnel — 5-stage narrative of what happens to a
+  // convoy post between creation and actual coordination. Rows come back
+  // pre-sorted by stage order.
+  const [convoyFunnel, setConvoyFunnel] = useState([]);
+  // Bounty funnel by category — long-form (category, stage, count, %).
+  // Client groups by category and renders one 4-stage mini-funnel each.
+  const [bountyFunnel, setBountyFunnel] = useState([]);
   const [recentActivity, setRecentActivity] = useState([]);
   const [pushDeliveryStats, setPushDeliveryStats] = useState(null);
+  // Push CTR by notification type — { notif_type, sends, clicks, ctr_pct }[].
+  const [pushCtr, setPushCtr] = useState([]);
   const [pendingAmbassadors, setPendingAmbassadors] = useState([]);
   const [ambassadorsExpanded, setAmbassadorsExpanded] = useState(false);
   // Live users list state. Fetched on demand when the admin taps the
@@ -36775,6 +36896,16 @@ function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserNam
   const [trafficByPathLoading, setTrafficByPathLoading] = useState(false);
   const [totalViewsExpanded, setTotalViewsExpanded] = useState(false);
   const [avgSessionExpanded, setAvgSessionExpanded] = useState(false);
+  // Traffic source attribution — per-source session counts + signup rate
+  // over the last N days. Fetched alongside the traffic overview so it
+  // benefits from the same 30s auto-refresh.
+  const [trafficSources, setTrafficSources] = useState([]);
+  const [trafficSourcesLoading, setTrafficSourcesLoading] = useState(false);
+  // Geographic activity by state — trip reports grouped by state_code
+  // with per-state trip count + distinct authors + region label.
+  // Populated at the same time as trafficSources.
+  const [activityByState, setActivityByState] = useState([]);
+  const [activityByStateLoading, setActivityByStateLoading] = useState(false);
   const [pushSegment, setPushSegment] = useState("all");
   const [pushRecipientCount, setPushRecipientCount] = useState(null);
   const [pushBody, setPushBody] = useState("");
@@ -36809,6 +36940,10 @@ function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserNam
   const [topEarners, setTopEarners] = useState([]);
   const [pendingJourneys, setPendingJourneys] = useState([]);
   const [topClickers, setTopClickers] = useState([]);
+  // Per-ambassador revenue trend rows (long-form: one per ambassador × month).
+  // Client groups by ambassador_id to render the leaderboard + inline
+  // sparkline. Sorted by total_revenue DESC on the server.
+  const [ambassadorRevenue, setAmbassadorRevenue] = useState([]);
   const [discountAnalyticsLoading, setDiscountAnalyticsLoading] = useState(false);
   // Conflict queue (Phase 1B.5) — multi-ambassador attribution conflicts.
   const [conflictJourneys, setConflictJourneys] = useState([]);
@@ -36908,6 +37043,24 @@ function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserNam
     } catch (e) { console.error("[admin] traffic by path threw", e); setTrafficByPath([]); }
     finally { setTrafficByPathLoading(false); }
   }, []);
+  const fetchTrafficSources = useCallback(async () => {
+    setTrafficSourcesLoading(true);
+    try {
+      const { data, error } = await supabase.rpc("admin_get_traffic_sources", { p_days: 30 });
+      if (error) { console.error("[admin] traffic sources", error); setTrafficSources([]); }
+      else setTrafficSources(data || []);
+    } catch (e) { console.error("[admin] traffic sources threw", e); setTrafficSources([]); }
+    finally { setTrafficSourcesLoading(false); }
+  }, []);
+  const fetchActivityByState = useCallback(async () => {
+    setActivityByStateLoading(true);
+    try {
+      const { data, error } = await supabase.rpc("admin_get_activity_by_state", { p_days: 90 });
+      if (error) { console.error("[admin] activity by state", error); setActivityByState([]); }
+      else setActivityByState(data || []);
+    } catch (e) { console.error("[admin] activity by state threw", e); setActivityByState([]); }
+    finally { setActivityByStateLoading(false); }
+  }, []);
 
   // Fetch the list of currently-live users. Direct client query — the
   // profiles SELECT policy is public so no service-role RPC needed. Any
@@ -36930,57 +37083,71 @@ function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserNam
 
   const fetchUsersData = useCallback(async () => {
     try {
-      const [s, d, r, rs, mf] = await Promise.all([
+      const [s, d, r, rs, mf, rc, fa, tv] = await Promise.all([
         supabase.rpc("admin_get_signups_daily", { p_days: dateRange }),
         supabase.rpc("admin_get_dau_daily", { p_days: dateRange }),
         supabase.rpc("admin_get_role_breakdown"),
         supabase.rpc("admin_get_recent_signups", { p_hours: 24, p_limit: 30 }),
         supabase.rpc("admin_get_most_followed", { p_limit: 10 }),
+        supabase.rpc("admin_get_retention_cohorts", { p_months: 12 }),
+        supabase.rpc("admin_get_feature_adoption"),
+        supabase.rpc("admin_get_time_to_first_value"),
       ]);
-      [s, d, r, rs, mf].forEach((res, i) => {
-        if (res.error) console.error(`[admin] users RPC error (${["signups","dau","roles","recent_signups","most_followed"][i]}):`, res.error);
+      [s, d, r, rs, mf, rc, fa, tv].forEach((res, i) => {
+        if (res.error) console.error(`[admin] users RPC error (${["signups","dau","roles","recent_signups","most_followed","retention_cohorts","feature_adoption","ttfv"][i]}):`, res.error);
       });
       setSignupDaily(s.data || []);
       setDauDaily(d.data || []);
       setRoleBreakdown(r.data || []);
       setRecentSignups(rs.data || []);
       setMostFollowed(mf.data || []);
+      setRetentionCohorts(rc.data || []);
+      setFeatureAdoption(fa.data || []);
+      setTtfv(Array.isArray(tv.data) ? tv.data[0] : (tv.data || null));
     } catch (e) { console.error("[admin] users", e); }
   }, [dateRange]);
 
   const fetchContentData = useCallback(async () => {
     try {
-      const [pbt, tc, eng, tp, fca] = await Promise.all([
+      const [pbt, tc, eng, tp, fca, cv, cf, bf] = await Promise.all([
         supabase.rpc("admin_get_posts_by_type_daily", { p_days: dateRange }),
         supabase.rpc("admin_get_top_creators", { p_limit: 10 }),
         supabase.rpc("admin_get_engagement_totals"),
         supabase.rpc("admin_get_trending_posts", { p_limit: 10 }),
         supabase.rpc("admin_get_forum_category_activity"),
+        supabase.rpc("admin_get_content_velocity", { p_days: dateRange }),
+        supabase.rpc("admin_get_convoy_funnel", { p_days: Math.max(30, dateRange * 3) }),
+        supabase.rpc("admin_get_bounty_funnel", { p_days: Math.max(90, dateRange * 6) }),
       ]);
-      [pbt, tc, eng, tp, fca].forEach((res, i) => {
-        if (res.error) console.error(`[admin] content RPC error (${["posts_by_type","top_creators","engagement","trending","forum_cats"][i]}):`, res.error);
+      [pbt, tc, eng, tp, fca, cv, cf, bf].forEach((res, i) => {
+        if (res.error) console.error(`[admin] content RPC error (${["posts_by_type","top_creators","engagement","trending","forum_cats","content_velocity","convoy_funnel","bounty_funnel"][i]}):`, res.error);
       });
       setPostsByType(pbt.data || []);
       setTopCreators(tc.data || []);
       setEngagement(eng.data && eng.data[0] ? eng.data[0] : null);
       setTrendingPosts(tp.data || []);
       setForumCatActivity(fca.data || []);
+      setContentVelocity(cv.data || []);
+      setConvoyFunnel(cf.data || []);
+      setBountyFunnel(bf.data || []);
     } catch (e) { console.error("[admin] content", e); }
   }, [dateRange]);
 
   const fetchPushData = useCallback(async () => {
     try {
-      const [cnt, hist, deliv] = await Promise.all([
+      const [cnt, hist, deliv, ctr] = await Promise.all([
         supabase.rpc("admin_get_push_recipient_count", { p_segment: pushSegment }),
         supabase.rpc("admin_get_push_history", { p_limit: 50 }),
         supabase.rpc("admin_get_push_delivery_stats"),
+        supabase.rpc("admin_get_push_ctr", { p_days: 30 }),
       ]);
-      [cnt, hist, deliv].forEach((res, i) => {
-        if (res.error) console.error(`[admin] push RPC error (${["recipient_count","history","delivery"][i]}):`, res.error);
+      [cnt, hist, deliv, ctr].forEach((res, i) => {
+        if (res.error) console.error(`[admin] push RPC error (${["recipient_count","history","delivery","ctr"][i]}):`, res.error);
       });
       setPushRecipientCount(typeof cnt.data === "number" ? cnt.data : null);
       setPushHistory(hist.data || []);
       setPushDeliveryStats(deliv.data && deliv.data[0] ? deliv.data[0] : null);
+      setPushCtr(ctr.data || []);
     } catch (e) { console.error("[admin] push", e); }
   }, [pushSegment]);
 
@@ -37159,23 +37326,26 @@ function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserNam
   const fetchDiscountAnalytics = useCallback(async () => {
     setDiscountAnalyticsLoading(true);
     try {
-      const [ovRes, monthRes, topRes, pendRes, clicksRes] = await Promise.all([
+      const [ovRes, monthRes, topRes, pendRes, clicksRes, revRes] = await Promise.all([
         supabase.rpc("admin_ambassador_overview_stats"),
         supabase.rpc("admin_commission_vs_payouts_by_month", { p_months: 6 }),
         supabase.rpc("admin_top_earner_ambassadors", { p_limit: 10 }),
         supabase.rpc("admin_pending_journey_list", { p_limit: 50 }),
         supabase.rpc("admin_top_click_ambassadors", { p_limit: 10 }),
+        supabase.rpc("admin_get_top_ambassador_revenue", { p_limit: 10, p_months: 6 }),
       ]);
       if (ovRes.error) console.error("[admin] discount overview", ovRes.error);
       if (monthRes.error) console.error("[admin] discount by month", monthRes.error);
       if (topRes.error) console.error("[admin] top earners", topRes.error);
       if (pendRes.error) console.error("[admin] pending journeys", pendRes.error);
       if (clicksRes.error) console.error("[admin] top clicks", clicksRes.error);
+      if (revRes.error) console.error("[admin] ambassador revenue", revRes.error);
       setDiscountOverview(Array.isArray(ovRes.data) ? ovRes.data[0] : ovRes.data);
       setDiscountByMonth(monthRes.data || []);
       setTopEarners(topRes.data || []);
       setPendingJourneys(pendRes.data || []);
       setTopClickers(clicksRes.data || []);
+      setAmbassadorRevenue(revRes.data || []);
     } catch (e) { console.error("[admin] discount analytics", e); }
     setDiscountAnalyticsLoading(false);
   }, []);
@@ -37826,6 +37996,8 @@ function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserNam
 
   useEffect(() => { fetchOverview(); }, [fetchOverview]);
   useEffect(() => { fetchTrafficOverview(); }, [fetchTrafficOverview]);
+  useEffect(() => { fetchTrafficSources(); }, [fetchTrafficSources]);
+  useEffect(() => { fetchActivityByState(); }, [fetchActivityByState]);
   useEffect(() => { if (tab === "users") fetchUsersData(); }, [tab, fetchUsersData]);
   useEffect(() => { if (tab === "content") fetchContentData(); }, [tab, fetchContentData]);
   useEffect(() => { if (tab === "push") fetchPushData(); }, [tab, fetchPushData]);
@@ -38271,6 +38443,158 @@ function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserNam
                 </div>
               );
             })()}
+            {/* Traffic source attribution — sessions grouped by inbound
+                source (UTM > referrer domain bucket > Direct) with
+                signup conversion. /r/CODE ambassador clicks are not
+                represented here — they 302 to Shopify server-side and
+                never touch the SPA. */}
+            {(trafficSources || []).length > 0 && (() => {
+              // Collapse rows by source only (medium becomes a per-source
+              // secondary detail line in a future iteration). Sort by
+              // sessions desc.
+              const bySource = {};
+              const order = [];
+              trafficSources.forEach(r => {
+                if (!bySource[r.source]) { bySource[r.source] = { source: r.source, sessions: 0, signups: 0 }; order.push(r.source); }
+                bySource[r.source].sessions += Number(r.sessions || 0);
+                bySource[r.source].signups += Number(r.signups || 0);
+              });
+              const rows = order.map(s => {
+                const row = bySource[s];
+                row.rate = row.sessions > 0 ? Math.round((row.signups / row.sessions) * 1000) / 10 : 0;
+                return row;
+              }).sort((a, b) => b.sessions - a.sessions);
+              const totalSessions = rows.reduce((a, r) => a + r.sessions, 0) || 1;
+              const totalSignups  = rows.reduce((a, r) => a + r.signups, 0);
+              const overallRate = totalSessions > 0 ? Math.round((totalSignups / totalSessions) * 1000) / 10 : 0;
+              return (
+                <div style={{ background: T.darkCard, borderRadius: 10, padding: 14, border: `1px solid ${T.charcoal}` }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                    <TrendingUp size={12} color={T.copper} />
+                    <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600 }}>TRAFFIC SOURCES · LAST 30 DAYS</div>
+                    <button onClick={fetchTrafficSources} disabled={trafficSourcesLoading} title="Refresh" style={{ marginLeft: "auto", background: "none", border: "none", cursor: trafficSourcesLoading ? "default" : "pointer", padding: 2, display: "flex", alignItems: "center", opacity: trafficSourcesLoading ? 0.5 : 1 }}>
+                      <Radio size={12} color={T.tertiary} />
+                    </button>
+                  </div>
+                  <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginBottom: 10, lineHeight: 1.4 }}>
+                    {totalSessions.toLocaleString()} sessions · {totalSignups.toLocaleString()} signups · overall <span style={{ color: T.copper, fontWeight: 700 }}>{overallRate}%</span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 60px 60px 60px", gap: 6, fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.8, fontWeight: 600, padding: "0 0 6px", borderBottom: `1px solid ${T.charcoal}` }}>
+                    <span>SOURCE</span>
+                    <span style={{ textAlign: "right" }}>SESSIONS</span>
+                    <span style={{ textAlign: "right" }}>SIGNUPS</span>
+                    <span style={{ textAlign: "right" }}>RATE</span>
+                  </div>
+                  {rows.map((r, i) => {
+                    const shareOfTraffic = (r.sessions / totalSessions) * 100;
+                    return (
+                      <div key={r.source} style={{ display: "grid", gridTemplateColumns: "1fr 60px 60px 60px", gap: 6, padding: "8px 0", borderBottom: i < rows.length - 1 ? `1px solid ${T.charcoal}40` : "none", alignItems: "center" }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.source}>{r.source}</div>
+                          <div style={{ position: "relative", height: 3, background: T.charcoal, borderRadius: 2, marginTop: 3, overflow: "hidden" }}>
+                            <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${Math.max(1, shareOfTraffic)}%`, background: T.copper, borderRadius: 2 }} />
+                          </div>
+                        </div>
+                        <span style={{ fontFamily: sans, fontSize: 11, color: T.white, textAlign: "right", fontWeight: 600 }}>{r.sessions.toLocaleString()}</span>
+                        <span style={{ fontFamily: sans, fontSize: 11, color: r.signups > 0 ? T.green : T.tertiary, textAlign: "right", fontWeight: 600 }}>{r.signups.toLocaleString()}</span>
+                        <span style={{ fontFamily: sans, fontSize: 11, color: r.rate >= overallRate ? T.green : r.rate > 0 ? T.copper : T.tertiary, textAlign: "right", fontWeight: 700 }}>{r.rate}%</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+            {/* Trip activity by state — top states + region rollup.
+                Trip reports carry the only reliably-populated location
+                column (state_code via Mapbox reverse-geocode on publish).
+                Signups + camping spots don't have state directly and are
+                excluded from this view for now. */}
+            {(activityByState || []).length > 0 && (() => {
+              const rows = activityByState;
+              const totalTrips = rows.reduce((a, r) => a + Number(r.trip_count || 0), 0);
+              const maxTrips = rows.reduce((m, r) => Math.max(m, Number(r.trip_count || 0)), 0) || 1;
+              // Region rollup client-side. Same states can carry different
+              // regions per row (see the mode() aggregate in the RPC).
+              const byRegion = {};
+              const regionOrder = [];
+              rows.forEach(r => {
+                const key = r.region || "Unknown";
+                if (!byRegion[key]) { byRegion[key] = { region: key, trip_count: 0, states: 0 }; regionOrder.push(key); }
+                byRegion[key].trip_count += Number(r.trip_count || 0);
+                byRegion[key].states += 1;
+              });
+              const regionRows = regionOrder.map(k => byRegion[k]).sort((a, b) => b.trip_count - a.trip_count);
+              // Cap the state list at 20 rows visually. Long tail rolls
+              // into an implicit "Other" bar so the top of the list stays
+              // focused on where the community is actually most active.
+              const shownStates = rows.slice(0, 20);
+              const hiddenTail = rows.slice(20).reduce((a, r) => a + Number(r.trip_count || 0), 0);
+              return (
+                <div style={{ background: T.darkCard, borderRadius: 10, padding: 14, border: `1px solid ${T.charcoal}` }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                    <MapPin size={12} color={T.copper} />
+                    <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600 }}>TRIP ACTIVITY BY STATE · LAST 90 DAYS</div>
+                    <button onClick={fetchActivityByState} disabled={activityByStateLoading} title="Refresh" style={{ marginLeft: "auto", background: "none", border: "none", cursor: activityByStateLoading ? "default" : "pointer", padding: 2, display: "flex", alignItems: "center", opacity: activityByStateLoading ? 0.5 : 1 }}>
+                      <Radio size={12} color={T.tertiary} />
+                    </button>
+                  </div>
+                  <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginBottom: 10, lineHeight: 1.4 }}>
+                    <span style={{ color: T.copper, fontWeight: 700 }}>{totalTrips.toLocaleString()}</span> published trip reports across <span style={{ color: T.white, fontWeight: 600 }}>{rows.length}</span> states.
+                  </div>
+                  {/* State list */}
+                  <div style={{ display: "grid", gridTemplateColumns: "50px 1fr 55px 55px", gap: 6, fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.8, fontWeight: 600, padding: "0 0 6px", borderBottom: `1px solid ${T.charcoal}` }}>
+                    <span>STATE</span>
+                    <span>REGION</span>
+                    <span style={{ textAlign: "right" }}>TRIPS</span>
+                    <span style={{ textAlign: "right" }}>USERS</span>
+                  </div>
+                  {shownStates.map((r, i) => {
+                    const cnt = Number(r.trip_count) || 0;
+                    const usr = Number(r.distinct_users) || 0;
+                    const width = Math.max(2, (cnt / maxTrips) * 100);
+                    return (
+                      <div key={r.state_code + i} style={{ display: "grid", gridTemplateColumns: "50px 1fr 55px 55px", gap: 6, padding: "8px 0", borderBottom: i < shownStates.length - 1 || hiddenTail > 0 ? `1px solid ${T.charcoal}40` : "none", alignItems: "center" }}>
+                        <span style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700, letterSpacing: 0.6 }}>{r.state_code}</span>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.region || "—"}</div>
+                          <div style={{ position: "relative", height: 3, background: T.charcoal, borderRadius: 2, marginTop: 3, overflow: "hidden" }}>
+                            <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${width}%`, background: T.copper, borderRadius: 2 }} />
+                          </div>
+                        </div>
+                        <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, textAlign: "right", fontWeight: 700 }}>{cnt.toLocaleString()}</span>
+                        <span style={{ fontFamily: sans, fontSize: 11, color: T.white, textAlign: "right", fontWeight: 600 }}>{usr.toLocaleString()}</span>
+                      </div>
+                    );
+                  })}
+                  {hiddenTail > 0 && (
+                    <div style={{ padding: "8px 0", fontFamily: sans, fontSize: 10, color: T.tertiary, fontStyle: "italic" }}>
+                      + {rows.length - 20} more states · {hiddenTail.toLocaleString()} trips
+                    </div>
+                  )}
+                  {/* Region rollup */}
+                  {regionRows.length > 1 && (
+                    <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${T.charcoal}` }}>
+                      <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600, marginBottom: 8 }}>BY REGION</div>
+                      {regionRows.map((r, i) => {
+                        const share = totalTrips > 0 ? (r.trip_count / totalTrips) * 100 : 0;
+                        return (
+                          <div key={r.region} style={{ display: "grid", gridTemplateColumns: "1fr 55px 55px", gap: 6, padding: "6px 0", alignItems: "center", borderBottom: i < regionRows.length - 1 ? `1px solid ${T.charcoal}20` : "none" }}>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.region}</div>
+                              <div style={{ position: "relative", height: 3, background: T.charcoal, borderRadius: 2, marginTop: 3, overflow: "hidden" }}>
+                                <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${Math.max(1, share)}%`, background: T.green, borderRadius: 2 }} />
+                              </div>
+                            </div>
+                            <span style={{ fontFamily: sans, fontSize: 11, color: T.green, textAlign: "right", fontWeight: 700 }}>{r.trip_count.toLocaleString()}</span>
+                            <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, textAlign: "right" }}>{r.states} state{r.states === 1 ? "" : "s"}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
             {/* Pending ambassadors expandable — only render if there are any. */}
             {overview && overview.pending_ambassadors > 0 && (
               <div style={{ background: T.darkCard, borderRadius: 10, padding: 14, border: `1px solid ${T.charcoal}` }}>
@@ -38360,6 +38684,193 @@ function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserNam
                 </button>
               ))}
             </>)}
+            {/* Time-to-first-value — median seconds from signup to first
+                meaningful action + activation rate + distribution
+                buckets. Only counts users who signed up 7+ days ago so
+                users still in their "grace window" don't skew the rate. */}
+            {ttfv && Number(ttfv.total_candidates || 0) > 0 && sectionCard((() => {
+              const fmtDuration = (secs) => {
+                const s = Math.round(Number(secs) || 0);
+                if (s < 60) return `${s}s`;
+                if (s < 3600) return `${Math.round(s / 60)}m`;
+                if (s < 86400) { const h = Math.floor(s / 3600); const m = Math.round((s % 3600) / 60); return m > 0 ? `${h}h ${m}m` : `${h}h`; }
+                if (s < 604800) return `${Math.round(s / 86400)}d`;
+                if (s < 2592000) return `${Math.round(s / 604800)}w`;
+                return `${Math.round(s / 2592000)}mo`;
+              };
+              const activationRate = Number(ttfv.activation_rate_pct) || 0;
+              const total = Number(ttfv.total_candidates) || 0;
+              const activated = Number(ttfv.activated) || 0;
+              const buckets = [
+                { label: "≤ 1 hour",  pct: Number(ttfv.under_1h_pct)  || 0, accent: T.green },
+                { label: "≤ 1 day",   pct: Number(ttfv.under_1d_pct)  || 0, accent: T.green },
+                { label: "≤ 7 days",  pct: Number(ttfv.under_7d_pct)  || 0, accent: T.copper },
+                { label: "≤ 30 days", pct: Number(ttfv.under_30d_pct) || 0, accent: T.copper },
+              ];
+              return (
+                <>
+                  {sectionTitle("TIME TO FIRST VALUE")}
+                  <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginBottom: 12, lineHeight: 1.4 }}>
+                    Median time from signup → first meaningful action. Excludes users signed up in the last 7 days (grace window).
+                  </div>
+                  {/* Headline row: median (big) + p25/p75 + activation rate */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 12, marginBottom: 14 }}>
+                    <div style={{ background: T.darkBg, borderRadius: 8, padding: 12, border: `1px solid ${T.charcoal}` }}>
+                      <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600, marginBottom: 4 }}>MEDIAN TTFV</div>
+                      <div style={{ fontFamily: serif, fontSize: 26, color: T.copper, fontWeight: 700, lineHeight: 1 }}>{fmtDuration(ttfv.median_seconds)}</div>
+                      <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, marginTop: 6, letterSpacing: 0.4 }}>
+                        p25 <span style={{ color: T.white, fontWeight: 600 }}>{fmtDuration(ttfv.p25_seconds)}</span> · p75 <span style={{ color: T.white, fontWeight: 600 }}>{fmtDuration(ttfv.p75_seconds)}</span>
+                      </div>
+                    </div>
+                    <div style={{ background: T.darkBg, borderRadius: 8, padding: 12, border: `1px solid ${T.charcoal}` }}>
+                      <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600, marginBottom: 4 }}>ACTIVATION</div>
+                      <div style={{ fontFamily: serif, fontSize: 26, color: activationRate >= 50 ? T.green : T.copper, fontWeight: 700, lineHeight: 1 }}>{activationRate}%</div>
+                      <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, marginTop: 6, letterSpacing: 0.4 }}>
+                        <span style={{ color: T.white, fontWeight: 600 }}>{activated.toLocaleString()}</span> of <span style={{ color: T.white, fontWeight: 600 }}>{total.toLocaleString()}</span> reached first value
+                      </div>
+                    </div>
+                  </div>
+                  {/* Cumulative distribution — each bucket = % of ACTIVATED
+                      users who got there in that window. Bars are cumulative
+                      (≤1d includes ≤1h; ≤7d includes ≤1d) so widths only grow. */}
+                  <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600, marginBottom: 6 }}>OF ACTIVATED USERS, HOW FAST?</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {buckets.map(b => (
+                      <div key={b.label}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                          <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>{b.label}</span>
+                          <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700 }}>{b.pct}%</span>
+                        </div>
+                        <div style={{ position: "relative", height: 6, background: T.charcoal, borderRadius: 3, overflow: "hidden" }}>
+                          <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${Math.max(1, Math.min(100, b.pct))}%`, background: b.accent, borderRadius: 3, transition: "width 0.3s ease" }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              );
+            })())}
+            {/* Retention cohort matrix — signup cohort × months-since-signup.
+                Cell = % of that cohort still active in that month. Active
+                = wrote points_log row OR sent a DM. Uses the last 12
+                cohort months by default; server can extend via arg. */}
+            {(retentionCohorts || []).length > 0 && sectionCard((() => {
+              // Pivot long-form rows into { cohortDate → { size, offsets: {n → retained} } }
+              const byCohort = {};
+              (retentionCohorts || []).forEach(r => {
+                const key = r.cohort_month;
+                if (!byCohort[key]) byCohort[key] = { size: Number(r.cohort_size || 0), offsets: {} };
+                byCohort[key].offsets[r.month_offset] = Number(r.retained || 0);
+              });
+              // Cohorts sorted newest-first (most actionable at top).
+              const cohortRows = Object.keys(byCohort).sort((a, b) => b.localeCompare(a));
+              // Max offset across all cohorts drives column count.
+              let maxOffset = 0;
+              cohortRows.forEach(k => Object.keys(byCohort[k].offsets).forEach(o => { if (Number(o) > maxOffset) maxOffset = Number(o); }));
+              const cols = Array.from({ length: maxOffset + 1 }, (_, i) => i);
+              // Color gradient: green (>=50%) → copper (>=25%) → red-dim (<25%).
+              const cellColor = (pct) => {
+                if (pct == null) return T.charcoal;
+                if (pct >= 50) return `${T.green}${pct >= 75 ? "40" : "28"}`;
+                if (pct >= 25) return `${T.copper}${pct >= 40 ? "35" : "20"}`;
+                return `${T.red}18`;
+              };
+              const fmtCohort = (iso) => {
+                const d = new Date(iso + "T00:00:00");
+                if (isNaN(d.getTime())) return iso;
+                return d.toLocaleDateString(undefined, { month: "short", year: "2-digit" });
+              };
+              return (
+                <>
+                  {sectionTitle(`RETENTION · SIGNUP COHORTS × MONTHS SINCE`)}
+                  <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginBottom: 10, lineHeight: 1.4 }}>
+                    Cell = % of that month's signups active in month N. "Active" = any awarded action + DMs sent.
+                  </div>
+                  <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+                    <table style={{ borderCollapse: "separate", borderSpacing: 2, fontFamily: sans, fontSize: 10, minWidth: "100%" }}>
+                      <thead>
+                        <tr>
+                          <th style={{ textAlign: "left", padding: "6px 8px", color: T.tertiary, fontWeight: 600, letterSpacing: 0.8, minWidth: 74 }}>COHORT</th>
+                          <th style={{ textAlign: "right", padding: "6px 8px", color: T.tertiary, fontWeight: 600, letterSpacing: 0.8 }}>SIZE</th>
+                          {cols.map(n => (
+                            <th key={n} style={{ padding: "6px 6px", color: T.tertiary, fontWeight: 600, letterSpacing: 0.8, textAlign: "center", minWidth: 40 }}>M{n}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {cohortRows.map(k => {
+                          const row = byCohort[k];
+                          return (
+                            <tr key={k}>
+                              <td style={{ padding: "6px 8px", color: T.white, fontWeight: 600, whiteSpace: "nowrap" }}>{fmtCohort(k)}</td>
+                              <td style={{ padding: "6px 8px", color: T.copper, textAlign: "right", fontWeight: 600 }}>{row.size}</td>
+                              {cols.map(n => {
+                                const retained = row.offsets[n];
+                                const pct = row.size > 0 && retained != null ? Math.round((retained / row.size) * 100) : null;
+                                const empty = pct == null;
+                                return (
+                                  <td key={n} title={empty ? "" : `${retained}/${row.size} retained`}
+                                      style={{ padding: "6px 6px", background: cellColor(pct), color: empty ? T.tertiary : T.white, textAlign: "center", fontWeight: 700, borderRadius: 3, minWidth: 40 }}>
+                                    {empty ? "" : `${pct}%`}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              );
+            })())}
+            {/* Feature adoption funnel — of all signed-up users, what %
+                have ever done each meaningful action. Bars sorted by
+                adoption % descending so the low-adoption features drop
+                to the bottom where the "cold surface" signal is obvious. */}
+            {(featureAdoption || []).length > 0 && sectionCard((() => {
+              const rows = [...featureAdoption].sort((a, b) => Number(b.pct || 0) - Number(a.pct || 0));
+              const totalUsers = Number((rows[0] && rows[0].total_users) || 0);
+              // Bar color scales with adoption — green (high), copper
+              // (medium), red-dim (low). Same palette as the cohort matrix
+              // for visual consistency across the two lifecycle sections.
+              const barColor = (pct) => {
+                const p = Number(pct) || 0;
+                if (p >= 50) return T.green;
+                if (p >= 25) return T.copper;
+                if (p >= 10) return `${T.copper}80`;
+                return `${T.red}90`;
+              };
+              return (
+                <>
+                  {sectionTitle(`FEATURE ADOPTION · ${totalUsers.toLocaleString()} USERS`)}
+                  <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginBottom: 12, lineHeight: 1.4 }}>
+                    Distinct users who've ever performed each action. Cold surfaces settle at the bottom.
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {rows.map(r => {
+                      const pct = Number(r.pct) || 0;
+                      const count = Number(r.users_count) || 0;
+                      const width = Math.max(1, Math.min(100, pct)); // ensure a sliver of bar even at ~0%
+                      return (
+                        <div key={r.feature}>
+                          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, marginBottom: 3 }}>
+                            <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>{r.feature}</span>
+                            <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, whiteSpace: "nowrap" }}>
+                              <span style={{ color: T.copper, fontWeight: 700 }}>{count.toLocaleString()}</span>
+                              <span> · {pct}%</span>
+                            </span>
+                          </div>
+                          <div style={{ position: "relative", height: 6, background: T.charcoal, borderRadius: 3, overflow: "hidden" }}>
+                            <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${width}%`, background: barColor(pct), borderRadius: 3, transition: "width 0.3s ease" }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              );
+            })())}
             {/* Most-followed users. */}
             {(mostFollowed || []).length > 0 && sectionCard(<>
               {sectionTitle("MOST FOLLOWED")}
@@ -38428,6 +38939,201 @@ function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserNam
                 ))}
               </div>
             </>)}
+            {/* Content velocity per surface — items created + engagement
+                received + engagement rate over the same window. Sortable
+                between items DESC (busiest surface) and rate DESC
+                (most engagement-per-item — flags "cold vs hot" surfaces). */}
+            {(contentVelocity || []).length > 0 && sectionCard((() => {
+              const rows = [...contentVelocity].sort((a, b) => {
+                if (velocitySort === "rate") return Number(b.rate || 0) - Number(a.rate || 0);
+                return Number(b.items || 0) - Number(a.items || 0);
+              });
+              // Bar scale: max value across the sorted column so bars are
+              // comparable within the same view.
+              const maxVal = rows.reduce((m, r) => Math.max(m, Number(velocitySort === "rate" ? r.rate : r.items) || 0), 0) || 1;
+              const rateColor = (rate, items) => {
+                // Zero items → grey (dormant). Low rate on non-zero items
+                // → red (published but ignored). Medium → copper. High → green.
+                if (Number(items || 0) === 0) return T.tertiary;
+                const r = Number(rate) || 0;
+                if (r >= 2) return T.green;
+                if (r >= 0.5) return T.copper;
+                return `${T.red}CC`;
+              };
+              return (
+                <>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                    <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600 }}>CONTENT VELOCITY — {rangeLabel}</div>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      {["items", "rate"].map(m => {
+                        const sel = velocitySort === m;
+                        return (
+                          <button key={m} onClick={() => setVelocitySort(m)}
+                                  style={{ padding: "3px 8px", borderRadius: 4, background: sel ? T.copper : "transparent", border: `1px solid ${sel ? T.copper : T.charcoal}`, color: sel ? T.darkBg : T.tertiary, fontFamily: sans, fontSize: 8, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer", textTransform: "uppercase" }}>
+                            {m === "items" ? "BY VOLUME" : "BY RATE"}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginBottom: 10, lineHeight: 1.4 }}>
+                    Items = created in window. Engagement = likes + comments + RSVPs received. Rate = engagement per item.
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {rows.map(r => {
+                      const items = Number(r.items) || 0;
+                      const engagement = Number(r.engagement) || 0;
+                      const rate = Number(r.rate) || 0;
+                      const barValue = velocitySort === "rate" ? rate : items;
+                      const width = Math.max(1, Math.min(100, (barValue / maxVal) * 100));
+                      return (
+                        <div key={r.surface}>
+                          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, marginBottom: 3 }}>
+                            <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>{r.surface}</span>
+                            <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, whiteSpace: "nowrap" }}>
+                              <span style={{ color: T.copper, fontWeight: 700 }}>{items.toLocaleString()}</span>
+                              <span> items · </span>
+                              <span style={{ color: T.white, fontWeight: 600 }}>{engagement.toLocaleString()}</span>
+                              <span> eng · </span>
+                              <span style={{ color: rateColor(rate, items), fontWeight: 700 }}>{rate.toFixed(2)}/item</span>
+                            </span>
+                          </div>
+                          <div style={{ position: "relative", height: 6, background: T.charcoal, borderRadius: 3, overflow: "hidden" }}>
+                            <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${width}%`, background: rateColor(rate, items), borderRadius: 3, transition: "width 0.3s ease" }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              );
+            })())}
+            {/* Convoy completion funnel — 5-stage narrative from post to
+                actual coordination in the group DM. Window is deliberately
+                wider than the surrounding date-range picker (see fetch)
+                so convoys have time to complete their event date. */}
+            {(convoyFunnel || []).length > 0 && sectionCard((() => {
+              const rows = convoyFunnel;
+              const total = rows[0] ? Number(rows[0].convoys) || 0 : 0;
+              const stageColor = (idx) => {
+                // Progressive darkening: green tier at top → red at bottom
+                // matches the "loss down the funnel" narrative.
+                if (idx === 0) return T.green;
+                if (idx === 1) return `${T.green}D0`;
+                if (idx === 2) return T.copper;
+                if (idx === 3) return `${T.copper}D0`;
+                return `${T.red}D0`;
+              };
+              return (
+                <>
+                  {sectionTitle(`CONVOY FUNNEL · LAST ${Math.max(30, dateRange * 3)} DAYS · ${total} POSTED`)}
+                  <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginBottom: 12, lineHeight: 1.4 }}>
+                    From post → coordination. Drop-off between stages surfaces where convoys ghost.
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {rows.map((r, i) => {
+                      const cnt = Number(r.convoys) || 0;
+                      const pctTotal = Number(r.pct_of_total) || 0;
+                      const dropOff = Number(r.drop_off_pct) || 0;
+                      const width = Math.max(2, Math.min(100, pctTotal));
+                      return (
+                        <div key={r.stage}>
+                          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, marginBottom: 3 }}>
+                            <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>{i + 1}. {r.stage}</span>
+                            <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, whiteSpace: "nowrap" }}>
+                              <span style={{ color: T.copper, fontWeight: 700 }}>{cnt}</span>
+                              <span> · {pctTotal}%</span>
+                              {i > 0 && dropOff > 0 && (
+                                <span style={{ color: `${T.red}CC`, marginLeft: 6, fontWeight: 600 }}>↓ {dropOff}%</span>
+                              )}
+                            </span>
+                          </div>
+                          <div style={{ position: "relative", height: 8, background: T.charcoal, borderRadius: 3, overflow: "hidden" }}>
+                            <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${width}%`, background: stageColor(i), borderRadius: 3, transition: "width 0.3s ease" }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              );
+            })())}
+            {/* Bounty funnel by category — long-form rows grouped
+                client-side. Draws one 4-stage mini-funnel per category
+                so admin can see which categories convert cash and which
+                get claimed but never delivered. */}
+            {(bountyFunnel || []).length > 0 && sectionCard((() => {
+              // Group long-form → { category → { stage: row, ... } }
+              const byCat = {};
+              const catOrder = [];
+              (bountyFunnel || []).forEach(r => {
+                if (!byCat[r.category]) { byCat[r.category] = { rows: [], claimed: 0 }; catOrder.push(r.category); }
+                byCat[r.category].rows.push(r);
+                if (r.stage === "Claimed") byCat[r.category].claimed = Number(r.submissions) || 0;
+              });
+              // Category color palette — recycles the app tokens.
+              const catAccent = (i) => {
+                const palette = [T.copper, T.green, T.red, T.purple, `${T.copper}90`, `${T.green}90`];
+                return palette[i % palette.length];
+              };
+              const stageColor = (i, base) => {
+                if (i === 0) return base;
+                if (i === 1) return `${base}D0`;
+                if (i === 2) return `${T.copper}D0`;
+                return `${T.red}D0`;
+              };
+              return (
+                <>
+                  {sectionTitle(`BOUNTY FUNNEL BY CATEGORY · LAST ${Math.max(90, dateRange * 6)} DAYS`)}
+                  <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginBottom: 12, lineHeight: 1.4 }}>
+                    Claimed → Submitted → Approved → Paid. Categories with zero paid conversions surface fast here.
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                    {catOrder.map((cat, ci) => {
+                      const rows = byCat[cat].rows.sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0));
+                      const claimed = byCat[cat].claimed;
+                      const accent = catAccent(ci);
+                      return (
+                        <div key={cat} style={{ background: T.darkBg, borderRadius: 8, padding: 12, border: `1px solid ${T.charcoal}` }}>
+                          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
+                            <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 700, letterSpacing: 0.4 }}>{cat}</span>
+                            <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>
+                              <span style={{ color: accent, fontWeight: 700 }}>{claimed}</span>
+                              <span> claimed</span>
+                            </span>
+                          </div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                            {rows.map((r, i) => {
+                              const cnt = Number(r.submissions) || 0;
+                              const pct = Number(r.pct_of_total) || 0;
+                              const drop = Number(r.drop_off_pct) || 0;
+                              const width = Math.max(2, Math.min(100, pct));
+                              return (
+                                <div key={r.stage}>
+                                  <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, marginBottom: 2 }}>
+                                    <span style={{ fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 600 }}>{i + 1}. {r.stage}</span>
+                                    <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, whiteSpace: "nowrap" }}>
+                                      <span style={{ color: accent, fontWeight: 700 }}>{cnt}</span>
+                                      <span> · {pct}%</span>
+                                      {i > 0 && drop > 0 && (
+                                        <span style={{ color: `${T.red}CC`, marginLeft: 5, fontWeight: 600 }}>↓ {drop}%</span>
+                                      )}
+                                    </span>
+                                  </div>
+                                  <div style={{ position: "relative", height: 5, background: T.charcoal, borderRadius: 2, overflow: "hidden" }}>
+                                    <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${width}%`, background: stageColor(i, accent), borderRadius: 2, transition: "width 0.3s ease" }} />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              );
+            })())}
             {(topCreators || []).length > 0 && sectionCard(<>
               {sectionTitle("TOP CREATORS")}
               {topCreators.map((c, i) => (
@@ -38562,6 +39268,53 @@ function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserNam
                 </div>
               )}
             </>)}
+            {/* CTR by notification type — sends from `notifications`,
+                clicks from `push_clicks`, ratio computed server-side.
+                Bar tinted green (above overall CTR) → copper → red-dim so
+                low-performing types read as "not worth sending." */}
+            {(pushCtr || []).length > 0 && sectionCard((() => {
+              const rows = [...pushCtr].sort((a, b) => Number(b.sends || 0) - Number(a.sends || 0));
+              const totalSends = rows.reduce((a, r) => a + Number(r.sends || 0), 0);
+              const totalClicks = rows.reduce((a, r) => a + Number(r.clicks || 0), 0);
+              const overall = totalSends > 0 ? Math.round((totalClicks / totalSends) * 1000) / 10 : 0;
+              const rateColor = (rate) => {
+                const r = Number(rate) || 0;
+                if (totalSends === 0) return T.tertiary;
+                if (r >= overall && r > 0) return T.green;
+                if (r > 0) return T.copper;
+                return `${T.red}90`;
+              };
+              return (
+                <>
+                  {sectionTitle(`CTR BY TYPE · LAST 30 DAYS`)}
+                  <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginBottom: 10, lineHeight: 1.4 }}>
+                    {totalSends.toLocaleString()} sends · {totalClicks.toLocaleString()} clicks · overall <span style={{ color: T.copper, fontWeight: 700 }}>{overall}%</span>. Types below overall are candidates to mute.
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 60px 60px 60px", gap: 6, fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.8, fontWeight: 600, padding: "0 0 6px", borderBottom: `1px solid ${T.charcoal}` }}>
+                    <span>TYPE</span>
+                    <span style={{ textAlign: "right" }}>SENDS</span>
+                    <span style={{ textAlign: "right" }}>CLICKS</span>
+                    <span style={{ textAlign: "right" }}>CTR</span>
+                  </div>
+                  {rows.map((r, i) => {
+                    const rate = Number(r.ctr_pct) || 0;
+                    return (
+                      <div key={r.notif_type} style={{ display: "grid", gridTemplateColumns: "1fr 60px 60px 60px", gap: 6, padding: "8px 0", borderBottom: i < rows.length - 1 ? `1px solid ${T.charcoal}40` : "none", alignItems: "center" }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: 0.4 }}>{r.notif_type}</div>
+                          <div style={{ position: "relative", height: 3, background: T.charcoal, borderRadius: 2, marginTop: 3, overflow: "hidden" }}>
+                            <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${Math.max(1, Math.min(100, rate))}%`, background: rateColor(rate), borderRadius: 2 }} />
+                          </div>
+                        </div>
+                        <span style={{ fontFamily: sans, fontSize: 11, color: T.white, textAlign: "right", fontWeight: 600 }}>{Number(r.sends || 0).toLocaleString()}</span>
+                        <span style={{ fontFamily: sans, fontSize: 11, color: r.clicks > 0 ? T.green : T.tertiary, textAlign: "right", fontWeight: 600 }}>{Number(r.clicks || 0).toLocaleString()}</span>
+                        <span style={{ fontFamily: sans, fontSize: 11, color: rateColor(rate), textAlign: "right", fontWeight: 700 }}>{rate}%</span>
+                      </div>
+                    );
+                  })}
+                </>
+              );
+            })())}
             {(pushHistory || []).length > 0 && sectionCard(<>
               {sectionTitle("HISTORY")}
               {pushHistory.map((h, i) => (
@@ -39346,6 +40099,29 @@ function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserNam
               const filteredTopEarners    = (topEarners    || []).filter(a => matchesTierFilter(a.ambassador_id));
               const filteredTopClickers   = (topClickers   || []).filter(a => matchesTierFilter(a.ambassador_id));
               const filteredPendingJourneys = (pendingJourneys || []).filter(j => matchesTierFilter(j.ambassador_id));
+              // Group ambassador revenue long-form rows by ambassador_id →
+              // { id, meta, months: [{month, revenue, orders}], total, orders }
+              const revenueByAmb = {};
+              const revenueOrder = [];
+              (ambassadorRevenue || []).filter(r => matchesTierFilter(r.ambassador_id)).forEach(r => {
+                if (!revenueByAmb[r.ambassador_id]) {
+                  revenueByAmb[r.ambassador_id] = {
+                    id: r.ambassador_id,
+                    handle: r.handle, full_name: r.full_name, avatar_url: r.avatar_url,
+                    base_code: r.base_code, tier: r.tier,
+                    total: Number(r.total_revenue || 0),
+                    total_orders: Number(r.total_orders || 0),
+                    months: [],
+                  };
+                  revenueOrder.push(r.ambassador_id);
+                }
+                revenueByAmb[r.ambassador_id].months.push({
+                  month: r.month,
+                  revenue: Number(r.monthly_revenue || 0),
+                  orders: Number(r.monthly_orders || 0),
+                });
+              });
+              const revenueLeaderboard = revenueOrder.map(id => revenueByAmb[id]);
               return (
                 <>
                   {discountAnalyticsLoading && !discountOverview && (
@@ -39432,6 +40208,80 @@ function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserNam
                       </button>
                     ))}
                   </div>
+
+                  {/* Top ambassadors by TOTAL REVENUE DRIVEN (not their
+                      commission cut). Ranks by top-line brand contribution
+                      — the metric that matters for tier / retention
+                      decisions. Includes an inline monthly bar chart per
+                      ambassador so trend is visible at a glance. */}
+                  {revenueLeaderboard.length > 0 && (() => {
+                    // Build the ordered month axis across the whole set.
+                    // Each ambassador's monthly array may skip months where
+                    // they had no orders — we fill zeros so bars align.
+                    const monthSet = new Set();
+                    revenueLeaderboard.forEach(r => r.months.forEach(m => monthSet.add(m.month)));
+                    const monthAxis = Array.from(monthSet).sort();
+                    // Peak monthly revenue across all ambassadors — used to
+                    // scale the bars so comparisons are visually honest.
+                    const peakMonthlyRev = revenueLeaderboard.reduce((peak, r) => {
+                      const rMax = r.months.reduce((mx, m) => Math.max(mx, m.revenue), 0);
+                      return Math.max(peak, rMax);
+                    }, 0) || 1;
+                    const fmtMonthLabel = (iso) => {
+                      const d = new Date(iso + "T00:00:00");
+                      if (isNaN(d.getTime())) return iso;
+                      return d.toLocaleDateString(undefined, { month: "short" });
+                    };
+                    return (
+                      <div style={{ background: T.darkCard, borderRadius: 10, padding: 14, border: `1px solid ${T.charcoal}` }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                          <TrendingUp size={12} color={T.green} />
+                          <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600 }}>TOP REVENUE DRIVERS · LAST 6 MOS</div>
+                        </div>
+                        <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, marginBottom: 10, lineHeight: 1.4 }}>
+                          Ranks by total top-line revenue driven, not commission. Bars = monthly revenue trend.
+                        </div>
+                        {/* Month legend so the sparkline bar positions make sense at a glance. */}
+                        <div style={{ display: "flex", justifyContent: "space-between", padding: "0 0 0 34px", marginBottom: 6, fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 0.4 }}>
+                          {monthAxis.map(m => (<span key={m} style={{ minWidth: 20, textAlign: "center" }}>{fmtMonthLabel(m)}</span>))}
+                        </div>
+                        {revenueLeaderboard.map((r, i) => {
+                          // Fill zero-months so every ambassador shows the same axis.
+                          const monthsByKey = {};
+                          r.months.forEach(m => { monthsByKey[m.month] = m; });
+                          const filled = monthAxis.map(m => monthsByKey[m] || { month: m, revenue: 0, orders: 0 });
+                          return (
+                            <button key={r.id} onClick={() => onViewUser && onViewUser(r.handle || r.id)}
+                                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", width: "100%", background: "none", border: "none", cursor: "pointer", borderBottom: i < revenueLeaderboard.length - 1 ? `1px solid ${T.charcoal}` : "none", textAlign: "left" }}>
+                              <div style={{ fontFamily: serif, fontSize: 14, color: i < 3 ? T.copper : T.tertiary, width: 18, fontWeight: 600, flexShrink: 0 }}>{i + 1}</div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, marginBottom: 3 }}>
+                                  <div style={{ minWidth: 0, overflow: "hidden" }}>
+                                    <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.full_name || r.handle || "—"}</div>
+                                    <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary }}>@{r.handle || "user"} · {r.total_orders} order{r.total_orders === 1 ? "" : "s"} · <span style={{ color: T.copper, textTransform: "uppercase" }}>{r.tier || "ambassador"}</span></div>
+                                  </div>
+                                  <div style={{ textAlign: "right", flexShrink: 0 }}>
+                                    <div style={{ fontFamily: serif, fontSize: 13, color: T.green, fontWeight: 700 }}>{fmtMoney(r.total)}</div>
+                                    <div style={{ fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 0.8 }}>REVENUE DRIVEN</div>
+                                  </div>
+                                </div>
+                                {/* Inline monthly bar chart. */}
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", height: 24, gap: 2, marginTop: 2 }}>
+                                  {filled.map((m, mi) => {
+                                    const h = peakMonthlyRev > 0 ? Math.max(2, (m.revenue / peakMonthlyRev) * 24) : 2;
+                                    return (
+                                      <div key={mi} title={`${fmtMonthLabel(m.month)}: ${fmtMoney(m.revenue)}`}
+                                           style={{ flex: 1, minWidth: 6, height: `${h}px`, background: m.revenue > 0 ? T.green : T.charcoal, borderRadius: 1 }} />
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
 
                   {/* Top share-link clickers leaderboard */}
                   <div style={{ background: T.darkCard, borderRadius: 10, padding: 14, border: `1px solid ${T.charcoal}` }}>
@@ -45330,6 +46180,10 @@ export default function Trailhead() {
       if (cancelled) return;
       setSupabaseSession(session || null);
       if (event === "SIGNED_IN" && session) {
+        // Link current sessionStorage session to the newly signed-in user
+        // so guest→signup source attribution can be computed on the admin
+        // analytics side. Best-effort; RLS ignores stale/pre-linked rows.
+        try { _linkSessionToUser(session.user && session.user.id); } catch (e) {}
         // Route decision:
         //   - mid-signup (email flow) → don't touch; SignupScreen owns transition
         //   - mid-wizard (verify-email, install-pwa, enable-push, onboarding) → stay
@@ -51451,6 +52305,10 @@ export default function Trailhead() {
     const onMsg = (e) => {
       const data = e && e.data;
       if (!data || data.type !== "navigate" || !data.url) return;
+      // Log the push click (dedup'd module-side against the cold-boot path).
+      if (data.notifId || data.notifType) {
+        try { logPushClick({ notifId: data.notifId, notifType: data.notifType, path: data.url }); } catch (_) {}
+      }
       const url = String(data.url);
       // /post/<id> — open feed scrolled to that post
       const post = url.match(/^\/post\/([\w-]+)$/);

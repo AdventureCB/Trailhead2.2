@@ -38,7 +38,22 @@ self.addEventListener("push", (event) => {
 // data.url is a relative path like "/post/<uuid>" — handled by the SPA shell.
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = (event.notification.data && event.notification.data.url) || "/";
+  const data = event.notification.data || {};
+  const url = data.url || "/";
+  const notifId = data.notifId || null;
+  const notifType = data.type || null;
+  // Cold-boot URL carries tracking params so the freshly-loaded SPA can
+  // log the click. Warm-tab flow uses the postMessage below directly.
+  let coldUrl = url;
+  if (notifId || notifType) {
+    try {
+      const sep = url.includes("?") ? "&" : "?";
+      const parts = [];
+      if (notifId)   parts.push("ntf=" + encodeURIComponent(notifId));
+      if (notifType) parts.push("nt="  + encodeURIComponent(notifType));
+      coldUrl = url + sep + parts.join("&");
+    } catch (_) { /* leave url alone */ }
+  }
   event.waitUntil((async () => {
     const allClients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     for (const client of allClients) {
@@ -46,14 +61,13 @@ self.addEventListener("notificationclick", (event) => {
         const u = new URL(client.url);
         if (u.origin === self.location.origin) {
           await client.focus();
-          // If we control this client, tell the SPA to navigate.
-          client.postMessage({ type: "navigate", url });
+          client.postMessage({ type: "navigate", url, notifId, notifType });
           return;
         }
       } catch (e) { /* skip */ }
     }
     if (self.clients.openWindow) {
-      await self.clients.openWindow(url);
+      await self.clients.openWindow(coldUrl);
     }
   })());
 });
