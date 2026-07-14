@@ -5058,13 +5058,26 @@ const formatTime12h = (timeStr) => {
 // Guests + signed-in users both post — the RLS insert policy is open to
 // anon. Only admin can SELECT.
 const PAGE_VIEW_STATE = { sessionId: null, viewId: null, viewedAt: 0, initialized: false };
+// Persists in localStorage (not sessionStorage) with a 30-minute idle
+// timeout. Rationale: sessionStorage is scoped to a single tab, so a
+// user landing in tab A and signing up in tab B — or bouncing through an
+// OAuth redirect — gets two different session_ids and their source row
+// never gets linked to a user_id. localStorage carries the id across
+// tabs / OAuth round-trips / PWA reopens; the idle timeout still starts
+// a fresh session for return visitors after they've been inactive for
+// 30 min, so first-touch attribution stays meaningful.
 const _getSessionId = () => {
   try {
-    let sid = sessionStorage.getItem("th_session_id");
-    if (!sid) {
-      sid = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(36).slice(2, 10);
-      sessionStorage.setItem("th_session_id", sid);
+    const IDLE_MS = 30 * 60 * 1000;
+    const now = Date.now();
+    const lastActiveRaw = localStorage.getItem("th_session_last_active");
+    const lastActive = lastActiveRaw ? Number(lastActiveRaw) : 0;
+    let sid = localStorage.getItem("th_session_id");
+    if (!sid || !lastActive || (now - lastActive) > IDLE_MS) {
+      sid = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(now) + Math.random().toString(36).slice(2, 10);
+      localStorage.setItem("th_session_id", sid);
     }
+    localStorage.setItem("th_session_last_active", String(now));
     return sid;
   } catch (e) { return "sid_" + Date.now(); }
 };
@@ -36901,6 +36914,9 @@ function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserNam
   // benefits from the same 30s auto-refresh.
   const [trafficSources, setTrafficSources] = useState([]);
   const [trafficSourcesLoading, setTrafficSourcesLoading] = useState(false);
+  // Which source's per-medium/campaign/landing detail is expanded in the
+  // traffic sources card. Only one row expanded at a time.
+  const [expandedTrafficSource, setExpandedTrafficSource] = useState(null);
   // Geographic activity by state — trip reports grouped by state_code
   // with per-state trip count + distinct authors + region label.
   // Populated at the same time as trafficSources.
@@ -37046,9 +37062,18 @@ function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserNam
   const fetchTrafficSources = useCallback(async () => {
     setTrafficSourcesLoading(true);
     try {
-      const { data, error } = await supabase.rpc("admin_get_traffic_sources", { p_days: 30 });
-      if (error) { console.error("[admin] traffic sources", error); setTrafficSources([]); }
-      else setTrafficSources(data || []);
+      // Prefer the detailed RPC (source + medium + campaign + first_path).
+      // Fall back to the older rollup for envs that haven't run the new
+      // migration yet so the card still renders something.
+      const detailed = await supabase.rpc("admin_get_traffic_sources_detailed", { p_days: 30 });
+      if (!detailed.error && Array.isArray(detailed.data)) {
+        setTrafficSources(detailed.data);
+      } else {
+        if (detailed.error) console.warn("[admin] traffic sources detailed unavailable, trying rollup", detailed.error);
+        const fallback = await supabase.rpc("admin_get_traffic_sources", { p_days: 30 });
+        if (fallback.error) { console.error("[admin] traffic sources", fallback.error); setTrafficSources([]); }
+        else setTrafficSources(fallback.data || []);
+      }
     } catch (e) { console.error("[admin] traffic sources threw", e); setTrafficSources([]); }
     finally { setTrafficSourcesLoading(false); }
   }, []);
@@ -38444,64 +38469,140 @@ function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserNam
               );
             })()}
             {/* Traffic source attribution — sessions grouped by inbound
-                source (UTM > referrer domain bucket > Direct) with
-                signup conversion. /r/CODE ambassador clicks are not
-                represented here — they 302 to Shopify server-side and
-                never touch the SPA. */}
+                source. Detailed RPC returns source × medium × campaign
+                × first_path; client pivots into three views:
+                  1. Source rollup (default) — total per source
+                  2. Detail rows per source (tap to expand) — medium +
+                     campaign + landing path breakdown
+                  3. Top landing paths — collapsed view of first_path
+                     across all sources
+                /r/CODE ambassador clicks are not represented here —
+                they 302 to Shopify server-side and never touch the SPA. */}
             {(trafficSources || []).length > 0 && (() => {
-              // Collapse rows by source only (medium becomes a per-source
-              // secondary detail line in a future iteration). Sort by
-              // sessions desc.
+              // Source rollup for the top-level list.
               const bySource = {};
-              const order = [];
+              const orderSrc = [];
               trafficSources.forEach(r => {
-                if (!bySource[r.source]) { bySource[r.source] = { source: r.source, sessions: 0, signups: 0 }; order.push(r.source); }
+                if (!bySource[r.source]) { bySource[r.source] = { source: r.source, sessions: 0, signups: 0, details: [] }; orderSrc.push(r.source); }
                 bySource[r.source].sessions += Number(r.sessions || 0);
                 bySource[r.source].signups += Number(r.signups || 0);
+                bySource[r.source].details.push(r);
               });
-              const rows = order.map(s => {
+              const sourceRows = orderSrc.map(s => {
                 const row = bySource[s];
                 row.rate = row.sessions > 0 ? Math.round((row.signups / row.sessions) * 1000) / 10 : 0;
                 return row;
               }).sort((a, b) => b.sessions - a.sessions);
-              const totalSessions = rows.reduce((a, r) => a + r.sessions, 0) || 1;
-              const totalSignups  = rows.reduce((a, r) => a + r.signups, 0);
+              // Landing-path rollup (across all sources) for the second card.
+              const byPath = {};
+              const orderPath = [];
+              trafficSources.forEach(r => {
+                const p = r.first_path || "/";
+                if (!byPath[p]) { byPath[p] = { path: p, sessions: 0, signups: 0 }; orderPath.push(p); }
+                byPath[p].sessions += Number(r.sessions || 0);
+                byPath[p].signups += Number(r.signups || 0);
+              });
+              const pathRows = orderPath.map(p => {
+                const row = byPath[p];
+                row.rate = row.sessions > 0 ? Math.round((row.signups / row.sessions) * 1000) / 10 : 0;
+                return row;
+              }).sort((a, b) => b.sessions - a.sessions);
+              const totalSessions = sourceRows.reduce((a, r) => a + r.sessions, 0) || 1;
+              const totalSignups  = sourceRows.reduce((a, r) => a + r.signups, 0);
               const overallRate = totalSessions > 0 ? Math.round((totalSignups / totalSessions) * 1000) / 10 : 0;
               return (
-                <div style={{ background: T.darkCard, borderRadius: 10, padding: 14, border: `1px solid ${T.charcoal}` }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                    <TrendingUp size={12} color={T.copper} />
-                    <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600 }}>TRAFFIC SOURCES · LAST 30 DAYS</div>
-                    <button onClick={fetchTrafficSources} disabled={trafficSourcesLoading} title="Refresh" style={{ marginLeft: "auto", background: "none", border: "none", cursor: trafficSourcesLoading ? "default" : "pointer", padding: 2, display: "flex", alignItems: "center", opacity: trafficSourcesLoading ? 0.5 : 1 }}>
-                      <Radio size={12} color={T.tertiary} />
-                    </button>
-                  </div>
-                  <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginBottom: 10, lineHeight: 1.4 }}>
-                    {totalSessions.toLocaleString()} sessions · {totalSignups.toLocaleString()} signups · overall <span style={{ color: T.copper, fontWeight: 700 }}>{overallRate}%</span>
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 60px 60px 60px", gap: 6, fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.8, fontWeight: 600, padding: "0 0 6px", borderBottom: `1px solid ${T.charcoal}` }}>
-                    <span>SOURCE</span>
-                    <span style={{ textAlign: "right" }}>SESSIONS</span>
-                    <span style={{ textAlign: "right" }}>SIGNUPS</span>
-                    <span style={{ textAlign: "right" }}>RATE</span>
-                  </div>
-                  {rows.map((r, i) => {
-                    const shareOfTraffic = (r.sessions / totalSessions) * 100;
-                    return (
-                      <div key={r.source} style={{ display: "grid", gridTemplateColumns: "1fr 60px 60px 60px", gap: 6, padding: "8px 0", borderBottom: i < rows.length - 1 ? `1px solid ${T.charcoal}40` : "none", alignItems: "center" }}>
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.source}>{r.source}</div>
-                          <div style={{ position: "relative", height: 3, background: T.charcoal, borderRadius: 2, marginTop: 3, overflow: "hidden" }}>
-                            <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${Math.max(1, shareOfTraffic)}%`, background: T.copper, borderRadius: 2 }} />
-                          </div>
+                <>
+                  <div style={{ background: T.darkCard, borderRadius: 10, padding: 14, border: `1px solid ${T.charcoal}` }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                      <TrendingUp size={12} color={T.copper} />
+                      <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600 }}>TRAFFIC SOURCES · LAST 30 DAYS</div>
+                      <button onClick={fetchTrafficSources} disabled={trafficSourcesLoading} title="Refresh" style={{ marginLeft: "auto", background: "none", border: "none", cursor: trafficSourcesLoading ? "default" : "pointer", padding: 2, display: "flex", alignItems: "center", opacity: trafficSourcesLoading ? 0.5 : 1 }}>
+                        <Radio size={12} color={T.tertiary} />
+                      </button>
+                    </div>
+                    <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginBottom: 10, lineHeight: 1.4 }}>
+                      {totalSessions.toLocaleString()} sessions · {totalSignups.toLocaleString()} signups · overall <span style={{ color: T.copper, fontWeight: 700 }}>{overallRate}%</span> · tap a source for medium/campaign/landing detail.
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "18px 1fr 60px 60px 60px", gap: 6, fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.8, fontWeight: 600, padding: "0 0 6px", borderBottom: `1px solid ${T.charcoal}` }}>
+                      <span></span>
+                      <span>SOURCE</span>
+                      <span style={{ textAlign: "right" }}>SESSIONS</span>
+                      <span style={{ textAlign: "right" }}>SIGNUPS</span>
+                      <span style={{ textAlign: "right" }}>RATE</span>
+                    </div>
+                    {sourceRows.map((r, i) => {
+                      const shareOfTraffic = (r.sessions / totalSessions) * 100;
+                      const expanded = expandedTrafficSource === r.source;
+                      // Sort detail rows within a source by sessions desc,
+                      // filtering out fully-default rows (no meaningful
+                      // extra dimension to display).
+                      const details = [...r.details].sort((a, b) => Number(b.sessions || 0) - Number(a.sessions || 0));
+                      return (
+                        <div key={r.source}>
+                          <button onClick={() => setExpandedTrafficSource(prev => prev === r.source ? null : r.source)}
+                                  style={{ display: "grid", gridTemplateColumns: "18px 1fr 60px 60px 60px", gap: 6, padding: "8px 0", borderBottom: i < sourceRows.length - 1 || expanded ? `1px solid ${T.charcoal}40` : "none", alignItems: "center", width: "100%", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
+                            <span style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+                              {expanded ? <ChevronDown size={11} color={T.tertiary} /> : <ChevronRight size={11} color={T.tertiary} />}
+                            </span>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.source}>{r.source}</div>
+                              <div style={{ position: "relative", height: 3, background: T.charcoal, borderRadius: 2, marginTop: 3, overflow: "hidden" }}>
+                                <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${Math.max(1, shareOfTraffic)}%`, background: T.copper, borderRadius: 2 }} />
+                              </div>
+                            </div>
+                            <span style={{ fontFamily: sans, fontSize: 11, color: T.white, textAlign: "right", fontWeight: 600 }}>{r.sessions.toLocaleString()}</span>
+                            <span style={{ fontFamily: sans, fontSize: 11, color: r.signups > 0 ? T.green : T.tertiary, textAlign: "right", fontWeight: 600 }}>{r.signups.toLocaleString()}</span>
+                            <span style={{ fontFamily: sans, fontSize: 11, color: r.rate >= overallRate ? T.green : r.rate > 0 ? T.copper : T.tertiary, textAlign: "right", fontWeight: 700 }}>{r.rate}%</span>
+                          </button>
+                          {expanded && (
+                            <div style={{ background: T.darkBg, borderRadius: 6, padding: "8px 10px", margin: "0 0 8px 24px", border: `1px solid ${T.charcoal}` }}>
+                              <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.8, fontWeight: 600, marginBottom: 6 }}>MEDIUM · CAMPAIGN · LANDING</div>
+                              {details.length === 0 ? (
+                                <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>No detail data.</div>
+                              ) : details.map((d, di) => (
+                                <div key={di} style={{ display: "grid", gridTemplateColumns: "1fr 50px 50px", gap: 6, padding: "6px 0", borderBottom: di < details.length - 1 ? `1px solid ${T.charcoal}20` : "none", alignItems: "start" }}>
+                                  <div style={{ minWidth: 0 }}>
+                                    <div style={{ fontFamily: sans, fontSize: 10, color: T.white, fontWeight: 600 }}>
+                                      {d.medium && d.medium !== "(none)" ? d.medium : <span style={{ color: T.tertiary, fontStyle: "italic" }}>no medium</span>}
+                                      {d.campaign && d.campaign !== "(none)" && (<span style={{ color: T.copper }}> · {d.campaign}</span>)}
+                                    </div>
+                                    <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={d.first_path}>{d.first_path || "/"}</div>
+                                  </div>
+                                  <span style={{ fontFamily: sans, fontSize: 10, color: T.white, textAlign: "right", fontWeight: 600 }}>{Number(d.sessions || 0).toLocaleString()}</span>
+                                  <span style={{ fontFamily: sans, fontSize: 10, color: Number(d.signups) > 0 ? T.green : T.tertiary, textAlign: "right", fontWeight: 600 }}>{Number(d.signups || 0).toLocaleString()}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                        <span style={{ fontFamily: sans, fontSize: 11, color: T.white, textAlign: "right", fontWeight: 600 }}>{r.sessions.toLocaleString()}</span>
-                        <span style={{ fontFamily: sans, fontSize: 11, color: r.signups > 0 ? T.green : T.tertiary, textAlign: "right", fontWeight: 600 }}>{r.signups.toLocaleString()}</span>
-                        <span style={{ fontFamily: sans, fontSize: 11, color: r.rate >= overallRate ? T.green : r.rate > 0 ? T.copper : T.tertiary, textAlign: "right", fontWeight: 700 }}>{r.rate}%</span>
+                      );
+                    })}
+                  </div>
+                  {/* Landing paths — same data, pivoted by first_path so
+                      admin can see which entry pages actually convert. */}
+                  {pathRows.length > 0 && (
+                    <div style={{ background: T.darkCard, borderRadius: 10, padding: 14, border: `1px solid ${T.charcoal}` }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+                        <MapPin size={12} color={T.copper} />
+                        <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600 }}>TOP LANDING PATHS · LAST 30 DAYS</div>
                       </div>
-                    );
-                  })}
-                </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 60px 60px 60px", gap: 6, fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.8, fontWeight: 600, padding: "0 0 6px", borderBottom: `1px solid ${T.charcoal}` }}>
+                        <span>PATH</span>
+                        <span style={{ textAlign: "right" }}>SESSIONS</span>
+                        <span style={{ textAlign: "right" }}>SIGNUPS</span>
+                        <span style={{ textAlign: "right" }}>RATE</span>
+                      </div>
+                      {pathRows.slice(0, 20).map((r, i) => (
+                        <div key={r.path} style={{ display: "grid", gridTemplateColumns: "1fr 60px 60px 60px", gap: 6, padding: "8px 0", borderBottom: i < Math.min(pathRows.length, 20) - 1 ? `1px solid ${T.charcoal}40` : "none", alignItems: "center" }}>
+                          <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.path}>{r.path}</span>
+                          <span style={{ fontFamily: sans, fontSize: 11, color: T.white, textAlign: "right", fontWeight: 600 }}>{r.sessions.toLocaleString()}</span>
+                          <span style={{ fontFamily: sans, fontSize: 11, color: r.signups > 0 ? T.green : T.tertiary, textAlign: "right", fontWeight: 600 }}>{r.signups.toLocaleString()}</span>
+                          <span style={{ fontFamily: sans, fontSize: 11, color: r.rate >= overallRate ? T.green : r.rate > 0 ? T.copper : T.tertiary, textAlign: "right", fontWeight: 700 }}>{r.rate}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
               );
             })()}
             {/* Trip activity by state — top states + region rollup.
@@ -46163,6 +46264,20 @@ export default function Trailhead() {
         // Background: full hydrate keeps everything else loading.
         if (session) {
           const hasHandle = !!(session.user && session.user.user_metadata && session.user.user_metadata.handle);
+          const wizardPending = !!(session.user && session.user.user_metadata && session.user.user_metadata.wizard_pending);
+          // Deep-link + existing session: initial isGuest defaulted to
+          // true (see `useState(!!initialSharedLink)`) so the SPA would
+          // otherwise render guest chrome + gate features even though the
+          // user is signed in. Explicitly flip out of guest + into app
+          // here — the SIGNED_IN event only fires for fresh sign-ins,
+          // not for localStorage session restores, so we can't rely on
+          // that handler.
+          setIsGuest(false);
+          setAuthState(prev => {
+            if (prev === "signup" || prev === "verify-email" || prev === "onboarding" || prev === "install-pwa") return prev;
+            if (wizardPending) return "onboarding";
+            return hasHandle ? "app" : "onboarding";
+          });
           if (hasHandle) hydrateUserData(session); else setAppReady(true);
         } else {
           hydrateGuestData();
