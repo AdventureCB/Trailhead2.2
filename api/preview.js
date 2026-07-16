@@ -938,7 +938,7 @@ async function resolveEntity(type, id) {
       imageAlt: "",
       breadcrumb: { items: [{ name: "Trailhead", url: null }, { name: "Builds", url: null }] },
       jsonLd: {
-        kind: "CollectionPage",
+        kind: "CollectionLanding",
         title: "Overlanding Vehicle Builds",
         description: "Vehicle builds from the Trailhead overlanding community.",
         items: listItems,
@@ -989,7 +989,7 @@ async function resolveEntity(type, id) {
       imageAlt: "",
       breadcrumb: { items: [{ name: "Trailhead", url: null }, { name: "Trip Reports", url: null }] },
       jsonLd: {
-        kind: "CollectionPage",
+        kind: "CollectionLanding",
         title: "Overlanding Trip Reports",
         description: "Community trip reports on Trailhead.",
         items: listItems,
@@ -1040,7 +1040,7 @@ async function resolveEntity(type, id) {
       imageAlt: "",
       breadcrumb: { items: [{ name: "Trailhead", url: null }, { name: "Camping Spots", url: null }] },
       jsonLd: {
-        kind: "CollectionPage",
+        kind: "CollectionLanding",
         title: "Overland Camping Spots",
         description: "Public camping spots on Trailhead.",
         items: listItems,
@@ -2097,10 +2097,12 @@ module.exports = async function handler(req, res) {
     };
     const clean = Object.fromEntries(Object.entries(ld).filter(([, v]) => v !== undefined));
     jsonLdTag = `<script type="application/ld+json">${JSON.stringify(clean).replace(/</g, "\\u003c")}</script>`;
-  } else if (meta.jsonLd && meta.jsonLd.kind === "CollectionPage") {
+  } else if (meta.jsonLd && meta.jsonLd.kind === "CollectionLanding") {
     // Schema.org CollectionPage wrapping an ItemList. Gives Google a
     // machine-readable inventory of every URL on the hub page so the
     // crawler can discover + prioritize the linked detail pages.
+    // (Distinct from the forum-sub CollectionPage handler above — that
+    // one carries subInfo + threads[]; this one carries items[].)
     const j = meta.jsonLd;
     const itemNodes = (Array.isArray(j.items) ? j.items : []).slice(0, 100).map((it, i) => Object.fromEntries(Object.entries({
       "@type": "ListItem",
