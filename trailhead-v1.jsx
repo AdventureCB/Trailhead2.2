@@ -17902,6 +17902,133 @@ function BuildCommentsSection({ buildId, comments, likedCommentIds, commentLikeC
   );
 }
 
+/* ─── SPOTS INDEX (/spots landing) ─── */
+// Cards-only browse of user-added camping spots. Landing screen for the
+// /spots URL. Guest visitors see all the cards but VIEW ON MAP requires
+// sign-in (the map surface itself is guest-gated). Seeded OSM/RIDB rows
+// are excluded — those are name+coords only, not meaningful browse cards.
+function SpotsIndexScreen({ isGuest, onGuestTap, onViewSpotOnMap, onBack, onViewUser }) {
+  const [spots, setSpots] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: rows, error: err } = await supabase
+          .from("camping_spots")
+          .select("id, user_id, name, description, spot_type, fee, lat, lng, photos, created_at")
+          .eq("source", "user")
+          .eq("visibility", "public")
+          .order("created_at", { ascending: false })
+          .limit(200);
+        if (cancelled) return;
+        if (err) { setError(err.message); setLoading(false); return; }
+        const list = Array.isArray(rows) ? rows : [];
+        const ownerIds = Array.from(new Set(list.map(s => s.user_id).filter(Boolean)));
+        const profById = {};
+        if (ownerIds.length > 0) {
+          try {
+            const { data: profs } = await supabase
+              .from("profiles")
+              .select("id, full_name, handle, avatar_url")
+              .in("id", ownerIds);
+            if (Array.isArray(profs)) profs.forEach(p => { profById[p.id] = p; });
+          } catch (e) { /* non-fatal */ }
+        }
+        if (cancelled) return;
+        setSpots(list.map(s => ({ ...s, _author: profById[s.user_id] || null })));
+        setLoading(false);
+      } catch (e) {
+        if (cancelled) return;
+        setError(e.message || "Failed to load camping spots");
+        setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+  const openOnMap = (spot) => {
+    if (isGuest) { onGuestTap && onGuestTap(); return; }
+    onViewSpotOnMap && onViewSpotOnMap(spot.id);
+  };
+  return (
+    <div style={{ padding: "16px 16px 40px", fontFamily: serif }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+        {onBack && (
+          <button onClick={onBack} style={{ background: T.darkCard, border: "none", borderRadius: 8, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+            <ChevronLeft size={18} color={T.white} />
+          </button>
+        )}
+        <div>
+          <h1 style={{ fontFamily: sans, fontSize: 22, margin: 0, color: T.white, fontWeight: 700 }}>Community Camp Spots</h1>
+          <p style={{ fontFamily: sans, fontSize: 12, color: T.tertiary, margin: "4px 0 0" }}>
+            User-added camping spots from the Trailhead overlanding community
+          </p>
+        </div>
+      </div>
+      {loading ? (
+        <div style={{ padding: 32, textAlign: "center", fontFamily: sans, fontSize: 12, color: T.tertiary, letterSpacing: 1 }}>LOADING SPOTS…</div>
+      ) : error ? (
+        <div style={{ padding: 32, textAlign: "center", fontFamily: sans, fontSize: 12, color: T.red, letterSpacing: 1 }}>{error}</div>
+      ) : spots.length === 0 ? (
+        <div style={{ padding: 32, textAlign: "center", fontFamily: sans, fontSize: 12, color: T.tertiary }}>
+          No community spots yet. Be the first — add one from the Maps tab.
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {spots.map(s => {
+            const photo = Array.isArray(s.photos) && s.photos[0] && s.photos[0].url;
+            const auth = s._author;
+            const authName = (auth && auth.full_name) || (auth && auth.handle) || "";
+            const authHandle = auth && auth.handle;
+            const typeLine = [s.spot_type && s.spot_type !== "unknown" ? s.spot_type : null, s.fee].filter(Boolean).join(" · ");
+            return (
+              <div key={s.id} style={{ background: T.charcoal, borderRadius: 10, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+                {photo ? (
+                  <div style={{ width: "100%", aspectRatio: "16/9", background: `#1A1A1A url(${photo}) center/cover` }} />
+                ) : (
+                  <div style={{ width: "100%", aspectRatio: "16/9", background: `linear-gradient(135deg, ${T.charcoal}, ${T.darkCard})`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <MapPin size={28} color={T.tertiary} />
+                  </div>
+                )}
+                <div style={{ padding: 14 }}>
+                  <h2 style={{ fontFamily: sans, fontSize: 17, margin: "0 0 4px", fontWeight: 700, color: T.white }}>{s.name || "Camp spot"}</h2>
+                  {typeLine && (
+                    <div style={{ fontFamily: sans, fontSize: 11, color: T.copper, letterSpacing: 0.6, margin: "0 0 8px", textTransform: "uppercase" }}>
+                      {typeLine}
+                    </div>
+                  )}
+                  {s.description && (
+                    <p style={{ fontFamily: sans, fontSize: 13, color: "#F5F2ED", margin: "0 0 10px", lineHeight: 1.55 }}>
+                      {String(s.description).slice(0, 200)}{String(s.description).length > 200 ? "…" : ""}
+                    </p>
+                  )}
+                  {authName && (
+                    <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, margin: "0 0 12px" }}>
+                      Added by{" "}
+                      <button onClick={(e) => { e.stopPropagation(); if (auth && auth.id && onViewUser) onViewUser(auth.id); }} style={{ background: "none", border: "none", padding: 0, cursor: onViewUser ? "pointer" : "default", color: T.white, fontFamily: sans, fontSize: 11, fontWeight: 700 }}>
+                        {authName}
+                      </button>
+                      {authHandle ? <span style={{ color: T.copper }}> @{authHandle}</span> : ""}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => openOnMap(s)}
+                    style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", padding: "10px 14px", background: T.red, color: T.white, border: "none", borderRadius: 6, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}
+                  >
+                    <MapPin size={14} color={T.white} />
+                    <span>{isGuest ? "SIGN IN TO VIEW ON MAP" : "VIEW ON MAP"}</span>
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── BUILDS / PROFILE SCREEN ─── */
 function BuildsScreen({ onViewUser, userBuilds, allBuilds: allBuildsProp, onLoadAllBuilds, onLoadBuildById, allBuildsLoaded, buildSaving, currentUserId, isAdmin, followingIds, onAddBuild, onUpdateBuild, onDeleteBuild, onPostBuildToFeed, onOpenDM, onOpenShareCompose, onOpenShareIntent, userRoutes, pendingBuildNav, onConsumePendingBuildNav, isGuest, onGuestTap, likedBuildIds, buildLikeCounts, onToggleBuildLike, buildComments, onLoadBuildComments, onAddBuildComment, onDeleteBuildComment, likedBuildCommentIds, buildCommentLikeCounts, onToggleBuildCommentLike, currentUserName, currentUserHandle, currentUserAvatar, allTripReports }) {
   // Trigger the cross-user builds load the first time the gallery mounts.
@@ -45758,13 +45885,14 @@ export default function Trailhead() {
         setFeedItems(prev => [...fresh, ...(prev || []).filter(p => !freshIds.has(p.id))]);
       }
     } catch (e) { console.warn("[guest-hydrate] posts fetch failed", e); }
-    // Builds gallery — public read.
+    // Builds gallery — public read. 1000 cap matches the signed-in
+    // loadAllBuildsOnce path so guests see the same catalog on /builds.
     try {
       const { data: buildRows } = await supabase
         .from("builds")
         .select("*")
         .order("created_at", { ascending: false })
-        .limit(100);
+        .limit(1000);
       if (Array.isArray(buildRows)) {
         const ownerIds = Array.from(new Set(buildRows.map(b => b.user_id).filter(Boolean)));
         const ownersById = {};
@@ -47240,7 +47368,12 @@ export default function Trailhead() {
     // not a back-door into the gated Maps screen, and (b) the background
     // hydrate's feedItems is visible to guests as soon as it lands.
     // Spot/HQ links still need the map (their popup IS the map UI).
-    if (initialSharedLink.kind === "spot" || initialSharedLink.kind === "hq" || initialSharedLink.kind === "spots-index") return "routes";
+    if (initialSharedLink.kind === "spot" || initialSharedLink.kind === "hq") return "routes";
+    // /spots landing renders SpotsIndexScreen — a cards browse. Guests
+    // see the cards; VIEW ON MAP requires sign-in (the map surface is
+    // guest-gated). Distinct from /routes so the map's guest gating isn't
+    // bypassed by the URL.
+    if (initialSharedLink.kind === "spots-index") return "spots";
     if (initialSharedLink.kind === "build" || initialSharedLink.kind === "builds-index") return "builds";
     if (initialSharedLink.kind === "forum-thread" || initialSharedLink.kind === "forum-sub" || initialSharedLink.kind === "forum-landing") return "forum";
     if (initialSharedLink.kind === "bounty") return "ranks";
@@ -56499,6 +56632,7 @@ export default function Trailhead() {
             {screen === "forum" && <ForumScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} isAdmin={isAdmin} isModerator={isModerator} isAmbassador={isAmbassador} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentUserName={(currentProfile && currentProfile.full_name) || "You"} currentUserHandle={(currentProfile && currentProfile.handle) || ""} currentUserAvatar={profilePic || (currentProfile && currentProfile.avatar_url) || null} pendingThread={pendingThread} onPendingHandled={() => setPendingThread(null)} pendingForumSubNav={pendingForumSubNav} onConsumePendingForumSubNav={() => setPendingForumSubNav(null)} pendingForumCatNav={pendingForumCatNav} onConsumePendingForumCatNav={() => setPendingForumCatNav(null)} onAddNotification={requireAuth(addNotification)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onOpenShareCompose={openShareCompose} onOpenShareIntent={openShareIntent} onAddFeedPost={requireAuth((post) => addPost(post))} threadsBySub={forumThreadsBySub} repliesByThread={forumReplies} onAddForumThread={requireAuth(addForumThread)} onUpdateForumThread={requireAuth(updateForumThread)} onDeleteForumThread={requireAuth(deleteForumThreadRouted)} onAddForumReply={requireAuth(addForumReply)} onDeleteForumReply={requireAuth(deleteForumReplyRouted)} onLoadForumReplies={loadForumReplies} likedForumThreadIds={likedForumThreadIds} forumThreadLikeCounts={forumThreadLikeCounts} onToggleForumThreadLike={requireAuth(toggleForumThreadLike)} likedForumReplyIds={likedForumReplyIds} forumReplyLikeCounts={forumReplyLikeCounts} onToggleForumReplyLike={requireAuth(toggleForumReplyLike)} onBumpForumThreadView={bumpForumThreadView} onAwardPoints={awardPoints} categoriesList={forumCategoriesList} onAddCategory={requireAuth(addForumCategory)} onUpdateCategory={requireAuth(updateForumCategory)} onDeleteCategory={requireAuth(deleteForumCategory)} onAddSubcategory={requireAuth(addForumSubcategory)} onUpdateSubcategory={requireAuth(updateForumSubcategory)} onDeleteSubcategory={requireAuth(deleteForumSubcategory)} onReportContent={requireAuth(openContentReport)} onViewUser={openUserProfile} />}
             {screen === "routes" && <RoutesScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} campingSpots={campingSpots} showCampingSpots={showCampingSpots} setShowCampingSpots={setShowCampingSpots} showPublicLands={showPublicLands} setShowPublicLands={setShowPublicLands} showSatellite={showSatellite} setShowSatellite={setShowSatellite} onOpenShareIntent={openShareIntent} tripAuthors={tripAuthors} onLoadRouteData={loadTripRouteData} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} tripReports={allTripReports} showTripReports={showTripReports} setShowTripReports={setShowTripReports} tripPlans={allTripPlans} showTripPlans={showTripPlans} setShowTripPlans={setShowTripPlans} onMapViewportChange={onMapViewportChange} onAddCampingSpot={requireAuth(addCampingSpot)} onUpdateCampingSpot={requireAuth(updateCampingSpot)} onDeleteCampingSpot={requireAuth(deleteCampingSpot)} onAddPhotoToSpot={requireAuth(addPhotoToSpot)} onDeletePhotoFromSpot={requireAuth(deletePhotoFromSpot)} onLoadCampingSpotPhotos={loadCampingSpotPhotos} onLoadCampingSpotElevation={loadCampingSpotElevation} spotAuthors={spotAuthors} onViewUser={openUserProfile} onStartNav={(route) => setActiveNavRoute(route)} onOpenTripDetail={(slug) => setPendingTripNav(slug)} onOpenTripPlanDraft={(id) => setDetailTripId(id)} onNewTripReport={() => setTripCreatorMode("report")} onNewTripPlan={() => requireAuth(() => enterPlanBuilder())()} pendingSpotNav={pendingSpotNav} onConsumePendingSpotNav={() => setPendingSpotNav(null)} pendingHQOpen={pendingHQOpen} onConsumePendingHQOpen={() => setPendingHQOpen(false)} pendingPlanNav={pendingPlanNav} onConsumePendingPlanNav={() => setPendingPlanNav(null)} onShareCampingSpotToFeed={requireAuth(shareCampingSpotToFeed)} onShareHQToFeed={requireAuth(shareHQToFeed)} onShareTripToFeed={requireAuth(shareTripToFeed)} onShareTripPlanToFeed={requireAuth(shareTripPlanToFeed)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onShowToast={showErrorToast} onOpenShareCompose={openShareCompose} savedTripIds={savedTripIds} onToggleSaveTrip={requireAuth(toggleSaveTrip)} planBuilder={{ active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, editingId: planBuilderEditingId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen, accent: (planBuilderEditingId && (tripReports || []).find(t => t.id === planBuilderEditingId && t.kind === "report")) ? T.purple : T.copper }} gearDropPinBuilder={{ active: gearDropPinBuilderActive, dropId: gearDropPinBuilderDropId, pins: gearDropPinBuilderPins, saving: gearDropPinBuilderSaving, mode: gearDropPinBuilderMode, addPin: addGearDropPin, removePin: removeGearDropPin, movePin: moveGearDropPin, updatePin: updateGearDropPin, commit: commitGearDropPinBuilder, exit: exitGearDropPinBuilder }} />}
             {screen === "builds" && <BuildsScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onViewUser={openUserProfile} userBuilds={userBuilds} allBuilds={allBuilds} onLoadAllBuilds={loadAllBuildsOnce} onLoadBuildById={loadBuildById} allBuildsLoaded={allBuildsLoaded} buildSaving={buildSaving} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} followingIds={followingIds} pendingBuildNav={pendingBuildNav} onConsumePendingBuildNav={() => setPendingBuildNav(null)} onAddBuild={requireAuth(addBuild)} userRoutes={userRoutes} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onOpenShareCompose={openShareCompose} onOpenShareIntent={openShareIntent} onUpdateBuild={requireAuth(updateBuild)} likedBuildIds={likedBuildIds} buildLikeCounts={buildLikeCounts} onToggleBuildLike={requireAuth(toggleBuildLike)} onDeleteBuild={requireAuth(deleteBuild)} onPostBuildToFeed={requireAuth((b, opts) => { const rawBd = b.buildData; const bd = scrubLocalPhotosFromBuildData(rawBd); const isLocalUrl = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:")); const rawHero = b.image || (rawBd && rawBd.mainPhotos && rawBd.mainPhotos[0] && rawBd.mainPhotos[0].url) || null; const cleanHero = isLocalUrl(rawHero) ? ((bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url) || null) : rawHero; const heroImg = isLocalUrl(cleanHero) ? null : cleanHero; const meName = (currentProfile && currentProfile.full_name) || "You"; const myUid = supabaseSession && supabaseSession.user && supabaseSession.user.id; const isReshare = b.userId && myUid && b.userId !== myUid; const ownerHandle = isReshare ? (b.handle || "").replace(/^@/, "") : null; const ownerName = isReshare ? (b.owner || null) : null; addPost({ id: "feedbuild_" + Date.now(), type: "BUILDS", user: meName, initial: meName.charAt(0).toUpperCase(), time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, subtitle: isReshare ? `Shared @${ownerHandle}'s build` : "Added a new build", vehicle: `${b.year} ${b.make} ${b.model}`, photoUrls: heroImg ? [heroImg] : undefined, image: heroImg, likes: 0, comments: 0, buildData: bd, buildRawId: b.rawId != null ? b.rawId : null, sharedFromOwnerHandle: ownerHandle, sharedFromOwnerName: ownerName, _skipBuildIdCol: isReshare }); awardPoints(POINTS.feedPost, "Build Shared"); })} buildComments={buildComments} onLoadBuildComments={loadBuildComments} onAddBuildComment={requireAuth(addBuildComment)} onDeleteBuildComment={deleteBuildComment} likedBuildCommentIds={likedBuildCommentIds} buildCommentLikeCounts={buildCommentLikeCounts} onToggleBuildCommentLike={requireAuth(toggleBuildCommentLike)} currentUserName={(currentProfile && currentProfile.full_name) || ""} currentUserHandle={(currentProfile && currentProfile.handle) ? "@" + currentProfile.handle : ""} currentUserAvatar={(currentProfile && currentProfile.avatar_url) || null} allTripReports={allTripReports} />}
+            {screen === "spots" && <SpotsIndexScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onBack={() => { setScreen("routes"); if (typeof window !== "undefined") window.history.pushState({}, "", "/"); }} onViewUser={openUserProfile} onViewSpotOnMap={(spotId) => { setScreen("routes"); setPendingSpotNav(spotId); if (typeof window !== "undefined") window.history.pushState({}, "", `/spots/${spotId}`); }} />}
             {screen === "ambassador" && (isGuest
               ? <GuestGateScreen title="AMBASSADOR DASHBOARD REQUIRES AN ACCOUNT" subtitle="Sign in to view your ambassador code, commissions, and payouts." onSignIn={goToLoginFromGuest} />
               : <AmbassadorDashboardScreen

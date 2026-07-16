@@ -1004,9 +1004,13 @@ async function resolveEntity(type, id) {
     };
   }
   if (type === "spots-index") {
+    // Filter to community-contributed spots (`source = 'user'`). Seeded
+    // OSM/RIDB rows are name+coords only — not meaningful browse cards.
+    // User-added spots carry descriptions, photos, and are what the
+    // /spots landing is browsing for humans + crawlers alike.
     const items = await supabaseFetchAll(
       "camping_spots",
-      "visibility=eq.public&select=id,user_id,name,description,spot_type,fee,lat,lng,source,created_at&order=created_at.desc.nullslast&limit=60"
+      "source=eq.user&visibility=eq.public&select=id,user_id,name,description,spot_type,fee,lat,lng,source,created_at&order=created_at.desc.nullslast&limit=60"
     );
     const ownerIds = Array.from(new Set((items || []).map(s => s.user_id).filter(Boolean)));
     const profiles = ownerIds.length > 0
