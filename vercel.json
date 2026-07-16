@@ -5,6 +5,9 @@
   "rewrites": [
     { "source": "/sitemap.xml", "destination": "/api/sitemap.xml" },
     { "source": "/r/:code", "destination": "/api/r?code=:code" },
+    { "source": "/trips", "destination": "/api/preview?type=trips-index" },
+    { "source": "/builds", "destination": "/api/preview?type=builds-index" },
+    { "source": "/spots", "destination": "/api/preview?type=spots-index" },
     { "source": "/trips/:slug", "destination": "/api/preview?type=trip&id=:slug" },
     { "source": "/plans/:slug", "destination": "/api/preview?type=plan&id=:slug" },
     { "source": "/drops/:slug", "destination": "/api/preview?type=gear-drop&id=:slug" },

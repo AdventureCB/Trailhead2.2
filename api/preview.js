@@ -903,6 +903,157 @@ async function resolveEntity(type, id) {
       },
     };
   }
+  // Collection landing pages — /builds, /trips, /spots. Each hub renders
+  // the latest ~50 items as a dense grid of internal links so crawlers can
+  // walk from one page to every entity of the collection. Also gives the
+  // sitemap a canonical parent for each detail URL.
+  if (type === "builds-index") {
+    const items = await supabaseFetchAll(
+      "builds",
+      "select=id,user_id,name,year,make,model,hero_img,created_at&order=created_at.desc&limit=60"
+    );
+    const ownerIds = Array.from(new Set((items || []).map(b => b.user_id).filter(Boolean)));
+    const profiles = ownerIds.length > 0
+      ? await supabaseFetchAll("profiles", `id=in.(${ownerIds.map(encodeURIComponent).join(",")})&select=id,full_name,handle,avatar_url`)
+      : [];
+    const profById = {};
+    (profiles || []).forEach(p => { profById[p.id] = p; });
+    const listItems = (items || []).map(b => {
+      const p = profById[b.user_id] || null;
+      const vehicle = [b.year, b.make, b.model].filter(Boolean).join(" ");
+      return {
+        url: `/builds/${b.id}`,
+        title: b.name || vehicle || "Build",
+        subtitle: vehicle,
+        image: b.hero_img || null,
+        authorName: (p && p.full_name) || (p && p.handle) || null,
+        authorHandle: (p && p.handle) || null,
+        createdAt: b.created_at,
+      };
+    });
+    return {
+      title: "Overlanding Vehicle Builds · Trailhead",
+      description: "Browse vehicle builds from the Trailhead overlanding community — 4Runners, Tacomas, Broncos, Jeeps, RAM 1500s, and more, with detailed mod lists and photos.",
+      image: null,
+      imageAlt: "",
+      breadcrumb: { items: [{ name: "Trailhead", url: null }, { name: "Builds", url: null }] },
+      jsonLd: {
+        kind: "CollectionPage",
+        title: "Overlanding Vehicle Builds",
+        description: "Vehicle builds from the Trailhead overlanding community.",
+        items: listItems,
+      },
+      listSSR: {
+        kind: "builds",
+        heading: "Overlanding Vehicle Builds",
+        intro: "Browse recent builds from the Trailhead overlanding community. Each build details the vehicle, its mods, and the trips it's been on.",
+        items: listItems,
+        accent: "#C49A6C",
+      },
+    };
+  }
+  if (type === "trips-index") {
+    const items = await supabaseFetchAll(
+      "trip_reports",
+      "kind=eq.report&status=eq.published&select=id,user_id,slug,name,description,hero_img,distance_mi,elev_gain_ft,region,state_code,difficulty,published_at,created_at&order=published_at.desc.nullslast&limit=60"
+    );
+    const ownerIds = Array.from(new Set((items || []).map(t => t.user_id).filter(Boolean)));
+    const profiles = ownerIds.length > 0
+      ? await supabaseFetchAll("profiles", `id=in.(${ownerIds.map(encodeURIComponent).join(",")})&select=id,full_name,handle,avatar_url`)
+      : [];
+    const profById = {};
+    (profiles || []).forEach(p => { profById[p.id] = p; });
+    const listItems = (items || []).filter(t => t && t.slug).map(t => {
+      const p = profById[t.user_id] || null;
+      const metaBits = [];
+      if (t.distance_mi != null) metaBits.push(`${Number(t.distance_mi).toFixed(1)} mi`);
+      if (t.elev_gain_ft != null) metaBits.push(`${Math.round(t.elev_gain_ft).toLocaleString()} ft gain`);
+      const loc = [t.region, t.state_code].filter(Boolean).join(", ");
+      if (loc) metaBits.push(loc);
+      if (t.difficulty) metaBits.push(t.difficulty);
+      return {
+        url: `/trips/${t.slug}`,
+        title: t.name || "Trip Report",
+        subtitle: metaBits.join(" · "),
+        description: (t.description || "").slice(0, 180),
+        image: t.hero_img || null,
+        authorName: (p && p.full_name) || (p && p.handle) || null,
+        authorHandle: (p && p.handle) || null,
+        createdAt: t.published_at || t.created_at,
+      };
+    });
+    return {
+      title: "Overlanding Trip Reports · Trailhead",
+      description: "Real overlanding trip reports from the Trailhead community — GPS routes, camping stops, terrain notes, and photos across the western US and beyond.",
+      image: null,
+      imageAlt: "",
+      breadcrumb: { items: [{ name: "Trailhead", url: null }, { name: "Trip Reports", url: null }] },
+      jsonLd: {
+        kind: "CollectionPage",
+        title: "Overlanding Trip Reports",
+        description: "Community trip reports on Trailhead.",
+        items: listItems,
+      },
+      listSSR: {
+        kind: "trips",
+        heading: "Overlanding Trip Reports",
+        intro: "Community trip reports with GPS routes, camping spots, terrain notes, and photos from the Trailhead overlanding community.",
+        items: listItems,
+        accent: "#8B6FAF",
+      },
+    };
+  }
+  if (type === "spots-index") {
+    const items = await supabaseFetchAll(
+      "camping_spots",
+      "visibility=eq.public&select=id,user_id,name,description,spot_type,fee,lat,lng,source,created_at&order=created_at.desc.nullslast&limit=60"
+    );
+    const ownerIds = Array.from(new Set((items || []).map(s => s.user_id).filter(Boolean)));
+    const profiles = ownerIds.length > 0
+      ? await supabaseFetchAll("profiles", `id=in.(${ownerIds.map(encodeURIComponent).join(",")})&select=id,full_name,handle,avatar_url`)
+      : [];
+    const profById = {};
+    (profiles || []).forEach(p => { profById[p.id] = p; });
+    const listItems = (items || []).map(s => {
+      const p = profById[s.user_id] || null;
+      const metaBits = [];
+      if (s.spot_type && s.spot_type !== "unknown") metaBits.push(s.spot_type);
+      if (s.fee) metaBits.push(s.fee);
+      if (s.lat != null && s.lng != null) metaBits.push(`${Number(s.lat).toFixed(3)}, ${Number(s.lng).toFixed(3)}`);
+      return {
+        url: `/spots/${s.id}`,
+        title: s.name || "Camping Spot",
+        subtitle: metaBits.join(" · "),
+        description: (s.description || "").slice(0, 180),
+        image: (s.lat != null && s.lng != null)
+          ? staticMap(s.lng, s.lat, "5B8C5A", "circle", 12)
+          : null,
+        authorName: s.source === "user" ? ((p && p.full_name) || (p && p.handle) || null) : null,
+        authorHandle: s.source === "user" ? ((p && p.handle) || null) : null,
+        createdAt: s.created_at,
+      };
+    });
+    return {
+      title: "Overland Camping Spots · Trailhead",
+      description: "Discover camping locations across the overland community — federal campgrounds, dispersed sites, and community-added spots with photos and notes.",
+      image: null,
+      imageAlt: "",
+      breadcrumb: { items: [{ name: "Trailhead", url: null }, { name: "Camping Spots", url: null }] },
+      jsonLd: {
+        kind: "CollectionPage",
+        title: "Overland Camping Spots",
+        description: "Public camping spots on Trailhead.",
+        items: listItems,
+      },
+      listSSR: {
+        kind: "spots",
+        heading: "Overland Camping Spots",
+        intro: "Camping spots across the overland community — federal campgrounds, dispersed sites, and community-added locations with photos and notes.",
+        items: listItems,
+        accent: "#5B8C5A",
+      },
+    };
+  }
   return null;
 }
 
@@ -1430,6 +1581,72 @@ function buildProfileSSR(payload, canonicalUrl, origin) {
   `;
 }
 
+// Collection landing SSR — /builds, /trips, /spots. Renders a dense grid
+// of internal-link cards so crawlers can walk from the hub to every
+// entity in the collection. Each card is a real <a href> anchor with the
+// item's name, subtitle, and (when available) hero image.
+function buildListingSSR(payload, canonicalUrl, origin) {
+  if (!payload || !Array.isArray(payload.items)) return "";
+  const accent = payload.accent || "#C49A6C";
+  const heading = escapeHtml(payload.heading || "");
+  const intro = escapeHtml(payload.intro || "");
+  const items = payload.items;
+  const crumbs = [
+    `<a href="${origin}/" style="color:${accent};text-decoration:none;">Trailhead</a>`,
+    `<span style="color:#fff;">${heading}</span>`,
+  ].join(' <span style="color:#8B7D6B;">/</span> ');
+  const cardsHtml = items.length === 0
+    ? `<div style="padding:32px 0;color:#8B7D6B;font-size:14px;text-align:center;">No items yet.</div>`
+    : items.map(it => {
+        const url = `${origin}${it.url}`;
+        const title = escapeHtml(it.title || "");
+        const subtitle = it.subtitle ? escapeHtml(it.subtitle) : "";
+        const desc = it.description ? escapeHtml(it.description) : "";
+        const author = it.authorName
+          ? `<span>by <strong style="color:#fff;font-weight:600;">${escapeHtml(it.authorName)}</strong>${it.authorHandle ? ` <span style="color:${accent};">@${escapeHtml(it.authorHandle)}</span>` : ""}</span>`
+          : "";
+        const dateStr = it.createdAt ? new Date(it.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "";
+        const heroBlock = it.image
+          ? `<img src="${escapeHtml(it.image)}" alt="${title}" loading="lazy" decoding="async" style="width:120px;height:120px;border-radius:8px;object-fit:cover;flex-shrink:0;background:#1A1A1A;" />`
+          : `<div style="width:120px;height:120px;border-radius:8px;background:linear-gradient(135deg,#2A2A28,#1A1A1A);flex-shrink:0;"></div>`;
+        return `
+          <article style="padding:16px 0;border-bottom:1px solid #2A2A28;">
+            <a href="${url}" style="display:flex;gap:16px;text-decoration:none;color:inherit;align-items:flex-start;">
+              ${heroBlock}
+              <div style="flex:1;min-width:0;">
+                <h2 style="margin:0 0 6px;font-size:18px;font-family:'Trebuchet MS','Gill Sans',sans-serif;font-weight:700;line-height:1.3;color:#fff;">${title}</h2>
+                ${subtitle ? `<p style="margin:0 0 6px;font-family:'Trebuchet MS',sans-serif;font-size:12px;color:${accent};letter-spacing:0.4px;">${subtitle}</p>` : ""}
+                ${desc ? `<p style="margin:0 0 8px;font-size:14px;color:#F5F2ED;line-height:1.5;">${desc}${(desc.length >= 178 ? "…" : "")}</p>` : ""}
+                <div style="font-family:'Trebuchet MS',sans-serif;font-size:11px;color:#8B7D6B;">
+                  ${author}
+                  ${author && dateStr ? " · " : ""}
+                  ${dateStr ? `<time datetime="${escapeHtml(it.createdAt || "")}">${escapeHtml(dateStr)}</time>` : ""}
+                </div>
+              </div>
+            </a>
+          </article>
+        `;
+      }).join("\n");
+  return `
+    <main style="max-width:720px;margin:0 auto;padding:32px 20px 80px;color:#fff;background:#111111;min-height:100vh;font-family:'Source Serif 4',Georgia,serif;line-height:1.6;box-sizing:border-box;">
+      <nav style="font-family:'Trebuchet MS',sans-serif;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:24px;color:#8B7D6B;">
+        ${crumbs}
+      </nav>
+      <header style="margin-bottom:24px;">
+        <h1 style="margin:0 0 8px;font-size:32px;font-family:'Trebuchet MS','Gill Sans',sans-serif;line-height:1.2;font-weight:700;color:#fff;">${heading}</h1>
+        ${intro ? `<p style="margin:0;font-size:15px;color:#F5F2ED;line-height:1.6;">${intro}</p>` : ""}
+        <p style="margin:10px 0 0;font-family:'Trebuchet MS',sans-serif;font-size:12px;color:#8B7D6B;">${items.length} recent ${items.length === 1 ? "item" : "items"}</p>
+      </header>
+      <section style="margin:0;">
+        ${cardsHtml}
+      </section>
+      <footer style="margin-top:48px;padding-top:24px;border-top:1px solid #2A2A28;font-family:'Trebuchet MS',sans-serif;font-size:12px;color:#8B7D6B;">
+        Browse more on <a href="${origin}/" style="color:${accent};text-decoration:none;">Trailhead</a> — the overlanding community by Lone Peak Overland.
+      </footer>
+    </main>
+  `;
+}
+
 module.exports = async function handler(req, res) {
   // Refresh the DB-backed forum subcategory map if stale. Cheap; cached
   // 60s. Means admin edits in-app propagate to OG / SSR / JSON-LD within
@@ -1456,7 +1673,10 @@ module.exports = async function handler(req, res) {
     type === "forum-thread" ? `/forum/${sub}/${slug}` :
     type === "forum-sub" ? `/forum/${sub}` :
     type === "user" ? `/users/${handle.replace(/^@/, "")}` :
-    type === "hq" ? `/hq` : "/";
+    type === "hq" ? `/hq` :
+    type === "builds-index" ? `/builds` :
+    type === "trips-index" ? `/trips` :
+    type === "spots-index" ? `/spots` : "/";
   const canonicalUrl = `${proto}://${host}${prettyPath}`;
 
   let meta = DEFAULT_META;
@@ -1877,6 +2097,32 @@ module.exports = async function handler(req, res) {
     };
     const clean = Object.fromEntries(Object.entries(ld).filter(([, v]) => v !== undefined));
     jsonLdTag = `<script type="application/ld+json">${JSON.stringify(clean).replace(/</g, "\\u003c")}</script>`;
+  } else if (meta.jsonLd && meta.jsonLd.kind === "CollectionPage") {
+    // Schema.org CollectionPage wrapping an ItemList. Gives Google a
+    // machine-readable inventory of every URL on the hub page so the
+    // crawler can discover + prioritize the linked detail pages.
+    const j = meta.jsonLd;
+    const itemNodes = (Array.isArray(j.items) ? j.items : []).slice(0, 100).map((it, i) => Object.fromEntries(Object.entries({
+      "@type": "ListItem",
+      position: i + 1,
+      url: `${origin}${it.url}`,
+      name: it.title || undefined,
+    }).filter(([, v]) => v !== undefined)));
+    const ld = {
+      "@context": "https://schema.org",
+      "@type": "CollectionPage",
+      name: j.title || undefined,
+      description: j.description || undefined,
+      url: canonicalUrl,
+      isPartOf: { "@type": "WebSite", name: "Trailhead", url: `${origin}/` },
+      mainEntity: {
+        "@type": "ItemList",
+        numberOfItems: itemNodes.length,
+        itemListElement: itemNodes,
+      },
+    };
+    const clean = Object.fromEntries(Object.entries(ld).filter(([, v]) => v !== undefined));
+    jsonLdTag = `<script type="application/ld+json">${JSON.stringify(clean).replace(/</g, "\\u003c")}</script>`;
   } else if (meta.jsonLd && meta.jsonLd.kind === "PersonProfile") {
     // ProfilePage wrapping a Person entity. Google + LinkedIn + others
     // pull author E-E-A-T signals from this schema — name, handle (as
@@ -1952,6 +2198,8 @@ module.exports = async function handler(req, res) {
     ssrHtml = buildPostSSR(meta.article, canonicalUrl, origin);
   } else if (type === "user" && meta.profileSSR) {
     ssrHtml = buildProfileSSR(meta.profileSSR, canonicalUrl, origin);
+  } else if ((type === "builds-index" || type === "trips-index" || type === "spots-index") && meta.listSSR) {
+    ssrHtml = buildListingSSR(meta.listSSR, canonicalUrl, origin);
   }
   if (ssrHtml) {
     html = html.replace(/(<div id="root"[^>]*>)([\s\S]*?)(<\/div>)/i, `$1${ssrHtml}$3`);

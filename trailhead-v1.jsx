@@ -44857,6 +44857,13 @@ const __INITIAL_SHARED_LINK = (function() {
       try { window.history.replaceState(null, "", "/"); } catch (e) {}
       return { kind: "hq" };
     }
+    // Collection landing pages — /builds, /trips, /spots. Slug stays
+    // visible so the address bar matches what's on screen + shares stay
+    // clean. SSR handled by api/preview.js; SPA routes to the closest
+    // in-app screen when the user follows the link.
+    if (/^\/builds\/?$/.test(path)) return { kind: "builds-index" };
+    if (/^\/trips\/?$/.test(path)) return { kind: "trips-index" };
+    if (/^\/spots\/?$/.test(path)) return { kind: "spots-index" };
     // User profile deep link — /users/<handle>. Keep the URL visible so
     // shares are clean + the address bar matches what's on screen.
     const userMatch = path.match(/^\/users\/(.+?)\/?$/);
@@ -47159,7 +47166,7 @@ export default function Trailhead() {
   // write the same pill state as FeedScreen's inline pill row. Falls back
   // to in-component state for any FeedScreen instance that isn't passed a
   // controller (e.g. profile-screen activity tabs).
-  const [feedFilter, setFeedFilter] = useState("ALL");
+  const [feedFilter, setFeedFilter] = useState(initialSharedLink && initialSharedLink.kind === "trips-index" ? "TRIP REPORTS" : "ALL");
   const FEED_PILL_FILTERS = ["ALL", "BUILDS", "CONVOYS", "TRIP REPORTS", ...(GEAR_DROPS_ENABLED ? ["GEAR DROPS"] : []), "PHOTOS", "FORUM"];
 
   // Desktop layout — Twitter-style centered column (the existing 430px app
@@ -47233,10 +47240,13 @@ export default function Trailhead() {
     // not a back-door into the gated Maps screen, and (b) the background
     // hydrate's feedItems is visible to guests as soon as it lands.
     // Spot/HQ links still need the map (their popup IS the map UI).
-    if (initialSharedLink.kind === "spot" || initialSharedLink.kind === "hq") return "routes";
-    if (initialSharedLink.kind === "build") return "builds";
+    if (initialSharedLink.kind === "spot" || initialSharedLink.kind === "hq" || initialSharedLink.kind === "spots-index") return "routes";
+    if (initialSharedLink.kind === "build" || initialSharedLink.kind === "builds-index") return "builds";
     if (initialSharedLink.kind === "forum-thread" || initialSharedLink.kind === "forum-sub" || initialSharedLink.kind === "forum-landing") return "forum";
     if (initialSharedLink.kind === "bounty") return "ranks";
+    // trips-index lands on the Feed with the TRIP REPORTS filter
+    // pre-selected (feedFilter useState below flips accordingly).
+    if (initialSharedLink.kind === "trips-index") return "feed";
     // Admin landing is gated by an isAdmin-aware useEffect below — at boot
     // time we don't know the role yet, so cold-boot to feed and promote
     // once auth resolves.

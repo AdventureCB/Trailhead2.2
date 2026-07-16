@@ -103,6 +103,13 @@ module.exports = async function handler(req, res) {
   // Forum landing — single hub URL listing every category. SPA handles
   // rendering; no rewrite needed (falls through to index.html shell).
   urls.push(urlEntry(`${origin}/forum`, now, "daily", "0.8"));
+  // Collection landing pages — server-side rendered by api/preview.js
+  // with a dense grid of internal links to every detail URL. High
+  // priority because they're the canonical parents for /builds/:id,
+  // /trips/:slug, /spots/:id.
+  urls.push(urlEntry(`${origin}/builds`, now, "daily", "0.8"));
+  urls.push(urlEntry(`${origin}/trips`, now, "daily", "0.8"));
+  urls.push(urlEntry(`${origin}/spots`, now, "daily", "0.8"));
 
   // Forum subcategory landing pages — each is its own topical hub.
   forumSubcategories.forEach(sub => {
