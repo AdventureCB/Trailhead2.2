@@ -6901,7 +6901,7 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
           {/* View Full Build CTA */}
           <div style={{ padding: "10px 16px 4px" }}>
             <button
-              onClick={() => onViewBuild && onViewBuild({ rawId: item.buildRawId != null ? item.buildRawId : null, name: item.title })}
+              onClick={() => onViewBuild && onViewBuild({ rawId: item.buildRawId != null ? item.buildRawId : null, name: item.title, ownerId: item.userId || null })}
               style={{ width: "100%", padding: "11px 14px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
             >
               <Wrench size={13} color={T.white} />
@@ -17988,16 +17988,21 @@ function BuildsScreen({ onViewUser, userBuilds, allBuilds: allBuildsProp, onLoad
 
   const allBuilds = [...defaultBuilds, ...mappedUserBuilds];
 
-  // Resolve pending build navigation — every build is in allBuildsProp now,
-  // so just look it up by id (or name fallback) and open the detail view.
+  // Resolve pending build navigation. Priority: exact id match > owner+name
+  // match (disambiguates when multiple users have builds with the same
+  // "<year> <make> <model>" title) > pure-name match (last resort for legacy
+  // posts w/o ownerId). Never fall through to pure-name when we have a
+  // rawId — better to wait for onLoadBuildById than land on the wrong user's
+  // build.
   useEffect(() => {
     if (!pendingBuildNav) return;
-    const { rawId, name } = pendingBuildNav;
+    const { rawId, name, ownerId } = pendingBuildNav;
     let match = null;
     if (rawId != null) match = allBuilds.find(b => b.rawId === rawId || b.id === rawId);
-    if (!match && name) {
+    if (!match && !rawId && name) {
       const lc = String(name).toLowerCase();
-      match = allBuilds.find(b => (b.name || "").toLowerCase() === lc);
+      if (ownerId) match = allBuilds.find(b => (b.name || "").toLowerCase() === lc && b.userId === ownerId);
+      if (!match) match = allBuilds.find(b => (b.name || "").toLowerCase() === lc);
     }
     if (match) {
       setDetailBuildId(match.id);
@@ -53155,17 +53160,17 @@ export default function Trailhead() {
     if (allBuildsLoadedRef.current) return;
     allBuildsLoadedRef.current = true;
     try {
-      // Initial cap at 150 (most users explore a few dozen). Lazy pagination
-      // can come later if a user actually hits the cap.
-      // Slim SELECT — skip the heavy `build_data` jsonb which can hold
-      // embedded photo blobs / mod arrays large enough to time out the
-      // PostgREST statement (code 57014). The gallery card only needs
-      // hero_img + name + year/make/model. Full build_data is lazy-loaded
-      // when the detail page opens via loadBuildById.
+      // Cap at 1000 (PostgREST default max). Slim SELECT — skip the heavy
+      // `build_data` jsonb which can hold embedded photo blobs / mod arrays
+      // large enough to time out the PostgREST statement (code 57014). The
+      // gallery card only needs hero_img + name + year/make/model. Full
+      // build_data is lazy-loaded when the detail page opens via
+      // loadBuildById. If the app grows past 1000 builds, switch to
+      // keyset pagination (created_at cursor).
       const { data: buildRows, error: buildErr } = await supabase
         .from("builds")
         .select("id, user_id, name, year, make, model, trim, hero_img, created_at")
-        .order("created_at", { ascending: false }).limit(150);
+        .order("created_at", { ascending: false }).limit(1000);
       if (buildErr) { console.error("[builds] gallery load error", buildErr); allBuildsLoadedRef.current = false; setAllBuildsLoaded(true); return; }
       if (!Array.isArray(buildRows)) return;
       const myUid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
