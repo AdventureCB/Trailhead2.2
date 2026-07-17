@@ -5714,7 +5714,7 @@ function ImageCarousel({ images, startIndex, onClose }) {
 // Feed posts are now persisted to public.posts and hydrated on sign-in.
 // The legacy defaultFeedItems seed array was removed once the backend landed.
 
-function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShareCompose, onOpenShareIntent, onViewBuild, onOpenTripDetail, onOpenConvoy, feedItems, onUpdateFeed, onUpdatePost, likedPostIds, onTogglePostLike, postComments, onAddComment, onDeleteComment, likedCommentIds, onToggleCommentLike, currentUserId, currentUserName, currentUserHandle, currentUserAvatar, isAdmin, isModerator, isBetaTester, onDeletePost, onEditPost, onAddNotification, forumUserReplies, forumViewCounts, savedRoutes, onSaveRoute, onUnsaveRoute, onStartNav, onStartDirections, onAwardPoints, isGuest, onGuestTap, pendingPostNav, onConsumePendingPostNav, onSharedPostMissing, convoyRsvps, onRsvpConvoy, onSearchUsers, filterFn, hideFilters, onlineUserIds, tripReports, tripPlans, tripAuthors, onNewTripReport, onOpenTripDraft, onOpenSpotOnMap, onOpenHQOnMap, onOpenBountyById, onLoadMore, hasMore, loadingMore, onLoadTripRouteData, onReportContent, activeFilter: controlledFilter, setActiveFilter: setControlledFilter, gearDrops, gearDropWinners, myGearDropRuns, onOpenGearDrop }) {
+function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShareCompose, onOpenShareIntent, onViewBuild, onOpenTripDetail, onOpenConvoy, feedItems, onUpdateFeed, onUpdatePost, likedPostIds, onTogglePostLike, postComments, onAddComment, onDeleteComment, likedCommentIds, onToggleCommentLike, currentUserId, currentUserName, currentUserHandle, currentUserAvatar, isAdmin, isModerator, isBetaTester, onDeletePost, onEditPost, onAddNotification, forumUserReplies, forumViewCounts, savedRoutes, onSaveRoute, onUnsaveRoute, onStartNav, onStartDirections, onAwardPoints, isGuest, onGuestTap, pendingPostNav, onConsumePendingPostNav, onSharedPostMissing, convoyRsvps, onRsvpConvoy, onSearchUsers, filterFn, hideFilters, onlineUserIds, tripReports, tripPlans, tripAuthors, onNewTripReport, onOpenTripDraft, onOpenSpotOnMap, onOpenHQOnMap, onOpenBountyById, onLoadMore, hasMore, loadingMore, onLoadTripRouteData, onReportContent, activeFilter: controlledFilter, setActiveFilter: setControlledFilter, gearDrops, gearDropWinners, myGearDropRuns, onOpenGearDrop, pollsById, myPollResponsesById, onSubmitPollResponse, pollAllBuilds, pollAllTripReports, pollCampingSpots }) {
   // Infinite-scroll sentinel — bottom of the feed list. When it scrolls
   // into view, ask the root to load the next page. Disabled when the
   // active filter is anything but ALL (filter-narrowed lists don't drive
@@ -6106,6 +6106,42 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
   };
 
   const renderCard = (item) => {
+    if (item.type === "POLL") {
+      const pollId = item.pollId || (item.data && item.data.pollId) || null;
+      const poll = pollId && pollsById ? pollsById[pollId] : null;
+      const myResp = pollId && myPollResponsesById ? myPollResponsesById[pollId] : null;
+      return (
+        <div key={item.id} style={cardStyle}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px" }}>
+            <div style={{ width: 32, height: 32, borderRadius: "50%", background: T.copper, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", ...avatarOnlineStyle(item.userId, onlineUserIds) }}>
+              {item.avatarUrl ? <img src={txImg(item.avatarUrl, 96)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontFamily: sans, fontSize: 11, fontWeight: 700, color: T.white }}>{item.initial}</span>}
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                <span onClick={() => onViewUser && onViewUser(item.userId || item.handle || (item.user || "").replace(/\s/g, "_"))} style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, cursor: "pointer" }}>{item.user}</span>
+                {item.handle && <span style={{ fontFamily: sans, fontSize: 11, color: T.copper }}>@{String(item.handle).replace(/^@/, "")}</span>}
+              </div>
+              <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 1 }}>{relTime(item.time)}</div>
+            </div>
+          </div>
+          {poll ? (
+            <PollCard
+              poll={poll}
+              myResponse={myResp}
+              isGuest={isGuest}
+              onGuestTap={onGuestTap}
+              onSubmit={onSubmitPollResponse}
+              allBuilds={pollAllBuilds}
+              allTripReports={pollAllTripReports}
+              campingSpots={pollCampingSpots}
+            />
+          ) : (
+            <div style={{ padding: "20px 16px", fontFamily: sans, fontSize: 12, color: T.tertiary, textAlign: "center" }}>Loading poll…</div>
+          )}
+          {actionBar(item)}
+        </div>
+      );
+    }
     if (item.type === "POST") {
       return (
         <div key={item.id} style={cardStyle}>
@@ -18035,6 +18071,453 @@ function SpotsIndexScreen({ isGuest, onGuestTap, onViewSpotOnMap, onBack, onView
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ─── POLLS — admin-created feed polls ─── */
+// Question types supported by the poll editor + renderer. Kept as a
+// constant so the picker + validation + renderer all reference the same
+// canonical list. `dropdown_*` types pull their option list from live
+// app state (builds / trips / spots) at render time.
+const POLL_QUESTION_TYPES = [
+  { key: "multiple_choice", label: "Multiple choice" },
+  { key: "short_answer", label: "Short answer" },
+  { key: "dropdown_builds", label: "Pick a build" },
+  { key: "dropdown_trips", label: "Pick a trip report" },
+  { key: "dropdown_spots", label: "Pick a camp spot" },
+];
+
+// Compact URL-safe question id — poll payloads are only unique WITHIN a
+// single poll, so we use a short random tail rather than a UUID.
+function pollQuestionId() {
+  return "q_" + Math.random().toString(36).slice(2, 9);
+}
+
+// PollCreator — admin modal for authoring a new poll. Reachable from the
+// Compose screen (admin-only POLL type). Handles multi-question polls,
+// mixed question types, optional "Other" + multi-select on multiple
+// choice. Fires `onSubmit({title, description, revealResults, questions})`
+// on POST; parent inserts posts + polls rows.
+function PollCreator({ isAdmin, onSubmit, onClose }) {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [revealResults, setRevealResults] = useState(false);
+  const [questions, setQuestions] = useState(() => [{
+    id: pollQuestionId(),
+    text: "",
+    type: "multiple_choice",
+    options: ["", ""],
+    allow_other: false,
+    allow_multiple: false,
+    required: true,
+  }]);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  if (!isAdmin) return null;
+  const updateQ = (idx, patch) => setQuestions(prev => prev.map((q, i) => i === idx ? { ...q, ...patch } : q));
+  const removeQ = (idx) => setQuestions(prev => prev.filter((_, i) => i !== idx));
+  const addQ = () => setQuestions(prev => [...prev, {
+    id: pollQuestionId(),
+    text: "",
+    type: "multiple_choice",
+    options: ["", ""],
+    allow_other: false,
+    allow_multiple: false,
+    required: true,
+  }]);
+  const setOption = (qIdx, oIdx, value) => updateQ(qIdx, { options: questions[qIdx].options.map((o, i) => i === oIdx ? value : o) });
+  const addOption = (qIdx) => updateQ(qIdx, { options: [...questions[qIdx].options, ""] });
+  const removeOption = (qIdx, oIdx) => updateQ(qIdx, { options: questions[qIdx].options.filter((_, i) => i !== oIdx) });
+  const canSubmit = title.trim().length > 0 && questions.length > 0 && questions.every(q => {
+    if (!q.text.trim()) return false;
+    if (q.type === "multiple_choice") return q.options.filter(o => o.trim()).length >= 2;
+    return true;
+  });
+  const doSubmit = async () => {
+    if (!canSubmit || submitting) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      const cleanQuestions = questions.map(q => {
+        const base = { id: q.id, text: q.text.trim(), type: q.type, required: !!q.required };
+        if (q.type === "multiple_choice") {
+          return { ...base, options: q.options.map(o => o.trim()).filter(Boolean), allow_other: !!q.allow_other, allow_multiple: !!q.allow_multiple };
+        }
+        return base;
+      });
+      const res = await onSubmit({ title: title.trim(), description: description.trim(), revealResults, questions: cleanQuestions });
+      if (res && res.error) setError(res.error);
+      else onClose();
+    } catch (e) { setError(e.message || "Failed to publish poll"); }
+    finally { setSubmitting(false); }
+  };
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 1100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, maxHeight: "92vh", background: T.darkBg, borderTopLeftRadius: 16, borderTopRightRadius: 16, display: "flex", flexDirection: "column", border: `1px solid ${T.charcoal}` }}>
+        <div style={{ padding: "16px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${T.charcoal}` }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <BarChart3 size={18} color={T.copper} />
+            <span style={{ fontFamily: sans, fontSize: 15, color: T.white, fontWeight: 700, letterSpacing: 0.5 }}>NEW POLL</span>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer" }}>
+            <X size={18} color={T.tertiary} />
+          </button>
+        </div>
+        <div className="th-scroll" style={{ flex: 1, overflowY: "auto", padding: 16 }}>
+          <label style={{ display: "block", marginBottom: 12 }}>
+            <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700, marginBottom: 6 }}>POLL TITLE</div>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Build of the week" style={{ width: "100%", background: T.darkCard, color: T.white, border: `1px solid ${T.charcoal}`, borderRadius: 8, padding: "10px 12px", fontFamily: serif, fontSize: 14, outline: "none", boxSizing: "border-box" }} />
+          </label>
+          <label style={{ display: "block", marginBottom: 12 }}>
+            <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700, marginBottom: 6 }}>DESCRIPTION <span style={{ color: T.tertiary, fontWeight: 400, letterSpacing: 0 }}>(optional)</span></div>
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} placeholder="Give voters context" style={{ width: "100%", background: T.darkCard, color: T.white, border: `1px solid ${T.charcoal}`, borderRadius: 8, padding: "10px 12px", fontFamily: serif, fontSize: 13, outline: "none", boxSizing: "border-box", resize: "vertical" }} />
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20, cursor: "pointer" }}>
+            <input type="checkbox" checked={revealResults} onChange={(e) => setRevealResults(e.target.checked)} />
+            <span style={{ fontFamily: sans, fontSize: 12, color: T.tertiary }}>Reveal results to voters when poll closes</span>
+          </label>
+          {questions.map((q, qIdx) => (
+            <div key={q.id} style={{ background: T.charcoal, borderRadius: 10, padding: 14, marginBottom: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.5, fontWeight: 700 }}>QUESTION {qIdx + 1}</span>
+                {questions.length > 1 && (
+                  <button onClick={() => removeQ(qIdx)} style={{ background: "none", border: "none", color: T.red, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>REMOVE</button>
+                )}
+              </div>
+              <input value={q.text} onChange={(e) => updateQ(qIdx, { text: e.target.value })} placeholder="What are you asking?" style={{ width: "100%", background: T.darkCard, color: T.white, border: `1px solid ${T.darkBg}`, borderRadius: 6, padding: "9px 12px", fontFamily: serif, fontSize: 13, outline: "none", boxSizing: "border-box", marginBottom: 10 }} />
+              <select value={q.type} onChange={(e) => updateQ(qIdx, { type: e.target.value, options: e.target.value === "multiple_choice" && q.options.length < 2 ? ["", ""] : q.options })} style={{ width: "100%", background: T.darkCard, color: T.white, border: `1px solid ${T.darkBg}`, borderRadius: 6, padding: "9px 12px", fontFamily: sans, fontSize: 12, marginBottom: 10 }}>
+                {POLL_QUESTION_TYPES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+              </select>
+              {q.type === "multiple_choice" && (
+                <>
+                  {q.options.map((opt, oIdx) => (
+                    <div key={oIdx} style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                      <input value={opt} onChange={(e) => setOption(qIdx, oIdx, e.target.value)} placeholder={`Option ${oIdx + 1}`} style={{ flex: 1, background: T.darkCard, color: T.white, border: `1px solid ${T.darkBg}`, borderRadius: 6, padding: "8px 10px", fontFamily: serif, fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+                      {q.options.length > 2 && (
+                        <button onClick={() => removeOption(qIdx, oIdx)} style={{ background: T.darkCard, color: T.red, border: "none", borderRadius: 6, padding: "0 10px", fontFamily: sans, fontSize: 14, cursor: "pointer" }}>×</button>
+                      )}
+                    </div>
+                  ))}
+                  <button onClick={() => addOption(qIdx)} style={{ background: "none", border: `1px dashed ${T.copper}60`, color: T.copper, borderRadius: 6, padding: "6px 10px", fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, cursor: "pointer", marginTop: 2, marginBottom: 8 }}>+ ADD OPTION</button>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                      <input type="checkbox" checked={!!q.allow_other} onChange={(e) => updateQ(qIdx, { allow_other: e.target.checked })} />
+                      <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>Allow "Other" (short answer)</span>
+                    </label>
+                    <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                      <input type="checkbox" checked={!!q.allow_multiple} onChange={(e) => updateQ(qIdx, { allow_multiple: e.target.checked })} />
+                      <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>Allow multiple selections</span>
+                    </label>
+                  </div>
+                </>
+              )}
+              {q.type !== "multiple_choice" && q.type !== "short_answer" && (
+                <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, marginTop: 4 }}>
+                  Voters will pick from a live list of {q.type === "dropdown_builds" ? "builds" : q.type === "dropdown_trips" ? "trip reports" : "camping spots"}.
+                </div>
+              )}
+            </div>
+          ))}
+          <button onClick={addQ} style={{ width: "100%", background: T.darkCard, border: `1px dashed ${T.tertiary}`, color: T.copper, borderRadius: 8, padding: "12px", fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 1, cursor: "pointer", marginBottom: 12 }}>+ ADD QUESTION</button>
+          {error && <div style={{ marginBottom: 10, fontFamily: sans, fontSize: 12, color: T.red }}>{error}</div>}
+        </div>
+        <div style={{ padding: 14, borderTop: `1px solid ${T.charcoal}` }}>
+          <button onClick={doSubmit} disabled={!canSubmit || submitting} style={{ width: "100%", background: canSubmit ? T.red : T.charcoal, color: canSubmit ? T.white : T.tertiary, border: "none", borderRadius: 8, padding: "13px", fontFamily: sans, fontSize: 13, fontWeight: 700, letterSpacing: 1, cursor: canSubmit && !submitting ? "pointer" : "default", opacity: submitting ? 0.7 : 1 }}>
+            {submitting ? "PUBLISHING…" : "PUBLISH POLL"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// PollCard — feed-inline poll renderer. Read-only when the user has
+// already voted OR the poll is closed. Editable while status='active'.
+// Shows aggregated results when status='closed' AND reveal_results=true
+// (parent passes tally derived from responses list).
+function PollCard({ poll, myResponse, isGuest, onGuestTap, onSubmit, allBuilds, allTripReports, campingSpots, results }) {
+  const [draft, setDraft] = useState(() => (myResponse && myResponse.responses) || {});
+  const [submitting, setSubmitting] = useState(false);
+  const [saveState, setSaveState] = useState(""); // "" | "saved" | "error:<msg>"
+  useEffect(() => { setDraft((myResponse && myResponse.responses) || {}); }, [myResponse]);
+  if (!poll) return null;
+  const questions = Array.isArray(poll.questions) ? poll.questions : [];
+  const closed = poll.status !== "active";
+  const readOnly = closed;
+  const revealResults = closed && poll.reveal_results && results;
+  const setQ = (qid, value) => setDraft(prev => ({ ...prev, [qid]: value }));
+  const submitVote = async () => {
+    if (isGuest) { onGuestTap && onGuestTap(); return; }
+    if (readOnly || submitting) return;
+    setSubmitting(true);
+    setSaveState("");
+    try {
+      const res = await onSubmit(poll.id, draft);
+      if (res && res.error) setSaveState("error:" + res.error);
+      else setSaveState("saved");
+    } catch (e) { setSaveState("error:" + (e.message || "Failed")); }
+    finally { setSubmitting(false); }
+  };
+  const dropdownSource = (type) => {
+    if (type === "dropdown_builds") return (Array.isArray(allBuilds) ? allBuilds : []).map(b => ({ id: b.id, label: b.name || [b.year, b.make, b.model].filter(Boolean).join(" ") }));
+    if (type === "dropdown_trips") return (Array.isArray(allTripReports) ? allTripReports : []).filter(t => t && t.status === "published" && (!t.kind || t.kind === "report")).map(t => ({ id: t.id, label: t.name || "Trip Report" }));
+    if (type === "dropdown_spots") return (Array.isArray(campingSpots) ? campingSpots : []).map(s => ({ id: s.id, label: s.name || "Camping Spot" }));
+    return [];
+  };
+  return (
+    <div style={{ padding: "0 16px 12px" }}>
+      <div style={{ background: T.darkCard, border: `1px solid ${T.copper}30`, borderRadius: 12, overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 14px", background: `${T.copper}12`, borderBottom: `1px solid ${T.copper}20` }}>
+          <BarChart3 size={14} color={T.copper} />
+          <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.5, fontWeight: 700 }}>POLL</span>
+          {closed && <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, background: T.charcoal, padding: "3px 8px", borderRadius: 4, marginLeft: "auto" }}>{poll.status === "closed" ? "CLOSED" : "ARCHIVED"}</span>}
+        </div>
+        <div style={{ padding: 14 }}>
+          <h3 style={{ margin: "0 0 6px", fontFamily: sans, fontSize: 16, fontWeight: 700, color: T.white }}>{poll.title || "Poll"}</h3>
+          {poll.description && <p style={{ margin: "0 0 12px", fontFamily: serif, fontSize: 13, color: "#F5F2ED", lineHeight: 1.5 }}>{poll.description}</p>}
+          {questions.map((q, qIdx) => {
+            const ans = draft[q.id] || {};
+            const total = results && results[q.id] ? results[q.id].total : 0;
+            return (
+              <div key={q.id} style={{ marginBottom: 14 }}>
+                <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, marginBottom: 8 }}>
+                  {qIdx + 1}. {q.text}
+                  {q.required && <span style={{ color: T.red, marginLeft: 4 }}>*</span>}
+                </div>
+                {q.type === "multiple_choice" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {(q.options || []).map(opt => {
+                      const choices = Array.isArray(ans.choices) ? ans.choices : [];
+                      const picked = choices.includes(opt);
+                      const count = revealResults ? ((results && results[q.id] && results[q.id].counts && results[q.id].counts[opt]) || 0) : 0;
+                      const pct = revealResults && total > 0 ? Math.round((count / total) * 100) : 0;
+                      return (
+                        <button key={opt} disabled={readOnly} onClick={() => {
+                          const next = q.allow_multiple
+                            ? { ...ans, choices: picked ? choices.filter(c => c !== opt) : [...choices, opt] }
+                            : { ...ans, choices: [opt] };
+                          setQ(q.id, next);
+                        }} style={{ position: "relative", background: picked ? `${T.copper}25` : T.charcoal, border: `1px solid ${picked ? T.copper : T.darkBg}`, borderRadius: 6, padding: "10px 12px", fontFamily: serif, fontSize: 13, color: T.white, textAlign: "left", cursor: readOnly ? "default" : "pointer", overflow: "hidden" }}>
+                          {revealResults && (
+                            <div style={{ position: "absolute", inset: 0, background: `linear-gradient(to right, ${T.copper}20 ${pct}%, transparent ${pct}%)`, pointerEvents: "none" }} />
+                          )}
+                          <span style={{ position: "relative", zIndex: 1 }}>{opt}{picked && <span style={{ color: T.copper, marginLeft: 6 }}>✓</span>}</span>
+                          {revealResults && <span style={{ position: "relative", zIndex: 1, float: "right", color: T.tertiary, fontFamily: sans, fontSize: 11 }}>{count} · {pct}%</span>}
+                        </button>
+                      );
+                    })}
+                    {q.allow_other && (
+                      <div>
+                        <button disabled={readOnly} onClick={() => setQ(q.id, { ...ans, choices: [...(ans.choices || []).filter(c => c !== "__other__"), "__other__"] })} style={{ width: "100%", background: (ans.choices || []).includes("__other__") ? `${T.copper}25` : T.charcoal, border: `1px solid ${(ans.choices || []).includes("__other__") ? T.copper : T.darkBg}`, borderRadius: 6, padding: "10px 12px", fontFamily: serif, fontSize: 13, color: T.white, textAlign: "left", cursor: readOnly ? "default" : "pointer" }}>
+                          Other {(ans.choices || []).includes("__other__") && <span style={{ color: T.copper, marginLeft: 6 }}>✓</span>}
+                        </button>
+                        {(ans.choices || []).includes("__other__") && (
+                          <input disabled={readOnly} value={ans.other_text || ""} onChange={(e) => setQ(q.id, { ...ans, other_text: e.target.value })} placeholder="Type your answer" style={{ width: "100%", marginTop: 6, background: T.darkCard, color: T.white, border: `1px solid ${T.darkBg}`, borderRadius: 6, padding: "8px 10px", fontFamily: serif, fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {q.type === "short_answer" && (
+                  <textarea disabled={readOnly} rows={2} value={ans.text || ""} onChange={(e) => setQ(q.id, { text: e.target.value })} placeholder="Type your answer" style={{ width: "100%", background: T.charcoal, color: T.white, border: `1px solid ${T.darkBg}`, borderRadius: 6, padding: "9px 12px", fontFamily: serif, fontSize: 13, outline: "none", boxSizing: "border-box", resize: "vertical" }} />
+                )}
+                {(q.type === "dropdown_builds" || q.type === "dropdown_trips" || q.type === "dropdown_spots") && (() => {
+                  const source = dropdownSource(q.type);
+                  const selectedId = (ans.selected_ids && ans.selected_ids[0]) || "";
+                  return (
+                    <select disabled={readOnly} value={selectedId} onChange={(e) => setQ(q.id, { selected_ids: e.target.value ? [e.target.value] : [] })} style={{ width: "100%", background: T.charcoal, color: T.white, border: `1px solid ${T.darkBg}`, borderRadius: 6, padding: "10px 12px", fontFamily: sans, fontSize: 13 }}>
+                      <option value="">— Choose one —</option>
+                      {source.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+                    </select>
+                  );
+                })()}
+              </div>
+            );
+          })}
+          {!readOnly && (
+            <button onClick={submitVote} disabled={submitting} style={{ width: "100%", background: T.copper, color: T.white, border: "none", borderRadius: 8, padding: "11px", fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 1, cursor: submitting ? "wait" : "pointer", opacity: submitting ? 0.7 : 1 }}>
+              {submitting ? "SUBMITTING…" : (myResponse ? "UPDATE VOTE" : (isGuest ? "SIGN IN TO VOTE" : "SUBMIT VOTE"))}
+            </button>
+          )}
+          {saveState === "saved" && (
+            <div style={{ marginTop: 8, fontFamily: serif, fontSize: 12, color: T.green, textAlign: "center" }}>Thanks — your vote is recorded.</div>
+          )}
+          {saveState.startsWith("error:") && (
+            <div style={{ marginTop: 8, fontFamily: sans, fontSize: 11, color: T.red, textAlign: "center" }}>{saveState.slice(6)}</div>
+          )}
+          {readOnly && !revealResults && (
+            <div style={{ marginTop: 4, fontFamily: serif, fontSize: 12, color: T.tertiary, textAlign: "center", fontStyle: "italic" }}>
+              This poll is closed.{myResponse ? " Thanks for voting." : ""}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Admin-only polls dashboard. Lists every poll w/ response count, per-poll
+// tap opens response breakdown. Response aggregation is client-side —
+// walks the returned responses jsonb and tallies per question.
+function PollsAdminScreen({ onBack, onLoadPolls, onLoadPollResponses, onUpdatePollStatus, onDeletePoll, isAdmin }) {
+  const [polls, setPolls] = useState(null);
+  const [error, setError] = useState("");
+  const [selectedId, setSelectedId] = useState(null);
+  const [responses, setResponses] = useState(null);
+  const [selectedPoll, setSelectedPoll] = useState(null);
+  const refresh = async () => {
+    const res = await onLoadPolls();
+    if (res && res.error) setError(res.error);
+    else setPolls(res && res.data ? res.data : []);
+  };
+  useEffect(() => { refresh(); }, []);
+  const openPoll = async (poll) => {
+    setSelectedId(poll.id);
+    setSelectedPoll(poll);
+    setResponses(null);
+    const res = await onLoadPollResponses(poll.id);
+    if (res && res.error) setResponses({ error: res.error });
+    else setResponses(res && res.data ? res.data : []);
+  };
+  const closeDetail = () => { setSelectedId(null); setSelectedPoll(null); setResponses(null); };
+  if (!isAdmin) return null;
+  if (selectedId) {
+    const poll = selectedPoll || (polls || []).find(p => p.id === selectedId);
+    const responseList = Array.isArray(responses) ? responses : [];
+    const questions = Array.isArray(poll && poll.questions) ? poll.questions : [];
+    // Tally per question client-side.
+    const tally = {};
+    questions.forEach(q => {
+      tally[q.id] = { total: 0, counts: {}, texts: [], selectedIds: [] };
+      responseList.forEach(r => {
+        const ans = (r && r.responses && r.responses[q.id]) || null;
+        if (!ans) return;
+        tally[q.id].total += 1;
+        if (q.type === "multiple_choice") {
+          (ans.choices || []).forEach(c => {
+            if (c === "__other__") tally[q.id].counts["Other"] = (tally[q.id].counts["Other"] || 0) + 1;
+            else tally[q.id].counts[c] = (tally[q.id].counts[c] || 0) + 1;
+          });
+          if (ans.other_text) tally[q.id].texts.push(ans.other_text);
+        } else if (q.type === "short_answer") {
+          if (ans.text) tally[q.id].texts.push(ans.text);
+        } else if (q.type.startsWith("dropdown_")) {
+          (ans.selected_ids || []).forEach(id => tally[q.id].selectedIds.push(id));
+        }
+      });
+    });
+    return (
+      <div style={{ padding: "16px 16px 40px", fontFamily: serif }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+          <button onClick={closeDetail} style={{ background: T.darkCard, border: "none", borderRadius: 8, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+            <ChevronLeft size={18} color={T.white} />
+          </button>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h1 style={{ fontFamily: sans, fontSize: 18, margin: 0, color: T.white, fontWeight: 700 }}>{poll ? poll.title : "Poll"}</h1>
+            <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, marginTop: 3 }}>
+              {responseList.length} response{responseList.length === 1 ? "" : "s"} · {poll && poll.status}
+            </div>
+          </div>
+          {poll && poll.status === "active" && (
+            <button onClick={async () => { const r = await onUpdatePollStatus(poll.id, "closed"); if (!(r && r.error)) { await refresh(); setSelectedPoll(prev => prev ? { ...prev, status: "closed" } : prev); } }} style={{ background: T.copper, color: T.white, border: "none", borderRadius: 6, padding: "8px 12px", fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>CLOSE POLL</button>
+          )}
+          {poll && poll.status === "closed" && (
+            <button onClick={async () => { const r = await onUpdatePollStatus(poll.id, "active"); if (!(r && r.error)) { await refresh(); setSelectedPoll(prev => prev ? { ...prev, status: "active" } : prev); } }} style={{ background: T.green, color: T.white, border: "none", borderRadius: 6, padding: "8px 12px", fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>RE-OPEN</button>
+          )}
+        </div>
+        {questions.map(q => {
+          const t = tally[q.id] || { total: 0, counts: {}, texts: [], selectedIds: [] };
+          return (
+            <div key={q.id} style={{ background: T.charcoal, borderRadius: 10, padding: 14, marginBottom: 12 }}>
+              <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, marginBottom: 4 }}>{q.text}</div>
+              <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, marginBottom: 10 }}>{q.type.replace(/_/g, " ").toUpperCase()} · {t.total} response{t.total === 1 ? "" : "s"}</div>
+              {q.type === "multiple_choice" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {[...(q.options || []), ...(q.allow_other ? ["Other"] : [])].map(opt => {
+                    const count = t.counts[opt] || 0;
+                    const pct = t.total > 0 ? Math.round((count / t.total) * 100) : 0;
+                    return (
+                      <div key={opt} style={{ position: "relative", background: T.darkCard, borderRadius: 6, padding: "9px 12px" }}>
+                        <div style={{ position: "absolute", inset: 0, background: `linear-gradient(to right, ${T.copper}30 ${pct}%, transparent ${pct}%)`, borderRadius: 6 }} />
+                        <div style={{ position: "relative", display: "flex", justifyContent: "space-between", fontFamily: serif, fontSize: 13, color: T.white }}>
+                          <span>{opt}</span>
+                          <span style={{ fontFamily: sans, fontSize: 12, color: T.tertiary }}>{count} · {pct}%</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {q.allow_other && t.texts.length > 0 && (
+                    <div style={{ marginTop: 8, background: T.darkCard, borderRadius: 6, padding: 10 }}>
+                      <div style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1, fontWeight: 700, marginBottom: 6 }}>"OTHER" ANSWERS</div>
+                      {t.texts.map((tx, i) => <div key={i} style={{ fontFamily: serif, fontSize: 12, color: "#F5F2ED", marginBottom: 4 }}>· {tx}</div>)}
+                    </div>
+                  )}
+                </div>
+              )}
+              {q.type === "short_answer" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {t.texts.length === 0 ? <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>No responses yet.</div> :
+                    t.texts.map((tx, i) => <div key={i} style={{ background: T.darkCard, borderRadius: 6, padding: "8px 12px", fontFamily: serif, fontSize: 13, color: "#F5F2ED" }}>{tx}</div>)}
+                </div>
+              )}
+              {q.type.startsWith("dropdown_") && (() => {
+                const idCounts = {};
+                t.selectedIds.forEach(id => { idCounts[id] = (idCounts[id] || 0) + 1; });
+                const sorted = Object.entries(idCounts).sort((a, b) => b[1] - a[1]);
+                return sorted.length === 0 ? (
+                  <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>No responses yet.</div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {sorted.map(([id, count]) => {
+                      const pct = t.total > 0 ? Math.round((count / t.total) * 100) : 0;
+                      return (
+                        <div key={id} style={{ position: "relative", background: T.darkCard, borderRadius: 6, padding: "9px 12px" }}>
+                          <div style={{ position: "absolute", inset: 0, background: `linear-gradient(to right, ${T.copper}30 ${pct}%, transparent ${pct}%)`, borderRadius: 6 }} />
+                          <div style={{ position: "relative", display: "flex", justifyContent: "space-between", fontFamily: sans, fontSize: 12, color: T.white }}>
+                            <span style={{ fontFamily: "monospace", fontSize: 10, color: T.tertiary }}>{id.slice(0, 8)}…</span>
+                            <span>{count} · {pct}%</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+          );
+        })}
+        <div style={{ marginTop: 12 }}>
+          <button onClick={async () => { if (confirm("Delete this poll and all responses? This cannot be undone.")) { const r = await onDeletePoll(poll.id); if (!(r && r.error)) { closeDetail(); await refresh(); } } }} style={{ width: "100%", background: "transparent", color: T.red, border: `1px solid ${T.red}60`, borderRadius: 8, padding: "10px", fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>DELETE POLL</button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div style={{ padding: "16px 16px 40px", fontFamily: serif }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+        <button onClick={onBack} style={{ background: T.darkCard, border: "none", borderRadius: 8, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+          <ChevronLeft size={18} color={T.white} />
+        </button>
+        <h1 style={{ fontFamily: sans, fontSize: 22, margin: 0, color: T.white, fontWeight: 700 }}>Polls</h1>
+      </div>
+      {polls === null && <div style={{ padding: 32, fontFamily: sans, fontSize: 12, color: T.tertiary, textAlign: "center" }}>LOADING…</div>}
+      {error && <div style={{ padding: 32, fontFamily: sans, fontSize: 12, color: T.red, textAlign: "center" }}>{error}</div>}
+      {polls && polls.length === 0 && <div style={{ padding: 32, fontFamily: sans, fontSize: 12, color: T.tertiary, textAlign: "center" }}>No polls yet. Create one from the Post button.</div>}
+      {polls && polls.map(p => (
+        <button key={p.id} onClick={() => openPoll(p)} style={{ width: "100%", background: T.charcoal, border: "none", borderRadius: 10, padding: "14px", marginBottom: 8, display: "flex", alignItems: "center", gap: 12, cursor: "pointer", textAlign: "left" }}>
+          <div style={{ width: 40, height: 40, borderRadius: 8, background: `${T.copper}20`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <BarChart3 size={18} color={T.copper} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.title}</div>
+            <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, marginTop: 3 }}>
+              {p.question_count || 0} question{p.question_count === 1 ? "" : "s"} · {p.response_count || 0} response{p.response_count === 1 ? "" : "s"} · {p.status}
+            </div>
+          </div>
+          <ChevronRight size={16} color={T.tertiary} />
+        </button>
+      ))}
     </div>
   );
 }
@@ -36834,6 +37317,7 @@ function AdminHubScreen({ onBack, onSelect, openReportCount, openBugCount, isAdm
     { key: "bounties",   label: "BOUNTIES",   desc: "Quests, brief authoring, rewards, slot management.", icon: Target,        color: T.green },
     { key: "demo-progress", label: "DEMO PROGRESS", desc: "Live status of every Demo Request submission: claim → schedule → proof → review.", icon: UserCheck, color: T.green },
     !guideOnly && { key: "push",       label: "PUSH",       desc: "Broadcast push notifications and view history.",   icon: Bell,           color: T.copper },
+    !guideOnly && { key: "polls",      label: "POLLS",      desc: "Community polls with per-question response breakdown.", icon: BarChart3, color: T.copper },
     !guideOnly && { key: "analytics",  label: "ANALYTICS",  desc: "Active users, signups, posts, engagement.",        icon: TrendingUp,     color: T.green },
   ].filter(Boolean);
   return (
@@ -42305,7 +42789,7 @@ function PhotoUploader({ photos, onChange, maxPhotos = 10, compact = false, onUp
 }
 
 /* ─── COMPOSE / CREATE POST SCREEN ─── */
-function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotification, onAddRoute, onOpenDM, onSendDmInvite, userBuilds, currentUserName, currentUserHandle, onSearchUsers, onUploadError, initialConvoy, followingProfiles, onLoadFollowingProfiles, myTripPlans, currentUserId, onPlanNewRouteForConvoy, onUseExistingPlanForConvoy, onPlanNewRoute, onNewTripReport }) {
+function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotification, onAddRoute, onOpenDM, onSendDmInvite, userBuilds, currentUserName, currentUserHandle, onSearchUsers, onUploadError, initialConvoy, followingProfiles, onLoadFollowingProfiles, myTripPlans, currentUserId, onPlanNewRouteForConvoy, onUseExistingPlanForConvoy, onPlanNewRoute, onNewTripReport, isAdmin, onOpenPollCreator }) {
   // Trigger the lazy-load of followed-user profiles the first time the
   // compose screen mounts so the convoy invite dropdown has data ready.
   // Root tracks idempotency via a ref, so re-mounts here are no-ops.
@@ -42462,6 +42946,7 @@ function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotificatio
     { key: "route", label: "Route", desc: "Upload a route with stats and GPS track", icon: Map, color: T.green },
     { key: "convoy", label: "Convoy / Event", desc: "Organize a group trip with dates and slots", icon: Users, color: T.copper },
     { key: "recovery", label: "Recovery Request", desc: "Request help from nearby overlanders", icon: AlertTriangle, color: T.red },
+    ...(isAdmin ? [{ key: "poll", label: "Poll", desc: "Ask the community a question (admin-only)", icon: BarChart3, color: T.copper }] : []),
   ];
 
   const handleSubmit = async () => {
@@ -42682,6 +43167,14 @@ function ComposeScreen({ onClose, onSubmit, onAddRecoveryAlert, onAddNotificatio
                   // new route or pick one of their existing plans.
                   setPostType("convoy");
                   setConvoyStep("choose");
+                  return;
+                }
+                if (t.key === "poll") {
+                  // Poll authoring lives in its own overlay at root scope.
+                  // Close compose + open PollCreator so the modal isn't
+                  // stuck inside the compose sheet.
+                  if (typeof onOpenPollCreator === "function") onOpenPollCreator();
+                  if (typeof onClose === "function") onClose();
                   return;
                 }
                 setPostType(t.key);
@@ -45916,6 +46409,7 @@ export default function Trailhead() {
   };
 
   const hydrateGuestData = async () => {
+    try { hydratePolls(); } catch (e) { /* non-fatal */ }
     try {
       const { data: postRows, error: postErr } = await supabase
         .from("posts")
@@ -46019,6 +46513,8 @@ export default function Trailhead() {
     try { hydrateBounties(); } catch (e) { /* non-fatal */ }
     try { hydrateMyBountySubmissions(uid); } catch (e) { /* non-fatal */ }
     try { refreshBountyEarnings(); } catch (e) { /* non-fatal */ }
+    try { hydratePolls(); } catch (e) { /* non-fatal */ }
+    try { hydrateMyPollResponses(uid); } catch (e) { /* non-fatal */ }
 
     // ─── Tier 1 — critical for first paint ───
     // Profile (header avatar/name) + posts (feed list). Both run in
@@ -47473,6 +47969,13 @@ export default function Trailhead() {
   // board. Replaces the local component-state seed array that lived inside
   // RanksScreen for the v0 mock.
   const [bounties, setBounties] = useState([]);
+  // Polls — active + recently-closed polls hydrated from the polls table.
+  // Feed items with type='POLL' resolve the payload via pollsById[data.pollId].
+  const [pollsById, setPollsById] = useState({}); // { [pollId]: pollRow }
+  // Viewer's own poll responses. Populated once at boot + refreshed via
+  // realtime when the user votes (or admin/other tab flips a status).
+  const [myPollResponsesById, setMyPollResponsesById] = useState({}); // { [pollId]: {responses, ...} }
+  const [showPollCreator, setShowPollCreator] = useState(false);
   // Phase 6: which submission the admin has open in the review screen.
   // `null` keeps BountiesAdminScreen rendered; setting to a uuid mounts
   // BountySubmissionReviewScreen as a sub-route.
@@ -50010,6 +50513,143 @@ export default function Trailhead() {
       console.error("[recomputeAllContentPartnerStandings] failed", e);
       return { error: "Network error" };
     }
+  };
+
+  // ── Polls CRUD ──
+  // hydratePolls loads recent polls; ~200 covers active + recently-closed.
+  // Older polls still resolve via loadPollById when a feed item references
+  // them (their post row's `data.pollId` triggers a lazy hydrate).
+  const hydratePolls = async () => {
+    try {
+      const { data, error } = await supabase.from("polls")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (error) { console.error("[hydratePolls] error", error); return; }
+      const byId = {};
+      (Array.isArray(data) ? data : []).forEach(p => { byId[p.id] = p; });
+      setPollsById(byId);
+    } catch (e) { console.error("[hydratePolls] failed", e); }
+  };
+  // Own responses hydrate — only fetches when signed in.
+  const hydrateMyPollResponses = async (overrideUid) => {
+    const uid = overrideUid || (supabaseSession && supabaseSession.user && supabaseSession.user.id);
+    if (!uid) return;
+    try {
+      const { data, error } = await supabase.from("poll_responses")
+        .select("poll_id, responses, submitted_at, updated_at")
+        .eq("user_id", uid);
+      if (error) { console.error("[hydrateMyPollResponses] error", error); return; }
+      const byPollId = {};
+      (Array.isArray(data) ? data : []).forEach(r => { byPollId[r.poll_id] = r; });
+      setMyPollResponsesById(byPollId);
+    } catch (e) { console.error("[hydrateMyPollResponses] failed", e); }
+  };
+  const loadPollById = async (pollId) => {
+    if (!pollId) return null;
+    try {
+      const { data, error } = await supabase.from("polls").select("*").eq("id", pollId).maybeSingle();
+      if (error) { console.error("[loadPollById] error", error); return null; }
+      if (data) setPollsById(prev => ({ ...prev, [data.id]: data }));
+      return data;
+    } catch (e) { console.error("[loadPollById] failed", e); return null; }
+  };
+  // Admin-only poll creation. Inserts the polls row first (fetches back
+  // the id), then addPost with type='POLL' + data.pollId. Two-step because
+  // the post needs the poll id in its data payload for the feed renderer
+  // to resolve the poll. Errors from either step surface to the caller.
+  const createPollPost = async ({ title, description, revealResults, questions }) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) return { error: "Not authenticated" };
+    if (!isAdmin) return { error: "Admin only" };
+    try {
+      const { data: pollRow, error: pollErr } = await supabase.from("polls").insert({
+        created_by: uid,
+        title,
+        description: description || null,
+        questions: questions || [],
+        reveal_results: !!revealResults,
+        status: "active",
+      }).select().single();
+      if (pollErr) { console.error("[createPollPost] poll insert", pollErr); return { error: pollErr.message }; }
+      const meName = (currentProfile && currentProfile.full_name) || "Admin";
+      addPost({
+        id: "poll_" + Date.now(),
+        type: "POLL",
+        user: meName,
+        initial: meName.charAt(0).toUpperCase(),
+        time: Date.now(),
+        title: title,
+        pollId: pollRow.id,
+      });
+      // Local pollsById update so the feed card renders immediately after
+      // addPost's optimistic feed insert lands.
+      setPollsById(prev => ({ ...prev, [pollRow.id]: pollRow }));
+      return { ok: true, poll_id: pollRow.id };
+    } catch (e) { console.error("[createPollPost] failed", e); return { error: e.message || "Failed to publish poll" }; }
+  };
+  // Vote / update vote. Upserts a poll_responses row keyed by (poll_id, user_id).
+  const submitPollResponse = async (pollId, responses) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) return { error: "Not authenticated" };
+    if (!pollId) return { error: "Missing poll" };
+    try {
+      const { data, error } = await supabase.from("poll_responses").upsert({
+        poll_id: pollId,
+        user_id: uid,
+        responses: responses || {},
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "poll_id,user_id" }).select().single();
+      if (error) { console.error("[submitPollResponse] error", error); return { error: error.message }; }
+      setMyPollResponsesById(prev => ({ ...prev, [pollId]: data }));
+      return { ok: true };
+    } catch (e) { console.error("[submitPollResponse] failed", e); return { error: e.message || "Failed to submit" }; }
+  };
+  const updatePollStatus = async (pollId, status) => {
+    if (!isAdmin) return { error: "Admin only" };
+    try {
+      const { data, error } = await supabase.from("polls").update({ status, updated_at: new Date().toISOString() }).eq("id", pollId).select().single();
+      if (error) { console.error("[updatePollStatus] error", error); return { error: error.message }; }
+      setPollsById(prev => ({ ...prev, [pollId]: data }));
+      return { ok: true };
+    } catch (e) { console.error("[updatePollStatus] failed", e); return { error: e.message || "Failed" }; }
+  };
+  const deletePollById = async (pollId) => {
+    if (!isAdmin) return { error: "Admin only" };
+    try {
+      // Deleting the poll cascades poll_responses; also delete the parent
+      // post so the feed no longer shows a dead card. Post cascade doesn't
+      // remove the poll row (posts don't own polls); we do post first for
+      // less visible lag, then poll.
+      const poll = pollsById[pollId];
+      if (poll && poll.post_id) {
+        await supabase.from("posts").delete().eq("id", poll.post_id);
+      }
+      const { error } = await supabase.from("polls").delete().eq("id", pollId);
+      if (error) { console.error("[deletePollById] error", error); return { error: error.message }; }
+      setPollsById(prev => { const next = { ...prev }; delete next[pollId]; return next; });
+      return { ok: true };
+    } catch (e) { console.error("[deletePollById] failed", e); return { error: e.message || "Failed" }; }
+  };
+  // Admin dashboard loaders.
+  const loadPollsWithCounts = async () => {
+    if (!isAdmin) return { error: "Admin only" };
+    try {
+      const { data, error } = await supabase.rpc("admin_get_polls_with_counts", { p_limit: 200 });
+      if (error) { console.error("[loadPollsWithCounts] error", error); return { error: error.message }; }
+      return { data: Array.isArray(data) ? data : [] };
+    } catch (e) { console.error("[loadPollsWithCounts] failed", e); return { error: e.message || "Failed" }; }
+  };
+  const loadPollResponses = async (pollId) => {
+    if (!isAdmin) return { error: "Admin only" };
+    try {
+      const { data, error } = await supabase.from("poll_responses")
+        .select("id, poll_id, user_id, responses, submitted_at, updated_at")
+        .eq("poll_id", pollId)
+        .order("submitted_at", { ascending: false });
+      if (error) { console.error("[loadPollResponses] error", error); return { error: error.message }; }
+      return { data: Array.isArray(data) ? data : [] };
+    } catch (e) { console.error("[loadPollResponses] failed", e); return { error: e.message || "Failed" }; }
   };
 
   // ── Bounties CRUD (Phase 4) ──
@@ -56383,6 +57023,12 @@ export default function Trailhead() {
       tripPlans={allTripPlans}
       onOpenConvoy={(id) => setDetailConvoyId(id)}
       onReportContent={requireAuth(openContentReport)}
+      pollsById={pollsById}
+      myPollResponsesById={myPollResponsesById}
+      onSubmitPollResponse={requireAuth(submitPollResponse)}
+      pollAllBuilds={allBuilds}
+      pollAllTripReports={allTripReports}
+      pollCampingSpots={campingSpots}
     />
   );
 
@@ -56658,7 +57304,7 @@ export default function Trailhead() {
 
       <div className="th-scroll" style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
         {showCompose ? (
-          <ComposeScreen key={composePrefillConvoy && composePrefillConvoy.planId ? `pre_${composePrefillConvoy.planId}` : "fresh"} userBuilds={myBuildsForLink} currentUserName={(currentProfile && currentProfile.full_name) || "You"} currentUserHandle={(currentProfile && currentProfile.handle) || ""} onSearchUsers={searchUsers} onUploadError={showErrorToast} initialConvoy={composePrefillConvoy} followingProfiles={followingProfiles} onLoadFollowingProfiles={loadFollowingProfilesOnce} myTripPlans={allTripPlans} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} onPlanNewRouteForConvoy={requireAuth(enterPlanBuilderForConvoy)} onUseExistingPlanForConvoy={requireAuth(startConvoyFromPlan)} onPlanNewRoute={requireAuth(() => { setScreen("routes"); enterPlanBuilder(); })} onNewTripReport={requireAuth(() => setTripCreatorMode("report"))} onClose={() => { setShowCompose(false); setComposePrefillConvoy(null); }} onSubmit={async (newPost) => { const planIdForConvoy = composePrefillConvoy && composePrefillConvoy.planId; if (planIdForConvoy && newPost && newPost.type === "CONVOYS") newPost = { ...newPost, planId: planIdForConvoy }; const created = await addPost(newPost); /* When the convoy was generated from a plan, force the plan public + published so other users can see + RSVP it. RLS already allows owner-only patches; updateTripDraft will be a no-op for non-owners (which won't happen here — only the plan owner can plan a convoy from it). */ if (created && created.type === "CONVOYS" && planIdForConvoy) { try { await updateTripDraft(planIdForConvoy, { visibility: "public", status: "published" }); } catch (e) { console.warn("[plan→convoy] failed to publish plan", e); } } awardPoints(newPost.type === "RECOVERY" ? 0 : POINTS.feedPost, newPost.type === "RECOVERY" ? "" : "Feed Post"); if (newPost.photoUrls && newPost.photoUrls.length > 0) awardPoints(POINTS.photoUploaded * newPost.photoUrls.length, "Photos Uploaded"); /* Convoys: auto-RSVP the host as going. This persists their attendance and triggers ensureConvoyGroupMembership, creating the group DM right away with the host as the first member. Subsequent invitee goings join the same group. */ if (created && created.type === "CONVOYS" && created.id && typeof created.id === "string" && created.id.length > 20 && created.id.includes("-")) { setConvoyRsvp(created.id, "going"); } return created; }} onAddRecoveryAlert={addRecoveryAlert} onAddNotification={addNotification} onAddRoute={(r) => { setUserRoutes(prev => [r, ...prev]); awardPoints(POINTS.routeLogged, "Route Logged"); }} onOpenDM={openDM} onSendDmInvite={sendDmInvite} />
+          <ComposeScreen key={composePrefillConvoy && composePrefillConvoy.planId ? `pre_${composePrefillConvoy.planId}` : "fresh"} userBuilds={myBuildsForLink} currentUserName={(currentProfile && currentProfile.full_name) || "You"} currentUserHandle={(currentProfile && currentProfile.handle) || ""} onSearchUsers={searchUsers} onUploadError={showErrorToast} initialConvoy={composePrefillConvoy} followingProfiles={followingProfiles} onLoadFollowingProfiles={loadFollowingProfilesOnce} myTripPlans={allTripPlans} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} onPlanNewRouteForConvoy={requireAuth(enterPlanBuilderForConvoy)} onUseExistingPlanForConvoy={requireAuth(startConvoyFromPlan)} onPlanNewRoute={requireAuth(() => { setScreen("routes"); enterPlanBuilder(); })} onNewTripReport={requireAuth(() => setTripCreatorMode("report"))} isAdmin={isAdmin} onOpenPollCreator={() => setShowPollCreator(true)} onClose={() => { setShowCompose(false); setComposePrefillConvoy(null); }} onSubmit={async (newPost) => { const planIdForConvoy = composePrefillConvoy && composePrefillConvoy.planId; if (planIdForConvoy && newPost && newPost.type === "CONVOYS") newPost = { ...newPost, planId: planIdForConvoy }; const created = await addPost(newPost); /* When the convoy was generated from a plan, force the plan public + published so other users can see + RSVP it. RLS already allows owner-only patches; updateTripDraft will be a no-op for non-owners (which won't happen here — only the plan owner can plan a convoy from it). */ if (created && created.type === "CONVOYS" && planIdForConvoy) { try { await updateTripDraft(planIdForConvoy, { visibility: "public", status: "published" }); } catch (e) { console.warn("[plan→convoy] failed to publish plan", e); } } awardPoints(newPost.type === "RECOVERY" ? 0 : POINTS.feedPost, newPost.type === "RECOVERY" ? "" : "Feed Post"); if (newPost.photoUrls && newPost.photoUrls.length > 0) awardPoints(POINTS.photoUploaded * newPost.photoUrls.length, "Photos Uploaded"); /* Convoys: auto-RSVP the host as going. This persists their attendance and triggers ensureConvoyGroupMembership, creating the group DM right away with the host as the first member. Subsequent invitee goings join the same group. */ if (created && created.type === "CONVOYS" && created.id && typeof created.id === "string" && created.id.length > 20 && created.id.includes("-")) { setConvoyRsvp(created.id, "going"); } return created; }} onAddRecoveryAlert={addRecoveryAlert} onAddNotification={addNotification} onAddRoute={(r) => { setUserRoutes(prev => [r, ...prev]); awardPoints(POINTS.routeLogged, "Route Logged"); }} onOpenDM={openDM} onSendDmInvite={sendDmInvite} />
         ) : showRecovery ? (
           <RecoveryScreen
             onOpenMap={openMap}
@@ -56808,6 +57454,15 @@ export default function Trailhead() {
                       onReviewSubmission={reviewContentPartnerSubmission}
                       onRecomputeAll={recomputeAllContentPartnerStandings}
                     />)
+                : adminSubScreen === "polls"
+                ? <PollsAdminScreen
+                    isAdmin={isAdmin}
+                    onBack={() => setAdminSubScreen(null)}
+                    onLoadPolls={loadPollsWithCounts}
+                    onLoadPollResponses={loadPollResponses}
+                    onUpdatePollStatus={updatePollStatus}
+                    onDeletePoll={deletePollById}
+                  />
                 : adminSubScreen
                 ? <AdminDashboardScreen
                     currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id}
@@ -57190,6 +57845,9 @@ export default function Trailhead() {
       />
       {shareComposeTarget && (
         <ShareComposeModal target={shareComposeTarget} onClose={() => setShareComposeTarget(null)} />
+      )}
+      {showPollCreator && (
+        <PollCreator isAdmin={isAdmin} onSubmit={createPollPost} onClose={() => setShowPollCreator(false)} />
       )}
       {reportTarget && (
         <ContentReportForm
