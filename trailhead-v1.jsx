@@ -21738,7 +21738,7 @@ function BountyResponseForm({ bounty, draft, onSave, onSubmit, onClose, onUpload
    keep state stable across RanksScreen re-renders. */
 const MIN_PAYOUT_CENTS = 2500;
 
-function BountyEarningsCard({ earnings, currentProfile, onRefreshGiftCard, onRequestPayout, onLoadBountyHistory, onLoadGiftCardCode }) {
+function BountyEarningsCard({ earnings, currentProfile, onRefreshGiftCard, onRequestPayout, onLoadBountyHistory, onLoadGiftCardCode, pendingList }) {
   const pending = (earnings && earnings.total_pending_cents) || 0;
   const paid = (earnings && earnings.total_paid_cents) || 0;
   const balance = (currentProfile && currentProfile.lpo_gift_card_balance_cents) || 0;
@@ -21808,6 +21808,28 @@ function BountyEarningsCard({ earnings, currentProfile, onRefreshGiftCard, onReq
             <div style={{ marginTop: 8, fontFamily: sans, fontSize: 10, color: T.red }}>{requestState.slice(6)}</div>
           )}
         </div>
+        {/* PENDING PAYOUT — running list of approved-but-not-paid submissions
+            so the user sees the pending balance stacking up toward the $25
+            threshold. Rendered when at least one such submission exists. */}
+        {Array.isArray(pendingList) && pendingList.length > 0 && (
+          <div style={{ marginTop: 10, background: T.darkCard, borderRadius: 10, overflow: "hidden" }}>
+            <div style={{ padding: "10px 14px", borderBottom: `1px solid ${T.charcoal}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.5, fontWeight: 700 }}>PENDING PAYOUT</span>
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{pendingList.length} approved</span>
+            </div>
+            {pendingList.map(p => (
+              <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderTop: `1px solid ${T.charcoal}80` }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.title}</div>
+                  <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 2 }}>
+                    Approved {p.approved_at ? new Date(p.approved_at).toLocaleDateString() : ""}
+                  </div>
+                </div>
+                <div style={{ fontFamily: sans, fontSize: 13, color: T.green, fontWeight: 700, flexShrink: 0 }}>+${((p.amount_cents || 0) / 100).toFixed(2)}</div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {showGiftCard && (
@@ -22428,6 +22450,23 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
             onRequestPayout={onRequestPayout}
             onLoadBountyHistory={onLoadBountyHistory}
             onLoadGiftCardCode={onLoadGiftCardCode}
+            pendingList={(() => {
+              // Approved-but-not-paid submissions surface as a compact
+              // running list under the earnings card so users can watch
+              // their pending balance stack up toward the $25 threshold.
+              const subs = Array.isArray(mySubmissions) ? mySubmissions : [];
+              const bountyById = {};
+              (Array.isArray(bountiesFromDB) ? bountiesFromDB : []).forEach(b => { bountyById[b.id] = b; });
+              return subs
+                .filter(s => s.status === "approved" && (s.payout_status == null || s.payout_status === "pending"))
+                .map(s => ({
+                  id: s.id,
+                  title: (bountyById[s.bounty_id] && bountyById[s.bounty_id].title) || "Bounty",
+                  amount_cents: s.reward_cents || 0,
+                  approved_at: s.reviewed_at || s.updated_at,
+                }))
+                .sort((a, b) => String(b.approved_at || "").localeCompare(String(a.approved_at || "")));
+            })()}
           />
           {/* Lifetime + breakdown still surfaces below for context. */}
           <div style={{ padding: "0 16px 10px", fontFamily: sans, fontSize: 11, color: T.tertiary, letterSpacing: 0.5 }}>
@@ -22847,12 +22886,21 @@ function RanksScreen({ myPoints: myPointsProp, pointsBreakdown: breakdownProp, c
                           <span style={{ fontFamily: serif, fontSize: 12, color: T.tertiary }}>Awaiting admin review — you'll be notified when approved or if edits are needed.</span>
                         </div>
                       )}
-                      {b.status === "approved" && (
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0 0" }}>
-                          <CheckCircle size={14} color={T.green} />
-                          <span style={{ fontFamily: serif, fontSize: 12, color: T.green }}>Approved! Your reward will appear in your earnings.</span>
-                        </div>
-                      )}
+                      {b.status === "approved" && (() => {
+                        const rewardC = b.reward_cents || 0;
+                        const isPaid = b.submission && b.submission.payout_status === "paid";
+                        const msg = isPaid
+                          ? `Paid! $${(rewardC / 100).toFixed(2)} disbursed to your gift card.`
+                          : rewardC > 0
+                            ? `Approved! $${(rewardC / 100).toFixed(2)} added to your pending balance.`
+                            : "Approved! Your reward will appear in your earnings.";
+                        return (
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0 0" }}>
+                            <CheckCircle size={14} color={T.green} />
+                            <span style={{ fontFamily: serif, fontSize: 12, color: T.green }}>{msg}</span>
+                          </div>
+                        );
+                      })()}
                       {b.status === "rejected" && (
                         <div>
                           {b.reviewerNotes && (
