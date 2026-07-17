@@ -6121,7 +6121,7 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
                 <span onClick={() => onViewUser && onViewUser(item.userId || item.handle || (item.user || "").replace(/\s/g, "_"))} style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, cursor: "pointer" }}>{item.user}</span>
                 {item.handle && <span style={{ fontFamily: sans, fontSize: 11, color: T.copper }}>@{String(item.handle).replace(/^@/, "")}</span>}
               </div>
-              <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 1 }}>{relTime(item.time)}</div>
+              <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 1 }}>{formatPostTime(item.time)}</div>
             </div>
           </div>
           {poll ? (
