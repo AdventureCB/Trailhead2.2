@@ -18232,6 +18232,104 @@ function PollCreator({ isAdmin, onSubmit, onClose }) {
   );
 }
 
+// Collapsed picker for dropdown_builds / dropdown_trips / dropdown_spots
+// poll questions. Renders a single control (placeholder OR the selected
+// card) that opens a bottom-sheet modal on tap. The modal lists every
+// available option as a full card (hero + name + metadata). Tapping a
+// card selects it + closes the sheet. Read-only mode disables tap-to-open.
+function PollCardPicker({ qId, type, selectedId, onPick, readOnly, allBuilds, allTripReports, campingSpots }) {
+  const [open, setOpen] = useState(false);
+  const rows = type === "dropdown_builds"
+    ? (Array.isArray(allBuilds) ? allBuilds : []).map(b => ({
+        id: b.id,
+        title: b.name || [b.year, b.make, b.model].filter(Boolean).join(" ") || "Build",
+        subtitle: [b.year, b.make, b.model].filter(Boolean).join(" "),
+        author: b.owner || null,
+        handle: b.handle || null,
+        image: b.hero_img || b.image || null,
+      }))
+    : type === "dropdown_trips"
+    ? (Array.isArray(allTripReports) ? allTripReports : [])
+        .filter(t => t && t.status === "published" && (!t.kind || t.kind === "report"))
+        .map(t => ({
+          id: t.id,
+          title: t.name || "Trip Report",
+          subtitle: [t.region, t.state_code].filter(Boolean).join(", ") || (t.distance_mi != null ? `${Number(t.distance_mi).toFixed(1)} mi` : ""),
+          author: null,
+          handle: null,
+          image: t.hero_img || null,
+        }))
+    : (Array.isArray(campingSpots) ? campingSpots : []).map(s => ({
+        id: s.id,
+        title: s.name || "Camping Spot",
+        subtitle: [s.spot_type && s.spot_type !== "unknown" ? s.spot_type : null, s.fee].filter(Boolean).join(" · "),
+        author: null,
+        handle: null,
+        image: (Array.isArray(s.photos) && s.photos[0] && s.photos[0].url) || null,
+      }));
+  const kindLabel = type === "dropdown_builds" ? "build" : type === "dropdown_trips" ? "trip report" : "camp spot";
+  const selectedRow = selectedId ? rows.find(r => r.id === selectedId) : null;
+  const renderRow = (row, onClick) => (
+    <button key={row ? row.id : "placeholder"} disabled={readOnly && onClick != null} onClick={onClick} style={{ display: "flex", alignItems: "stretch", gap: 0, background: T.charcoal, border: `1px solid ${T.darkBg}`, borderRadius: 8, padding: 0, cursor: (readOnly || !onClick) ? "default" : "pointer", textAlign: "left", overflow: "hidden", width: "100%" }}>
+      <div style={{ width: 80, minHeight: 72, flexShrink: 0, background: row.image ? `#1A1A1A url(${row.image}) center/cover` : `linear-gradient(135deg, ${T.charcoal}, ${T.darkCard})` }} />
+      <div style={{ flex: 1, minWidth: 0, padding: "10px 12px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+        <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.title}</div>
+        {row.subtitle && <div style={{ fontFamily: sans, fontSize: 11, color: T.copper, letterSpacing: 0.3, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.subtitle}</div>}
+        {row.author && <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 3 }}>by {row.author}{row.handle ? <span style={{ color: T.copper }}> @{String(row.handle).replace(/^@/, "")}</span> : ""}</div>}
+      </div>
+    </button>
+  );
+  return (
+    <>
+      {selectedRow ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {renderRow(selectedRow, null)}
+          {!readOnly && (
+            <button onClick={() => setOpen(true)} style={{ background: "none", border: "none", color: T.copper, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 1, cursor: "pointer", padding: "4px 0", textAlign: "left" }}>
+              CHANGE SELECTION
+            </button>
+          )}
+        </div>
+      ) : (
+        <button disabled={readOnly} onClick={() => setOpen(true)} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", background: T.charcoal, color: T.tertiary, border: `1px solid ${T.darkBg}`, borderRadius: 6, padding: "12px 14px", fontFamily: sans, fontSize: 13, cursor: readOnly ? "default" : "pointer" }}>
+          <span>{readOnly ? `No ${kindLabel} selected` : `Choose a ${kindLabel}`}</span>
+          {!readOnly && <ChevronDown size={16} color={T.tertiary} />}
+        </button>
+      )}
+      {open && (
+        <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 1200, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, maxHeight: "80vh", background: T.darkBg, borderTopLeftRadius: 16, borderTopRightRadius: 16, display: "flex", flexDirection: "column", border: `1px solid ${T.charcoal}` }}>
+            <div style={{ padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${T.charcoal}` }}>
+              <span style={{ fontFamily: sans, fontSize: 12, color: T.copper, fontWeight: 700, letterSpacing: 1.5 }}>PICK A {kindLabel.toUpperCase()}</span>
+              <button onClick={() => setOpen(false)} style={{ background: "none", border: "none", cursor: "pointer" }}>
+                <X size={18} color={T.tertiary} />
+              </button>
+            </div>
+            <div className="th-scroll" style={{ flex: 1, overflowY: "auto", padding: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+              {rows.length === 0 ? (
+                <div style={{ padding: 24, textAlign: "center", fontFamily: sans, fontSize: 12, color: T.tertiary }}>Nothing to pick from yet.</div>
+              ) : rows.map(row => {
+                const picked = row.id === selectedId;
+                return (
+                  <button key={row.id} onClick={() => { onPick(row.id); setOpen(false); }} style={{ display: "flex", alignItems: "stretch", gap: 0, background: picked ? `${T.copper}18` : T.charcoal, border: `1px solid ${picked ? T.copper : T.darkBg}`, borderRadius: 8, padding: 0, cursor: "pointer", textAlign: "left", overflow: "hidden", width: "100%" }}>
+                    <div style={{ width: 88, minHeight: 78, flexShrink: 0, background: row.image ? `#1A1A1A url(${row.image}) center/cover` : `linear-gradient(135deg, ${T.charcoal}, ${T.darkCard})` }} />
+                    <div style={{ flex: 1, minWidth: 0, padding: "10px 12px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+                      <div style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.title}</div>
+                      {row.subtitle && <div style={{ fontFamily: sans, fontSize: 11, color: T.copper, letterSpacing: 0.3, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.subtitle}</div>}
+                      {row.author && <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 3 }}>by {row.author}{row.handle ? <span style={{ color: T.copper }}> @{String(row.handle).replace(/^@/, "")}</span> : ""}</div>}
+                    </div>
+                    {picked && <div style={{ display: "flex", alignItems: "center", paddingRight: 12 }}><CheckCircle size={16} color={T.copper} /></div>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 // PollCard — feed-inline poll renderer. Read-only when the user has
 // already voted OR the poll is closed. Editable while status='active'.
 // Shows aggregated results when status='closed' AND reveal_results=true
@@ -18322,63 +18420,18 @@ function PollCard({ poll, myResponse, isGuest, onGuestTap, onSubmit, allBuilds, 
                 {q.type === "short_answer" && (
                   <textarea disabled={readOnly} rows={2} value={ans.text || ""} onChange={(e) => setQ(q.id, { text: e.target.value })} placeholder="Type your answer" style={{ width: "100%", background: T.charcoal, color: T.white, border: `1px solid ${T.darkBg}`, borderRadius: 6, padding: "9px 12px", fontFamily: serif, fontSize: 13, outline: "none", boxSizing: "border-box", resize: "vertical" }} />
                 )}
-                {(q.type === "dropdown_builds" || q.type === "dropdown_trips" || q.type === "dropdown_spots") && (() => {
-                  // Rich card picker — full hero + name + metadata so
-                  // voters make an informed pick instead of picking blind
-                  // from a list of names. Tap a card to select. Vertical
-                  // scroll with a soft max height so the poll doesn't
-                  // dominate the whole viewport when the source is large.
-                  const selectedId = (ans.selected_ids && ans.selected_ids[0]) || "";
-                  const rows = q.type === "dropdown_builds"
-                    ? (Array.isArray(allBuilds) ? allBuilds : []).map(b => ({
-                        id: b.id,
-                        title: b.name || [b.year, b.make, b.model].filter(Boolean).join(" ") || "Build",
-                        subtitle: [b.year, b.make, b.model].filter(Boolean).join(" "),
-                        author: b.owner || null,
-                        handle: b.handle || null,
-                        image: b.hero_img || b.image || null,
-                      }))
-                    : q.type === "dropdown_trips"
-                    ? (Array.isArray(allTripReports) ? allTripReports : [])
-                        .filter(t => t && t.status === "published" && (!t.kind || t.kind === "report"))
-                        .map(t => ({
-                          id: t.id,
-                          title: t.name || "Trip Report",
-                          subtitle: [t.region, t.state_code].filter(Boolean).join(", ") || (t.distance_mi != null ? `${Number(t.distance_mi).toFixed(1)} mi` : ""),
-                          author: null,
-                          handle: null,
-                          image: t.hero_img || null,
-                        }))
-                    : (Array.isArray(campingSpots) ? campingSpots : []).map(s => ({
-                        id: s.id,
-                        title: s.name || "Camping Spot",
-                        subtitle: [s.spot_type && s.spot_type !== "unknown" ? s.spot_type : null, s.fee].filter(Boolean).join(" · "),
-                        author: null,
-                        handle: null,
-                        image: (Array.isArray(s.photos) && s.photos[0] && s.photos[0].url) || null,
-                      }));
-                  if (rows.length === 0) {
-                    return <div style={{ padding: "12px 0", fontFamily: sans, fontSize: 12, color: T.tertiary, fontStyle: "italic" }}>Nothing to pick from yet.</div>;
-                  }
-                  return (
-                    <div className="th-scroll" style={{ maxHeight: 360, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8, padding: "2px" }}>
-                      {rows.map(row => {
-                        const picked = row.id === selectedId;
-                        return (
-                          <button key={row.id} disabled={readOnly} onClick={() => setQ(q.id, { selected_ids: [row.id] })} style={{ display: "flex", alignItems: "stretch", gap: 10, background: picked ? `${T.copper}18` : T.charcoal, border: `1px solid ${picked ? T.copper : T.darkBg}`, borderRadius: 8, padding: 0, cursor: readOnly ? "default" : "pointer", textAlign: "left", overflow: "hidden" }}>
-                            <div style={{ width: 80, minHeight: 72, flexShrink: 0, background: row.image ? `#1A1A1A url(${row.image}) center/cover` : `linear-gradient(135deg, ${T.charcoal}, ${T.darkCard})` }} />
-                            <div style={{ flex: 1, minWidth: 0, padding: "10px 12px 10px 0", display: "flex", flexDirection: "column", justifyContent: "center" }}>
-                              <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.title}</div>
-                              {row.subtitle && <div style={{ fontFamily: sans, fontSize: 11, color: T.copper, letterSpacing: 0.3, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.subtitle}</div>}
-                              {row.author && <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 3 }}>by {row.author}{row.handle ? <span style={{ color: T.copper }}> @{String(row.handle).replace(/^@/, "")}</span> : ""}</div>}
-                            </div>
-                            {picked && <div style={{ display: "flex", alignItems: "center", paddingRight: 10 }}><CheckCircle size={16} color={T.copper} /></div>}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  );
-                })()}
+                {(q.type === "dropdown_builds" || q.type === "dropdown_trips" || q.type === "dropdown_spots") && (
+                  <PollCardPicker
+                    qId={q.id}
+                    type={q.type}
+                    selectedId={(ans.selected_ids && ans.selected_ids[0]) || ""}
+                    onPick={(id) => setQ(q.id, { selected_ids: id ? [id] : [] })}
+                    readOnly={readOnly}
+                    allBuilds={allBuilds}
+                    allTripReports={allTripReports}
+                    campingSpots={campingSpots}
+                  />
+                )}
               </div>
             );
           })}
