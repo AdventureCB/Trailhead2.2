@@ -18323,13 +18323,60 @@ function PollCard({ poll, myResponse, isGuest, onGuestTap, onSubmit, allBuilds, 
                   <textarea disabled={readOnly} rows={2} value={ans.text || ""} onChange={(e) => setQ(q.id, { text: e.target.value })} placeholder="Type your answer" style={{ width: "100%", background: T.charcoal, color: T.white, border: `1px solid ${T.darkBg}`, borderRadius: 6, padding: "9px 12px", fontFamily: serif, fontSize: 13, outline: "none", boxSizing: "border-box", resize: "vertical" }} />
                 )}
                 {(q.type === "dropdown_builds" || q.type === "dropdown_trips" || q.type === "dropdown_spots") && (() => {
-                  const source = dropdownSource(q.type);
+                  // Rich card picker — full hero + name + metadata so
+                  // voters make an informed pick instead of picking blind
+                  // from a list of names. Tap a card to select. Vertical
+                  // scroll with a soft max height so the poll doesn't
+                  // dominate the whole viewport when the source is large.
                   const selectedId = (ans.selected_ids && ans.selected_ids[0]) || "";
+                  const rows = q.type === "dropdown_builds"
+                    ? (Array.isArray(allBuilds) ? allBuilds : []).map(b => ({
+                        id: b.id,
+                        title: b.name || [b.year, b.make, b.model].filter(Boolean).join(" ") || "Build",
+                        subtitle: [b.year, b.make, b.model].filter(Boolean).join(" "),
+                        author: b.owner || null,
+                        handle: b.handle || null,
+                        image: b.hero_img || b.image || null,
+                      }))
+                    : q.type === "dropdown_trips"
+                    ? (Array.isArray(allTripReports) ? allTripReports : [])
+                        .filter(t => t && t.status === "published" && (!t.kind || t.kind === "report"))
+                        .map(t => ({
+                          id: t.id,
+                          title: t.name || "Trip Report",
+                          subtitle: [t.region, t.state_code].filter(Boolean).join(", ") || (t.distance_mi != null ? `${Number(t.distance_mi).toFixed(1)} mi` : ""),
+                          author: null,
+                          handle: null,
+                          image: t.hero_img || null,
+                        }))
+                    : (Array.isArray(campingSpots) ? campingSpots : []).map(s => ({
+                        id: s.id,
+                        title: s.name || "Camping Spot",
+                        subtitle: [s.spot_type && s.spot_type !== "unknown" ? s.spot_type : null, s.fee].filter(Boolean).join(" · "),
+                        author: null,
+                        handle: null,
+                        image: (Array.isArray(s.photos) && s.photos[0] && s.photos[0].url) || null,
+                      }));
+                  if (rows.length === 0) {
+                    return <div style={{ padding: "12px 0", fontFamily: sans, fontSize: 12, color: T.tertiary, fontStyle: "italic" }}>Nothing to pick from yet.</div>;
+                  }
                   return (
-                    <select disabled={readOnly} value={selectedId} onChange={(e) => setQ(q.id, { selected_ids: e.target.value ? [e.target.value] : [] })} style={{ width: "100%", background: T.charcoal, color: T.white, border: `1px solid ${T.darkBg}`, borderRadius: 6, padding: "10px 12px", fontFamily: sans, fontSize: 13 }}>
-                      <option value="">— Choose one —</option>
-                      {source.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
-                    </select>
+                    <div className="th-scroll" style={{ maxHeight: 360, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8, padding: "2px" }}>
+                      {rows.map(row => {
+                        const picked = row.id === selectedId;
+                        return (
+                          <button key={row.id} disabled={readOnly} onClick={() => setQ(q.id, { selected_ids: [row.id] })} style={{ display: "flex", alignItems: "stretch", gap: 10, background: picked ? `${T.copper}18` : T.charcoal, border: `1px solid ${picked ? T.copper : T.darkBg}`, borderRadius: 8, padding: 0, cursor: readOnly ? "default" : "pointer", textAlign: "left", overflow: "hidden" }}>
+                            <div style={{ width: 80, minHeight: 72, flexShrink: 0, background: row.image ? `#1A1A1A url(${row.image}) center/cover` : `linear-gradient(135deg, ${T.charcoal}, ${T.darkCard})` }} />
+                            <div style={{ flex: 1, minWidth: 0, padding: "10px 12px 10px 0", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+                              <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.title}</div>
+                              {row.subtitle && <div style={{ fontFamily: sans, fontSize: 11, color: T.copper, letterSpacing: 0.3, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.subtitle}</div>}
+                              {row.author && <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 3 }}>by {row.author}{row.handle ? <span style={{ color: T.copper }}> @{String(row.handle).replace(/^@/, "")}</span> : ""}</div>}
+                            </div>
+                            {picked && <div style={{ display: "flex", alignItems: "center", paddingRight: 10 }}><CheckCircle size={16} color={T.copper} /></div>}
+                          </button>
+                        );
+                      })}
+                    </div>
                   );
                 })()}
               </div>
