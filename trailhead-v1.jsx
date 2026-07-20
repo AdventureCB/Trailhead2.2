@@ -18360,7 +18360,7 @@ function PollCard({ poll, myResponse, isGuest, onGuestTap, onSubmit, allBuilds, 
 // Admin-only polls dashboard. Lists every poll w/ response count, per-poll
 // tap opens response breakdown. Response aggregation is client-side —
 // walks the returned responses jsonb and tallies per question.
-function PollsAdminScreen({ onBack, onLoadPolls, onLoadPollResponses, onUpdatePollStatus, onDeletePoll, isAdmin }) {
+function PollsAdminScreen({ onBack, onLoadPolls, onLoadPollResponses, onUpdatePollStatus, onDeletePoll, isAdmin, allBuilds, allTripReports, campingSpots }) {
   const [polls, setPolls] = useState(null);
   const [error, setError] = useState("");
   const [selectedId, setSelectedId] = useState(null);
@@ -18432,29 +18432,42 @@ function PollsAdminScreen({ onBack, onLoadPolls, onLoadPollResponses, onUpdatePo
             <div key={q.id} style={{ background: T.charcoal, borderRadius: 10, padding: 14, marginBottom: 12 }}>
               <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, marginBottom: 4 }}>{q.text}</div>
               <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, marginBottom: 10 }}>{q.type.replace(/_/g, " ").toUpperCase()} · {t.total} response{t.total === 1 ? "" : "s"}</div>
-              {q.type === "multiple_choice" && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {[...(q.options || []), ...(q.allow_other ? ["Other"] : [])].map(opt => {
-                    const count = t.counts[opt] || 0;
-                    const pct = t.total > 0 ? Math.round((count / t.total) * 100) : 0;
-                    return (
-                      <div key={opt} style={{ position: "relative", background: T.darkCard, borderRadius: 6, padding: "9px 12px" }}>
-                        <div style={{ position: "absolute", inset: 0, background: `linear-gradient(to right, ${T.copper}30 ${pct}%, transparent ${pct}%)`, borderRadius: 6 }} />
-                        <div style={{ position: "relative", display: "flex", justifyContent: "space-between", fontFamily: serif, fontSize: 13, color: T.white }}>
-                          <span>{opt}</span>
-                          <span style={{ fontFamily: sans, fontSize: 12, color: T.tertiary }}>{count} · {pct}%</span>
+              {q.type === "multiple_choice" && (() => {
+                // Rank options by vote count descending so the winner is on
+                // top. Tiebreak on original poll order (stable). Zero-count
+                // options stay visible at the bottom so admin can see which
+                // options nobody picked.
+                const origOrder = [...(q.options || []), ...(q.allow_other ? ["Other"] : [])];
+                const ranked = origOrder
+                  .map((opt, origIdx) => ({ opt, origIdx, count: t.counts[opt] || 0 }))
+                  .sort((a, b) => b.count - a.count || a.origIdx - b.origIdx);
+                return (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {ranked.map((row, rankIdx) => {
+                      const pct = t.total > 0 ? Math.round((row.count / t.total) * 100) : 0;
+                      const isTop = rankIdx === 0 && row.count > 0;
+                      return (
+                        <div key={row.opt} style={{ position: "relative", background: T.darkCard, borderRadius: 6, padding: "9px 12px" }}>
+                          <div style={{ position: "absolute", inset: 0, background: `linear-gradient(to right, ${T.copper}30 ${pct}%, transparent ${pct}%)`, borderRadius: 6 }} />
+                          <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "space-between", fontFamily: serif, fontSize: 13, color: T.white, gap: 8 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                              <span style={{ fontFamily: sans, fontSize: 10, color: isTop ? T.copper : T.tertiary, fontWeight: 700, letterSpacing: 0.5, minWidth: 22 }}>#{rankIdx + 1}</span>
+                              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.opt}</span>
+                            </div>
+                            <span style={{ fontFamily: sans, fontSize: 12, color: T.tertiary, flexShrink: 0 }}>{row.count} · {pct}%</span>
+                          </div>
                         </div>
+                      );
+                    })}
+                    {q.allow_other && t.texts.length > 0 && (
+                      <div style={{ marginTop: 8, background: T.darkCard, borderRadius: 6, padding: 10 }}>
+                        <div style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1, fontWeight: 700, marginBottom: 6 }}>"OTHER" ANSWERS</div>
+                        {t.texts.map((tx, i) => <div key={i} style={{ fontFamily: serif, fontSize: 12, color: "#F5F2ED", marginBottom: 4 }}>· {tx}</div>)}
                       </div>
-                    );
-                  })}
-                  {q.allow_other && t.texts.length > 0 && (
-                    <div style={{ marginTop: 8, background: T.darkCard, borderRadius: 6, padding: 10 }}>
-                      <div style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1, fontWeight: 700, marginBottom: 6 }}>"OTHER" ANSWERS</div>
-                      {t.texts.map((tx, i) => <div key={i} style={{ fontFamily: serif, fontSize: 12, color: "#F5F2ED", marginBottom: 4 }}>· {tx}</div>)}
-                    </div>
-                  )}
-                </div>
-              )}
+                    )}
+                  </div>
+                );
+              })()}
               {q.type === "short_answer" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {t.texts.length === 0 ? <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>No responses yet.</div> :
@@ -18462,6 +18475,23 @@ function PollsAdminScreen({ onBack, onLoadPolls, onLoadPollResponses, onUpdatePo
                 </div>
               )}
               {q.type.startsWith("dropdown_") && (() => {
+                // Resolve entity ids → human-readable names via the live
+                // sources passed from root. Falls back to a short id chunk
+                // if the entity isn't in the local cache (e.g. build was
+                // deleted since the vote was cast).
+                const nameFor = (id) => {
+                  if (q.type === "dropdown_builds") {
+                    const b = (Array.isArray(allBuilds) ? allBuilds : []).find(x => x.id === id);
+                    if (b) return b.name || [b.year, b.make, b.model].filter(Boolean).join(" ") || "Build";
+                  } else if (q.type === "dropdown_trips") {
+                    const tr = (Array.isArray(allTripReports) ? allTripReports : []).find(x => x.id === id);
+                    if (tr) return tr.name || "Trip Report";
+                  } else if (q.type === "dropdown_spots") {
+                    const s = (Array.isArray(campingSpots) ? campingSpots : []).find(x => x.id === id);
+                    if (s) return s.name || "Camping Spot";
+                  }
+                  return `(missing · ${String(id).slice(0, 8)}…)`;
+                };
                 const idCounts = {};
                 t.selectedIds.forEach(id => { idCounts[id] = (idCounts[id] || 0) + 1; });
                 const sorted = Object.entries(idCounts).sort((a, b) => b[1] - a[1]);
@@ -18469,14 +18499,18 @@ function PollsAdminScreen({ onBack, onLoadPolls, onLoadPollResponses, onUpdatePo
                   <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>No responses yet.</div>
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    {sorted.map(([id, count]) => {
+                    {sorted.map(([id, count], rankIdx) => {
                       const pct = t.total > 0 ? Math.round((count / t.total) * 100) : 0;
+                      const isTop = rankIdx === 0 && count > 0;
                       return (
                         <div key={id} style={{ position: "relative", background: T.darkCard, borderRadius: 6, padding: "9px 12px" }}>
                           <div style={{ position: "absolute", inset: 0, background: `linear-gradient(to right, ${T.copper}30 ${pct}%, transparent ${pct}%)`, borderRadius: 6 }} />
-                          <div style={{ position: "relative", display: "flex", justifyContent: "space-between", fontFamily: sans, fontSize: 12, color: T.white }}>
-                            <span style={{ fontFamily: "monospace", fontSize: 10, color: T.tertiary }}>{id.slice(0, 8)}…</span>
-                            <span>{count} · {pct}%</span>
+                          <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "space-between", fontFamily: serif, fontSize: 13, color: T.white, gap: 8 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                              <span style={{ fontFamily: sans, fontSize: 10, color: isTop ? T.copper : T.tertiary, fontWeight: 700, letterSpacing: 0.5, minWidth: 22 }}>#{rankIdx + 1}</span>
+                              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nameFor(id)}</span>
+                            </div>
+                            <span style={{ fontFamily: sans, fontSize: 12, color: T.tertiary, flexShrink: 0 }}>{count} · {pct}%</span>
                           </div>
                         </div>
                       );
@@ -57462,6 +57496,9 @@ export default function Trailhead() {
                     onLoadPollResponses={loadPollResponses}
                     onUpdatePollStatus={updatePollStatus}
                     onDeletePoll={deletePollById}
+                    allBuilds={allBuilds}
+                    allTripReports={allTripReports}
+                    campingSpots={campingSpots}
                   />
                 : adminSubScreen
                 ? <AdminDashboardScreen
