@@ -18296,22 +18296,22 @@ function PollCardPicker({ qId, type, selectedId, onPick, readOnly, allBuilds, al
           {!readOnly && <ChevronDown size={16} color={T.tertiary} />}
         </button>
       )}
-      {open && (
+      {open && typeof document !== "undefined" && createPortal(
         <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 1200, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, maxHeight: "80vh", background: T.darkBg, borderTopLeftRadius: 16, borderTopRightRadius: 16, display: "flex", flexDirection: "column", border: `1px solid ${T.charcoal}` }}>
-            <div style={{ padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${T.charcoal}` }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, height: "80vh", background: T.darkBg, borderTopLeftRadius: 16, borderTopRightRadius: 16, display: "flex", flexDirection: "column", border: `1px solid ${T.charcoal}` }}>
+            <div style={{ padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${T.charcoal}`, flexShrink: 0 }}>
               <span style={{ fontFamily: sans, fontSize: 12, color: T.copper, fontWeight: 700, letterSpacing: 1.5 }}>PICK A {kindLabel.toUpperCase()}</span>
               <button onClick={() => setOpen(false)} style={{ background: "none", border: "none", cursor: "pointer" }}>
                 <X size={18} color={T.tertiary} />
               </button>
             </div>
-            <div className="th-scroll" style={{ flex: 1, overflowY: "auto", padding: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+            <div className="th-scroll" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 14, display: "flex", flexDirection: "column", gap: 8 }}>
               {rows.length === 0 ? (
                 <div style={{ padding: 24, textAlign: "center", fontFamily: sans, fontSize: 12, color: T.tertiary }}>Nothing to pick from yet.</div>
               ) : rows.map(row => {
                 const picked = row.id === selectedId;
                 return (
-                  <button key={row.id} onClick={() => { onPick(row.id); setOpen(false); }} style={{ display: "flex", alignItems: "stretch", gap: 0, background: picked ? `${T.copper}18` : T.charcoal, border: `1px solid ${picked ? T.copper : T.darkBg}`, borderRadius: 8, padding: 0, cursor: "pointer", textAlign: "left", overflow: "hidden", width: "100%" }}>
+                  <button key={row.id} onClick={() => { onPick(row.id); setOpen(false); }} style={{ display: "flex", alignItems: "stretch", gap: 0, background: picked ? `${T.copper}18` : T.charcoal, border: `1px solid ${picked ? T.copper : T.darkBg}`, borderRadius: 8, padding: 0, cursor: "pointer", textAlign: "left", overflow: "hidden", width: "100%", flexShrink: 0 }}>
                     <div style={{ width: 88, minHeight: 78, flexShrink: 0, background: row.image ? `#1A1A1A url(${row.image}) center/cover` : `linear-gradient(135deg, ${T.charcoal}, ${T.darkCard})` }} />
                     <div style={{ flex: 1, minWidth: 0, padding: "10px 12px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
                       <div style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.title}</div>
@@ -18324,7 +18324,8 @@ function PollCardPicker({ qId, type, selectedId, onPick, readOnly, allBuilds, al
               })}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
