@@ -6134,6 +6134,9 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
               allBuilds={pollAllBuilds}
               allTripReports={pollAllTripReports}
               campingSpots={pollCampingSpots}
+              onOpenBuild={onViewBuild}
+              onOpenTrip={onOpenTripDetail}
+              onOpenSpot={onOpenSpotOnMap}
             />
           ) : (
             <div style={{ padding: "20px 16px", fontFamily: sans, fontSize: 12, color: T.tertiary, textAlign: "center" }}>Loading poll…</div>
@@ -18237,9 +18240,9 @@ function PollCreator({ isAdmin, onSubmit, onClose }) {
 // card) that opens a bottom-sheet modal on tap. The modal lists every
 // available option as a full card (hero + name + metadata). Tapping a
 // card selects it + closes the sheet. Read-only mode disables tap-to-open.
-function PollCardPicker({ qId, type, selectedId, onPick, readOnly, allBuilds, allTripReports, campingSpots }) {
+function PollCardPicker({ qId, type, selectedId, onPick, readOnly, allBuilds, allTripReports, campingSpots, onOpenBuild, onOpenTrip, onOpenSpot }) {
   const [open, setOpen] = useState(false);
-  const rows = type === "dropdown_builds"
+  const rawRows = type === "dropdown_builds"
     ? (Array.isArray(allBuilds) ? allBuilds : []).map(b => ({
         id: b.id,
         title: b.name || [b.year, b.make, b.model].filter(Boolean).join(" ") || "Build",
@@ -18253,6 +18256,7 @@ function PollCardPicker({ qId, type, selectedId, onPick, readOnly, allBuilds, al
         .filter(t => t && t.status === "published" && (!t.kind || t.kind === "report"))
         .map(t => ({
           id: t.id,
+          slug: t.slug || null,
           title: t.name || "Trip Report",
           subtitle: [t.region, t.state_code].filter(Boolean).join(", ") || (t.distance_mi != null ? `${Number(t.distance_mi).toFixed(1)} mi` : ""),
           author: null,
@@ -18267,6 +18271,16 @@ function PollCardPicker({ qId, type, selectedId, onPick, readOnly, allBuilds, al
         handle: null,
         image: (Array.isArray(s.photos) && s.photos[0] && s.photos[0].url) || null,
       }));
+  // Rows w/ a hero image render first — the whole point of showing full
+  // cards is the visual, so bare no-image rows would defeat the purpose
+  // if scattered in. Preserves original relative order within each group.
+  const rows = rawRows.slice().sort((a, b) => (a.image ? 0 : 1) - (b.image ? 0 : 1));
+  const openItem = (row) => {
+    if (type === "dropdown_builds" && typeof onOpenBuild === "function") onOpenBuild({ rawId: row.id, name: row.title });
+    else if (type === "dropdown_trips" && typeof onOpenTrip === "function" && row.slug) onOpenTrip(row.slug);
+    else if (type === "dropdown_spots" && typeof onOpenSpot === "function") onOpenSpot(row.id);
+    setOpen(false);
+  };
   const kindLabel = type === "dropdown_builds" ? "build" : type === "dropdown_trips" ? "trip report" : "camp spot";
   const selectedRow = selectedId ? rows.find(r => r.id === selectedId) : null;
   const renderRow = (row, onClick) => (
@@ -18310,16 +18324,29 @@ function PollCardPicker({ qId, type, selectedId, onPick, readOnly, allBuilds, al
                 <div style={{ padding: 24, textAlign: "center", fontFamily: sans, fontSize: 12, color: T.tertiary }}>Nothing to pick from yet.</div>
               ) : rows.map(row => {
                 const picked = row.id === selectedId;
+                const kindHref = type === "dropdown_builds" ? "OPEN BUILD" : type === "dropdown_trips" ? "OPEN TRIP" : "OPEN SPOT";
                 return (
-                  <button key={row.id} onClick={() => { onPick(row.id); setOpen(false); }} style={{ display: "flex", alignItems: "stretch", gap: 0, background: picked ? `${T.copper}18` : T.charcoal, border: `1px solid ${picked ? T.copper : T.darkBg}`, borderRadius: 8, padding: 0, cursor: "pointer", textAlign: "left", overflow: "hidden", width: "100%", flexShrink: 0 }}>
-                    <div style={{ width: 88, minHeight: 78, flexShrink: 0, background: row.image ? `#1A1A1A url(${row.image}) center/cover` : `linear-gradient(135deg, ${T.charcoal}, ${T.darkCard})` }} />
-                    <div style={{ flex: 1, minWidth: 0, padding: "10px 12px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
-                      <div style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.title}</div>
-                      {row.subtitle && <div style={{ fontFamily: sans, fontSize: 11, color: T.copper, letterSpacing: 0.3, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.subtitle}</div>}
-                      {row.author && <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 3 }}>by {row.author}{row.handle ? <span style={{ color: T.copper }}> @{String(row.handle).replace(/^@/, "")}</span> : ""}</div>}
+                  <div key={row.id} style={{ display: "flex", alignItems: "stretch", gap: 0, background: picked ? `${T.copper}18` : T.charcoal, border: `1px solid ${picked ? T.copper : T.darkBg}`, borderRadius: 8, overflow: "hidden", width: "100%", flexShrink: 0 }}>
+                    {/* Tap the card body to select — button takes the full row minus
+                        the action column on the right. */}
+                    <button onClick={() => { onPick(row.id); setOpen(false); }} style={{ display: "flex", alignItems: "stretch", gap: 0, background: "transparent", border: "none", padding: 0, cursor: "pointer", textAlign: "left", flex: 1, minWidth: 0 }}>
+                      <div style={{ width: 88, minHeight: 78, flexShrink: 0, background: row.image ? `#1A1A1A url(${row.image}) center/cover` : `linear-gradient(135deg, ${T.charcoal}, ${T.darkCard})` }} />
+                      <div style={{ flex: 1, minWidth: 0, padding: "10px 12px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+                        <div style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.title}</div>
+                        {row.subtitle && <div style={{ fontFamily: sans, fontSize: 11, color: T.copper, letterSpacing: 0.3, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.subtitle}</div>}
+                        {row.author && <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 3 }}>by {row.author}{row.handle ? <span style={{ color: T.copper }}> @{String(row.handle).replace(/^@/, "")}</span> : ""}</div>}
+                      </div>
+                    </button>
+                    {/* Dedicated OPEN column — lets voters preview the full page
+                        without committing a selection. Closes the modal so the
+                        target screen mounts clean. */}
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "stretch", justifyContent: "center", borderLeft: `1px solid ${T.darkBg}`, padding: "0 4px" }}>
+                      {picked && <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "4px 0 6px" }}><CheckCircle size={14} color={T.copper} /></div>}
+                      <button onClick={() => openItem(row)} style={{ background: "transparent", color: T.copper, border: `1px solid ${T.copper}50`, borderRadius: 4, padding: "6px 10px", fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer", whiteSpace: "nowrap" }}>
+                        {kindHref}
+                      </button>
                     </div>
-                    {picked && <div style={{ display: "flex", alignItems: "center", paddingRight: 12 }}><CheckCircle size={16} color={T.copper} /></div>}
-                  </button>
+                  </div>
                 );
               })}
             </div>
@@ -18335,7 +18362,7 @@ function PollCardPicker({ qId, type, selectedId, onPick, readOnly, allBuilds, al
 // already voted OR the poll is closed. Editable while status='active'.
 // Shows aggregated results when status='closed' AND reveal_results=true
 // (parent passes tally derived from responses list).
-function PollCard({ poll, myResponse, isGuest, onGuestTap, onSubmit, allBuilds, allTripReports, campingSpots, results }) {
+function PollCard({ poll, myResponse, isGuest, onGuestTap, onSubmit, allBuilds, allTripReports, campingSpots, results, onOpenBuild, onOpenTrip, onOpenSpot }) {
   const [draft, setDraft] = useState(() => (myResponse && myResponse.responses) || {});
   const [submitting, setSubmitting] = useState(false);
   const [saveState, setSaveState] = useState(""); // "" | "saved" | "error:<msg>"
@@ -18431,6 +18458,9 @@ function PollCard({ poll, myResponse, isGuest, onGuestTap, onSubmit, allBuilds, 
                     allBuilds={allBuilds}
                     allTripReports={allTripReports}
                     campingSpots={campingSpots}
+                    onOpenBuild={onOpenBuild}
+                    onOpenTrip={onOpenTrip}
+                    onOpenSpot={onOpenSpot}
                   />
                 )}
               </div>
