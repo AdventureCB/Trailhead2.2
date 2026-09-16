@@ -1,6 +1,6 @@
 {
-  "name": "Trailhead",
-  "short_name": "Trailhead",
+  "name": "Trailhub",
+  "short_name": "Trailhub",
   "description": "The overlanding community app by Lone Peak Overland",
   "start_url": "/",
   "display": "standalone",
