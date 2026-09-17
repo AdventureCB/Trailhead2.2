@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Trailhub — Offline Map Test</title>
+<link rel="stylesheet" href="/vendor/maplibre-gl.css">
+<style>
+  html, body { margin: 0; height: 100%; background: #111; }
+  #map { position: absolute; inset: 0; }
+  #status { position: absolute; top: env(safe-area-inset-top, 8px); left: 8px; right: 8px; z-index: 10;
+    font: 12px -apple-system, sans-serif; color: #fff; background: rgba(0,0,0,0.7);
+    padding: 8px 10px; border-radius: 8px; white-space: pre-wrap; max-height: 40%; overflow: auto; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="status">Loading…</div>
+<script src="/vendor/maplibre-gl.js"></script>
+<script src="/vendor/pmtiles.js"></script>
+<script>
+const S = document.getElementById("status");
+const log = (m) => { S.textContent += "\n" + m; };
+window.onerror = (msg, u, l) => { S.textContent += "\nERROR: " + msg + " @" + l; };
+
+(async () => {
+  try {
+    S.textContent = "maplibregl: " + (!!window.maplibregl) + " | pmtiles: " + (!!window.pmtiles);
+    const protocol = new pmtiles.Protocol();
+    maplibregl.addProtocol("pmtiles", protocol.tile);
+    log("pmtiles protocol registered");
+
+    const PMTILES_URL = "https://tiles.lonepeakoverland.com/hq-region.pmtiles";
+    const layers = await fetch("/vendor/pm-layers-light.json").then(r => r.json());
+    log("loaded " + layers.length + " style layers");
+
+    const style = {
+      version: 8,
+      glyphs: "https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf",
+      sprite: "https://protomaps.github.io/basemaps-assets/sprites/v4/light",
+      sources: {
+        protomaps: {
+          type: "vector",
+          url: "pmtiles://" + PMTILES_URL,
+          attribution: "© OpenStreetMap contributors, © Protomaps"
+        }
+      },
+      layers: layers
+    };
+
+    const map = new maplibregl.Map({
+      container: "map",
+      style: style,
+      center: [-120.2072, 47.4052], // HQ
+      zoom: 8,
+    });
+    map.addControl(new maplibregl.NavigationControl());
+    map.on("load", () => log("✅ MAP LOADED — offline-style tiles rendering"));
+    map.on("error", (e) => log("map error: " + (e && e.error && e.error.message ? e.error.message : JSON.stringify(e && e.error || e))));
+    setTimeout(() => { if (S.textContent.indexOf("MAP LOADED") < 0) log("(still loading after 6s — check errors above)"); }, 6000);
+  } catch (e) {
+    log("FATAL: " + (e && e.message ? e.message : e));
+  }
+})();
+</script>
+</body>
+</html>
