@@ -457,7 +457,29 @@ function loadMapbox() {
       }
       // Alias so all existing `mapboxgl.*` usages resolve to MapLibre.
       window.mapboxgl = ml;
-      resolve(ml);
+      // Load PMTiles + register the pmtiles:// protocol so MapLibre can read
+      // local/remote PMTiles (offline basemap, downloaded regions). Non-fatal:
+      // if it fails, online maps still work; only offline is affected. The
+      // protocol instance is kept on window so 3b can register downloaded
+      // regions via `_thPmtilesProtocol.add(new pmtiles.PMTiles(url))`.
+      const loadPmtiles = () => new Promise((res) => {
+        if (window.pmtiles) return res();
+        const p = document.createElement("script");
+        p.src = "/vendor/pmtiles.js"; p.async = true;
+        p.onload = () => res(); p.onerror = () => res();
+        document.head.appendChild(p);
+      });
+      loadPmtiles().then(() => {
+        try {
+          if (window.pmtiles && ml.addProtocol && !ml.__pmtilesRegistered) {
+            const proto = new window.pmtiles.Protocol();
+            ml.addProtocol("pmtiles", proto.tile);
+            window._thPmtilesProtocol = proto;
+            ml.__pmtilesRegistered = true;
+          }
+        } catch (_) {}
+        resolve(ml);
+      });
     };
     s.onerror = () => reject(new Error("Failed to load MapLibre GL JS"));
     document.head.appendChild(s);
