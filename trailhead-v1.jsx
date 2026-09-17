@@ -377,7 +377,10 @@ const MAPBOX_TOKEN = "pk.eyJ1IjoibG9uZXBlYWtvdmVybGFuZCIsImEiOiJjbW91ODliaDQwNzM
 // look/services are unchanged; offline (native) swaps to open PMTiles later.
 // The style is the resolved https URL (mapbox:// sub-resources are rewritten by
 // mapTransformRequest below).
-const MAPBOX_STYLE = `https://api.mapbox.com/styles/v1/mapbox/outdoors-v12?access_token=${MAPBOX_TOKEN}`;
+// outdoors-v11 (classic), NOT v12: v12 defaults to globe projection + other
+// Mapbox-GL-v3-only features that MapLibre v4 can't parse (the map hangs on
+// load). v11 is pre-globe, fully MapLibre-compatible, and visually near-identical.
+const MAPBOX_STYLE = `https://api.mapbox.com/styles/v1/mapbox/outdoors-v11?access_token=${MAPBOX_TOKEN}`;
 
 // Public-lands overlay (PAD-US). Set this constant to your Mapbox tileset
 // id once you've uploaded PAD-US to Mapbox Studio (Tilesets → Upload). Format
