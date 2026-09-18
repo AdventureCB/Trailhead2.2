@@ -15026,7 +15026,7 @@ function TripReportDetail({ trip, author, currentUserId, onBack, onViewUser, onE
   return (
     <div style={{ padding: "0 0 24px" }}>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: `1px solid ${T.charcoal}` }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", paddingTop: "max(12px, env(safe-area-inset-top, 0px))", borderBottom: `1px solid ${T.charcoal}` }}>
         <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", gap: 4 }}>
           <ChevronLeft size={20} color={T.white} strokeWidth={1.5} />
           <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>BACK</span>
@@ -15961,7 +15961,7 @@ function ConvoyDetail({ item, linkedPlan, currentUserId, currentUserName, curren
   return (
     <div style={{ padding: "0 0 24px" }}>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: `1px solid ${T.charcoal}` }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", paddingTop: "max(12px, env(safe-area-inset-top, 0px))", borderBottom: `1px solid ${T.charcoal}` }}>
         <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", gap: 4 }}>
           <ChevronLeft size={20} color={T.white} strokeWidth={1.5} />
           <span style={{ fontFamily: sans, fontSize: 11, color: T.white, fontWeight: 600 }}>BACK</span>
