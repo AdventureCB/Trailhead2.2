@@ -682,6 +682,54 @@ async function loadOfflineContent() {
   return out;
 }
 
+// --- Gear-drop offline run/drop cache -------------------------------------
+// Cache the last-known run + drop rows so a racer who force-quits mid-race
+// with no signal can still open the run screen (rebuilt from cache + any
+// pending outbox submissions) instead of hanging on "Loading run…".
+async function cacheGearDropRun(run) {
+  if (!run || !run.id) return;
+  try { await idbOp("content", "readwrite", (s) => s.put({ key: "gdrun:" + run.id, type: "gdrun", row: run })); } catch (_) {}
+}
+async function readCachedGearDropRun(runId) {
+  try { const it = await idbOp("content", "readonly", (s) => s.get("gdrun:" + runId)); return (it && it.row) || null; } catch (_) { return null; }
+}
+async function cacheGearDropDrop(drop) {
+  if (!drop || !drop.id) return;
+  try { await idbOp("content", "readwrite", (s) => s.put({ key: "gddrop:" + drop.id, type: "gddrop", row: drop })); } catch (_) {}
+}
+async function readCachedGearDropDrop(dropId) {
+  try { const it = await idbOp("content", "readonly", (s) => s.get("gddrop:" + dropId)); return (it && it.row) || null; } catch (_) { return null; }
+}
+// Pending offline waypoint submissions for a run, in stop order.
+async function pendingGearDropSubmissions(runId) {
+  try {
+    const rows = await offlineOutbox.list();
+    return (rows || [])
+      .filter((r) => r.kind === "gear_drop_submission" && r.payload && r.payload.runId === runId)
+      .map((r) => r.payload)
+      .sort((a, b) => (a.waypointIdx || 0) - (b.waypointIdx || 0));
+  } catch (_) { return []; }
+}
+// Rebuild a run's progress by layering pending offline submissions onto the
+// cached base row (idempotent — skips stops already unlocked in the base).
+function reconstructOfflineRun(baseRun, pendingSubs, totalStops) {
+  if (!baseRun) return null;
+  const prog = baseRun.progress || {};
+  const unlocked = Array.isArray(prog.waypointsUnlocked) ? [...prog.waypointsUnlocked] : [];
+  const submissions = Array.isArray(prog.submissions) ? [...prog.submissions] : [];
+  let lastTs = baseRun.last_unlocked_at || null;
+  let finishedAt = baseRun.finished_at || null;
+  (pendingSubs || []).forEach((p) => {
+    if (p.waypointIdx == null || unlocked.includes(p.waypointIdx)) return;
+    if (p.waypointIdx !== unlocked.length) return; // keep strict order
+    unlocked.push(p.waypointIdx);
+    submissions.push({ waypointIdx: p.waypointIdx, photoUrl: p.photoUrl, note: p.note, lat: p.lat, lng: p.lng, distanceM: p.distanceM, submittedAt: p.submittedAt });
+    lastTs = p.submittedAt;
+    if (totalStops && p.waypointIdx === totalStops - 1) finishedAt = p.submittedAt;
+  });
+  return { ...baseRun, last_unlocked_at: lastTs, finished_at: finishedAt, progress: { waypointsUnlocked: unlocked, submissions } };
+}
+
 // Geocode a free-text address via the Mapbox Geocoding API. Returns
 // { lat, lng, label } or null. Replaces google.maps.Geocoder.
 async function mapboxGeocode(query) {
@@ -54431,9 +54479,12 @@ export default function Trailhead() {
     try {
       const { data, error } = await supabase
         .from("gear_drops").select("*").eq("id", id).maybeSingle();
-      if (error) { console.error("[loadGearDropById]", error); return null; }
-      return data;
-    } catch (e) { console.error("[loadGearDropById] threw", e); return null; }
+      if (!error && data) { cacheGearDropDrop(data); return data; }
+      if (error) console.error("[loadGearDropById]", error);
+    } catch (e) { console.error("[loadGearDropById] threw", e); }
+    // Offline / failure — serve the last-cached drop so the run screen (and its
+    // waypoint gates) still work with no signal.
+    return await readCachedGearDropDrop(id);
   }, []);
 
   const createGearDrop = async (payload = {}) => {
@@ -54791,9 +54842,29 @@ export default function Trailhead() {
         .select("id, user_id, gear_drop_id, progress, last_unlocked_at, finished_at, route_data, status, kind")
         .eq("id", runId)
         .maybeSingle();
-      if (error) { console.error("[loadGearDropRunById]", error); return null; }
-      return data;
-    } catch (e) { console.error("[loadGearDropRunById] threw", e); return null; }
+      if (!error && data) {
+        cacheGearDropRun(data);
+        // Layer any not-yet-synced offline captures on top of the (possibly
+        // stale) server row so progress is correct even right after reconnect,
+        // before the outbox finishes flushing. Idempotent.
+        const pend = await pendingGearDropSubmissions(runId);
+        if (pend.length) {
+          const drop = await readCachedGearDropDrop(data.gear_drop_id);
+          const total = drop && drop.route_data && Array.isArray(drop.route_data.pins) ? drop.route_data.pins.length : null;
+          return reconstructOfflineRun(data, pend, total);
+        }
+        return data;
+      }
+      if (error) console.error("[loadGearDropRunById]", error);
+    } catch (e) { console.error("[loadGearDropRunById] threw", e); }
+    // Offline / failure — rebuild from the cached run + pending outbox subs so
+    // a mid-race restart with no signal still opens the run.
+    const base = await readCachedGearDropRun(runId);
+    if (!base) return null;
+    const pend = await pendingGearDropSubmissions(runId);
+    const drop = await readCachedGearDropDrop(base.gear_drop_id);
+    const total = drop && drop.route_data && Array.isArray(drop.route_data.pins) ? drop.route_data.pins.length : null;
+    return reconstructOfflineRun(base, pend, total);
   }, []);
 
   // Wraps the gear_drop_advance_run SECURITY DEFINER RPC. Returns the
