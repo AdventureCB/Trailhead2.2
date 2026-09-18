@@ -16213,6 +16213,23 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
   const handleClearOffline = async () => {
     try { await offlineCache.clearAll(); setOfflineRegions([]); setShowOfflineManage(false); if (onShowToast) onShowToast("Offline map data cleared"); } catch (_) {}
   };
+  // Is the current viewport already fully inside a downloaded region? Tracks
+  // map moves so the download button relabels to "already downloaded".
+  const [offlineCovered, setOfflineCovered] = useState(false);
+  useEffect(() => {
+    if (basemap !== "offline" || !mapReady || !mapInst.current) { setOfflineCovered(false); return; }
+    const map = mapInst.current;
+    const check = () => {
+      try {
+        const b = map.getBounds();
+        const a = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+        setOfflineCovered((offlineRegions || []).some((r) => r.bbox && r.bbox[0] <= a[0] && r.bbox[1] <= a[1] && r.bbox[2] >= a[2] && r.bbox[3] >= a[3]));
+      } catch (_) {}
+    };
+    check();
+    map.on("moveend", check);
+    return () => { try { map.off("moveend", check); } catch (_) {} };
+  }, [basemap, mapReady, offlineRegions]);
   const [selectedSpot, setSelectedSpot] = useState(null);
   const [selectedLand, setSelectedLand] = useState(null);
   // Search state — combined results from Mapbox geocode + local camping spots.
@@ -17154,10 +17171,11 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
         {/* Offline download panel — only while the offline basemap is active.
             Caches the current viewport's tiles for no-signal use. */}
         {!isGuest && basemap === "offline" && (
-          <div style={{ position: "absolute", bottom: 14, left: "50%", transform: "translateX(-50%)", zIndex: 6, width: "min(92%, 340px)", background: `${T.darkCard}F0`, backdropFilter: "blur(10px)", border: `1px solid ${T.charcoal}`, borderRadius: 12, boxShadow: "0 6px 18px rgba(0,0,0,0.45)", padding: 10 }}>
-            <button onClick={handleDownloadArea} disabled={offlineDownloading} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "11px", borderRadius: 8, background: offlineDownloading ? T.charcoal : T.copper, border: "none", cursor: offlineDownloading ? "default" : "pointer", fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.5, color: offlineDownloading ? T.tertiary : T.darkBg }}>
-              <ArrowDown size={15} color={offlineDownloading ? T.tertiary : T.darkBg} strokeWidth={2.5} />
-              {offlineDownloading ? `Downloading… ${offlinePct}%` : "Download this area"}
+          <div style={{ position: "absolute", top: planActive ? 112 : 60, left: 10, right: 56, zIndex: 6, background: `${T.darkCard}F0`, backdropFilter: "blur(10px)", border: `1px solid ${T.charcoal}`, borderRadius: 12, boxShadow: "0 6px 18px rgba(0,0,0,0.45)", padding: 10 }}>
+            <button onClick={handleDownloadArea} disabled={offlineDownloading || offlineCovered} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "11px", borderRadius: 8, background: (offlineDownloading || offlineCovered) ? T.charcoal : T.copper, border: "none", cursor: (offlineDownloading || offlineCovered) ? "default" : "pointer", fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.5, color: (offlineDownloading || offlineCovered) ? T.tertiary : T.darkBg }}>
+              {offlineCovered && !offlineDownloading
+                ? <><CheckCircle size={15} color={T.green} strokeWidth={2.5} />This area is downloaded</>
+                : <><ArrowDown size={15} color={offlineDownloading ? T.tertiary : T.darkBg} strokeWidth={2.5} />{offlineDownloading ? `Downloading… ${offlinePct}%` : "Download this area"}</>}
             </button>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8, fontFamily: sans, fontSize: 10, color: T.tertiary }}>
               <span>{offlineRegions.length} area{offlineRegions.length === 1 ? "" : "s"} saved offline</span>
