@@ -474,10 +474,10 @@ function loadMapbox() {
           if (window.pmtiles && ml.addProtocol && !ml.__pmtilesRegistered) {
             const proto = new window.pmtiles.Protocol();
             ml.addProtocol("pmtiles", proto.tile);
-            // Serve the offline source through the caching source so tiles
-            // viewed online are cached, and downloaded regions render offline.
-            try { proto.add(new window.pmtiles.PMTiles(new CachingPmtilesSource(OFFLINE_TILES_URL))); } catch (_) {}
             window._thPmtilesProtocol = proto;
+            // Offline region router — serves downloaded region files locally,
+            // falling back to the remote source when online.
+            try { ml.addProtocol("offline", offlineTileRouter); loadDownloadedRegions(); } catch (_) {}
             ml.__pmtilesRegistered = true;
           }
         } catch (_) {}
@@ -508,7 +508,9 @@ async function buildOfflineMapStyle(pmtilesUrl) {
     sources: {
       protomaps: {
         type: "vector",
-        url: "pmtiles://" + (pmtilesUrl || OFFLINE_TILES_URL),
+        tiles: ["offline://{z}/{x}/{y}"],
+        minzoom: 0,
+        maxzoom: 14,
         attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · © Protomaps',
       },
     },
@@ -516,20 +518,22 @@ async function buildOfflineMapStyle(pmtilesUrl) {
   };
 }
 
-// ─── Offline tile cache (IndexedDB byte-range cache over the PMTiles source) ──
-// We cache the raw byte RANGES the pmtiles reader fetches (header, directories,
-// tiles) keyed by url|offset|length. "Download this area" drives getZxy() for
-// every tile in a bbox so its bytes land in IndexedDB; offline, the same
-// CachingPmtilesSource serves those ranges from cache, so the pmtiles protocol
-// renders with NO connection. Region metadata lives in a second store.
+// ─── Offline regions (whole-file PMTiles per region, cached on-device) ────────
+// Model: the user picks regions from a hosted catalog (regions.json); each is a
+// pre-extracted full-detail PMTiles file on R2. Downloading = fetching that
+// whole file and storing it as a Blob in IndexedDB. Serving = the "offline://"
+// tile protocol reads from downloaded region files (Blob-backed pmtiles) for
+// tiles they cover, else falls back to the remote source when online. Scales to
+// all of North America — the catalog is server-driven (no app change to expand).
 const OFFLINE_DB_NAME = "trailhub-offline";
+const OFFLINE_CATALOG_URL = "https://tiles.lonepeakoverland.com/regions.json";
 function openOfflineDB() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(OFFLINE_DB_NAME, 1);
+    const req = indexedDB.open(OFFLINE_DB_NAME, 2);
     req.onupgradeneeded = () => {
       const db = req.result;
-      if (!db.objectStoreNames.contains("ranges")) db.createObjectStore("ranges");
       if (!db.objectStoreNames.contains("regions")) db.createObjectStore("regions", { keyPath: "id" });
+      if (db.objectStoreNames.contains("ranges")) db.deleteObjectStore("ranges"); // drop legacy v1 store
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -544,70 +548,97 @@ function idbOp(store, mode, fn) {
     tx.onabort = () => reject(tx.error);
   }));
 }
-const offlineCache = {
-  getRange: (k) => idbOp("ranges", "readonly", (s) => s.get(k)),
-  putRange: (k, v) => idbOp("ranges", "readwrite", (s) => s.put(v, k)),
-  listRegions: () => idbOp("regions", "readonly", (s) => s.getAll()),
-  putRegion: (r) => idbOp("regions", "readwrite", (s) => s.put(r)),
-  deleteRegion: (id) => idbOp("regions", "readwrite", (s) => s.delete(id)),
-  clearAll: () => Promise.all([
-    idbOp("ranges", "readwrite", (s) => s.clear()),
-    idbOp("regions", "readwrite", (s) => s.clear()),
-  ]),
+const offlineStore = {
+  put: (r) => idbOp("regions", "readwrite", (s) => s.put(r)),
+  list: () => idbOp("regions", "readonly", (s) => s.getAll()),
+  delete: (id) => idbOp("regions", "readwrite", (s) => s.delete(id)),
 };
 
-// pmtiles Source that caches byte ranges in IndexedDB (wraps FetchSource).
-class CachingPmtilesSource {
-  constructor(url) { this.url = url; this._inner = new window.pmtiles.FetchSource(url); }
-  getKey() { return this.url; }
-  async getBytes(offset, length, signal, etag) {
-    const key = this.url + "|" + offset + "|" + length;
-    try { const c = await offlineCache.getRange(key); if (c && c.data) return { data: c.data, etag: c.etag }; } catch (_) {}
-    const res = await this._inner.getBytes(offset, length, signal, etag);
-    try { await offlineCache.putRange(key, { data: res.data, etag: res.etag }); } catch (_) {}
-    return res;
+// Blob-backed pmtiles Source — reads byte ranges from an in-IDB Blob via slice
+// (no need to hold the whole file in memory).
+class BlobPmtilesSource {
+  constructor(blob, key) { this.blob = blob; this._key = key; }
+  getKey() { return this._key; }
+  async getBytes(offset, length) {
+    const buf = await this.blob.slice(offset, offset + length).arrayBuffer();
+    return { data: buf };
   }
 }
 
-// Web-Mercator tile x/y range covering a bbox at zoom z.
+// Web-Mercator tile x/y range covering a bbox at zoom z; used to route tiles.
 function tileRangeForBbox(bbox, z) {
   const [minLng, minLat, maxLng, maxLat] = bbox;
   const n = Math.pow(2, z);
   const lon2x = (lon) => Math.floor(((lon + 180) / 360) * n);
-  const lat2y = (lat) => {
-    const r = (lat * Math.PI) / 180;
-    return Math.floor(((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * n);
-  };
-  const clamp = (v) => Math.max(0, Math.min(n - 1, v));
-  return { minX: clamp(lon2x(minLng)), maxX: clamp(lon2x(maxLng)), minY: clamp(lat2y(maxLat)), maxY: clamp(lat2y(minLat)) };
+  const lat2y = (lat) => { const r = (lat * Math.PI) / 180; return Math.floor(((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * n); };
+  const cl = (v) => Math.max(0, Math.min(n - 1, v));
+  return { minX: cl(lon2x(minLng)), maxX: cl(lon2x(maxLng)), minY: cl(lat2y(maxLat)), maxY: cl(lat2y(minLat)) };
 }
-function countRegionTiles(bbox, minZ, maxZ) {
-  let t = 0;
-  for (let z = minZ; z <= maxZ; z++) { const r = tileRangeForBbox(bbox, z); t += (r.maxX - r.minX + 1) * (r.maxY - r.minY + 1); }
-  return t;
+function bboxCoversTile(bbox, z, x, y) {
+  const r = tileRangeForBbox(bbox, z);
+  return x >= r.minX && x <= r.maxX && y >= r.minY && y <= r.maxY;
 }
-let _downloadPMTiles = null;
-async function downloadOfflineRegion(bbox, name, opts, onProgress) {
-  const minZoom = (opts && opts.minZoom) || 0;
-  const maxZoom = (opts && opts.maxZoom) || 14;
-  if (!window.pmtiles) throw new Error("map engine not ready");
-  if (!_downloadPMTiles) _downloadPMTiles = new window.pmtiles.PMTiles(new CachingPmtilesSource(OFFLINE_TILES_URL));
-  const p = _downloadPMTiles;
-  const total = countRegionTiles(bbox, minZoom, maxZoom);
-  let done = 0;
-  for (let z = minZoom; z <= maxZoom; z++) {
-    const r = tileRangeForBbox(bbox, z);
-    for (let x = r.minX; x <= r.maxX; x++) {
-      for (let y = r.minY; y <= r.maxY; y++) {
-        try { await p.getZxy(z, x, y); } catch (_) {}
-        done++;
-        if (onProgress && (done % 20 === 0 || done === total)) onProgress(done, total);
-      }
+
+// Registry of downloaded regions' PMTiles + the remote fallback source.
+let _downloadedRegions = []; // [{ meta, pm }]
+let _remoteOfflinePM = null;
+async function loadDownloadedRegions() {
+  try {
+    const rows = await offlineStore.list();
+    _downloadedRegions = (rows || []).filter((r) => r.blob).map((r) => ({ meta: r, pm: new window.pmtiles.PMTiles(new BlobPmtilesSource(r.blob, "region:" + r.id)) }));
+  } catch (_) { _downloadedRegions = []; }
+  return _downloadedRegions;
+}
+function ensureRemoteOfflinePM() {
+  if (!_remoteOfflinePM && window.pmtiles) _remoteOfflinePM = new window.pmtiles.PMTiles(new window.pmtiles.FetchSource(OFFLINE_TILES_URL));
+  return _remoteOfflinePM;
+}
+// "offline://{z}/{x}/{y}" tile router: downloaded regions first, then remote.
+async function offlineTileRouter(params) {
+  const m = String(params.url).replace("offline://", "").split("/");
+  const z = +m[0], x = +m[1], y = +m[2];
+  for (const r of _downloadedRegions) {
+    if (z <= (r.meta.maxZoom || 14) && bboxCoversTile(r.meta.bbox, z, x, y)) {
+      try { const t = await r.pm.getZxy(z, x, y); if (t && t.data) return { data: t.data }; } catch (_) {}
     }
   }
-  const region = { id: "r_" + Date.now(), name: name || "Downloaded area", bbox, minZoom, maxZoom, tiles: total, createdAt: new Date().toISOString() };
-  try { await offlineCache.putRegion(region); } catch (_) {}
-  return region;
+  if (typeof navigator === "undefined" || navigator.onLine) {
+    try { const pm = ensureRemoteOfflinePM(); if (pm) { const t = await pm.getZxy(z, x, y); if (t && t.data) return { data: t.data }; } } catch (_) {}
+  }
+  return { data: new Uint8Array() };
+}
+
+async function fetchRegionCatalog() {
+  const res = await fetch(OFFLINE_CATALOG_URL + "?t=" + Date.now(), { cache: "no-store" });
+  if (!res.ok) throw new Error("catalog unavailable");
+  return res.json();
+}
+// Download a region's whole PMTiles file → store Blob in IDB → register it.
+async function downloadRegionFile(region, onProgress) {
+  const res = await fetch(region.url + "?t=" + Date.now(), { cache: "no-store" });
+  if (!res.ok || !res.body) throw new Error("download failed (" + res.status + ")");
+  const total = Number(res.headers.get("content-length")) || (region.sizeMB ? region.sizeMB * 1e6 : 0);
+  const reader = res.body.getReader();
+  const chunks = []; let received = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value); received += value.length;
+    if (onProgress) onProgress(received, total);
+  }
+  const blob = new Blob(chunks, { type: "application/octet-stream" });
+  const meta = { id: region.id, name: region.name, group: region.group, bbox: region.bbox, maxZoom: region.maxZoom || 14, sizeMB: Math.round(blob.size / 1e6), blob, createdAt: new Date().toISOString() };
+  await offlineStore.put(meta);
+  _downloadedRegions = _downloadedRegions.filter((r) => r.meta.id !== region.id);
+  _downloadedRegions.push({ meta, pm: new window.pmtiles.PMTiles(new BlobPmtilesSource(blob, "region:" + region.id)) });
+  return meta;
+}
+async function deleteDownloadedRegion(id) {
+  try { await offlineStore.delete(id); } catch (_) {}
+  _downloadedRegions = _downloadedRegions.filter((r) => r.meta.id !== id);
+}
+async function listDownloadedRegions() {
+  try { const rows = await offlineStore.list(); return (rows || []).map((r) => ({ id: r.id, name: r.name, group: r.group, sizeMB: r.sizeMB })); } catch (_) { return []; }
 }
 
 // Geocode a free-text address via the Mapbox Geocoding API. Returns
@@ -3777,7 +3808,7 @@ function useWakeLock(active) {
 // Collapsed by default to a small "LAYERS" chip; tapping the chip expands a
 // menu with the toggles. The chip stays compact when nothing is enabled,
 // and shows an active count when one or more layers are on.
-function MapLayerToggle({ showCamping, setShowCamping, showPublicLands, setShowPublicLands, showTripReports, setShowTripReports, showTripPlans, setShowTripPlans, showSatellite, setShowSatellite, basemap, setBasemap }) {
+function MapLayerToggle({ showCamping, setShowCamping, showPublicLands, setShowPublicLands, showTripReports, setShowTripReports, showTripPlans, setShowTripPlans, showSatellite, setShowSatellite, basemap, setBasemap, onOpenOfflineDownloads }) {
   const [open, setOpen] = useState(false);
   const offlineOn = basemap === "offline";
   const activeCount = (showCamping ? 1 : 0) + (showPublicLands ? 1 : 0) + (showTripReports ? 1 : 0) + (showTripPlans ? 1 : 0) + (showSatellite ? 1 : 0) + (offlineOn ? 1 : 0);
@@ -3878,7 +3909,13 @@ function MapLayerToggle({ showCamping, setShowCamping, showPublicLands, setShowP
       }}>
         {open && (
           <div>
-            {setBasemap && row(OfflineSwatch, "Offline map", "Downloadable open basemap (beta)", offlineOn, () => setBasemap(b => b === "offline" ? "mapbox" : "offline"))}
+            {setBasemap && row(OfflineSwatch, "Offline map", "Open basemap — works with no signal", offlineOn, () => setBasemap(b => b === "offline" ? "mapbox" : "offline"))}
+            {onOpenOfflineDownloads && (
+              <button onClick={onOpenOfflineDownloads} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "11px 14px", background: "none", border: "none", borderTop: `1px solid ${T.charcoal}`, cursor: "pointer", fontFamily: sans, color: T.copper, textAlign: "left" }}>
+                <div style={{ width: 26, height: 26, borderRadius: 6, background: `${T.copper}20`, border: `1px solid ${T.copper}55`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><ArrowDown size={15} color={T.copper} strokeWidth={2.5} /></div>
+                <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.3 }}>Download maps…</div><div style={{ fontSize: 10, color: T.tertiary, marginTop: 2 }}>Pick regions for offline use</div></div>
+              </button>
+            )}
             {setShowSatellite && row(SatelliteSwatch, "Satellite", "Aerial imagery + labels", showSatellite, () => setShowSatellite(v => !v))}
             {row(CampingSwatch, "Camping spots", "Public + community", showCamping, () => setShowCamping(v => !v))}
             {row(PublicLandsSwatch, "Public lands", "BLM · USFS · NPS · State", showPublicLands, () => setShowPublicLands(v => !v))}
@@ -16177,6 +16214,100 @@ function ConvoyDetail({ item, linkedPlan, currentUserId, currentUserName, curren
   );
 }
 
+// Offline maps download sheet — a grouped, checkbox region catalog (driven by
+// the hosted regions.json). Users select states/regions to download for
+// no-signal use; downloads are whole PMTiles files stored on-device.
+function OfflineRegionsSheet({ onClose, onShowToast }) {
+  const [catalog, setCatalog] = useState(null);
+  const [downloaded, setDownloaded] = useState({}); // id -> {sizeMB}
+  const [selected, setSelected] = useState({});     // id -> true
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState(null);   // { name, pct }
+  const [error, setError] = useState("");
+  const refresh = async () => { try { const d = await listDownloadedRegions(); const m = {}; (d || []).forEach((r) => { m[r.id] = r; }); setDownloaded(m); } catch (_) {} };
+  useEffect(() => { fetchRegionCatalog().then(setCatalog).catch(() => setError("Couldn't load the region list — check your connection.")); refresh(); }, []);
+  const toggle = (id) => setSelected((s) => ({ ...s, [id]: !s[id] }));
+  const toggleGroup = (regions) => {
+    const ids = regions.filter((r) => !downloaded[r.id]).map((r) => r.id);
+    const allOn = ids.length > 0 && ids.every((id) => selected[id]);
+    setSelected((s) => { const n = { ...s }; ids.forEach((id) => { n[id] = !allOn; }); return n; });
+  };
+  const selectedRegions = () => {
+    if (!catalog) return [];
+    const out = [];
+    catalog.groups.forEach((g) => g.regions.forEach((r) => { if (selected[r.id] && !downloaded[r.id]) out.push(r); }));
+    return out;
+  };
+  const sel = selectedRegions();
+  const totalSelMB = sel.reduce((n, r) => n + (r.sizeMB || 0), 0);
+  const startDownload = async () => {
+    if (sel.length === 0 || busy) return;
+    setBusy(true); setError("");
+    for (const r of sel) {
+      setProgress({ name: r.name, pct: 0 });
+      try { await downloadRegionFile(r, (rec, tot) => setProgress({ name: r.name, pct: tot ? Math.round((rec / tot) * 100) : 0 })); }
+      catch (e) { setError("Failed to download " + r.name + (e && e.message ? " — " + e.message : "")); }
+      await refresh();
+    }
+    setProgress(null); setSelected({}); setBusy(false);
+    if (onShowToast) onShowToast("Offline maps updated");
+  };
+  const remove = async (id) => { await deleteDownloadedRegion(id); await refresh(); };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 1400, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={() => !busy && onClose()}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 430, maxHeight: "88vh", background: T.darkBg, borderTopLeftRadius: 18, borderTopRightRadius: 18, borderTop: `1px solid ${T.charcoal}`, display: "flex", flexDirection: "column", paddingBottom: "env(safe-area-inset-bottom)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 18px 12px" }}>
+          <div>
+            <h2 style={{ fontFamily: sans, fontSize: 17, color: T.white, margin: 0, fontWeight: 700 }}>Offline Maps</h2>
+            <p style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, margin: "3px 0 0" }}>Download regions to use maps with no signal.</p>
+          </div>
+          <button onClick={() => !busy && onClose()} style={{ background: T.darkCard, border: "none", borderRadius: 8, width: 34, height: 34, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><X size={18} color={T.tertiary} /></button>
+        </div>
+        {error && <div style={{ margin: "0 18px 10px", background: `${T.red}15`, border: `1px solid ${T.red}40`, padding: 10, borderRadius: 8, fontFamily: sans, fontSize: 12, color: T.red }}>{error}</div>}
+        <div style={{ flex: 1, overflowY: "auto", padding: "0 18px" }}>
+          {!catalog && !error && <div style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, textAlign: "center", padding: 24 }}>Loading regions…</div>}
+          {catalog && catalog.groups.map((g) => (
+            <div key={g.name} style={{ marginBottom: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", margin: "0 0 6px" }}>
+                <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700 }}>{g.name.toUpperCase()}</span>
+                <button onClick={() => toggleGroup(g.regions)} disabled={busy} style={{ background: "none", border: "none", color: T.copper, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}>SELECT ALL</button>
+              </div>
+              {g.regions.map((r) => {
+                const done = !!downloaded[r.id];
+                const on = !!selected[r.id];
+                return (
+                  <div key={r.id} onClick={() => !done && !busy && toggle(r.id)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 12px", background: T.darkCard, borderRadius: 10, marginBottom: 6, cursor: done || busy ? "default" : "pointer", border: `1px solid ${on ? T.copper : T.charcoal}` }}>
+                    <div style={{ width: 20, height: 20, borderRadius: done ? "50%" : 5, flexShrink: 0, background: done ? T.green : on ? T.copper : "transparent", border: `2px solid ${done ? T.green : on ? T.copper : T.tertiary}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      {(done || on) && <CheckCircle size={12} color={T.white} strokeWidth={3} />}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600 }}>{r.name}</div>
+                      <div style={{ fontFamily: serif, fontSize: 11, color: T.tertiary }}>{done ? "Saved offline" : `~${r.sizeMB} MB`}</div>
+                    </div>
+                    {done && <button onClick={(e) => { e.stopPropagation(); remove(r.id); }} disabled={busy} style={{ background: "none", border: "none", cursor: busy ? "default" : "pointer", padding: 4 }}><Trash2 size={16} color={T.red} /></button>}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+        <div style={{ padding: "12px 18px 16px", borderTop: `1px solid ${T.charcoal}` }}>
+          {busy && progress && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, marginBottom: 5 }}>Downloading {progress.name}… {progress.pct}%</div>
+              <div style={{ height: 5, background: T.charcoal, borderRadius: 3, overflow: "hidden" }}><div style={{ height: "100%", width: `${progress.pct}%`, background: T.copper, transition: "width 0.2s" }} /></div>
+            </div>
+          )}
+          <button onClick={startDownload} disabled={busy || sel.length === 0} style={{ width: "100%", padding: "13px", borderRadius: 10, background: busy || sel.length === 0 ? T.charcoal : T.red, border: "none", cursor: busy || sel.length === 0 ? "default" : "pointer", fontFamily: sans, fontSize: 13, fontWeight: 700, letterSpacing: 0.5, color: busy || sel.length === 0 ? T.tertiary : T.white }}>
+            {busy ? "Downloading…" : sel.length === 0 ? "Select regions to download" : `Download ${sel.length} region${sel.length === 1 ? "" : "s"} · ~${totalSelMB} MB`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onAddPhotoToSpot, onDeletePhotoFromSpot, onLoadCampingSpotPhotos, onLoadCampingSpotElevation, spotAuthors, tripAuthors, onLoadRouteData, onViewUser, onStartNav, onNewTripReport, onNewTripPlan, currentUserId, isAdmin, onMapViewportChange, tripReports, showTripReports, setShowTripReports, tripPlans, showTripPlans, setShowTripPlans, onOpenTripDetail, onOpenTripPlanDraft, pendingSpotNav, onConsumePendingSpotNav, pendingHQOpen, onConsumePendingHQOpen, pendingPlanNav, onConsumePendingPlanNav, onShareCampingSpotToFeed, onShareHQToFeed, onShareTripToFeed, onShareTripPlanToFeed, onOpenDM, onShowToast, onOpenShareCompose, onOpenShareIntent, planBuilder, gearDropPinBuilder, isGuest, onGuestTap, savedTripIds, onToggleSaveTrip }) {
   const mapRef = useRef(null);
   const mapInst = useRef(null);
@@ -16187,49 +16318,8 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
   const [basemap, setBasemap] = useState(() => { try { return localStorage.getItem("th_basemap") === "offline" ? "offline" : "mapbox"; } catch (_) { return "mapbox"; } });
   useEffect(() => { try { localStorage.setItem("th_basemap", basemap); } catch (_) {} }, [basemap]);
   const lastViewRef = useRef(null); // preserves center/zoom across basemap remounts
-  // Offline downloaded regions (see downloadOfflineRegion / offlineCache).
-  const [offlineRegions, setOfflineRegions] = useState([]);
-  const [offlineDownloading, setOfflineDownloading] = useState(false);
-  const [offlinePct, setOfflinePct] = useState(0);
-  const [showOfflineManage, setShowOfflineManage] = useState(false);
-  useEffect(() => { offlineCache.listRegions().then((rs) => setOfflineRegions(rs || [])).catch(() => {}); }, []);
-  const handleDownloadArea = async () => {
-    if (!mapInst.current || offlineDownloading) return;
-    const b = mapInst.current.getBounds();
-    const bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
-    // Auto-cap max zoom so a zoomed-out view can't queue a giant download.
-    let maxZoom = 14; const CAP = 45000;
-    while (maxZoom > 10 && countRegionTiles(bbox, 0, maxZoom) > CAP) maxZoom--;
-    setOfflineDownloading(true); setOfflinePct(0);
-    try {
-      await downloadOfflineRegion(bbox, "Area · " + new Date().toLocaleDateString(), { minZoom: 0, maxZoom }, (done, total) => {
-        setOfflinePct(total ? Math.round((done / total) * 100) : 0);
-      });
-      const rs = await offlineCache.listRegions(); setOfflineRegions(rs || []);
-      if (onShowToast) onShowToast("Area saved for offline use");
-    } catch (e) { if (onShowToast) onShowToast("Download failed — try a smaller area or check signal"); }
-    setOfflineDownloading(false);
-  };
-  const handleClearOffline = async () => {
-    try { await offlineCache.clearAll(); setOfflineRegions([]); setShowOfflineManage(false); if (onShowToast) onShowToast("Offline map data cleared"); } catch (_) {}
-  };
-  // Is the current viewport already fully inside a downloaded region? Tracks
-  // map moves so the download button relabels to "already downloaded".
-  const [offlineCovered, setOfflineCovered] = useState(false);
-  useEffect(() => {
-    if (basemap !== "offline" || !mapReady || !mapInst.current) { setOfflineCovered(false); return; }
-    const map = mapInst.current;
-    const check = () => {
-      try {
-        const b = map.getBounds();
-        const a = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
-        setOfflineCovered((offlineRegions || []).some((r) => r.bbox && r.bbox[0] <= a[0] && r.bbox[1] <= a[1] && r.bbox[2] >= a[2] && r.bbox[3] >= a[3]));
-      } catch (_) {}
-    };
-    check();
-    map.on("moveend", check);
-    return () => { try { map.off("moveend", check); } catch (_) {} };
-  }, [basemap, mapReady, offlineRegions]);
+  // Offline maps download sheet (region catalog with checkboxes).
+  const [showOfflineSheet, setShowOfflineSheet] = useState(false);
   const [selectedSpot, setSelectedSpot] = useState(null);
   const [selectedLand, setSelectedLand] = useState(null);
   // Search state — combined results from Mapbox geocode + local camping spots.
@@ -17168,33 +17258,14 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
           )}
         </div>
         )}
-        {/* Offline download panel — only while the offline basemap is active.
-            Caches the current viewport's tiles for no-signal use. */}
-        {!isGuest && basemap === "offline" && (
-          <div style={{ position: "absolute", top: planActive ? 112 : 60, left: 10, right: 56, zIndex: 6, background: `${T.darkCard}F0`, backdropFilter: "blur(10px)", border: `1px solid ${T.charcoal}`, borderRadius: 12, boxShadow: "0 6px 18px rgba(0,0,0,0.45)", padding: 10 }}>
-            <button onClick={handleDownloadArea} disabled={offlineDownloading || offlineCovered} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "11px", borderRadius: 8, background: (offlineDownloading || offlineCovered) ? T.charcoal : T.copper, border: "none", cursor: (offlineDownloading || offlineCovered) ? "default" : "pointer", fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.5, color: (offlineDownloading || offlineCovered) ? T.tertiary : T.darkBg }}>
-              {offlineCovered && !offlineDownloading
-                ? <><CheckCircle size={15} color={T.green} strokeWidth={2.5} />This area is downloaded</>
-                : <><ArrowDown size={15} color={offlineDownloading ? T.tertiary : T.darkBg} strokeWidth={2.5} />{offlineDownloading ? `Downloading… ${offlinePct}%` : "Download this area"}</>}
-            </button>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8, fontFamily: sans, fontSize: 10, color: T.tertiary }}>
-              <span>{offlineRegions.length} area{offlineRegions.length === 1 ? "" : "s"} saved offline</span>
-              {offlineRegions.length > 0 && <button onClick={() => setShowOfflineManage((v) => !v)} style={{ background: "none", border: "none", color: T.copper, fontFamily: sans, fontSize: 10, fontWeight: 700, cursor: "pointer", letterSpacing: 0.5 }}>{showOfflineManage ? "DONE" : "MANAGE"}</button>}
-            </div>
-            {showOfflineManage && (
-              <div style={{ marginTop: 6 }}>
-                {offlineRegions.map((r) => (
-                  <div key={r.id} style={{ padding: "5px 0", borderTop: `1px solid ${T.charcoal}`, fontFamily: serif, fontSize: 11, color: T.white, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name} · z{r.maxZoom} · {(r.tiles || 0).toLocaleString()} tiles</div>
-                ))}
-                <button onClick={handleClearOffline} style={{ width: "100%", marginTop: 8, padding: "8px", borderRadius: 8, background: `${T.red}15`, border: `1px solid ${T.red}40`, cursor: "pointer", fontFamily: sans, fontSize: 11, fontWeight: 700, color: T.red, letterSpacing: 0.5 }}>Clear all offline data</button>
-              </div>
-            )}
-          </div>
+        {/* Offline maps download sheet — opened from the layers menu. */}
+        {!isGuest && showOfflineSheet && (
+          <OfflineRegionsSheet onClose={() => setShowOfflineSheet(false)} onShowToast={onShowToast} />
         )}
         {/* Layer toggle — hidden for guests for the same reason as search:
             they're only here to view a specific spot/HQ via deep link. */}
         {!isGuest && (
-        <MapLayerToggle showCamping={showCampingSpots} setShowCamping={setShowCampingSpots} showPublicLands={showPublicLands} setShowPublicLands={setShowPublicLands} showTripReports={showTripReports} setShowTripReports={setShowTripReports} showTripPlans={showTripPlans} setShowTripPlans={setShowTripPlans} showSatellite={showSatellite} setShowSatellite={setShowSatellite} basemap={basemap} setBasemap={setBasemap} />
+        <MapLayerToggle showCamping={showCampingSpots} setShowCamping={setShowCampingSpots} showPublicLands={showPublicLands} setShowPublicLands={setShowPublicLands} showTripReports={showTripReports} setShowTripReports={setShowTripReports} showTripPlans={showTripPlans} setShowTripPlans={setShowTripPlans} showSatellite={showSatellite} setShowSatellite={setShowSatellite} basemap={basemap} setBasemap={setBasemap} onOpenOfflineDownloads={() => setShowOfflineSheet(true)} />
         )}
         {/* Add-mode hint banner — visible only while we're waiting for the
             user's next tap, so they know what to do without staring at a
