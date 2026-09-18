@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback, useDeferredValue, memo } from "react";
 import { createRoot } from "react-dom/client";
 import { createPortal } from "react-dom";
-import { Heart, MessageCircle, MapPin, Clock, Mountain, ChevronRight, ChevronLeft, ChevronDown, Search, Plus, Home, Compass, Map, Wrench, Trophy, AlertTriangle, Navigation, Star, Share2, Bookmark, MoreHorizontal, MoreVertical, ArrowUp, ArrowDown, ArrowRight, Users, Radio, CloudSun, CheckCircle, Target, Gift, ChevronUp, ExternalLink, Lock, Globe, Shield, ShieldCheck, UserPlus, UserCheck, Settings, Camera, Eye, EyeOff, X, Bell, ThumbsUp, UserPlus as UserPlusIcon, AtSign, Mail, Send, Image, Smartphone, Trash2, Edit2, Edit3, Award, Zap, TrendingUp, Flame, DollarSign, Route, Video, Play, Maximize2, Minimize2, LogOut, Binoculars, Layers, Tent, BookOpen, Link2, PlusSquare, Disc, Cog, MoveVertical, CircleDashed, Anchor, Tag, Flag, FileText, ZoomIn, ZoomOut, Crop, BarChart3 } from "lucide-react";
+import { Heart, MessageCircle, MapPin, Clock, Mountain, ChevronRight, ChevronLeft, ChevronDown, Search, Plus, Home, Compass, Map, Wrench, Trophy, AlertTriangle, Navigation, Star, Share2, Bookmark, MoreHorizontal, MoreVertical, ArrowUp, ArrowDown, ArrowRight, Users, Radio, CloudSun, CheckCircle, Target, Gift, ChevronUp, ExternalLink, Lock, Globe, Shield, ShieldCheck, UserPlus, UserCheck, Settings, Camera, Eye, EyeOff, X, Bell, ThumbsUp, UserPlus as UserPlusIcon, AtSign, Mail, Send, Image, Smartphone, Trash2, Edit2, Edit3, Award, Zap, TrendingUp, Flame, DollarSign, Route, Video, Play, Maximize2, Minimize2, LogOut, Binoculars, Layers, Tent, BookOpen, Link2, PlusSquare, Disc, Cog, MoveVertical, CircleDashed, Anchor, Tag, Flag, FileText, ZoomIn, ZoomOut, Crop, BarChart3, RefreshCw, CloudOff } from "lucide-react";
 import { supabase, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "./supabase-client.js";
 import { registerNativePush, logoutNativePush, isNativePlatform, openOAuthUrl, closeInAppBrowser, NATIVE_OAUTH_REDIRECT, signInWithApple } from "./native-bridge.js";
 
@@ -51672,11 +51672,14 @@ export default function Trailhead() {
       if (typeof navigator !== "undefined" && navigator.onLine && rows && rows.length) { flushOutboxRef.current && flushOutboxRef.current(); }
     }).catch(() => {});
   }, []);
-  // Flush whenever connectivity returns.
+  // Flush whenever connectivity returns; track online state for the sync pill.
+  const [isOnline, setIsOnline] = useState(typeof navigator === "undefined" ? true : navigator.onLine);
   useEffect(() => {
-    const onOnline = () => { flushOutboxRef.current && flushOutboxRef.current(); };
+    const onOnline = () => { setIsOnline(true); flushOutboxRef.current && flushOutboxRef.current(); };
+    const onOffline = () => setIsOnline(false);
     window.addEventListener("online", onOnline);
-    return () => window.removeEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    return () => { window.removeEventListener("online", onOnline); window.removeEventListener("offline", onOffline); };
   }, []);
   // ----------------------------------------------------------------------
   // Viewport-change handler, fired by useMapViewport on each settled pan/zoom.
@@ -60387,6 +60390,24 @@ export default function Trailhead() {
         />
       )}
       {reportToast && <ReportSubmittedToast onDone={() => setReportToast(false)} />}
+      {/* Offline sync pill — surfaces queued writes (add spot, etc.) captured
+          with no signal. Online: tap to sync now. Offline: informational. Sits
+          above the BottomNav, clear of the home indicator. */}
+      {pendingSyncCount > 0 && (
+        <div
+          onClick={() => { if (isOnline && !syncingOutbox && flushOutboxRef.current) flushOutboxRef.current(); }}
+          style={{ position: "fixed", left: "50%", transform: "translateX(-50%)", bottom: `calc(${isDesktop ? 20 : 78}px + env(safe-area-inset-bottom, 0px))`, zIndex: 900, display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", background: `${T.darkCard}F5`, border: `1px solid ${isOnline ? T.copper : T.tertiary}80`, borderRadius: 999, boxShadow: "0 6px 18px rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", cursor: isOnline && !syncingOutbox ? "pointer" : "default", maxWidth: "90vw" }}
+        >
+          {syncingOutbox
+            ? <div style={{ width: 13, height: 13, border: `2px solid ${T.copper}`, borderTopColor: "transparent", borderRadius: "50%", animation: "th-spin 0.7s linear infinite", flexShrink: 0 }} />
+            : isOnline ? <RefreshCw size={13} color={T.copper} style={{ flexShrink: 0 }} /> : <CloudOff size={13} color={T.tertiary} style={{ flexShrink: 0 }} />}
+          <span style={{ fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.3, color: T.white, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {syncingOutbox
+              ? "Syncing…"
+              : `${pendingSyncCount} change${pendingSyncCount === 1 ? "" : "s"} ${isOnline ? "· tap to sync" : "waiting for signal"}`}
+          </span>
+        </div>
+      )}
       {/* Recipient picker — opens after share-compose's "Choose
           Recipient". Component is hoisted to module scope so its hooks
           have stable identity across root re-renders. */}
