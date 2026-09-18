@@ -710,6 +710,40 @@ async function pendingGearDropSubmissions(runId) {
       .sort((a, b) => (a.waypointIdx || 0) - (b.waypointIdx || 0));
   } catch (_) { return []; }
 }
+// --- Offline trip-report id map + nested photo upload ---------------------
+// A draft created offline gets a temp id (tmp_trip_*). The outbox flush maps
+// it to the real row id once the create syncs; the map persists in the content
+// store so later update/publish items (this pass or a future one) resolve.
+async function getTripIdMap() {
+  try { const it = await idbOp("content", "readonly", (s) => s.get("tripidmap")); return (it && it.map) || {}; } catch (_) { return {}; }
+}
+async function setTripIdMapEntry(tmpId, realId) {
+  try { const map = await getTripIdMap(); map[tmpId] = realId; await idbOp("content", "readwrite", (s) => s.put({ key: "tripidmap", map })); } catch (_) {}
+}
+// Upload any data:/blob: photos inside a route_data blob (top-level photos[]
+// and per-pin photo) at sync time — offline capture can't reach storage, so
+// they ride as local data URLs until now.
+async function uploadOfflineRouteDataPhotos(rd, uid) {
+  if (!rd || typeof rd !== "object") return rd;
+  const isLocal = (u) => typeof u === "string" && (u.startsWith("data:") || u.startsWith("blob:"));
+  const out = { ...rd };
+  if (Array.isArray(rd.photos) && rd.photos.some((p) => isLocal(p && (p.url || p)))) {
+    try { out.photos = await uploadPostPhotoList(rd.photos.map((p) => (typeof p === "string" ? { url: p } : p)), uid); }
+    catch (e) { console.error("[outbox] route_data photos upload failed", e); }
+  }
+  if (Array.isArray(rd.pins)) {
+    out.pins = [];
+    for (const pin of rd.pins) {
+      const purl = pin && (typeof pin.photo === "string" ? pin.photo : (pin.photo && pin.photo.url));
+      if (isLocal(purl)) {
+        try { const up = await uploadPostPhotoList([{ url: purl }], uid); const nu = up && up[0] && up[0].url; out.pins.push(nu ? { ...pin, photo: nu } : pin); }
+        catch (_) { out.pins.push(pin); }
+      } else out.pins.push(pin);
+    }
+  }
+  return out;
+}
+
 // Rebuild a run's progress by layering pending offline submissions onto the
 // cached base row (idempotent — skips stops already unlocked in the base).
 function reconstructOfflineRun(baseRun, pendingSubs, totalStops) {
@@ -51726,6 +51760,8 @@ export default function Trailhead() {
     // Runs whose earlier submission failed this pass — skip their later
     // (dependent, ordered) items so nothing misapplies before the retry.
     const blockedRuns = new Set();
+    // Trip drafts whose create failed / hasn't synced — hold their patches.
+    const blockedTrips = new Set();
     for (const rec of rows) {
       try {
         if (rec.kind === "camping_spot") {
@@ -51764,6 +51800,48 @@ export default function Trailhead() {
           // queued and block the rest of this run's items this pass.
           if (data && data.ok === false) { blockedRuns.add(p.runId); continue; }
           // ok:true (including duplicate no-op) or already-finished → applied.
+          await offlineOutbox.delete(rec.id);
+          done++;
+        } else if (rec.kind === "trip_create") {
+          const p = rec.payload || {};
+          const base = p.slug || ("trip-" + Date.now());
+          const slugs = [base];
+          for (let i = 2; i <= 10; i++) slugs.push(`${base}-${i}`);
+          slugs.push(`${base}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`);
+          let inserted = null, insErr = null;
+          for (const slug of slugs) {
+            const { data, error } = await supabase.from("trip_reports")
+              .insert({ user_id: rec.uid, slug, name: p.name, description: p.description || null, status: "draft", kind: p.kind || "report", visibility: p.visibility || (p.kind === "plan" ? "private" : "public") })
+              .select().single();
+            if (!error && data) { inserted = data; break; }
+            insErr = error;
+            if (error && error.code !== "23505") break; // non-collision → stop
+          }
+          if (!inserted) { console.error("[outbox] trip create failed", insErr); blockedTrips.add(rec.tempId); continue; }
+          await setTripIdMapEntry(rec.tempId, inserted.id);
+          setTripReports(prev => prev.map(t => t.id === rec.tempId ? { ...t, ...inserted } : t));
+          await offlineOutbox.delete(rec.id);
+          done++;
+        } else if (rec.kind === "trip_update") {
+          const tmp = rec.tempId;
+          if (blockedTrips.has(tmp)) continue; // its create failed this pass
+          // Resolve the real row id: a temp draft id maps through tripIdMap
+          // (set when its create synced, this pass or an earlier one).
+          let realId = tmp;
+          if (typeof tmp === "string" && tmp.startsWith("tmp_trip")) {
+            const map = await getTripIdMap();
+            realId = map[tmp];
+            if (!realId) { blockedTrips.add(tmp); continue; } // create not synced yet — hold
+          }
+          let updates = (rec.payload && rec.payload.updates) || {};
+          if (updates.route_data) {
+            updates = { ...updates, route_data: await uploadOfflineRouteDataPhotos(updates.route_data, rec.uid) };
+          }
+          const { data, error } = await supabase.from("trip_reports")
+            .update({ ...updates, updated_at: new Date().toISOString() })
+            .eq("id", realId).eq("user_id", rec.uid).select().maybeSingle();
+          if (error) { console.error("[outbox] trip update failed", error); blockedTrips.add(tmp); continue; }
+          if (data) setTripReports(prev => prev.map(t => (t.id === realId || t.id === tmp) ? data : t));
           await offlineOutbox.delete(rec.id);
           done++;
         } else {
@@ -57928,6 +58006,18 @@ export default function Trailhead() {
     };
     setTripReports(prev => [optimistic, ...prev]);
 
+    // Offline: queue the create; the draft keeps its temp id and any following
+    // route/edit/publish patches queue against it (resolved to the real id at
+    // sync). The whole trip-report flow then works with no signal.
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      try {
+        await offlineOutbox.add({ kind: "trip_create", tempId: tmpId, uid, createdAt: Date.now(), payload: { name: trimmedName, description: (description || "").trim() || null, kind, visibility: initialVisibility, slug: baseSlug } });
+        refreshPendingSyncCount();
+        showErrorToast("Saved offline — will sync when you're back online.");
+      } catch (e) { console.error("[outbox] trip create enqueue failed", e); }
+      return optimistic;
+    }
+
     // Try inserting with progressively-suffixed slugs to ride past
     // collisions (Postgres returns 23505 on UNIQUE violation). Placeholder
     // names like "Untitled trip report" stay forever on draft rows because
@@ -58045,6 +58135,16 @@ export default function Trailhead() {
       }
     }
     setTripReports(prev => prev.map(t => t.id === id ? { ...t, ...updates, updated_at: new Date().toISOString() } : t));
+    // Offline, or patching a draft that was created offline and hasn't synced
+    // yet (temp id) — queue the patch. The server row doesn't exist to update
+    // (a temp id matches nothing), so this is the only correct path.
+    if ((typeof navigator !== "undefined" && !navigator.onLine) || id.startsWith("tmp_trip")) {
+      try {
+        await offlineOutbox.add({ kind: "trip_update", tempId: id, uid, createdAt: Date.now(), payload: { updates } });
+        refreshPendingSyncCount();
+      } catch (e) { console.error("[outbox] trip update enqueue failed", e); }
+      return { ...(tripReports.find(t => t.id === id) || {}), ...updates };
+    }
     try {
       // maybeSingle (not single) so a non-owner attempting to patch returns
       // null silently instead of a 406 PGRST116. This happens legitimately
@@ -58119,6 +58219,16 @@ export default function Trailhead() {
     setTripReports(prev => prev.filter(t => t.id !== id));
     setViewportTripReports(prev => prev.filter(t => t.id !== id));
     setViewportTripPlans(prev => prev.filter(t => t.id !== id));
+    // Deleting a draft that was created offline and hasn't synced: purge its
+    // queued create/update items so they don't resurrect it on reconnect.
+    if (typeof id === "string" && id.startsWith("tmp_trip")) {
+      try {
+        const rows = await offlineOutbox.list();
+        for (const r of (rows || [])) { if ((r.kind === "trip_create" || r.kind === "trip_update") && r.tempId === id) await offlineOutbox.delete(r.id); }
+        refreshPendingSyncCount();
+      } catch (e) { console.error("[outbox] purge trip drafts failed", e); }
+      return; // no server row exists yet
+    }
     try {
       await supabase.from("trip_reports").delete().eq("id", id).eq("user_id", uid);
     } catch (e) { console.error("[trip_reports] delete failed", e); }
