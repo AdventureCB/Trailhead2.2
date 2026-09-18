@@ -33233,7 +33233,7 @@ function GearDropLiveTracker({ drop, racers, currentUserId, onClose }) {
 // RPC which validates proximity server-side and atomically claims winner
 // on the final waypoint. A realtime subscription on trip_reports keeps
 // the leaderboard live so racers can see each other advance in real time.
-function GearDropRunScreen({ runId, currentUserId, onClose, onLoadRun, onLoadDrop, onAdvance, onShowToast, onLoadParticipants, onViewUser, onOpenDrop }) {
+function GearDropRunScreen({ runId, currentUserId, onClose, onLoadRun, onLoadDrop, onAdvance, onShowToast, onLoadParticipants, onViewUser, onOpenDrop, onOutboxChanged }) {
   const [run, setRun] = useState(null);
   const [drop, setDrop] = useState(null);
   const [userLoc, setUserLoc] = useState(null);
@@ -33591,6 +33591,14 @@ function GearDropRunScreen({ runId, currentUserId, onClose, onLoadRun, onLoadDro
         r.onerror = rej;
         r.readAsDataURL(file);
       });
+      // Offline: can't upload — keep the local data URL; it rides in the
+      // outbox and uploads at sync time. Marked _local so submit knows.
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        setSubmitPhoto({ url: dataUrl, _local: true });
+        setPhotoUploading(false);
+        if (photoFileRef.current) photoFileRef.current.value = "";
+        return;
+      }
       const uploaded = await uploadPostPhotoList([{ url: dataUrl }], currentUserId);
       const newUrl = uploaded && uploaded[0] && uploaded[0].url;
       if (newUrl && (newUrl.startsWith("http://") || newUrl.startsWith("https://"))) {
@@ -33615,8 +33623,33 @@ function GearDropRunScreen({ runId, currentUserId, onClose, onLoadRun, onLoadDro
     if (!userLoc) { setSubmitError("Waiting for GPS — try again in a moment."); return; }
     setSubmitting(true);
     setSubmitError(null);
+    // Captured at the moment of submission — used as the authoritative finish
+    // time even if this syncs much later (winner = earliest finish, at drop end).
+    const submittedAt = new Date().toISOString();
+    // ── Offline capture-and-sync ──────────────────────────────────────────
+    // No signal: gate distance locally (the server re-checks on sync with the
+    // stored coords), advance progress optimistically, and queue the write.
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      try {
+        if (distance == null) { setSubmitError("Waiting for GPS — try again in a moment."); return; }
+        if (distance > radius) { setSubmitError(`Too far — ${Math.round(distance)}m away, need ${Math.round(radius)}m.`); return; }
+        const submission = { waypointIdx: nextIdx, photoUrl: submitPhoto.url, note: submitNote.trim(), lat: userLoc.lat, lng: userLoc.lng, distanceM: distance, submittedAt };
+        await offlineOutbox.add({ kind: "gear_drop_submission", tempId: `${runId}:${nextIdx}`, uid: currentUserId, createdAt: Date.now(), payload: { runId, note: submitNote.trim(), lat: userLoc.lat, lng: userLoc.lng, submittedAt, photoUrl: submitPhoto.url, waypointIdx: nextIdx } });
+        setRun(prev => prev ? { ...prev, last_unlocked_at: submittedAt, finished_at: isLast ? submittedAt : prev.finished_at, progress: { waypointsUnlocked: [...unlocked, nextIdx], submissions: [...((prev.progress && prev.progress.submissions) || []), submission] } } : prev);
+        playGearDropWaypointChime();
+        triggerGearDropWaypointHaptic();
+        setSubmitPhoto(null); setSubmitNote(""); setSubmitOpen(false);
+        if (onOutboxChanged) onOutboxChanged();
+        if (isLast) setWinState({ won: false, finished: true, offline: true });
+        else if (onShowToast) onShowToast(`Waypoint ${nextIdx} recorded offline — will sync.`);
+      } catch (e) {
+        console.error("[run-screen] offline capture failed", e);
+        setSubmitError("Couldn't save offline. Storage may be full.");
+      } finally { setSubmitting(false); }
+      return;
+    }
     try {
-      const res = await onAdvance(runId, submitPhoto.url, submitNote.trim(), userLoc.lat, userLoc.lng);
+      const res = await onAdvance(runId, submitPhoto.url, submitNote.trim(), userLoc.lat, userLoc.lng, submittedAt);
       if (res && res.error) {
         setSubmitError(res.error);
         return;
@@ -33945,9 +33978,11 @@ function GearDropRunScreen({ runId, currentUserId, onClose, onLoadRun, onLoadDro
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 7, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
           <div style={{ width: "100%", maxWidth: 360, padding: 28, background: T.darkCard, border: `2px solid ${T.green}`, borderRadius: 18, textAlign: "center", boxShadow: `0 0 32px ${T.green}40` }}>
             <CheckCircle size={48} color={T.green} style={{ marginBottom: 10 }} />
-            <h1 style={{ fontFamily: sans, fontSize: 22, color: T.white, fontWeight: 800, margin: "0 0 8px", letterSpacing: 0.4 }}>RUN COMPLETE</h1>
+            <h1 style={{ fontFamily: sans, fontSize: 22, color: T.white, fontWeight: 800, margin: "0 0 8px", letterSpacing: 0.4 }}>{winState.offline ? "FINISH RECORDED" : "RUN COMPLETE"}</h1>
             <p style={{ fontFamily: serif, fontSize: 13, color: T.white, opacity: 0.92, lineHeight: 1.5, margin: "0 0 18px" }}>
-              You wrapped <strong>{drop.title}</strong>. Your recap is auto-published — head back to the event page to see the leaderboard, racer recaps, and any afterparty info.
+              {winState.offline
+                ? <>You finished <strong>{drop.title}</strong> offline — your finish time is saved on your phone and will sync automatically when you're back in signal. The winner (earliest finish) is announced when the drop ends.</>
+                : <>You wrapped <strong>{drop.title}</strong>. Your recap is auto-published. The winner — the earliest finish — is announced when the drop ends. Head back to the event page for the leaderboard and afterparty info.</>}
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {onOpenDrop && drop && drop.id && (
@@ -51640,6 +51675,9 @@ export default function Trailhead() {
     if (!rows || !rows.length) { setPendingSyncCount(0); return; }
     flushingRef.current = true; setSyncingOutbox(true);
     let done = 0;
+    // Runs whose earlier submission failed this pass — skip their later
+    // (dependent, ordered) items so nothing misapplies before the retry.
+    const blockedRuns = new Set();
     for (const rec of rows) {
       try {
         if (rec.kind === "camping_spot") {
@@ -51652,6 +51690,33 @@ export default function Trailhead() {
           setPendingWriteSpots(prev => prev.filter(s => s.id !== rec.tempId));
           setCampingSpots(prev => prev.some(s => s.id === inserted.id) ? prev : [inserted, ...prev]);
           try { if (Array.isArray(photos)) fetchedSpotPhotosRef.current.add(inserted.id); } catch (_) {}
+          done++;
+        } else if (rec.kind === "gear_drop_submission") {
+          const p = rec.payload || {};
+          // Submissions for one run are strictly ordered + dependent (each
+          // advances the NEXT stop). If an earlier item for this run failed
+          // this pass, skip the rest so they don't misapply — they'll retry
+          // next flush once the earlier one lands.
+          if (blockedRuns.has(p.runId)) continue;
+          // Upload the captured photo (kept as a local data URL offline) to
+          // storage, then replay with the original capture timestamp + stop
+          // index so finish ordering + idempotency stay correct.
+          let photoUrl = p.photoUrl;
+          if (photoUrl && (photoUrl.startsWith("data:") || photoUrl.startsWith("blob:"))) {
+            try { const up = await uploadPostPhotoList([{ url: photoUrl }], rec.uid); photoUrl = (up && up[0] && up[0].url) || photoUrl; }
+            catch (e) { console.error("[outbox] gear drop photo upload failed", e); blockedRuns.add(p.runId); continue; }
+          }
+          const { data, error } = await supabase.rpc("gear_drop_advance_run_at", {
+            p_run_id: p.runId, p_photo_url: photoUrl, p_note: p.note, p_lat: p.lat, p_lng: p.lng, p_submitted_at: p.submittedAt, p_waypoint_idx: p.waypointIdx,
+          });
+          // "run already finished" means the whole run already synced — drop it.
+          const alreadyDone = error && /already finished/i.test(error.message || "");
+          if (error && !alreadyDone) { console.error("[outbox] gear drop advance failed", error); blockedRuns.add(p.runId); continue; }
+          // Server says hold (out_of_order) or a soft reject (too_far) — leave
+          // queued and block the rest of this run's items this pass.
+          if (data && data.ok === false) { blockedRuns.add(p.runId); continue; }
+          // ok:true (including duplicate no-op) or already-finished → applied.
+          await offlineOutbox.delete(rec.id);
           done++;
         } else {
           await offlineOutbox.delete(rec.id); // unknown kind — drop
@@ -54558,7 +54623,18 @@ export default function Trailhead() {
     if (newStatus === "scheduled") {
       return await scheduleGearDrop(dropId);
     }
-    return await updateGearDrop(dropId, { status: newStatus });
+    const res = await updateGearDrop(dropId, { status: newStatus });
+    // Ending the drop decides the winner: earliest finish wins (fair across
+    // offline finishers who synced at different times). Fires won/winner
+    // notifications. Best-effort — a finalize failure doesn't un-end the drop.
+    if (newStatus === "ended" && !(res && res.error)) {
+      try {
+        const { data, error } = await supabase.rpc("gear_drop_finalize_winner", { p_drop_id: dropId });
+        if (error) console.error("[finalize_winner] rpc error", error);
+        else console.log("[finalize_winner]", data);
+      } catch (e) { console.error("[finalize_winner] threw", e); }
+    }
+    return res;
   };
 
   // Per-drop co-host grants — temp editor access scoped to a single drop
@@ -54723,16 +54799,28 @@ export default function Trailhead() {
   // Wraps the gear_drop_advance_run SECURITY DEFINER RPC. Returns the
   // jsonb shape { ok, error?, unlocked_idx?, is_last?, finished?, won?,
   // distance_m?, radius_m?, next_waypoint?, waypoints_remaining? }.
-  const advanceGearDropRun = async (runId, photoUrl, note, lat, lng) => {
+  const advanceGearDropRun = async (runId, photoUrl, note, lat, lng, submittedAt) => {
     if (!runId || !photoUrl || !note || lat == null || lng == null) return { error: "Missing parameters" };
     try {
-      const { data, error } = await supabase.rpc("gear_drop_advance_run", {
+      // Pass the client-captured timestamp so an offline submission that syncs
+      // later still counts from when it actually happened (winner = earliest
+      // finish, decided at drop end).
+      let { data, error } = await supabase.rpc("gear_drop_advance_run_at", {
         p_run_id: runId,
         p_photo_url: photoUrl,
         p_note: note,
         p_lat: lat,
         p_lng: lng,
+        p_submitted_at: submittedAt || new Date().toISOString(),
       });
+      // Graceful fallback if the new RPC isn't deployed yet (SQL migration
+      // applied separately): use the legacy 5-arg RPC so online racing never
+      // breaks in the window between web deploy and DB migration.
+      if (error && (error.code === "PGRST202" || /could not find|does not exist/i.test(error.message || ""))) {
+        ({ data, error } = await supabase.rpc("gear_drop_advance_run", {
+          p_run_id: runId, p_photo_url: photoUrl, p_note: note, p_lat: lat, p_lng: lng,
+        }));
+      }
       if (error) {
         // Log every field so a 400 with a generic UI message can still be
         // traced via the console (Supabase's PostgrestError has code +
@@ -60875,6 +60963,7 @@ export default function Trailhead() {
           onLoadRun={loadGearDropRunById}
           onLoadDrop={loadGearDropById}
           onAdvance={advanceGearDropRun}
+          onOutboxChanged={refreshPendingSyncCount}
           onShowToast={showErrorToast}
           onLoadParticipants={loadGearDropParticipants}
           onViewUser={openUserProfile}
