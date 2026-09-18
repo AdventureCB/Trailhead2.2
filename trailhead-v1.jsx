@@ -529,10 +529,11 @@ const OFFLINE_DB_NAME = "trailhub-offline";
 const OFFLINE_CATALOG_URL = "https://tiles.lonepeakoverland.com/regions.json";
 function openOfflineDB() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(OFFLINE_DB_NAME, 2);
+    const req = indexedDB.open(OFFLINE_DB_NAME, 3);
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains("regions")) db.createObjectStore("regions", { keyPath: "id" });
+      if (!db.objectStoreNames.contains("content")) db.createObjectStore("content", { keyPath: "key" }); // offline overlay data
       if (db.objectStoreNames.contains("ranges")) db.deleteObjectStore("ranges"); // drop legacy v1 store
     };
     req.onsuccess = () => resolve(req.result);
@@ -639,6 +640,32 @@ async function deleteDownloadedRegion(id) {
 }
 async function listDownloadedRegions() {
   try { const rows = await offlineStore.list(); return (rows || []).map((r) => ({ id: r.id, name: r.name, group: r.group, sizeMB: r.sizeMB })); } catch (_) { return []; }
+}
+
+// Cache a region's overlay CONTENT (camp spots + published trips + plans) so it
+// renders on the offline map with no signal. Reuses the same bbox fetchers the
+// live map uses, so shapes match exactly. Called at region-download time.
+async function cacheRegionContent(bbox) {
+  try {
+    const [spots, reports, plans] = await Promise.all([
+      fetchCampingSpotsInBbox(bbox).catch(() => []),
+      fetchTripReportsInBbox(bbox).catch(() => []),
+      fetchTripPlansInBbox(bbox).catch(() => []),
+    ]);
+    const items = [];
+    (spots || []).forEach((r) => r && r.id && items.push({ key: "spot:" + r.id, type: "spot", row: r }));
+    (reports || []).forEach((r) => r && r.id && items.push({ key: "report:" + r.id, type: "report", row: r }));
+    (plans || []).forEach((r) => r && r.id && items.push({ key: "plan:" + r.id, type: "plan", row: r }));
+    if (items.length) await idbOp("content", "readwrite", (s) => { items.forEach((it) => s.put(it)); return null; });
+  } catch (_) {}
+}
+async function loadOfflineContent() {
+  const out = { spots: [], reports: [], plans: [] };
+  try {
+    const rows = await idbOp("content", "readonly", (s) => s.getAll());
+    (rows || []).forEach((it) => { if (it.type === "spot") out.spots.push(it.row); else if (it.type === "report") out.reports.push(it.row); else if (it.type === "plan") out.plans.push(it.row); });
+  } catch (_) {}
+  return out;
 }
 
 // Geocode a free-text address via the Mapbox Geocoding API. Returns
@@ -16217,7 +16244,7 @@ function ConvoyDetail({ item, linkedPlan, currentUserId, currentUserName, curren
 // Offline maps download sheet — a grouped, checkbox region catalog (driven by
 // the hosted regions.json). Users select states/regions to download for
 // no-signal use; downloads are whole PMTiles files stored on-device.
-function OfflineRegionsSheet({ onClose, onShowToast }) {
+function OfflineRegionsSheet({ onClose, onShowToast, onContentUpdated }) {
   const [catalog, setCatalog] = useState(null);
   const [downloaded, setDownloaded] = useState({}); // id -> {sizeMB}
   const [selected, setSelected] = useState({});     // id -> true
@@ -16245,11 +16272,16 @@ function OfflineRegionsSheet({ onClose, onShowToast }) {
     setBusy(true); setError("");
     for (const r of sel) {
       setProgress({ name: r.name, pct: 0 });
-      try { await downloadRegionFile(r, (rec, tot) => setProgress({ name: r.name, pct: tot ? Math.round((rec / tot) * 100) : 0 })); }
-      catch (e) { setError("Failed to download " + r.name + (e && e.message ? " — " + e.message : "")); }
+      try {
+        await downloadRegionFile(r, (rec, tot) => setProgress({ name: r.name, pct: tot ? Math.round((rec / tot) * 100) : 0 }));
+        // Also cache the region's camp spots / trips / plans for offline use.
+        setProgress({ name: r.name + " (content)", pct: 100 });
+        await cacheRegionContent(r.bbox);
+      } catch (e) { setError("Failed to download " + r.name + (e && e.message ? " — " + e.message : "")); }
       await refresh();
     }
     setProgress(null); setSelected({}); setBusy(false);
+    if (onContentUpdated) onContentUpdated();
     if (onShowToast) onShowToast("Offline maps updated");
   };
   const remove = async (id) => { await deleteDownloadedRegion(id); await refresh(); };
@@ -16308,7 +16340,7 @@ function OfflineRegionsSheet({ onClose, onShowToast }) {
   );
 }
 
-function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onAddPhotoToSpot, onDeletePhotoFromSpot, onLoadCampingSpotPhotos, onLoadCampingSpotElevation, spotAuthors, tripAuthors, onLoadRouteData, onViewUser, onStartNav, onNewTripReport, onNewTripPlan, currentUserId, isAdmin, onMapViewportChange, tripReports, showTripReports, setShowTripReports, tripPlans, showTripPlans, setShowTripPlans, onOpenTripDetail, onOpenTripPlanDraft, pendingSpotNav, onConsumePendingSpotNav, pendingHQOpen, onConsumePendingHQOpen, pendingPlanNav, onConsumePendingPlanNav, onShareCampingSpotToFeed, onShareHQToFeed, onShareTripToFeed, onShareTripPlanToFeed, onOpenDM, onShowToast, onOpenShareCompose, onOpenShareIntent, planBuilder, gearDropPinBuilder, isGuest, onGuestTap, savedTripIds, onToggleSaveTrip }) {
+function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onAddPhotoToSpot, onDeletePhotoFromSpot, onLoadCampingSpotPhotos, onLoadCampingSpotElevation, spotAuthors, tripAuthors, onLoadRouteData, onViewUser, onStartNav, onNewTripReport, onNewTripPlan, currentUserId, isAdmin, onMapViewportChange, tripReports, showTripReports, setShowTripReports, tripPlans, showTripPlans, setShowTripPlans, onOpenTripDetail, onOpenTripPlanDraft, pendingSpotNav, onConsumePendingSpotNav, pendingHQOpen, onConsumePendingHQOpen, pendingPlanNav, onConsumePendingPlanNav, onShareCampingSpotToFeed, onShareHQToFeed, onShareTripToFeed, onShareTripPlanToFeed, onOpenDM, onShowToast, onOpenShareCompose, onOpenShareIntent, planBuilder, gearDropPinBuilder, isGuest, onGuestTap, savedTripIds, onToggleSaveTrip, onOfflineContentUpdated }) {
   const mapRef = useRef(null);
   const mapInst = useRef(null);
   const [mapReady, setMapReady] = useState(false);
@@ -17260,7 +17292,7 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
         )}
         {/* Offline maps download sheet — opened from the layers menu. */}
         {!isGuest && showOfflineSheet && (
-          <OfflineRegionsSheet onClose={() => setShowOfflineSheet(false)} onShowToast={onShowToast} />
+          <OfflineRegionsSheet onClose={() => setShowOfflineSheet(false)} onShowToast={onShowToast} onContentUpdated={onOfflineContentUpdated} />
         )}
         {/* Layer toggle — hidden for guests for the same reason as search:
             they're only here to view a specific spot/HQ via deep link. */}
@@ -18280,7 +18312,7 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
   );
 }
 
-function RoutesScreen({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, currentUserId, isAdmin, tripReports, showTripReports, setShowTripReports, tripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onAddPhotoToSpot, onDeletePhotoFromSpot, onLoadCampingSpotPhotos, onLoadCampingSpotElevation, spotAuthors, tripAuthors, onLoadRouteData, onOpenTripDetail, onOpenTripPlanDraft, onNewTripReport, onNewTripPlan, pendingSpotNav, onConsumePendingSpotNav, pendingHQOpen, onConsumePendingHQOpen, pendingPlanNav, onConsumePendingPlanNav, onShareCampingSpotToFeed, onShareHQToFeed, onShareTripToFeed, onShareTripPlanToFeed, onOpenDM, onShowToast, onOpenShareCompose, onOpenShareIntent, onViewUser, onStartNav, planBuilder, gearDropPinBuilder, isGuest, onGuestTap, savedTripIds, onToggleSaveTrip }) {
+function RoutesScreen({ campingSpots, showCampingSpots, setShowCampingSpots, showPublicLands, setShowPublicLands, showSatellite, setShowSatellite, currentUserId, isAdmin, tripReports, showTripReports, setShowTripReports, tripPlans, showTripPlans, setShowTripPlans, onMapViewportChange, onAddCampingSpot, onUpdateCampingSpot, onDeleteCampingSpot, onAddPhotoToSpot, onDeletePhotoFromSpot, onLoadCampingSpotPhotos, onLoadCampingSpotElevation, spotAuthors, tripAuthors, onLoadRouteData, onOpenTripDetail, onOpenTripPlanDraft, onNewTripReport, onNewTripPlan, pendingSpotNav, onConsumePendingSpotNav, pendingHQOpen, onConsumePendingHQOpen, pendingPlanNav, onConsumePendingPlanNav, onShareCampingSpotToFeed, onShareHQToFeed, onShareTripToFeed, onShareTripPlanToFeed, onOpenDM, onShowToast, onOpenShareCompose, onOpenShareIntent, onViewUser, onStartNav, planBuilder, gearDropPinBuilder, isGuest, onGuestTap, savedTripIds, onToggleSaveTrip, onOfflineContentUpdated }) {
   // Maps screen — full-height ExploreMap with no chrome. Trip-reports list,
   // create modal, and detail overlay all live at the root now (the list
   // moved to the Feed under the renamed TRIP REPORTS filter; the modal +
@@ -18343,6 +18375,7 @@ function RoutesScreen({ campingSpots, showCampingSpots, setShowCampingSpots, sho
         onGuestTap={onGuestTap}
         savedTripIds={savedTripIds}
         onToggleSaveTrip={onToggleSaveTrip}
+        onOfflineContentUpdated={onOfflineContentUpdated}
         fillParent
       />
       {/* Guest banner — rendered HERE (not inline at the page level) so
@@ -51471,6 +51504,11 @@ export default function Trailhead() {
   // so the plan/report layers can render independently and so the bbox query
   // can stay on a partial index keyed by kind.
   const [viewportTripPlans, setViewportTripPlans] = useState([]);
+  // Offline content slice — camp spots / trips / plans cached for downloaded
+  // regions (IndexedDB). Merged into the map data so they render with no signal.
+  const [offlineContent, setOfflineContent] = useState({ spots: [], reports: [], plans: [] });
+  const reloadOfflineContent = useCallback(() => { loadOfflineContent().then(setOfflineContent).catch(() => {}); }, []);
+  useEffect(() => { reloadOfflineContent(); }, [reloadOfflineContent]);
   // Track the currently-loaded viewport so the realtime INSERT handler can
   // decide whether to graft a new other-user spot in or drop it (we'd
   // re-fetch on the next pan anyway).
@@ -51484,8 +51522,11 @@ export default function Trailhead() {
     for (const s of viewportCampingSpots) {
       if (s && s.id != null && !seen.has(s.id)) { seen.add(s.id); out.push(s); }
     }
+    for (const s of (offlineContent.spots || [])) {
+      if (s && s.id != null && !seen.has(s.id)) { seen.add(s.id); out.push(s); }
+    }
     return out;
-  }, [userCampingSpots, viewportCampingSpots]);
+  }, [userCampingSpots, viewportCampingSpots, offlineContent]);
   // Single setter shim so legacy mutators that called setCampingSpots(prev => ...)
   // still work — but only patch the user-owned slice (the viewport slice is
   // owned by the bbox fetcher). For optimistic adds + edits + deletes that's
@@ -51573,15 +51614,15 @@ export default function Trailhead() {
   const allTripReports = useMemo(() => {
     const reportRows = (tripReports || []).filter(t => !t.kind || t.kind === "report");
     const savedReports = (savedTripRows || []).filter(t => !t.kind || t.kind === "report");
-    return mergeTripSlices(reportRows, viewportTripReports, savedReports);
-  }, [tripReports, viewportTripReports, savedTripRows]);
+    return mergeTripSlices(reportRows, viewportTripReports, savedReports, (offlineContent.reports || []));
+  }, [tripReports, viewportTripReports, savedTripRows, offlineContent]);
   // Plans slice — owner sees own drafts + published; everyone sees published
   // PUBLIC plans via the bbox fetcher. Editor + planner tab read from this.
   const allTripPlans = useMemo(() => {
     const planRows = (tripReports || []).filter(t => t.kind === "plan");
     const savedPlans = (savedTripRows || []).filter(t => t.kind === "plan");
-    return mergeTripSlices(planRows, viewportTripPlans, savedPlans);
-  }, [tripReports, viewportTripPlans, savedTripRows]);
+    return mergeTripSlices(planRows, viewportTripPlans, savedPlans, (offlineContent.plans || []));
+  }, [tripReports, viewportTripPlans, savedTripRows, offlineContent]);
   // Threaded view counts derived from the live thread rows — fed into the
   // feed FORUM card + GlobalSearch result rows so their "X views" text
   // matches the source of truth without prop drilling the whole array.
@@ -59611,7 +59652,7 @@ export default function Trailhead() {
             {isGuest && screen !== "routes" && <GuestBanner onSignIn={() => setShowGuestPrompt(true)} />}
             {screen === "feed" && renderFeedScopedTo({ hideFilters: false })}
             {screen === "forum" && <ForumScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} isAdmin={isAdmin} isModerator={isModerator} isAmbassador={isAmbassador} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentUserName={(currentProfile && currentProfile.full_name) || "You"} currentUserHandle={(currentProfile && currentProfile.handle) || ""} currentUserAvatar={profilePic || (currentProfile && currentProfile.avatar_url) || null} pendingThread={pendingThread} onPendingHandled={() => setPendingThread(null)} pendingForumSubNav={pendingForumSubNav} onConsumePendingForumSubNav={() => setPendingForumSubNav(null)} pendingForumCatNav={pendingForumCatNav} onConsumePendingForumCatNav={() => setPendingForumCatNav(null)} onAddNotification={requireAuth(addNotification)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onOpenShareCompose={openShareCompose} onOpenShareIntent={openShareIntent} onAddFeedPost={requireAuth((post) => addPost(post))} threadsBySub={forumThreadsBySub} repliesByThread={forumReplies} onAddForumThread={requireAuth(addForumThread)} onUpdateForumThread={requireAuth(updateForumThread)} onDeleteForumThread={requireAuth(deleteForumThreadRouted)} onAddForumReply={requireAuth(addForumReply)} onDeleteForumReply={requireAuth(deleteForumReplyRouted)} onLoadForumReplies={loadForumReplies} likedForumThreadIds={likedForumThreadIds} forumThreadLikeCounts={forumThreadLikeCounts} onToggleForumThreadLike={requireAuth(toggleForumThreadLike)} likedForumReplyIds={likedForumReplyIds} forumReplyLikeCounts={forumReplyLikeCounts} onToggleForumReplyLike={requireAuth(toggleForumReplyLike)} onBumpForumThreadView={bumpForumThreadView} onAwardPoints={awardPoints} categoriesList={forumCategoriesList} onAddCategory={requireAuth(addForumCategory)} onUpdateCategory={requireAuth(updateForumCategory)} onDeleteCategory={requireAuth(deleteForumCategory)} onAddSubcategory={requireAuth(addForumSubcategory)} onUpdateSubcategory={requireAuth(updateForumSubcategory)} onDeleteSubcategory={requireAuth(deleteForumSubcategory)} onReportContent={requireAuth(openContentReport)} onViewUser={openUserProfile} onNotifyMentions={notifyMentions} />}
-            {screen === "routes" && <RoutesScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} campingSpots={campingSpots} showCampingSpots={showCampingSpots} setShowCampingSpots={setShowCampingSpots} showPublicLands={showPublicLands} setShowPublicLands={setShowPublicLands} showSatellite={showSatellite} setShowSatellite={setShowSatellite} onOpenShareIntent={openShareIntent} tripAuthors={tripAuthors} onLoadRouteData={loadTripRouteData} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} tripReports={allTripReports} showTripReports={showTripReports} setShowTripReports={setShowTripReports} tripPlans={allTripPlans} showTripPlans={showTripPlans} setShowTripPlans={setShowTripPlans} onMapViewportChange={onMapViewportChange} onAddCampingSpot={requireAuth(addCampingSpot)} onUpdateCampingSpot={requireAuth(updateCampingSpot)} onDeleteCampingSpot={requireAuth(deleteCampingSpot)} onAddPhotoToSpot={requireAuth(addPhotoToSpot)} onDeletePhotoFromSpot={requireAuth(deletePhotoFromSpot)} onLoadCampingSpotPhotos={loadCampingSpotPhotos} onLoadCampingSpotElevation={loadCampingSpotElevation} spotAuthors={spotAuthors} onViewUser={openUserProfile} onStartNav={(route) => setActiveNavRoute(route)} onOpenTripDetail={(slug) => setPendingTripNav(slug)} onOpenTripPlanDraft={(id) => setDetailTripId(id)} onNewTripReport={() => setTripCreatorMode("report")} onNewTripPlan={() => requireAuth(() => enterPlanBuilder())()} pendingSpotNav={pendingSpotNav} onConsumePendingSpotNav={() => setPendingSpotNav(null)} pendingHQOpen={pendingHQOpen} onConsumePendingHQOpen={() => setPendingHQOpen(false)} pendingPlanNav={pendingPlanNav} onConsumePendingPlanNav={() => setPendingPlanNav(null)} onShareCampingSpotToFeed={requireAuth(shareCampingSpotToFeed)} onShareHQToFeed={requireAuth(shareHQToFeed)} onShareTripToFeed={requireAuth(shareTripToFeed)} onShareTripPlanToFeed={requireAuth(shareTripPlanToFeed)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onShowToast={showErrorToast} onOpenShareCompose={openShareCompose} savedTripIds={savedTripIds} onToggleSaveTrip={requireAuth(toggleSaveTrip)} planBuilder={{ active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, editingId: planBuilderEditingId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen, accent: (planBuilderEditingId && (tripReports || []).find(t => t.id === planBuilderEditingId && t.kind === "report")) ? T.purple : T.copper }} gearDropPinBuilder={{ active: gearDropPinBuilderActive, dropId: gearDropPinBuilderDropId, pins: gearDropPinBuilderPins, saving: gearDropPinBuilderSaving, mode: gearDropPinBuilderMode, addPin: addGearDropPin, removePin: removeGearDropPin, movePin: moveGearDropPin, updatePin: updateGearDropPin, commit: commitGearDropPinBuilder, exit: exitGearDropPinBuilder }} />}
+            {screen === "routes" && <RoutesScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} campingSpots={campingSpots} showCampingSpots={showCampingSpots} setShowCampingSpots={setShowCampingSpots} showPublicLands={showPublicLands} setShowPublicLands={setShowPublicLands} showSatellite={showSatellite} setShowSatellite={setShowSatellite} onOpenShareIntent={openShareIntent} tripAuthors={tripAuthors} onLoadRouteData={loadTripRouteData} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} tripReports={allTripReports} showTripReports={showTripReports} setShowTripReports={setShowTripReports} tripPlans={allTripPlans} showTripPlans={showTripPlans} setShowTripPlans={setShowTripPlans} onMapViewportChange={onMapViewportChange} onAddCampingSpot={requireAuth(addCampingSpot)} onUpdateCampingSpot={requireAuth(updateCampingSpot)} onDeleteCampingSpot={requireAuth(deleteCampingSpot)} onAddPhotoToSpot={requireAuth(addPhotoToSpot)} onDeletePhotoFromSpot={requireAuth(deletePhotoFromSpot)} onLoadCampingSpotPhotos={loadCampingSpotPhotos} onLoadCampingSpotElevation={loadCampingSpotElevation} spotAuthors={spotAuthors} onViewUser={openUserProfile} onStartNav={(route) => setActiveNavRoute(route)} onOpenTripDetail={(slug) => setPendingTripNav(slug)} onOpenTripPlanDraft={(id) => setDetailTripId(id)} onNewTripReport={() => setTripCreatorMode("report")} onNewTripPlan={() => requireAuth(() => enterPlanBuilder())()} pendingSpotNav={pendingSpotNav} onConsumePendingSpotNav={() => setPendingSpotNav(null)} pendingHQOpen={pendingHQOpen} onConsumePendingHQOpen={() => setPendingHQOpen(false)} pendingPlanNav={pendingPlanNav} onConsumePendingPlanNav={() => setPendingPlanNav(null)} onShareCampingSpotToFeed={requireAuth(shareCampingSpotToFeed)} onShareHQToFeed={requireAuth(shareHQToFeed)} onShareTripToFeed={requireAuth(shareTripToFeed)} onShareTripPlanToFeed={requireAuth(shareTripPlanToFeed)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onShowToast={showErrorToast} onOpenShareCompose={openShareCompose} savedTripIds={savedTripIds} onToggleSaveTrip={requireAuth(toggleSaveTrip)} onOfflineContentUpdated={reloadOfflineContent} planBuilder={{ active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, editingId: planBuilderEditingId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen, accent: (planBuilderEditingId && (tripReports || []).find(t => t.id === planBuilderEditingId && t.kind === "report")) ? T.purple : T.copper }} gearDropPinBuilder={{ active: gearDropPinBuilderActive, dropId: gearDropPinBuilderDropId, pins: gearDropPinBuilderPins, saving: gearDropPinBuilderSaving, mode: gearDropPinBuilderMode, addPin: addGearDropPin, removePin: removeGearDropPin, movePin: moveGearDropPin, updatePin: updateGearDropPin, commit: commitGearDropPinBuilder, exit: exitGearDropPinBuilder }} />}
             {screen === "builds" && <BuildsScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onViewUser={openUserProfile} userBuilds={userBuilds} allBuilds={allBuilds} onLoadAllBuilds={loadAllBuildsOnce} onLoadBuildById={loadBuildById} allBuildsLoaded={allBuildsLoaded} buildSaving={buildSaving} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} followingIds={followingIds} pendingBuildNav={pendingBuildNav} onConsumePendingBuildNav={() => setPendingBuildNav(null)} onAddBuild={requireAuth(addBuild)} userRoutes={userRoutes} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onOpenShareCompose={openShareCompose} onOpenShareIntent={openShareIntent} onUpdateBuild={requireAuth(updateBuild)} likedBuildIds={likedBuildIds} buildLikeCounts={buildLikeCounts} onToggleBuildLike={requireAuth(toggleBuildLike)} onDeleteBuild={requireAuth(deleteBuild)} onPostBuildToFeed={requireAuth((b, opts) => { const rawBd = b.buildData; const bd = scrubLocalPhotosFromBuildData(rawBd); const isLocalUrl = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:")); const rawHero = b.image || (rawBd && rawBd.mainPhotos && rawBd.mainPhotos[0] && rawBd.mainPhotos[0].url) || null; const cleanHero = isLocalUrl(rawHero) ? ((bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url) || null) : rawHero; const heroImg = isLocalUrl(cleanHero) ? null : cleanHero; const meName = (currentProfile && currentProfile.full_name) || "You"; const myUid = supabaseSession && supabaseSession.user && supabaseSession.user.id; const isReshare = b.userId && myUid && b.userId !== myUid; const ownerHandle = isReshare ? (b.handle || "").replace(/^@/, "") : null; const ownerName = isReshare ? (b.owner || null) : null; addPost({ id: "feedbuild_" + Date.now(), type: "BUILDS", user: meName, initial: meName.charAt(0).toUpperCase(), time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, subtitle: isReshare ? `Shared @${ownerHandle}'s build` : "Added a new build", vehicle: `${b.year} ${b.make} ${b.model}`, photoUrls: heroImg ? [heroImg] : undefined, image: heroImg, likes: 0, comments: 0, buildData: bd, buildRawId: b.rawId != null ? b.rawId : null, sharedFromOwnerHandle: ownerHandle, sharedFromOwnerName: ownerName, _skipBuildIdCol: isReshare }); awardPoints(POINTS.feedPost, "Build Shared"); })} buildComments={buildComments} onLoadBuildComments={loadBuildComments} onAddBuildComment={requireAuth(addBuildComment)} onDeleteBuildComment={deleteBuildComment} likedBuildCommentIds={likedBuildCommentIds} buildCommentLikeCounts={buildCommentLikeCounts} onToggleBuildCommentLike={requireAuth(toggleBuildCommentLike)} currentUserName={(currentProfile && currentProfile.full_name) || ""} currentUserHandle={(currentProfile && currentProfile.handle) ? "@" + currentProfile.handle : ""} currentUserAvatar={(currentProfile && currentProfile.avatar_url) || null} allTripReports={allTripReports} onNotifyMentions={notifyMentions} />}
             {screen === "ambassador" && (isGuest
               ? <GuestGateScreen title="AMBASSADOR DASHBOARD REQUIRES AN ACCOUNT" subtitle="Sign in to view your ambassador code, commissions, and payouts." onSignIn={goToLoginFromGuest} />
