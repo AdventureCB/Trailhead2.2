@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback, useDeferredValue, memo } from "react";
 import { createRoot } from "react-dom/client";
 import { createPortal } from "react-dom";
-import { Heart, MessageCircle, MapPin, Clock, Mountain, ChevronRight, ChevronLeft, ChevronDown, Search, Plus, Home, Compass, Map, Wrench, Trophy, AlertTriangle, Navigation, Star, Share2, Bookmark, MoreHorizontal, MoreVertical, ArrowUp, ArrowRight, Users, Radio, CloudSun, CheckCircle, Target, Gift, ChevronUp, ExternalLink, Lock, Globe, Shield, ShieldCheck, UserPlus, UserCheck, Settings, Camera, Eye, EyeOff, X, Bell, ThumbsUp, UserPlus as UserPlusIcon, AtSign, Mail, Send, Image, Smartphone, Trash2, Edit2, Edit3, Award, Zap, TrendingUp, Flame, DollarSign, Route, Video, Play, Maximize2, Minimize2, LogOut, Binoculars, Layers, Tent, BookOpen, Link2, PlusSquare, Disc, Cog, MoveVertical, CircleDashed, Anchor, Tag, Flag, FileText, ZoomIn, ZoomOut, Crop, BarChart3 } from "lucide-react";
+import { Heart, MessageCircle, MapPin, Clock, Mountain, ChevronRight, ChevronLeft, ChevronDown, Search, Plus, Home, Compass, Map, Wrench, Trophy, AlertTriangle, Navigation, Star, Share2, Bookmark, MoreHorizontal, MoreVertical, ArrowUp, ArrowDown, ArrowRight, Users, Radio, CloudSun, CheckCircle, Target, Gift, ChevronUp, ExternalLink, Lock, Globe, Shield, ShieldCheck, UserPlus, UserCheck, Settings, Camera, Eye, EyeOff, X, Bell, ThumbsUp, UserPlus as UserPlusIcon, AtSign, Mail, Send, Image, Smartphone, Trash2, Edit2, Edit3, Award, Zap, TrendingUp, Flame, DollarSign, Route, Video, Play, Maximize2, Minimize2, LogOut, Binoculars, Layers, Tent, BookOpen, Link2, PlusSquare, Disc, Cog, MoveVertical, CircleDashed, Anchor, Tag, Flag, FileText, ZoomIn, ZoomOut, Crop, BarChart3 } from "lucide-react";
 import { supabase, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "./supabase-client.js";
 import { registerNativePush, logoutNativePush, isNativePlatform, openOAuthUrl, closeInAppBrowser, NATIVE_OAUTH_REDIRECT, signInWithApple } from "./native-bridge.js";
 
@@ -485,6 +485,32 @@ function loadMapbox() {
     document.head.appendChild(s);
   });
   return window._mapboxReadyPromise;
+}
+
+// Offline basemap: MapLibre style rendering the open Protomaps vector tiles
+// (from our R2 PMTiles) with LOCAL glyphs + sprite — so it renders with no
+// connection once a region's tiles are cached. Online it reads the hosted
+// Western US PMTiles via range requests. The Protomaps layer array is a local
+// static asset (works offline). Cached once per session.
+const OFFLINE_TILES_URL = "https://tiles.lonepeakoverland.com/western-us.pmtiles";
+let _offlineLayersCache = null;
+async function buildOfflineMapStyle(pmtilesUrl) {
+  if (!_offlineLayersCache) {
+    _offlineLayersCache = await fetch("/vendor/pm-layers-light.json").then((r) => r.json());
+  }
+  return {
+    version: 8,
+    glyphs: "/vendor/fonts/{fontstack}/{range}.pbf",
+    sprite: "/vendor/sprites/light",
+    sources: {
+      protomaps: {
+        type: "vector",
+        url: "pmtiles://" + (pmtilesUrl || OFFLINE_TILES_URL),
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · © Protomaps',
+      },
+    },
+    layers: _offlineLayersCache,
+  };
 }
 
 // Geocode a free-text address via the Mapbox Geocoding API. Returns
@@ -3654,9 +3680,17 @@ function useWakeLock(active) {
 // Collapsed by default to a small "LAYERS" chip; tapping the chip expands a
 // menu with the toggles. The chip stays compact when nothing is enabled,
 // and shows an active count when one or more layers are on.
-function MapLayerToggle({ showCamping, setShowCamping, showPublicLands, setShowPublicLands, showTripReports, setShowTripReports, showTripPlans, setShowTripPlans, showSatellite, setShowSatellite }) {
+function MapLayerToggle({ showCamping, setShowCamping, showPublicLands, setShowPublicLands, showTripReports, setShowTripReports, showTripPlans, setShowTripPlans, showSatellite, setShowSatellite, basemap, setBasemap }) {
   const [open, setOpen] = useState(false);
-  const activeCount = (showCamping ? 1 : 0) + (showPublicLands ? 1 : 0) + (showTripReports ? 1 : 0) + (showTripPlans ? 1 : 0) + (showSatellite ? 1 : 0);
+  const offlineOn = basemap === "offline";
+  const activeCount = (showCamping ? 1 : 0) + (showPublicLands ? 1 : 0) + (showTripReports ? 1 : 0) + (showTripPlans ? 1 : 0) + (showSatellite ? 1 : 0) + (offlineOn ? 1 : 0);
+  // Offline-basemap swatch — a small map tile with a down-arrow, hinting
+  // "downloadable map".
+  const OfflineSwatch = () => (
+    <div style={{ position: "relative", width: 26, height: 26, borderRadius: 6, overflow: "hidden", border: `1px solid ${T.charcoal}`, flexShrink: 0, background: "linear-gradient(135deg, #cfe3c4 0%, #a9c99a 55%, #d8cfa6 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <ArrowDown size={13} color={T.darkBg} strokeWidth={2.5} />
+    </div>
+  );
   // Public-lands swatch — composite of the headline manager colors so the
   // row reads as "the multi-agency overlay" at a glance instead of one solid color.
   const PublicLandsSwatch = () => (
@@ -3747,6 +3781,7 @@ function MapLayerToggle({ showCamping, setShowCamping, showPublicLands, setShowP
       }}>
         {open && (
           <div>
+            {setBasemap && row(OfflineSwatch, "Offline map", "Downloadable open basemap (beta)", offlineOn, () => setBasemap(b => b === "offline" ? "mapbox" : "offline"))}
             {setShowSatellite && row(SatelliteSwatch, "Satellite", "Aerial imagery + labels", showSatellite, () => setShowSatellite(v => !v))}
             {row(CampingSwatch, "Camping spots", "Public + community", showCamping, () => setShowCamping(v => !v))}
             {row(PublicLandsSwatch, "Public lands", "BLM · USFS · NPS · State", showPublicLands, () => setShowPublicLands(v => !v))}
@@ -16049,6 +16084,12 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
   const mapRef = useRef(null);
   const mapInst = useRef(null);
   const [mapReady, setMapReady] = useState(false);
+  // Basemap choice: "mapbox" (online Mapbox Outdoors) | "offline" (open
+  // Protomaps vector tiles, renders with no signal once a region is cached).
+  // Persisted; switching remounts the map (see the map-init effect).
+  const [basemap, setBasemap] = useState(() => { try { return localStorage.getItem("th_basemap") === "offline" ? "offline" : "mapbox"; } catch (_) { return "mapbox"; } });
+  useEffect(() => { try { localStorage.setItem("th_basemap", basemap); } catch (_) {} }, [basemap]);
+  const lastViewRef = useRef(null); // preserves center/zoom across basemap remounts
   const [selectedSpot, setSelectedSpot] = useState(null);
   const [selectedLand, setSelectedLand] = useState(null);
   // Search state — combined results from Mapbox geocode + local camping spots.
@@ -16405,15 +16446,19 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
 
   useEffect(() => {
     let cancelled = false;
+    setMapReady(false);
     const init = async () => {
       let mapboxgl;
       try { mapboxgl = await loadMapbox(); } catch (e) { return; }
       if (cancelled || !mapRef.current) return;
+      const style = basemap === "offline" ? await buildOfflineMapStyle() : MAPBOX_STYLE;
+      if (cancelled || !mapRef.current) return;
+      const view = lastViewRef.current;
       const map = new mapboxgl.Map({
         container: mapRef.current,
-        style: MAPBOX_STYLE,
-        center: [-110.0, 39.5],
-        zoom: 4,
+        style,
+        center: view ? view.center : [-110.0, 39.5],
+        zoom: view ? view.zoom : 4,
       });
       map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), "top-right");
       mapInst.current = map;
@@ -16448,9 +16493,13 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
     init();
     return () => {
       cancelled = true;
-      if (mapInst.current) { try { mapInst.current.remove(); } catch (_) {} mapInst.current = null; }
+      if (mapInst.current) {
+        // Preserve the current view so a basemap switch doesn't jump the camera.
+        try { const c = mapInst.current.getCenter(); lastViewRef.current = { center: [c.lng, c.lat], zoom: mapInst.current.getZoom() }; } catch (_) {}
+        try { mapInst.current.remove(); } catch (_) {} mapInst.current = null;
+      }
     };
-  }, []);
+  }, [basemap]);
 
   // Add-spot single-tap handler — when user taps the FAB Add Spot, the
   // next single map tap stages a draggable pin (planTapPos) and routes
@@ -16982,7 +17031,7 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
         {/* Layer toggle — hidden for guests for the same reason as search:
             they're only here to view a specific spot/HQ via deep link. */}
         {!isGuest && (
-        <MapLayerToggle showCamping={showCampingSpots} setShowCamping={setShowCampingSpots} showPublicLands={showPublicLands} setShowPublicLands={setShowPublicLands} showTripReports={showTripReports} setShowTripReports={setShowTripReports} showTripPlans={showTripPlans} setShowTripPlans={setShowTripPlans} showSatellite={showSatellite} setShowSatellite={setShowSatellite} />
+        <MapLayerToggle showCamping={showCampingSpots} setShowCamping={setShowCampingSpots} showPublicLands={showPublicLands} setShowPublicLands={setShowPublicLands} showTripReports={showTripReports} setShowTripReports={setShowTripReports} showTripPlans={showTripPlans} setShowTripPlans={setShowTripPlans} showSatellite={showSatellite} setShowSatellite={setShowSatellite} basemap={basemap} setBasemap={setBasemap} />
         )}
         {/* Add-mode hint banner — visible only while we're waiting for the
             user's next tap, so they know what to do without staring at a
