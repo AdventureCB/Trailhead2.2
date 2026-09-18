@@ -5100,7 +5100,7 @@ function GlobalSearch({
   return (
     <div style={{ position: "fixed", inset: 0, height: "100dvh", background: T.darkBg, zIndex: 500, display: "flex", flexDirection: "column" }}>
       {/* Search header */}
-      <div style={{ padding: "14px 16px", background: T.charcoal, borderBottom: `1px solid ${T.darkCard}`, flexShrink: 0 }}>
+      <div style={{ padding: "14px 16px", paddingTop: "max(14px, env(safe-area-inset-top, 0px))", background: T.charcoal, borderBottom: `1px solid ${T.darkCard}`, flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" }}>
             <ChevronLeft size={22} color={T.white} strokeWidth={1.5} />
@@ -11521,7 +11521,7 @@ const RouteMapPreview = memo(function RouteMapPreviewImpl({ pins, points, photos
       {selectedPhoto && isFullscreen && (
         <div onClick={() => setSelectedPhoto(null)} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, cursor: "pointer", borderRadius: 0 }}>
           <img src={txImg(selectedPhoto, 1200)} alt="" style={{ maxWidth: "90%", maxHeight: "90%", borderRadius: 10, objectFit: "contain" }} />
-          <button onClick={() => setSelectedPhoto(null)} style={{ position: "absolute", top: 16, right: 16, background: "rgba(0,0,0,0.6)", border: "none", borderRadius: "50%", width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+          <button onClick={() => setSelectedPhoto(null)} style={{ position: "absolute", top: "max(16px, env(safe-area-inset-top, 0px))", right: 16, background: "rgba(0,0,0,0.6)", border: "none", borderRadius: "50%", width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
             <X size={18} color="#fff" />
           </button>
         </div>
@@ -12181,7 +12181,7 @@ function RouteNavigation({ route, onClose, campingSpots, showCampingSpots, setSh
             vehicles, and we don't want to scare users off legitimate
             routes. Dismissible for the current leg. */}
         {usedTrailFallback && !dismissedTrailWarning && (
-          <div style={{ position: "absolute", top: 12, left: 12, right: 12, zIndex: 12, background: `${T.darkCard}F5`, border: `1px solid ${T.copper}80`, borderRadius: 10, padding: "10px 12px", boxShadow: "0 6px 18px rgba(0,0,0,0.55)", backdropFilter: "blur(8px)", display: "flex", alignItems: "flex-start", gap: 10 }}>
+          <div style={{ position: "absolute", top: "max(12px, env(safe-area-inset-top, 0px))", left: 12, right: 12, zIndex: 12, background: `${T.darkCard}F5`, border: `1px solid ${T.copper}80`, borderRadius: 10, padding: "10px 12px", boxShadow: "0 6px 18px rgba(0,0,0,0.55)", backdropFilter: "blur(8px)", display: "flex", alignItems: "flex-start", gap: 10 }}>
             <AlertTriangle size={16} color={T.copper} style={{ flexShrink: 0, marginTop: 1 }} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 1.2, marginBottom: 2 }}>TRAIL SEGMENT</div>
@@ -13615,7 +13615,7 @@ function TripPinFullscreen({ initialPins, initialPhotos, onClose, onSave, curren
             "ADD TO MAP" button; place matches also expose an ADD TO MAP
             button so users can pick a landmark by name. Both actions stage
             the pin position and open the WAYPOINT / CAMP picker below. */}
-        <div style={{ position: "absolute", top: 10, left: 10, right: 10, zIndex: 7 }}>
+        <div style={{ position: "absolute", top: "max(10px, env(safe-area-inset-top, 0px))", left: 10, right: 10, zIndex: 7 }}>
           <div style={{ display: "flex", alignItems: "center", background: `${T.darkCard}F0`, backdropFilter: "blur(10px)", borderRadius: 10, padding: "10px 14px", border: `1px solid ${searchOpen ? T.copper : T.charcoal}`, boxShadow: "0 4px 12px rgba(0,0,0,0.4)", transition: "border-color 0.15s" }}>
             <Search size={16} color={T.tertiary} />
             <input
@@ -21152,7 +21152,7 @@ function DemoRequestFlow({ bounty, submission, currentUserId, isGuest, onGuestTa
 
   return (
     <div style={{ position: "fixed", inset: 0, background: T.darkBg, zIndex: 1000, display: "flex", flexDirection: "column" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 16px", borderBottom: `1px solid ${T.charcoal}`, background: T.darkBg, position: "sticky", top: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 16px", paddingTop: "max(14px, env(safe-area-inset-top, 0px))", borderBottom: `1px solid ${T.charcoal}`, background: T.darkBg, position: "sticky", top: 0 }}>
         <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><X size={20} color={T.white} /></button>
         <Users size={14} color={T.red} />
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -31443,7 +31443,7 @@ function GearDropMementoScreen({ trip: tripProp, currentUserId, isAdmin, onClose
   if ((isPending || isRejected) && !isAdmin && !isOwner) {
     return (
       <div style={{ position: "fixed", top: 0, bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 430, zIndex: 1000, background: T.darkBg, display: "flex", flexDirection: "column" }}>
-        <div style={{ padding: "14px 16px", borderBottom: `1px solid ${T.charcoal}`, display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ padding: "14px 16px", paddingTop: "max(14px, env(safe-area-inset-top, 0px))", borderBottom: `1px solid ${T.charcoal}`, display: "flex", alignItems: "center", gap: 8 }}>
           <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
             <ChevronLeft size={20} color={T.white} />
           </button>
@@ -31469,7 +31469,7 @@ function GearDropMementoScreen({ trip: tripProp, currentUserId, isAdmin, onClose
 
   return (
     <div style={{ position: "fixed", top: 0, bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 430, zIndex: 1000, background: T.darkBg, overflowY: "auto" }}>
-      <div style={{ position: "sticky", top: 0, padding: "14px 16px", background: T.darkBg, borderBottom: `1px solid ${T.charcoal}`, display: "flex", alignItems: "center", gap: 8, zIndex: 4 }}>
+      <div style={{ position: "sticky", top: 0, padding: "14px 16px", paddingTop: "max(14px, env(safe-area-inset-top, 0px))", background: T.darkBg, borderBottom: `1px solid ${T.charcoal}`, display: "flex", alignItems: "center", gap: 8, zIndex: 4 }}>
         <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
           <ChevronLeft size={20} color={T.white} />
         </button>
@@ -31890,7 +31890,7 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, isGuest, onGuest
   if (!drop) {
     return (
       <div style={{ position: "fixed", inset: 0, background: T.darkBg, zIndex: 200, display: "flex", flexDirection: "column" }}>
-        <div style={{ padding: "14px 16px", borderBottom: `1px solid ${T.charcoal}`, display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ padding: "14px 16px", paddingTop: "max(14px, env(safe-area-inset-top, 0px))", borderBottom: `1px solid ${T.charcoal}`, display: "flex", alignItems: "center", gap: 8 }}>
           <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
             <ChevronLeft size={20} color={T.white} />
           </button>
@@ -31986,7 +31986,7 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, isGuest, onGuest
 
   return (
     <div style={{ position: "fixed", inset: 0, background: T.darkBg, zIndex: 200, overflowY: "auto", paddingBottom: 110 }}>
-      <div style={{ position: "sticky", top: 0, padding: "14px 16px", background: T.darkBg, borderBottom: `1px solid ${T.charcoal}`, zIndex: 5, display: "flex", alignItems: "center", gap: 8 }}>
+      <div style={{ position: "sticky", top: 0, padding: "14px 16px", paddingTop: "max(14px, env(safe-area-inset-top, 0px))", background: T.darkBg, borderBottom: `1px solid ${T.charcoal}`, zIndex: 5, display: "flex", alignItems: "center", gap: 8 }}>
         <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
           <ChevronLeft size={20} color={T.white} />
         </button>
@@ -33085,7 +33085,7 @@ function GearDropLiveTracker({ drop, racers, currentUserId, onClose }) {
 
   return (
     <div style={{ position: "fixed", inset: 0, background: T.darkBg, zIndex: 240, display: "flex", flexDirection: "column" }}>
-      <div style={{ position: "sticky", top: 0, padding: "14px 16px", background: T.darkBg, borderBottom: `1px solid ${T.charcoal}`, display: "flex", alignItems: "center", gap: 8, zIndex: 5 }}>
+      <div style={{ position: "sticky", top: 0, padding: "14px 16px", paddingTop: "max(14px, env(safe-area-inset-top, 0px))", background: T.darkBg, borderBottom: `1px solid ${T.charcoal}`, display: "flex", alignItems: "center", gap: 8, zIndex: 5 }}>
         <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
           <ChevronLeft size={20} color={T.white} />
         </button>
@@ -33603,7 +33603,7 @@ function GearDropRunScreen({ runId, currentUserId, onClose, onLoadRun, onLoadDro
           Header bar (back + title + LIVE chip) + target chip + hint
           button. Dark gradient from top so they stay legible against
           any basemap tile. */}
-      <div style={{ position: "absolute", top: 0, left: 0, right: 0, padding: "12px 12px 28px", background: "linear-gradient(180deg, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.4) 70%, transparent 100%)", display: "flex", flexDirection: "column", gap: 10, pointerEvents: "none" }}>
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, padding: "12px 12px 28px", paddingTop: "max(12px, env(safe-area-inset-top, 0px))", background: "linear-gradient(180deg, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.4) 70%, transparent 100%)", display: "flex", flexDirection: "column", gap: 10, pointerEvents: "none" }}>
         {/* Header row */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, pointerEvents: "auto" }}>
           <button onClick={onClose} style={{ width: 36, height: 36, borderRadius: 18, background: "rgba(0,0,0,0.55)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(6px)" }}>
@@ -35475,7 +35475,7 @@ function ContentPartnerDashboard({ onClose, onLoad, onLoadById, onSubmit, onReco
 
   return (
     <div style={{ position: "fixed", inset: 0, background: T.darkBg, zIndex: 200, overflowY: "auto" }}>
-      <div style={{ position: "sticky", top: 0, padding: "14px 16px", background: T.darkBg, borderBottom: `1px solid ${T.charcoal}`, display: "flex", alignItems: "center", gap: 8, zIndex: 5 }}>
+      <div style={{ position: "sticky", top: 0, padding: "14px 16px", paddingTop: "max(14px, env(safe-area-inset-top, 0px))", background: T.darkBg, borderBottom: `1px solid ${T.charcoal}`, display: "flex", alignItems: "center", gap: 8, zIndex: 5 }}>
         <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
           <ChevronLeft size={20} color={T.white} />
         </button>
@@ -36292,7 +36292,7 @@ function BountyLinkedTripPreview({ trip }) {
       {selectedPhotoUrl && createPortal(
         <div onClick={() => setSelectedPhotoUrl(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1600, cursor: "pointer", padding: 20, boxSizing: "border-box" }}>
           <img src={txImg(selectedPhotoUrl, 1200)} alt="" style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 8, objectFit: "contain" }} />
-          <button onClick={(e) => { e.stopPropagation(); setSelectedPhotoUrl(null); }} style={{ position: "absolute", top: 16, right: 16, background: "rgba(0,0,0,0.6)", border: "none", borderRadius: "50%", width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+          <button onClick={(e) => { e.stopPropagation(); setSelectedPhotoUrl(null); }} style={{ position: "absolute", top: "max(16px, env(safe-area-inset-top, 0px))", right: 16, background: "rgba(0,0,0,0.6)", border: "none", borderRadius: "50%", width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
             <X size={18} color="#fff" />
           </button>
         </div>,
@@ -38614,7 +38614,7 @@ function RaffleEntryScreen({ slug, currentUserId, currentProfile, currentUserEma
   const fmt = (c) => `$${Math.round((c || 0) / 100).toLocaleString()}`;
   const wrap = (children) => (
     <div style={{ position: "fixed", inset: 0, background: T.darkBg, zIndex: 220, overflowY: "auto", display: "flex", flexDirection: "column" }}>
-      <div style={{ position: "sticky", top: 0, background: T.darkBg, borderBottom: `1px solid ${T.charcoal}`, padding: "14px 16px", display: "flex", alignItems: "center", gap: 8 }}>
+      <div style={{ position: "sticky", top: 0, background: T.darkBg, borderBottom: `1px solid ${T.charcoal}`, padding: "14px 16px", paddingTop: "max(14px, env(safe-area-inset-top, 0px))", display: "flex", alignItems: "center", gap: 8 }}>
         <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><ChevronLeft size={20} color={T.white} /></button>
         <Gift size={16} color={T.copper} />
         <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.8 }}>DRAWING</span>
@@ -46340,7 +46340,7 @@ function DMScreen({ onClose, onViewUser, initialConvId, initialMessage, initialS
     return (
       <div style={overlayStyle}>
         {/* Chat header */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", background: T.charcoal, borderBottom: `1px solid ${T.darkCard}`, flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", paddingTop: "max(14px, env(safe-area-inset-top, 0px))", background: T.charcoal, borderBottom: `1px solid ${T.darkCard}`, flexShrink: 0 }}>
           <button onClick={() => { setView("inbox"); setActiveConvId(null); setParticipantsExpanded(false); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" }}>
             <ChevronLeft size={22} color={T.white} strokeWidth={1.5} />
           </button>
@@ -46760,7 +46760,7 @@ function DMScreen({ onClose, onViewUser, initialConvId, initialMessage, initialS
     const canSend = selectedRecipients.length > 0 && !creatingConvo;
     return (
       <div style={overlayStyle}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", background: T.charcoal, borderBottom: `1px solid ${T.darkCard}`, flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", paddingTop: "max(14px, env(safe-area-inset-top, 0px))", background: T.charcoal, borderBottom: `1px solid ${T.darkCard}`, flexShrink: 0 }}>
           <button onClick={() => { setView("inbox"); setSelectedRecipients([]); setNewRecipient(""); setGroupTitle(""); setFirstMsgText(""); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" }}>
             <ChevronLeft size={22} color={T.white} strokeWidth={1.5} />
           </button>
