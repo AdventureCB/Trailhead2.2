@@ -474,6 +474,9 @@ function loadMapbox() {
           if (window.pmtiles && ml.addProtocol && !ml.__pmtilesRegistered) {
             const proto = new window.pmtiles.Protocol();
             ml.addProtocol("pmtiles", proto.tile);
+            // Serve the offline source through the caching source so tiles
+            // viewed online are cached, and downloaded regions render offline.
+            try { proto.add(new window.pmtiles.PMTiles(new CachingPmtilesSource(OFFLINE_TILES_URL))); } catch (_) {}
             window._thPmtilesProtocol = proto;
             ml.__pmtilesRegistered = true;
           }
@@ -511,6 +514,100 @@ async function buildOfflineMapStyle(pmtilesUrl) {
     },
     layers: _offlineLayersCache,
   };
+}
+
+// ─── Offline tile cache (IndexedDB byte-range cache over the PMTiles source) ──
+// We cache the raw byte RANGES the pmtiles reader fetches (header, directories,
+// tiles) keyed by url|offset|length. "Download this area" drives getZxy() for
+// every tile in a bbox so its bytes land in IndexedDB; offline, the same
+// CachingPmtilesSource serves those ranges from cache, so the pmtiles protocol
+// renders with NO connection. Region metadata lives in a second store.
+const OFFLINE_DB_NAME = "trailhub-offline";
+function openOfflineDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(OFFLINE_DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains("ranges")) db.createObjectStore("ranges");
+      if (!db.objectStoreNames.contains("regions")) db.createObjectStore("regions", { keyPath: "id" });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+function idbOp(store, mode, fn) {
+  return openOfflineDB().then((db) => new Promise((resolve, reject) => {
+    const tx = db.transaction(store, mode);
+    const req = fn(tx.objectStore(store));
+    tx.oncomplete = () => resolve(req && req.result);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  }));
+}
+const offlineCache = {
+  getRange: (k) => idbOp("ranges", "readonly", (s) => s.get(k)),
+  putRange: (k, v) => idbOp("ranges", "readwrite", (s) => s.put(v, k)),
+  listRegions: () => idbOp("regions", "readonly", (s) => s.getAll()),
+  putRegion: (r) => idbOp("regions", "readwrite", (s) => s.put(r)),
+  deleteRegion: (id) => idbOp("regions", "readwrite", (s) => s.delete(id)),
+  clearAll: () => Promise.all([
+    idbOp("ranges", "readwrite", (s) => s.clear()),
+    idbOp("regions", "readwrite", (s) => s.clear()),
+  ]),
+};
+
+// pmtiles Source that caches byte ranges in IndexedDB (wraps FetchSource).
+class CachingPmtilesSource {
+  constructor(url) { this.url = url; this._inner = new window.pmtiles.FetchSource(url); }
+  getKey() { return this.url; }
+  async getBytes(offset, length, signal, etag) {
+    const key = this.url + "|" + offset + "|" + length;
+    try { const c = await offlineCache.getRange(key); if (c && c.data) return { data: c.data, etag: c.etag }; } catch (_) {}
+    const res = await this._inner.getBytes(offset, length, signal, etag);
+    try { await offlineCache.putRange(key, { data: res.data, etag: res.etag }); } catch (_) {}
+    return res;
+  }
+}
+
+// Web-Mercator tile x/y range covering a bbox at zoom z.
+function tileRangeForBbox(bbox, z) {
+  const [minLng, minLat, maxLng, maxLat] = bbox;
+  const n = Math.pow(2, z);
+  const lon2x = (lon) => Math.floor(((lon + 180) / 360) * n);
+  const lat2y = (lat) => {
+    const r = (lat * Math.PI) / 180;
+    return Math.floor(((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * n);
+  };
+  const clamp = (v) => Math.max(0, Math.min(n - 1, v));
+  return { minX: clamp(lon2x(minLng)), maxX: clamp(lon2x(maxLng)), minY: clamp(lat2y(maxLat)), maxY: clamp(lat2y(minLat)) };
+}
+function countRegionTiles(bbox, minZ, maxZ) {
+  let t = 0;
+  for (let z = minZ; z <= maxZ; z++) { const r = tileRangeForBbox(bbox, z); t += (r.maxX - r.minX + 1) * (r.maxY - r.minY + 1); }
+  return t;
+}
+let _downloadPMTiles = null;
+async function downloadOfflineRegion(bbox, name, opts, onProgress) {
+  const minZoom = (opts && opts.minZoom) || 0;
+  const maxZoom = (opts && opts.maxZoom) || 14;
+  if (!window.pmtiles) throw new Error("map engine not ready");
+  if (!_downloadPMTiles) _downloadPMTiles = new window.pmtiles.PMTiles(new CachingPmtilesSource(OFFLINE_TILES_URL));
+  const p = _downloadPMTiles;
+  const total = countRegionTiles(bbox, minZoom, maxZoom);
+  let done = 0;
+  for (let z = minZoom; z <= maxZoom; z++) {
+    const r = tileRangeForBbox(bbox, z);
+    for (let x = r.minX; x <= r.maxX; x++) {
+      for (let y = r.minY; y <= r.maxY; y++) {
+        try { await p.getZxy(z, x, y); } catch (_) {}
+        done++;
+        if (onProgress && (done % 20 === 0 || done === total)) onProgress(done, total);
+      }
+    }
+  }
+  const region = { id: "r_" + Date.now(), name: name || "Downloaded area", bbox, minZoom, maxZoom, tiles: total, createdAt: new Date().toISOString() };
+  try { await offlineCache.putRegion(region); } catch (_) {}
+  return region;
 }
 
 // Geocode a free-text address via the Mapbox Geocoding API. Returns
@@ -16090,6 +16187,32 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
   const [basemap, setBasemap] = useState(() => { try { return localStorage.getItem("th_basemap") === "offline" ? "offline" : "mapbox"; } catch (_) { return "mapbox"; } });
   useEffect(() => { try { localStorage.setItem("th_basemap", basemap); } catch (_) {} }, [basemap]);
   const lastViewRef = useRef(null); // preserves center/zoom across basemap remounts
+  // Offline downloaded regions (see downloadOfflineRegion / offlineCache).
+  const [offlineRegions, setOfflineRegions] = useState([]);
+  const [offlineDownloading, setOfflineDownloading] = useState(false);
+  const [offlinePct, setOfflinePct] = useState(0);
+  const [showOfflineManage, setShowOfflineManage] = useState(false);
+  useEffect(() => { offlineCache.listRegions().then((rs) => setOfflineRegions(rs || [])).catch(() => {}); }, []);
+  const handleDownloadArea = async () => {
+    if (!mapInst.current || offlineDownloading) return;
+    const b = mapInst.current.getBounds();
+    const bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+    // Auto-cap max zoom so a zoomed-out view can't queue a giant download.
+    let maxZoom = 14; const CAP = 45000;
+    while (maxZoom > 10 && countRegionTiles(bbox, 0, maxZoom) > CAP) maxZoom--;
+    setOfflineDownloading(true); setOfflinePct(0);
+    try {
+      await downloadOfflineRegion(bbox, "Area · " + new Date().toLocaleDateString(), { minZoom: 0, maxZoom }, (done, total) => {
+        setOfflinePct(total ? Math.round((done / total) * 100) : 0);
+      });
+      const rs = await offlineCache.listRegions(); setOfflineRegions(rs || []);
+      if (onShowToast) onShowToast("Area saved for offline use");
+    } catch (e) { if (onShowToast) onShowToast("Download failed — try a smaller area or check signal"); }
+    setOfflineDownloading(false);
+  };
+  const handleClearOffline = async () => {
+    try { await offlineCache.clearAll(); setOfflineRegions([]); setShowOfflineManage(false); if (onShowToast) onShowToast("Offline map data cleared"); } catch (_) {}
+  };
   const [selectedSpot, setSelectedSpot] = useState(null);
   const [selectedLand, setSelectedLand] = useState(null);
   // Search state — combined results from Mapbox geocode + local camping spots.
@@ -17027,6 +17150,28 @@ function ExploreMap({ campingSpots, showCampingSpots, setShowCampingSpots, showP
             </div>
           )}
         </div>
+        )}
+        {/* Offline download panel — only while the offline basemap is active.
+            Caches the current viewport's tiles for no-signal use. */}
+        {!isGuest && basemap === "offline" && (
+          <div style={{ position: "absolute", bottom: 14, left: "50%", transform: "translateX(-50%)", zIndex: 6, width: "min(92%, 340px)", background: `${T.darkCard}F0`, backdropFilter: "blur(10px)", border: `1px solid ${T.charcoal}`, borderRadius: 12, boxShadow: "0 6px 18px rgba(0,0,0,0.45)", padding: 10 }}>
+            <button onClick={handleDownloadArea} disabled={offlineDownloading} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "11px", borderRadius: 8, background: offlineDownloading ? T.charcoal : T.copper, border: "none", cursor: offlineDownloading ? "default" : "pointer", fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.5, color: offlineDownloading ? T.tertiary : T.darkBg }}>
+              <ArrowDown size={15} color={offlineDownloading ? T.tertiary : T.darkBg} strokeWidth={2.5} />
+              {offlineDownloading ? `Downloading… ${offlinePct}%` : "Download this area"}
+            </button>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8, fontFamily: sans, fontSize: 10, color: T.tertiary }}>
+              <span>{offlineRegions.length} area{offlineRegions.length === 1 ? "" : "s"} saved offline</span>
+              {offlineRegions.length > 0 && <button onClick={() => setShowOfflineManage((v) => !v)} style={{ background: "none", border: "none", color: T.copper, fontFamily: sans, fontSize: 10, fontWeight: 700, cursor: "pointer", letterSpacing: 0.5 }}>{showOfflineManage ? "DONE" : "MANAGE"}</button>}
+            </div>
+            {showOfflineManage && (
+              <div style={{ marginTop: 6 }}>
+                {offlineRegions.map((r) => (
+                  <div key={r.id} style={{ padding: "5px 0", borderTop: `1px solid ${T.charcoal}`, fontFamily: serif, fontSize: 11, color: T.white, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name} · z{r.maxZoom} · {(r.tiles || 0).toLocaleString()} tiles</div>
+                ))}
+                <button onClick={handleClearOffline} style={{ width: "100%", marginTop: 8, padding: "8px", borderRadius: 8, background: `${T.red}15`, border: `1px solid ${T.red}40`, cursor: "pointer", fontFamily: sans, fontSize: 11, fontWeight: 700, color: T.red, letterSpacing: 0.5 }}>Clear all offline data</button>
+              </div>
+            )}
+          </div>
         )}
         {/* Layer toggle — hidden for guests for the same reason as search:
             they're only here to view a specific spot/HQ via deep link. */}
