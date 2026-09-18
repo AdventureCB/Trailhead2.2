@@ -529,11 +529,14 @@ const OFFLINE_DB_NAME = "trailhub-offline";
 const OFFLINE_CATALOG_URL = "https://tiles.lonepeakoverland.com/regions.json";
 function openOfflineDB() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(OFFLINE_DB_NAME, 3);
+    const req = indexedDB.open(OFFLINE_DB_NAME, 4);
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains("regions")) db.createObjectStore("regions", { keyPath: "id" });
       if (!db.objectStoreNames.contains("content")) db.createObjectStore("content", { keyPath: "key" }); // offline overlay data
+      // Outbox: writes captured while offline, flushed in order on reconnect.
+      // Auto-incrementing key preserves FIFO order (creation sequence).
+      if (!db.objectStoreNames.contains("outbox")) db.createObjectStore("outbox", { keyPath: "id", autoIncrement: true });
       if (db.objectStoreNames.contains("ranges")) db.deleteObjectStore("ranges"); // drop legacy v1 store
     };
     req.onsuccess = () => resolve(req.result);
@@ -553,6 +556,17 @@ const offlineStore = {
   put: (r) => idbOp("regions", "readwrite", (s) => s.put(r)),
   list: () => idbOp("regions", "readonly", (s) => s.getAll()),
   delete: (id) => idbOp("regions", "readwrite", (s) => s.delete(id)),
+};
+
+// Offline write outbox — mutations captured with no signal (add camp spot,
+// record route, gear-drop capture) are queued here and replayed in FIFO order
+// when connectivity returns. Each record: { id (auto), kind, tempId, uid,
+// payload, createdAt }. `kind` selects the replay handler at flush time.
+const offlineOutbox = {
+  add: (rec) => idbOp("outbox", "readwrite", (s) => s.add(rec)),
+  list: () => idbOp("outbox", "readonly", (s) => s.getAll()),
+  delete: (id) => idbOp("outbox", "readwrite", (s) => s.delete(id)),
+  clear: () => idbOp("outbox", "readwrite", (s) => s.clear()),
 };
 
 // Blob-backed pmtiles Source — reads byte ranges from an in-IDB Blob via slice
@@ -51571,6 +51585,10 @@ export default function Trailhead() {
   const [offlineContent, setOfflineContent] = useState({ spots: [], reports: [], plans: [] });
   const reloadOfflineContent = useCallback(() => { loadOfflineContent().then(setOfflineContent).catch(() => {}); }, []);
   useEffect(() => { reloadOfflineContent(); }, [reloadOfflineContent]);
+  // Optimistic pins for writes captured offline (declared here so the
+  // campingSpots merge memo below can union them). Flush logic lives further
+  // down, after the setCampingSpots shim it depends on.
+  const [pendingWriteSpots, setPendingWriteSpots] = useState([]);
   // Track the currently-loaded viewport so the realtime INSERT handler can
   // decide whether to graft a new other-user spot in or drop it (we'd
   // re-fetch on the next pan anyway).
@@ -51587,8 +51605,13 @@ export default function Trailhead() {
     for (const s of (offlineContent.spots || [])) {
       if (s && s.id != null && !seen.has(s.id)) { seen.add(s.id); out.push(s); }
     }
+    // Pins captured offline and awaiting sync — render them immediately so the
+    // map reflects the add even with no signal (deduped by their temp id).
+    for (const s of pendingWriteSpots) {
+      if (s && s.id != null && !seen.has(s.id)) { seen.add(s.id); out.push(s); }
+    }
     return out;
-  }, [userCampingSpots, viewportCampingSpots, offlineContent]);
+  }, [userCampingSpots, viewportCampingSpots, offlineContent, pendingWriteSpots]);
   // Single setter shim so legacy mutators that called setCampingSpots(prev => ...)
   // still work — but only patch the user-owned slice (the viewport slice is
   // owned by the bbox fetcher). For optimistic adds + edits + deletes that's
@@ -51596,6 +51619,66 @@ export default function Trailhead() {
   const setCampingSpots = useCallback((updater) => {
     setUserCampingSpots(prev => typeof updater === "function" ? updater(prev) : updater);
   }, []);
+  // ---- Offline write outbox (sync queue) --------------------------------
+  // (pendingWriteSpots is declared above, with the offline-content state, so
+  // the campingSpots merge memo can union it.)
+  const [pendingSyncCount, setPendingSyncCount] = useState(0);
+  const [syncingOutbox, setSyncingOutbox] = useState(false);
+  const flushingRef = useRef(false);
+  const flushOutboxRef = useRef(null);
+  const refreshPendingSyncCount = useCallback(() => {
+    offlineOutbox.list().then(rows => setPendingSyncCount((rows || []).length)).catch(() => {});
+  }, []);
+  // Replay queued writes in FIFO order. A failed item is LEFT in the outbox
+  // (retried on the next online event) rather than dropped, so no data is
+  // lost; only unknown kinds are dropped to avoid a poison pill.
+  const flushOutbox = async () => {
+    if (flushingRef.current) return;
+    if (typeof navigator !== "undefined" && !navigator.onLine) return;
+    let rows = [];
+    try { rows = await offlineOutbox.list(); } catch (_) { return; }
+    if (!rows || !rows.length) { setPendingSyncCount(0); return; }
+    flushingRef.current = true; setSyncingOutbox(true);
+    let done = 0;
+    for (const rec of rows) {
+      try {
+        if (rec.kind === "camping_spot") {
+          const uid = rec.uid;
+          let photos = Array.isArray(rec.payload.photos) ? rec.payload.photos : [];
+          if (photos.length) { try { photos = await uploadPostPhotoList(photos, uid); } catch (e) { console.error("[outbox] photo upload failed", e); } }
+          const { data: inserted, error } = await supabase.from("camping_spots").insert({ ...rec.payload, photos, source: "user", user_id: uid }).select().single();
+          if (error || !inserted) { console.error("[outbox] camp spot insert failed", error); continue; }
+          await offlineOutbox.delete(rec.id);
+          setPendingWriteSpots(prev => prev.filter(s => s.id !== rec.tempId));
+          setCampingSpots(prev => prev.some(s => s.id === inserted.id) ? prev : [inserted, ...prev]);
+          try { if (Array.isArray(photos)) fetchedSpotPhotosRef.current.add(inserted.id); } catch (_) {}
+          done++;
+        } else {
+          await offlineOutbox.delete(rec.id); // unknown kind — drop
+        }
+      } catch (e) { console.error("[outbox] flush item threw", e); }
+    }
+    flushingRef.current = false; setSyncingOutbox(false);
+    refreshPendingSyncCount();
+    if (done > 0) showErrorToast(`Synced ${done} offline change${done === 1 ? "" : "s"}.`);
+  };
+  useEffect(() => { flushOutboxRef.current = flushOutbox; });
+  // Boot: re-hydrate pending pins from the outbox, then flush if we're online.
+  useEffect(() => {
+    offlineOutbox.list().then(rows => {
+      const spots = (rows || []).filter(r => r.kind === "camping_spot").map(r => ({ id: r.tempId, ...r.payload, source: "user", user_id: r.uid, _pendingSync: true }));
+      if (spots.length) setPendingWriteSpots(spots);
+      setPendingSyncCount((rows || []).length);
+      if (typeof navigator !== "undefined" && navigator.onLine && rows && rows.length) { flushOutboxRef.current && flushOutboxRef.current(); }
+    }).catch(() => {});
+  }, []);
+  // Flush whenever connectivity returns.
+  useEffect(() => {
+    const onOnline = () => { flushOutboxRef.current && flushOutboxRef.current(); };
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, []);
+  // ----------------------------------------------------------------------
   // Viewport-change handler, fired by useMapViewport on each settled pan/zoom.
   // Refreshes BOTH the camping and trip-report viewport slices in parallel
   // so each map only needs one moveend listener. Single bbox = single round
@@ -57960,6 +58043,27 @@ export default function Trailhead() {
     const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
     if (!uid || !spot || spot.lat == null || spot.lng == null) return null;
     const visibility = spot.visibility === "private" ? "private" : "public";
+    // Offline path: no signal → queue the write to the outbox (photos ride
+    // along as local data URLs and get uploaded at flush time) and keep an
+    // optimistic pin marked _pendingSync so it renders immediately and
+    // survives reloads (re-hydrated from the outbox on boot).
+    const online = typeof navigator === "undefined" || navigator.onLine;
+    if (!online) {
+      const tmpId = "tmp_camp_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+      const optimistic = { id: tmpId, ...spot, photos: Array.isArray(spot.photos) ? spot.photos : [], visibility, source: "user", user_id: uid, _pendingSync: true };
+      setPendingWriteSpots(prev => [optimistic, ...prev]);
+      try {
+        await offlineOutbox.add({ kind: "camping_spot", tempId: tmpId, uid, createdAt: Date.now(), payload: { name: spot.name || "Unnamed spot", lat: spot.lat, lng: spot.lng, description: spot.description || null, spot_type: spot.spot_type || "unknown", fee: spot.fee || "unknown", visibility, photo_url: spot.photo_url || null, photos: Array.isArray(spot.photos) ? spot.photos : [], amenities: spot.amenities || null } });
+        refreshPendingSyncCount();
+        showErrorToast("Saved offline — will sync when you're back online.");
+      } catch (e) {
+        console.error("[outbox] enqueue camp spot failed", e);
+        setPendingWriteSpots(prev => prev.filter(s => s.id !== tmpId));
+        showErrorToast("Couldn't save offline. Storage may be full.");
+        return null;
+      }
+      return optimistic;
+    }
     // Upload any data:/blob: photos to post-photos BEFORE persisting so the
     // jsonb never carries base64 blobs (same trap that bit trip reports).
     let uploadedPhotos = Array.isArray(spot.photos) ? spot.photos : [];
