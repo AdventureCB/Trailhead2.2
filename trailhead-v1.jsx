@@ -11612,6 +11612,12 @@ function RouteNavigation({ route, onClose, campingSpots, showCampingSpots, setSh
   // the driver knows the leg may cross a non-motorized path.
   const [usedTrailFallback, setUsedTrailFallback] = useState(false);
   const [dismissedTrailWarning, setDismissedTrailWarning] = useState(false);
+  // Offline / no-signal fallback: the Mapbox Directions API needs a network
+  // connection, but GPS + a downloaded basemap work with no signal. When
+  // routing can't be reached we draw a straight-line heading from the user to
+  // the destination (haversine distance + live puck) so directions still give
+  // real value in the field. No turn-by-turn steps in this mode.
+  const [usedStraightLine, setUsedStraightLine] = useState(false);
   // Step + progress state surfaced to the banner / bottom card.
   const [stepIdx, setStepIdx] = useState(0);
   const [distToManeuver, setDistToManeuver] = useState(null); // meters until current step's end
@@ -11751,6 +11757,35 @@ function RouteNavigation({ route, onClose, campingSpots, showCampingSpots, setSh
     return true;
   };
 
+  // Offline heading: draw a straight dashed line through the pins and use the
+  // haversine sum as the "remaining distance". No turn-by-turn steps — the map
+  // (downloaded basemap) plus the live GPS puck give the user a bearing and a
+  // distance to the destination even with no signal.
+  const applyStraightLine = (pinsChain) => {
+    const map = mapInst.current;
+    if (!map || !pinsChain || pinsChain.length < 2) return false;
+    const coords = pinsChain.map(p => [p.lng, p.lat]);
+    let meters = 0;
+    for (let i = 1; i < pinsChain.length; i++) {
+      meters += haversine(pinsChain[i - 1].lat, pinsChain[i - 1].lng, pinsChain[i].lat, pinsChain[i].lng);
+    }
+    routeCoordsRef.current = coords;
+    stepsRef.current = [];
+    stepStartsRef.current = [];
+    totalDistanceRef.current = meters;
+    totalDurationRef.current = 0;
+    spokenRef.current = new Set();
+    setStepIdx(0);
+    stepIdxRef.current = 0;
+    setRemainingDist(meters);
+    setRemainingTime(null);
+    setDistToManeuver(null);
+    const src = map.getSource("route-nav");
+    if (src) src.setData({ type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: {} });
+    setRouteLoaded(true);
+    return true;
+  };
+
   const fetchRouteFromPins = async (pinsChain) => {
     // Snap threshold: any input coord snapped more than this from a
     // classified road is a signal the driving graph can't route the pin
@@ -11776,16 +11811,25 @@ function RouteNavigation({ route, onClose, campingSpots, showCampingSpots, setSh
     const driving = await fetchProfile("driving");
     const drivingHas = !!(driving && driving.routes && driving.routes[0]);
     const drivingBad = drivingHas && worstSnap(driving) > SNAP_LIMIT_M;
-    if (drivingHas && !drivingBad) { setUsedTrailFallback(false); return applyRoute(driving); }
+    if (drivingHas && !drivingBad) { setUsedTrailFallback(false); setUsedStraightLine(false); return applyRoute(driving); }
     // Driving failed OR snapped too far — try walking, which uses a much
     // wider road graph (tracks / paths / unclassified included).
     const walking = await fetchProfile("walking");
     const walkingHas = !!(walking && walking.routes && walking.routes[0]);
     if (!walkingHas) {
-      // Walking also failed — fall back to whatever driving gave us so the
-      // UI at least renders something. If both are empty applyRoute(null)
-      // returns false and the caller shows a routing error.
+      // Both driving AND walking returned nothing. If driving also produced
+      // no route we're almost certainly offline (the fetch threw) — draw a
+      // straight-line heading so directions still work with no signal, using
+      // GPS + the downloaded basemap.
+      if (!drivingHas) {
+        setUsedTrailFallback(false);
+        setUsedStraightLine(true);
+        setDismissedTrailWarning(false);
+        return applyStraightLine(pinsChain);
+      }
+      // Driving gave us something usable — render it rather than erroring.
       setUsedTrailFallback(false);
+      setUsedStraightLine(false);
       return applyRoute(driving);
     }
     // If driving DID return a route but had a bad snap, only prefer the
@@ -11793,9 +11837,10 @@ function RouteNavigation({ route, onClose, campingSpots, showCampingSpots, setSh
     if (drivingHas) {
       const w = worstSnap(walking);
       const d = worstSnap(driving);
-      if (w >= d) { setUsedTrailFallback(false); return applyRoute(driving); }
+      if (w >= d) { setUsedTrailFallback(false); setUsedStraightLine(false); return applyRoute(driving); }
     }
     setUsedTrailFallback(true);
+    setUsedStraightLine(false);
     setDismissedTrailWarning(false);
     return applyRoute(walking);
   };
@@ -12187,6 +12232,23 @@ function RouteNavigation({ route, onClose, campingSpots, showCampingSpots, setSh
               <div style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 1.2, marginBottom: 2 }}>TRAIL SEGMENT</div>
               <p style={{ margin: 0, fontFamily: serif, fontSize: 12, color: T.white, lineHeight: 1.4 }}>
                 This route includes trails that may not allow vehicle access and could require walking. Please follow laws and posted trail restrictions.
+              </p>
+            </div>
+            <button onClick={() => setDismissedTrailWarning(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: T.tertiary, flexShrink: 0 }} title="Dismiss">
+              <X size={14} />
+            </button>
+          </div>
+        )}
+        {/* Offline heading — surfaces when the Directions API was unreachable
+            (no signal) and we drew a straight-line bearing instead. GPS + the
+            downloaded basemap still work; there's just no road routing. */}
+        {usedStraightLine && !dismissedTrailWarning && (
+          <div style={{ position: "absolute", top: "max(12px, env(safe-area-inset-top, 0px))", left: 12, right: 12, zIndex: 12, background: `${T.darkCard}F5`, border: `1px solid ${T.copper}80`, borderRadius: 10, padding: "10px 12px", boxShadow: "0 6px 18px rgba(0,0,0,0.55)", backdropFilter: "blur(8px)", display: "flex", alignItems: "flex-start", gap: 10 }}>
+            <Navigation size={16} color={T.copper} style={{ flexShrink: 0, marginTop: 1 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 1.2, marginBottom: 2 }}>STRAIGHT-LINE HEADING</div>
+              <p style={{ margin: 0, fontFamily: serif, fontSize: 12, color: T.white, lineHeight: 1.4 }}>
+                Road routing isn't available{typeof navigator !== "undefined" && navigator.onLine === false ? " offline" : " here"} — showing a straight-line bearing and distance to your destination. Your live GPS position still tracks on the downloaded map.
               </p>
             </div>
             <button onClick={() => setDismissedTrailWarning(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: T.tertiary, flexShrink: 0 }} title="Dismiss">
