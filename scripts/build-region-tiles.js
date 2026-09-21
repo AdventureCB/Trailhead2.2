@@ -75,6 +75,32 @@ const REGIONS = [
   { id: "ma", name: "Massachusetts", group: "New England", bbox: [-73.6, 41.2, -69.8, 42.9] },
   { id: "ct", name: "Connecticut", group: "New England", bbox: [-73.8, 40.9, -71.7, 42.1] },
   { id: "ri", name: "Rhode Island", group: "New England", bbox: [-71.9, 41.1, -71.1, 42.1] },
+  // ── North America expansion (Sep 2026): Alaska, Canada, Mexico. Hawaii
+  //    deliberately skipped. Alaska + the three northern territories are cut
+  //    straight from the remote planet (each is its own huge, sparse area —
+  //    no chunk to share). Aleutians west of -180 are excluded.
+  { id: "ak", name: "Alaska", group: "Alaska", bbox: [-179.9, 51.2, -129.9, 71.5] },
+  { id: "bc", name: "British Columbia", group: "Canada West", bbox: [-139.1, 48.3, -114.0, 60.0] },
+  { id: "ab", name: "Alberta", group: "Canada West", bbox: [-120.0, 48.99, -110.0, 60.0] },
+  { id: "sk", name: "Saskatchewan", group: "Canada West", bbox: [-110.0, 48.99, -101.4, 60.0] },
+  { id: "mb", name: "Manitoba", group: "Canada West", bbox: [-102.1, 48.99, -88.9, 60.0] },
+  { id: "on", name: "Ontario", group: "Canada Central", bbox: [-95.2, 41.6, -74.3, 56.9] },
+  { id: "qc", name: "Quebec", group: "Canada Central", bbox: [-79.8, 44.99, -57.1, 62.6] },
+  { id: "nb", name: "New Brunswick", group: "Canada Atlantic", bbox: [-69.1, 44.5, -63.7, 48.1] },
+  { id: "ns", name: "Nova Scotia", group: "Canada Atlantic", bbox: [-66.4, 43.3, -59.6, 47.1] },
+  { id: "pe", name: "Prince Edward Island", group: "Canada Atlantic", bbox: [-64.5, 45.9, -61.9, 47.1] },
+  { id: "nl", name: "Newfoundland & Labrador", group: "Canada Atlantic", bbox: [-67.9, 46.6, -52.5, 60.4] },
+  { id: "yt", name: "Yukon", group: "Canada North", bbox: [-141.1, 60.0, -123.8, 69.7] },
+  { id: "nt", name: "Northwest Territories", group: "Canada North", bbox: [-136.5, 60.0, -102.0, 78.8] },
+  { id: "nu", name: "Nunavut", group: "Canada North", bbox: [-120.7, 51.6, -61.0, 83.2] },
+  // Mexico as 7 overlanding-sized regions (32 states would be too granular).
+  { id: "mx-baja", name: "Baja California (Norte & Sur)", group: "Mexico", bbox: [-118.5, 22.8, -109.4, 32.75] },
+  { id: "mx-sonora-chihuahua", name: "Sonora & Chihuahua", group: "Mexico", bbox: [-115.1, 25.5, -103.3, 31.8] },
+  { id: "mx-northeast", name: "Northeast (Coahuila, Nuevo León, Tamaulipas)", group: "Mexico", bbox: [-103.97, 22.2, -97.1, 29.9] },
+  { id: "mx-pacific", name: "Pacific (Sinaloa → Michoacán)", group: "Mexico", bbox: [-109.5, 17.9, -100.0, 27.1] },
+  { id: "mx-central", name: "Central (Bajío, CDMX, Puebla, Veracruz)", group: "Mexico", bbox: [-104.7, 17.1, -93.6, 24.9] },
+  { id: "mx-south", name: "South (Guerrero, Oaxaca, Chiapas, Tabasco)", group: "Mexico", bbox: [-102.2, 14.5, -90.4, 18.7] },
+  { id: "mx-yucatan", name: "Yucatán Peninsula", group: "Mexico", bbox: [-92.5, 17.8, -86.7, 21.7] },
 ];
 
 // Intermediate source chunks: extract each ONCE from the remote planet to a
@@ -86,6 +112,11 @@ const REGIONS = [
 const EXTRACT_CHUNKS = {
   "central-us": [-107.0, 24.3, -84.5, 49.5],
   "eastern-us": [-92.0, 24.3, -66.9, 47.6],
+  //   canada-west: bc ab sk mb        canada-east: on qc nb ns pe nl
+  //   mexico: every mx-* region        (ak yt nt nu: cut from the remote planet)
+  "canada-west": [-139.1, 48.3, -88.9, 60.0],
+  "canada-east": [-95.2, 41.6, -52.5, 62.6],
+  "mexico": [-118.5, 14.5, -86.7, 32.75],
 };
 module.exports = { REGIONS, EXTRACT_CHUNKS };
 
