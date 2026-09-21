@@ -51819,7 +51819,10 @@ export default function Trailhead() {
           }
           if (!inserted) { console.error("[outbox] trip create failed", insErr); blockedTrips.add(rec.tempId); continue; }
           await setTripIdMapEntry(rec.tempId, inserted.id);
-          setTripReports(prev => prev.map(t => t.id === rec.tempId ? { ...t, ...inserted } : t));
+          // Swap the temp draft for the real row; also drop any copy of the real
+          // row the server hydrate may have already brought in, so the synced
+          // trip never appears twice.
+          setTripReports(prev => prev.filter(t => t.id !== inserted.id).map(t => t.id === rec.tempId ? { ...t, ...inserted, _pendingSync: undefined } : t));
           await offlineOutbox.delete(rec.id);
           done++;
         } else if (rec.kind === "trip_update") {
@@ -51859,6 +51862,21 @@ export default function Trailhead() {
     offlineOutbox.list().then(rows => {
       const spots = (rows || []).filter(r => r.kind === "camping_spot").map(r => ({ id: r.tempId, ...r.payload, source: "user", user_id: r.uid, _pendingSync: true }));
       if (spots.length) setPendingWriteSpots(spots);
+      // Trip drafts created offline: rebuild each from its queued create +
+      // the patches layered on it (route, edits, publish) so a cold restart
+      // with no signal still shows the trip. The server hydrate keeps them
+      // as prev-only extras (mergeTripRowsPreservingHeavy) until they sync.
+      const drafts = {};
+      (rows || []).forEach(r => {
+        if (r.kind !== "trip_create" || !r.payload) return;
+        const ts = new Date(r.createdAt || Date.now()).toISOString();
+        drafts[r.tempId] = { id: r.tempId, user_id: r.uid, slug: r.payload.slug, name: r.payload.name, description: r.payload.description || null, status: "draft", kind: r.payload.kind || "report", visibility: r.payload.visibility || (r.payload.kind === "plan" ? "private" : "public"), route_data: null, created_at: ts, updated_at: ts, _pendingSync: true };
+      });
+      (rows || []).forEach(r => {
+        if (r.kind === "trip_update" && drafts[r.tempId] && r.payload && r.payload.updates) drafts[r.tempId] = { ...drafts[r.tempId], ...r.payload.updates, updated_at: new Date(r.createdAt || Date.now()).toISOString() };
+      });
+      const draftList = Object.values(drafts);
+      if (draftList.length) setTripReports(prev => [...draftList.filter(d => !prev.some(t => t.id === d.id)), ...prev]);
       setPendingSyncCount((rows || []).length);
       if (typeof navigator !== "undefined" && navigator.onLine && rows && rows.length) { flushOutboxRef.current && flushOutboxRef.current(); }
     }).catch(() => {});
