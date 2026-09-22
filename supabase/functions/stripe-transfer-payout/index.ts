@@ -149,6 +149,44 @@ Deno.serve(async (req: Request) => {
   if (netDollars <= 0) return ok({ ok: false, error: "payout net_amount must be > 0" }, 400);
   const amountCents = Math.round(netDollars * 100);
 
+  // ── Pre-flight balance check ──
+  // Transfers can only draw on the platform's AVAILABLE balance (not
+  // pending). GET /v1/balance up front so an insufficient-funds case
+  // returns actionable numbers ("$X available, need $Y") — and makes it
+  // obvious when the platform balance is empty (e.g. Shopify sales sit in
+  // Shopify Payments, a separate account; this balance is funded by
+  // top-ups). Reads the balance for whatever mode STRIPE_SECRET_KEY is in,
+  // so it also settles any live-vs-test confusion. Non-blocking if the
+  // balance call itself errors — fall through to the real transfer attempt.
+  const fmtUsd = (c: number) => `$${(c / 100).toFixed(2)}`;
+  const balResp = await stripeFetch("/v1/balance");
+  if (balResp.ok && balResp.data) {
+    const sumUsd = (arr: any) => (Array.isArray(arr) ? arr : [])
+      .filter((b: any) => b && b.currency === "usd")
+      .reduce((s: number, b: any) => s + (Number(b.amount) || 0), 0);
+    const usdAvailable = sumUsd(balResp.data.available);
+    const usdPending = sumUsd(balResp.data.pending);
+    if (usdAvailable < amountCents) {
+      const msg = `Insufficient Stripe balance — ${fmtUsd(usdAvailable)} available, need ${fmtUsd(amountCents)}.`
+        + (usdPending > 0 ? ` ${fmtUsd(usdPending)} is still pending/clearing.` : "")
+        + ` Your platform balance is funded by top-ups (Shopify sales are in a separate Shopify Payments account). Add funds at dashboard.stripe.com/balance, then retry.`;
+      // Record so the row's "last transfer attempt" note shows the numbers.
+      await supabaseFetch(`/rest/v1/ambassador_payouts?id=eq.${payoutId}`, {
+        method: "PATCH",
+        headers: { "Prefer": "return=minimal" },
+        body: JSON.stringify({
+          transfer_failed_at: new Date().toISOString(),
+          transfer_failure_message: msg,
+        }),
+      });
+      return ok({
+        ok: false,
+        error: msg,
+        balance: { available_cents: usdAvailable, pending_cents: usdPending, needed_cents: amountCents },
+      }, 400);
+    }
+  }
+
   // Create the transfer. Idempotency key includes payout id (so a
   // double-click within the same attempt doesn't double-fund) PLUS the
   // prior failure timestamp (so admin can retry after a sync failure

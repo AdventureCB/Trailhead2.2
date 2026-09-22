@@ -150,6 +150,9 @@ function buildPriceRule(args: {
   variant: "public" | "internal";
   role?: string;                     // 'primary' | 'bulk_promo' — public variant
                                      // for primary is scoped to DEPOSIT only.
+  depositScoped?: boolean;           // bulk_promo only: scope the PUBLIC code to
+                                     // the DEPOSIT product (0% off), mirroring
+                                     // the primary code instead of free-shipping.
   kind?: string;
   value?: number | null;
   minPurchase?: number | null;
@@ -178,13 +181,15 @@ function buildPriceRule(args: {
   //   - Shopify rejects fixed_amount value=0.00 but percentage value=-0.0
   //     is accepted (0% off = no change).
   //
-  // BULK_PROMO public: stays as free-shipping (broad applies-to-all).
-  // Bulk promos exist for general purchases (e.g. Holiday sale) — scoping
-  // them to DEPOSIT would defeat the point of the promo.
+  // BULK_PROMO public: normally free-shipping (broad applies-to-all). But
+  // when the template opts into deposit_scoped, mirror the PRIMARY public
+  // code exactly — scoped to the DEPOSIT product at 0% off — so it behaves
+  // like a normal ambassador deposit code (attribution-only), while the
+  // INTERNAL code still carries the template's customizable discount.
   if (args.variant === "public") {
-    if (args.role === "primary") {
+    if (args.role === "primary" || (args.role === "bulk_promo" && args.depositScoped)) {
       if (!DEPOSIT_PRODUCT_ID) {
-        throw new Error("SHOPIFY_DEPOSIT_PRODUCT_ID secret missing — set it before creating primary codes.");
+        throw new Error("SHOPIFY_DEPOSIT_PRODUCT_ID secret missing — set it before creating deposit-scoped codes.");
       }
       return {
         price_rule: {
@@ -198,7 +203,7 @@ function buildPriceRule(args: {
         },
       };
     }
-    // bulk_promo / fallback: free shipping
+    // bulk_promo (non-deposit-scoped) / fallback: free shipping
     return {
       price_rule: {
         ...base,
@@ -256,7 +261,7 @@ function buildPriceRule(args: {
 // Resolve role-specific config: code naming + the internal-code's kind/value/min
 // + active date range (from the template, if applicable).
 async function resolveRoleConfig(role: string, baseCode: string, body: any): Promise<
-  | { publicCode: string; internalCode: string; kind: string; value: number | null; minPurchase: number | null; label: string; templateId: string | null; startsAt: string | null; endsAt: string | null }
+  | { publicCode: string; internalCode: string; kind: string; value: number | null; minPurchase: number | null; label: string; templateId: string | null; startsAt: string | null; endsAt: string | null; depositScoped: boolean }
   | { error: string; status: number }
 > {
   if (role === "primary") {
@@ -270,6 +275,7 @@ async function resolveRoleConfig(role: string, baseCode: string, body: any): Pro
       templateId: null,
       startsAt: null,                                                               // always active
       endsAt: null,
+      depositScoped: true,                                                          // primary public is always DEPOSIT-scoped
     };
   }
   if (role === "bulk_promo") {
@@ -290,6 +296,7 @@ async function resolveRoleConfig(role: string, baseCode: string, body: any): Pro
       templateId,
       startsAt: row.starts_at || null,                                              // template-defined active window
       endsAt: row.ends_at || null,
+      depositScoped: !!row.deposit_scoped,                                          // opt-in: mirror primary's deposit-scoped public code
     };
   }
   return { error: `unknown role: ${role}`, status: 400 };
@@ -326,6 +333,7 @@ async function createShopifyCode(args: {
   title: string;
   variant: "public" | "internal";
   role?: string;
+  depositScoped?: boolean;
   code: string;
   kind?: string;
   value?: number | null;
@@ -636,6 +644,7 @@ Deno.serve(async (req: Request) => {
     title: publicTitle,
     variant: "public",
     role,
+    depositScoped: cfg.depositScoped,
     code: cfg.publicCode,
     startsAt: cfg.startsAt,
     endsAt: cfg.endsAt,

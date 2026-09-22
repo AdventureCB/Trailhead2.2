@@ -38789,10 +38789,8 @@ function RaffleEntryScreen({ slug, currentUserId, currentProfile, currentUserEma
   const [name, setName] = useState((currentProfile && currentProfile.full_name) || "");
   const [email, setEmail] = useState(currentUserEmail || "");
   const [phone, setPhone] = useState((currentProfile && currentProfile.phone) || "");
-  // Sales-contact opt-in. Unchecked by default: calls/texts need affirmative
-  // consent (TCPA), and a deliberate tap is what lets the sales team work
-  // the whole entry list, not just the winner. Flip the default here if
-  // legal is comfortable with a pre-checked box.
+  // Sales-contact consent — REQUIRED to enter. Starts unchecked so the tick is
+  // an affirmative act (TCPA-friendly even though it gates entry).
   const [contactOptIn, setContactOptIn] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -38901,7 +38899,9 @@ function RaffleEntryScreen({ slug, currentUserId, currentProfile, currentUserEma
   </>);
 
   // Signed in — collect phone + confirm name, submit entry.
-  const canSubmit = name.trim() && /\d{7,}/.test(phone.replace(/\D/g, "")) && !submitting;
+  // Consent to sales contact is a CONDITION of entry (Kyle, Sep 2026) — the
+  // button stays disabled until the box is ticked.
+  const canSubmit = name.trim() && /\d{7,}/.test(phone.replace(/\D/g, "")) && contactOptIn && !submitting;
   const submit = async () => {
     if (!canSubmit) return;
     setSubmitting(true); setError("");
@@ -38921,8 +38921,8 @@ function RaffleEntryScreen({ slug, currentUserId, currentProfile, currentUserEma
         {contactOptIn && <CheckCircle size={12} color={T.darkBg} strokeWidth={3} />}
       </div>
       <div>
-        <div style={{ fontFamily: sans, fontSize: 12, fontWeight: 700, color: T.white, letterSpacing: 0.3 }}>Yes, Lone Peak Overland can contact me</div>
-        <div style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, lineHeight: 1.4, marginTop: 2 }}>I'd like to hear from the team by phone, text, or email about campers, builds, and offers — win or lose. Opt out anytime.</div>
+        <div style={{ fontFamily: sans, fontSize: 12, fontWeight: 700, color: T.white, letterSpacing: 0.3 }}>Yes, Lone Peak Overland can contact me <span style={{ color: T.copper, fontSize: 9, letterSpacing: 1 }}>REQUIRED</span></div>
+        <div style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, lineHeight: 1.4, marginTop: 2 }}>To enter, agree that our team may reach you by phone, text, or email about campers, builds, and offers — win or lose. You can opt out anytime.</div>
       </div>
     </label>
     {error && <div style={{ fontFamily: sans, fontSize: 12, color: T.red, marginBottom: 12 }}>{error}</div>}
@@ -38933,9 +38933,8 @@ function RaffleEntryScreen({ slug, currentUserId, currentProfile, currentUserEma
 /* ─── RaffleAdminScreen ─── admin surface: create/manage event drawings,
    set reusable prize params, assign hosts, view + CSV-export entries.
    (Pick-winner + code delivery land in Phase 2.) */
-function RaffleAdminScreen({ onBack, isAdmin, onLoadEvents, onCreateEvent, onUpdateEvent, onLoadEntries, onLoadHosts, onAssignHost, onRemoveHost, onSearchUsers, onPickWinner, onLoadWinnerCode, onResyncCrm }) {
+function RaffleAdminScreen({ onBack, isAdmin, onLoadEvents, onCreateEvent, onUpdateEvent, onLoadEntries, onLoadHosts, onAssignHost, onRemoveHost, onSearchUsers, onPickWinner, onLoadWinnerCode }) {
   const [events, setEvents] = useState(null);
-  const [crmMsg, setCrmMsg] = useState("");
   const [selected, setSelected] = useState(null); // event being managed
   const [entries, setEntries] = useState(null);
   const [hosts, setHosts] = useState([]);
@@ -39002,8 +39001,8 @@ function RaffleAdminScreen({ onBack, isAdmin, onLoadEvents, onCreateEvent, onUpd
   const exportCsv = () => {
     if (!entries || entries.length === 0) return;
     const esc = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
-    const rows = [["Name", "Email", "Phone", "Entered", "Winner", "Contact opt-in", "Opted in at", "CRM synced"].map(esc).join(",")];
-    entries.forEach(e => rows.push([e.name, e.email, e.phone, e.created_at ? new Date(e.created_at).toLocaleString() : "", e.is_winner ? "YES" : "", e.contact_opt_in ? "YES" : "", e.contact_opt_in_at ? new Date(e.contact_opt_in_at).toLocaleString() : "", e.crm_synced_at ? new Date(e.crm_synced_at).toLocaleString() : (e.crm_error ? `ERROR: ${e.crm_error}` : "")].map(esc).join(",")));
+    const rows = [["Name", "Email", "Phone", "Entered", "Winner", "Contact consent", "Consented at"].map(esc).join(",")];
+    entries.forEach(e => rows.push([e.name, e.email, e.phone, e.created_at ? new Date(e.created_at).toLocaleString() : "", e.is_winner ? "YES" : "", e.contact_opt_in ? "YES" : "", e.contact_opt_in_at ? new Date(e.contact_opt_in_at).toLocaleString() : ""].map(esc).join(",")));
     const blob = new Blob([rows.join("\n")], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -39062,14 +39061,8 @@ function RaffleAdminScreen({ onBack, isAdmin, onLoadEvents, onCreateEvent, onUpd
           <div style={{ background: T.darkCard, borderRadius: 12, padding: 14, border: `1px solid ${T.charcoal}` }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
               <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700 }}>ENTRIES ({entries ? entries.length : "…"}{entries && entries.length ? ` · ${entries.filter(e => e.contact_opt_in).length} OPTED IN` : ""})</span>
-              <div style={{ display: "flex", gap: 6 }}>
-                {onResyncCrm && entries && entries.some(e => e.contact_opt_in && !e.crm_synced_at) && (
-                  <button onClick={async () => { setCrmMsg("Re-syncing…"); const r = await onResyncCrm(selected.id); setCrmMsg(r && r.error ? r.error : `Re-queued ${r && r.count != null ? r.count : "?"} for CRM sync — refresh in a few seconds.`); }} style={{ padding: "6px 12px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}`, color: T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>RE-SYNC CRM</button>
-                )}
-                <button onClick={exportCsv} disabled={!entries || entries.length === 0} style={{ padding: "6px 12px", borderRadius: 6, background: "none", border: `1px solid ${T.copper}`, color: T.copper, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, cursor: entries && entries.length ? "pointer" : "default", opacity: entries && entries.length ? 1 : 0.5 }}>EXPORT CSV</button>
-              </div>
+              <button onClick={exportCsv} disabled={!entries || entries.length === 0} style={{ padding: "6px 12px", borderRadius: 6, background: "none", border: `1px solid ${T.copper}`, color: T.copper, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, cursor: entries && entries.length ? "pointer" : "default", opacity: entries && entries.length ? 1 : 0.5 }}>EXPORT CSV</button>
             </div>
-            {crmMsg && <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, marginBottom: 8 }}>{crmMsg}</div>}
             {entries === null ? <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>Loading…</div>
               : entries.length === 0 ? <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>No entries yet.</div>
               : entries.map((e, i) => (
@@ -39078,12 +39071,10 @@ function RaffleAdminScreen({ onBack, isAdmin, onLoadEvents, onCreateEvent, onUpd
                     <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.name || "—"}{e.is_winner && <span style={{ marginLeft: 6, fontFamily: sans, fontSize: 8, color: T.copper, fontWeight: 800, letterSpacing: 0.6 }}>★ WINNER</span>}</div>
                     <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.email || ""}{e.phone ? ` · ${e.phone}` : ""}</div>
                   </div>
-                  {/* Consent + CRM state: OPTED IN (copper) once they tick the
-                      box; SYNCED (green) when the deal exists in Pipedrive;
-                      CRM ERR (red, hover for detail) if the sync failed. */}
-                  {e.contact_opt_in
-                    ? <span title={e.crm_error || (e.crm_synced_at ? `Synced ${new Date(e.crm_synced_at).toLocaleString()}` : "Waiting for CRM sync")} style={{ flexShrink: 0, fontFamily: sans, fontSize: 8, fontWeight: 800, letterSpacing: 0.6, padding: "3px 6px", borderRadius: 4, border: `1px solid ${e.crm_synced_at ? T.green : e.crm_error ? T.red : T.copper}`, color: e.crm_synced_at ? T.green : e.crm_error ? T.red : T.copper }}>{e.crm_synced_at ? "SYNCED" : e.crm_error ? "CRM ERR" : "OPTED IN"}</span>
-                    : <span style={{ flexShrink: 0, fontFamily: sans, fontSize: 8, fontWeight: 700, letterSpacing: 0.6, padding: "3px 6px", borderRadius: 4, border: `1px solid ${T.charcoal}`, color: T.tertiary }}>WIN ONLY</span>}
+                  {/* Consent is required for new entries; only pre-Sep-2026
+                      rows can lack it, so flag those (sales can't contact them
+                      unless they win). */}
+                  {!e.contact_opt_in && <span title="Entered before consent was required — contact only if they win" style={{ flexShrink: 0, fontFamily: sans, fontSize: 8, fontWeight: 700, letterSpacing: 0.6, padding: "3px 6px", borderRadius: 4, border: `1px solid ${T.charcoal}`, color: T.tertiary }}>NO CONSENT</span>}
                 </div>
               ))}
           </div>
@@ -53098,9 +53089,10 @@ export default function Trailhead() {
         email: (email || sessionEmail || "").trim() || null,
         phone: (phone || "").trim() || null,
       };
-      // Sales-contact consent. A DB trigger syncs opted-in entries to the CRM.
-      // If the consent columns aren't migrated yet (PGRST204), retry the bare
-      // insert so a pending migration can never block someone from entering.
+      // Sales-contact consent (required to enter). Stored on the row so the
+      // sales software — which shares this database — can read it. If the
+      // consent columns aren't migrated yet (PGRST204), retry the bare insert
+      // so a pending migration can never block someone from entering.
       let { error } = await supabase.from("raffle_entries").insert({ ...base, contact_opt_in: !!contactOptIn, contact_opt_in_at: contactOptIn ? new Date().toISOString() : null });
       if (error && (error.code === "PGRST204" || /contact_opt_in/.test(error.message || ""))) {
         console.warn("[raffle] consent columns missing — inserting without them");
@@ -53161,16 +53153,6 @@ export default function Trailhead() {
     const { error } = await supabase.from("raffle_events").update(body).eq("id", id);
     if (error) return { error: error.message };
     return { ok: true };
-  };
-  // Re-fire the CRM sync trigger for opted-in entries that never reached
-  // Pipedrive (token rotated, CRM down, migration applied after entries).
-  const resyncRaffleCrm = async (eventId) => {
-    if (!isAdmin) return { error: "Not authorized" };
-    try {
-      const { data, error } = await supabase.rpc("admin_resync_raffle_crm", { p_event_id: eventId || null });
-      if (error) return { error: error.message || "Re-sync failed" };
-      return { ok: true, count: data };
-    } catch (e) { return { error: (e && e.message) || "Network error" }; }
   };
   const loadRaffleEntries = async (eventId) => {
     if (!isAdmin || !eventId) return [];
@@ -60300,7 +60282,6 @@ export default function Trailhead() {
                     onSearchUsers={searchUsers}
                     onPickWinner={pickRaffleWinner}
                     onLoadWinnerCode={loadRaffleWinnerCode}
-                    onResyncCrm={resyncRaffleCrm}
                   />
                 : adminSubScreen
                 ? <AdminDashboardScreen

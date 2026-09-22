@@ -28,6 +28,11 @@ const VAPID_SUBJECT = Deno.env.get("VAPID_SUBJECT") ?? "mailto:noreply@trailhead
 const SEND_PUSH_SECRET = Deno.env.get("SEND_PUSH_SECRET") ?? "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+// OneSignal (native iOS/Android push). Optional — until BOTH are set, the
+// OneSignal fan-out is a silent no-op and only web push (VAPID) runs, so the
+// current web/PWA experience is completely unaffected.
+const ONESIGNAL_APP_ID = Deno.env.get("ONESIGNAL_APP_ID") ?? "";
+const ONESIGNAL_REST_API_KEY = Deno.env.get("ONESIGNAL_REST_API_KEY") ?? "";
 
 // Constant-time string comparison so an attacker can't time-side-channel
 // the correct secret one character at a time.
@@ -43,6 +48,40 @@ webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 // Service-role client bypasses RLS so we can read subscriptions + cross-user
 // data (DM participants, sender profile, etc.) regardless of auth context.
 const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+
+// Native push via OneSignal, targeting External IDs (= Supabase user id, set
+// on the device by native-bridge.js via OneSignal.login(uid)). Independent of
+// web push_subscriptions, so native-only installs still get delivered. Puts the
+// deep-link path in `data.url` (NOT the top-level `url`, which would open a
+// browser) so the native tap handler routes it in-app via trailhead:deeplink.
+// No-op unless both secrets are set.
+async function sendOneSignal(recipientIds: string[], p: any) {
+  if (!ONESIGNAL_APP_ID || !ONESIGNAL_REST_API_KEY) return { skipped: "not configured" };
+  if (!recipientIds || recipientIds.length === 0) return { skipped: "no recipients" };
+  const body: any = {
+    app_id: ONESIGNAL_APP_ID,
+    target_channel: "push",
+    include_aliases: { external_id: recipientIds },
+    headings: { en: p.title || "Trailhub" },
+    contents: { en: p.body || "" },
+    data: (p.data && typeof p.data === "object") ? p.data : {},
+  };
+  if (p.image) { body.big_picture = p.image; body.ios_attachments = { th: p.image }; }
+  if (p.tag) body.collapse_id = String(p.tag).slice(0, 64); // dedupe like web `tag`
+  try {
+    const r = await fetch("https://api.onesignal.com/notifications", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Key ${ONESIGNAL_REST_API_KEY}` },
+      body: JSON.stringify(body),
+    });
+    let data: any = null; try { data = await r.json(); } catch {}
+    if (!r.ok) console.error("[send-push] OneSignal error", r.status, data);
+    return { ok: r.ok, status: r.status, id: data?.id, errors: data?.errors };
+  } catch (e) {
+    console.error("[send-push] OneSignal fetch failed", e);
+    return { ok: false, error: String(e) };
+  }
+}
 
 // Resolve the hero image URL for a post — checks the typed hero_img column
 // first, then the photo_urls text[] array, then several places inside the
@@ -68,6 +107,36 @@ async function resolvePostHeroImage(postId: string): Promise<string | null> {
     }
     return null;
   } catch (_) { return null; }
+}
+
+// Resolve a build's hero image for the push preview card. Builds store the
+// hero on `hero_img`; fall back to the first main photo inside build_data.
+async function resolveBuildHeroImage(buildId: string): Promise<string | null> {
+  if (!buildId) return null;
+  try {
+    const { data: b } = await sb.from("builds").select("hero_img, build_data").eq("id", buildId).maybeSingle();
+    if (!b) return null;
+    if (b.hero_img && typeof b.hero_img === "string") return b.hero_img;
+    const bd = b.build_data || {};
+    if (Array.isArray(bd.mainPhotos) && bd.mainPhotos[0]) {
+      const first = bd.mainPhotos[0];
+      const url = typeof first === "string" ? first : (first && first.url);
+      if (typeof url === "string" && url.startsWith("http")) return url;
+    }
+    return null;
+  } catch (_) { return null; }
+}
+
+// Resolve a forum thread's canonical URL path from its id. Threads store the
+// stable `slug` + `subcategory_slug` (decoupled from display names), which
+// map to the /forum/<sub-slug>/<thread-slug> deep link the SPA + SSR resolve.
+async function resolveForumThreadPath(threadId: string): Promise<string> {
+  if (!threadId) return "/forum";
+  try {
+    const { data: th } = await sb.from("forum_threads").select("slug, subcategory_slug").eq("id", threadId).maybeSingle();
+    if (th && th.slug && th.subcategory_slug) return `/forum/${th.subcategory_slug}/${th.slug}`;
+  } catch (_) { /* fall through */ }
+  return "/forum";
 }
 
 // Resolve the hero image + slug for a gear drop. Used when the
@@ -98,19 +167,32 @@ async function buildNotifPayload(n: any) {
     } catch (_) { /* non-fatal */ }
   }
   const text = n.text || "sent you a notification";
-  const target = n.target ? `: "${n.target}"` : "";
-  // Gear drop notifications carry gear_drop_id (not post_id) — route to
-  // /drops/<slug> when present and use the drop's hero as the preview.
+  // raffle_won stores the event slug in `target` (for routing), so don't
+  // append it as a body suffix like the entity types do.
+  const isRaffle = n.type === "raffle_won";
+  const target = (n.target && !isRaffle) ? `: "${n.target}"` : "";
+  // Resolve the tap URL + preview image from whichever entity FK is set.
+  // Mentions can carry post_id / forum_thread_id / build_id / gear_drop_id
+  // depending on where the tag happened, so all four route to their exact
+  // deep link (not the app home). gear_drop_id is checked without the
+  // gear_drop_* type gate so a mention in a gear drop comment routes too.
   const isGearDrop = typeof n.type === "string" && n.type.startsWith("gear_drop_");
   let url = "/";
   let image: string | null = null;
-  if (isGearDrop && n.gear_drop_id) {
+  if (isRaffle && n.target) {
+    url = `/win/${n.target}`;
+  } else if (n.gear_drop_id) {
     const drop = await resolveGearDropPreview(n.gear_drop_id);
     if (drop.slug) url = `/drops/${drop.slug}`;
     image = drop.image;
   } else if (n.post_id) {
     url = `/post/${n.post_id}`;
     image = await resolvePostHeroImage(n.post_id);
+  } else if (n.forum_thread_id) {
+    url = await resolveForumThreadPath(n.forum_thread_id);
+  } else if (n.build_id) {
+    url = `/builds/${n.build_id}`;
+    image = await resolveBuildHeroImage(n.build_id);
   }
   return {
     title,
@@ -212,26 +294,31 @@ Deno.serve(async (req) => {
   const record: any = payload?.record;
   if (!record || !table) return new Response("ignored: no record/table", { status: 200 });
 
-  // Build the push body once (it doesn't vary per recipient).
-  let pushBody: string;
-  if (table === "notifications") pushBody = JSON.stringify(await buildNotifPayload(record));
-  else if (table === "dm_messages") pushBody = JSON.stringify(await buildDmPayload(record));
+  // Build the push payload once (it doesn't vary per recipient).
+  let payloadObj: any;
+  if (table === "notifications") payloadObj = await buildNotifPayload(record);
+  else if (table === "dm_messages") payloadObj = await buildDmPayload(record);
   else return new Response(`ignored: unsupported table ${table}`, { status: 200 });
+  const pushBody = JSON.stringify(payloadObj);
 
   const recipientIds = await resolveRecipients(table, record);
   if (recipientIds.length === 0) return new Response("no recipients", { status: 200 });
 
+  // Native push (OneSignal) — fire FIRST, independent of web subscriptions, so
+  // a native-only user (no push_subscriptions row) still gets delivered.
+  const oneSignal = await sendOneSignal(recipientIds, payloadObj);
+
+  // Web push (VAPID) to browser / PWA subscriptions.
   const { data: subs, error } = await sb
     .from("push_subscriptions")
     .select("endpoint, p256dh, auth, user_id")
     .in("user_id", recipientIds);
   if (error) {
     console.error("[send-push] subs lookup error", error);
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+    return new Response(JSON.stringify({ error: error.message, oneSignal }), { status: 500 });
   }
-  if (!subs || subs.length === 0) return new Response("no subscriptions", { status: 200 });
 
-  const results = await Promise.allSettled(subs.map(async (s: any) => {
+  const results = (!subs || subs.length === 0) ? [] : await Promise.allSettled(subs.map(async (s: any) => {
     try {
       await webpush.sendNotification({
         endpoint: s.endpoint,
@@ -249,7 +336,7 @@ Deno.serve(async (req) => {
     }
   }));
 
-  return new Response(JSON.stringify({ table, recipients: recipientIds.length, sent: results.length, results }), {
+  return new Response(JSON.stringify({ table, recipients: recipientIds.length, web_sent: results.length, oneSignal, results }), {
     headers: { "content-type": "application/json" },
   });
 });
