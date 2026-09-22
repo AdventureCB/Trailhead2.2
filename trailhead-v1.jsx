@@ -38789,6 +38789,11 @@ function RaffleEntryScreen({ slug, currentUserId, currentProfile, currentUserEma
   const [name, setName] = useState((currentProfile && currentProfile.full_name) || "");
   const [email, setEmail] = useState(currentUserEmail || "");
   const [phone, setPhone] = useState((currentProfile && currentProfile.phone) || "");
+  // Sales-contact opt-in. Unchecked by default: calls/texts need affirmative
+  // consent (TCPA), and a deliberate tap is what lets the sales team work
+  // the whole entry list, not just the winner. Flip the default here if
+  // legal is comfortable with a pre-checked box.
+  const [contactOptIn, setContactOptIn] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
@@ -38900,7 +38905,7 @@ function RaffleEntryScreen({ slug, currentUserId, currentProfile, currentUserEma
   const submit = async () => {
     if (!canSubmit) return;
     setSubmitting(true); setError("");
-    const res = await onSubmitEntry(event.id, { name: name.trim(), phone: phone.trim(), email: (email || currentUserEmail || "").trim() });
+    const res = await onSubmitEntry(event.id, { name: name.trim(), phone: phone.trim(), email: (email || currentUserEmail || "").trim(), contactOptIn });
     setSubmitting(false);
     if (res && res.error) { setError(res.error); return; }
     setEntered(true);
@@ -38910,7 +38915,16 @@ function RaffleEntryScreen({ slug, currentUserId, currentProfile, currentUserEma
     <input value={name} onChange={e => setName(e.target.value)} placeholder="Your name" style={{ width: "100%", boxSizing: "border-box", padding: "11px 12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none", marginBottom: 12 }} />
     <label style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 700, display: "block", marginBottom: 4 }}>PHONE</label>
     <input value={phone} onChange={e => setPhone(e.target.value)} type="tel" placeholder="(555) 123-4567" style={{ width: "100%", boxSizing: "border-box", padding: "11px 12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none", marginBottom: 8 }} />
-    <div style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, marginBottom: 18, lineHeight: 1.4 }}>We'll only use your phone to contact you if you win.</div>
+    <div style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, marginBottom: 12, lineHeight: 1.4 }}>We'll use your phone to reach you if you win.</div>
+    <label onClick={() => setContactOptIn(v => !v)} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "11px 12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${contactOptIn ? T.copper : T.charcoal}`, cursor: "pointer", marginBottom: 18 }}>
+      <div style={{ width: 18, height: 18, flexShrink: 0, borderRadius: 4, marginTop: 1, background: contactOptIn ? T.copper : "transparent", border: `2px solid ${contactOptIn ? T.copper : T.tertiary}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {contactOptIn && <CheckCircle size={12} color={T.darkBg} strokeWidth={3} />}
+      </div>
+      <div>
+        <div style={{ fontFamily: sans, fontSize: 12, fontWeight: 700, color: T.white, letterSpacing: 0.3 }}>Yes, Lone Peak Overland can contact me</div>
+        <div style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, lineHeight: 1.4, marginTop: 2 }}>I'd like to hear from the team by phone, text, or email about campers, builds, and offers — win or lose. Opt out anytime.</div>
+      </div>
+    </label>
     {error && <div style={{ fontFamily: sans, fontSize: 12, color: T.red, marginBottom: 12 }}>{error}</div>}
     <button onClick={submit} disabled={!canSubmit} style={{ width: "100%", padding: "13px", borderRadius: 8, background: canSubmit ? T.copper : T.charcoal, color: canSubmit ? T.darkBg : T.tertiary, border: "none", fontFamily: sans, fontSize: 13, fontWeight: 700, letterSpacing: 1, cursor: canSubmit ? "pointer" : "default" }}>{submitting ? "ENTERING…" : "ENTER THE DRAWING"}</button>
   </>);
@@ -38919,8 +38933,9 @@ function RaffleEntryScreen({ slug, currentUserId, currentProfile, currentUserEma
 /* ─── RaffleAdminScreen ─── admin surface: create/manage event drawings,
    set reusable prize params, assign hosts, view + CSV-export entries.
    (Pick-winner + code delivery land in Phase 2.) */
-function RaffleAdminScreen({ onBack, isAdmin, onLoadEvents, onCreateEvent, onUpdateEvent, onLoadEntries, onLoadHosts, onAssignHost, onRemoveHost, onSearchUsers, onPickWinner, onLoadWinnerCode }) {
+function RaffleAdminScreen({ onBack, isAdmin, onLoadEvents, onCreateEvent, onUpdateEvent, onLoadEntries, onLoadHosts, onAssignHost, onRemoveHost, onSearchUsers, onPickWinner, onLoadWinnerCode, onResyncCrm }) {
   const [events, setEvents] = useState(null);
+  const [crmMsg, setCrmMsg] = useState("");
   const [selected, setSelected] = useState(null); // event being managed
   const [entries, setEntries] = useState(null);
   const [hosts, setHosts] = useState([]);
@@ -38987,8 +39002,8 @@ function RaffleAdminScreen({ onBack, isAdmin, onLoadEvents, onCreateEvent, onUpd
   const exportCsv = () => {
     if (!entries || entries.length === 0) return;
     const esc = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
-    const rows = [["Name", "Email", "Phone", "Entered", "Winner"].map(esc).join(",")];
-    entries.forEach(e => rows.push([e.name, e.email, e.phone, e.created_at ? new Date(e.created_at).toLocaleString() : "", e.is_winner ? "YES" : ""].map(esc).join(",")));
+    const rows = [["Name", "Email", "Phone", "Entered", "Winner", "Contact opt-in", "Opted in at", "CRM synced"].map(esc).join(",")];
+    entries.forEach(e => rows.push([e.name, e.email, e.phone, e.created_at ? new Date(e.created_at).toLocaleString() : "", e.is_winner ? "YES" : "", e.contact_opt_in ? "YES" : "", e.contact_opt_in_at ? new Date(e.contact_opt_in_at).toLocaleString() : "", e.crm_synced_at ? new Date(e.crm_synced_at).toLocaleString() : (e.crm_error ? `ERROR: ${e.crm_error}` : "")].map(esc).join(",")));
     const blob = new Blob([rows.join("\n")], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -39046,9 +39061,15 @@ function RaffleAdminScreen({ onBack, isAdmin, onLoadEvents, onCreateEvent, onUpd
           {/* Entries + export */}
           <div style={{ background: T.darkCard, borderRadius: 12, padding: 14, border: `1px solid ${T.charcoal}` }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700 }}>ENTRIES ({entries ? entries.length : "…"})</span>
-              <button onClick={exportCsv} disabled={!entries || entries.length === 0} style={{ padding: "6px 12px", borderRadius: 6, background: "none", border: `1px solid ${T.copper}`, color: T.copper, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, cursor: entries && entries.length ? "pointer" : "default", opacity: entries && entries.length ? 1 : 0.5 }}>EXPORT CSV</button>
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700 }}>ENTRIES ({entries ? entries.length : "…"}{entries && entries.length ? ` · ${entries.filter(e => e.contact_opt_in).length} OPTED IN` : ""})</span>
+              <div style={{ display: "flex", gap: 6 }}>
+                {onResyncCrm && entries && entries.some(e => e.contact_opt_in && !e.crm_synced_at) && (
+                  <button onClick={async () => { setCrmMsg("Re-syncing…"); const r = await onResyncCrm(selected.id); setCrmMsg(r && r.error ? r.error : `Re-queued ${r && r.count != null ? r.count : "?"} for CRM sync — refresh in a few seconds.`); }} style={{ padding: "6px 12px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}`, color: T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>RE-SYNC CRM</button>
+                )}
+                <button onClick={exportCsv} disabled={!entries || entries.length === 0} style={{ padding: "6px 12px", borderRadius: 6, background: "none", border: `1px solid ${T.copper}`, color: T.copper, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, cursor: entries && entries.length ? "pointer" : "default", opacity: entries && entries.length ? 1 : 0.5 }}>EXPORT CSV</button>
+              </div>
             </div>
+            {crmMsg && <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, marginBottom: 8 }}>{crmMsg}</div>}
             {entries === null ? <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>Loading…</div>
               : entries.length === 0 ? <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>No entries yet.</div>
               : entries.map((e, i) => (
@@ -39057,6 +39078,12 @@ function RaffleAdminScreen({ onBack, isAdmin, onLoadEvents, onCreateEvent, onUpd
                     <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.name || "—"}{e.is_winner && <span style={{ marginLeft: 6, fontFamily: sans, fontSize: 8, color: T.copper, fontWeight: 800, letterSpacing: 0.6 }}>★ WINNER</span>}</div>
                     <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.email || ""}{e.phone ? ` · ${e.phone}` : ""}</div>
                   </div>
+                  {/* Consent + CRM state: OPTED IN (copper) once they tick the
+                      box; SYNCED (green) when the deal exists in Pipedrive;
+                      CRM ERR (red, hover for detail) if the sync failed. */}
+                  {e.contact_opt_in
+                    ? <span title={e.crm_error || (e.crm_synced_at ? `Synced ${new Date(e.crm_synced_at).toLocaleString()}` : "Waiting for CRM sync")} style={{ flexShrink: 0, fontFamily: sans, fontSize: 8, fontWeight: 800, letterSpacing: 0.6, padding: "3px 6px", borderRadius: 4, border: `1px solid ${e.crm_synced_at ? T.green : e.crm_error ? T.red : T.copper}`, color: e.crm_synced_at ? T.green : e.crm_error ? T.red : T.copper }}>{e.crm_synced_at ? "SYNCED" : e.crm_error ? "CRM ERR" : "OPTED IN"}</span>
+                    : <span style={{ flexShrink: 0, fontFamily: sans, fontSize: 8, fontWeight: 700, letterSpacing: 0.6, padding: "3px 6px", borderRadius: 4, border: `1px solid ${T.charcoal}`, color: T.tertiary }}>WIN ONLY</span>}
                 </div>
               ))}
           </div>
@@ -53059,18 +53086,26 @@ export default function Trailhead() {
   };
   // Submit an entry (account required). Stamps email from the session, also
   // backfills profiles.phone when empty so it can flow into deals later.
-  const submitRaffleEntry = async (eventId, { name, phone, email }) => {
+  const submitRaffleEntry = async (eventId, { name, phone, email, contactOptIn }) => {
     const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
     if (!uid) return { error: "You must be signed in to enter." };
     if (!eventId) return { error: "Missing event." };
     const sessionEmail = (supabaseSession && supabaseSession.user && supabaseSession.user.email) || null;
     try {
-      const { error } = await supabase.from("raffle_entries").insert({
+      const base = {
         event_id: eventId, user_id: uid,
         name: (name || "").trim() || null,
         email: (email || sessionEmail || "").trim() || null,
         phone: (phone || "").trim() || null,
-      });
+      };
+      // Sales-contact consent. A DB trigger syncs opted-in entries to the CRM.
+      // If the consent columns aren't migrated yet (PGRST204), retry the bare
+      // insert so a pending migration can never block someone from entering.
+      let { error } = await supabase.from("raffle_entries").insert({ ...base, contact_opt_in: !!contactOptIn, contact_opt_in_at: contactOptIn ? new Date().toISOString() : null });
+      if (error && (error.code === "PGRST204" || /contact_opt_in/.test(error.message || ""))) {
+        console.warn("[raffle] consent columns missing — inserting without them");
+        ({ error } = await supabase.from("raffle_entries").insert(base));
+      }
       if (error) {
         if (/duplicate|unique/i.test(error.message || "")) return { error: "You're already entered in this drawing." };
         return { error: error.message || "Couldn't enter." };
@@ -53126,6 +53161,16 @@ export default function Trailhead() {
     const { error } = await supabase.from("raffle_events").update(body).eq("id", id);
     if (error) return { error: error.message };
     return { ok: true };
+  };
+  // Re-fire the CRM sync trigger for opted-in entries that never reached
+  // Pipedrive (token rotated, CRM down, migration applied after entries).
+  const resyncRaffleCrm = async (eventId) => {
+    if (!isAdmin) return { error: "Not authorized" };
+    try {
+      const { data, error } = await supabase.rpc("admin_resync_raffle_crm", { p_event_id: eventId || null });
+      if (error) return { error: error.message || "Re-sync failed" };
+      return { ok: true, count: data };
+    } catch (e) { return { error: (e && e.message) || "Network error" }; }
   };
   const loadRaffleEntries = async (eventId) => {
     if (!isAdmin || !eventId) return [];
@@ -60255,6 +60300,7 @@ export default function Trailhead() {
                     onSearchUsers={searchUsers}
                     onPickWinner={pickRaffleWinner}
                     onLoadWinnerCode={loadRaffleWinnerCode}
+                    onResyncCrm={resyncRaffleCrm}
                   />
                 : adminSubScreen
                 ? <AdminDashboardScreen
