@@ -1722,6 +1722,34 @@ let _deviceHeadingActive = false;
 const _deviceHeadingListeners = new Set();
 let _activePuckCount = 0;
 const _puckCountListeners = new Set();
+const _notifyPuckListeners = () => { _puckCountListeners.forEach(fn => { try { fn(_activePuckCount); } catch (_) {} }); };
+
+// Remembered compass decision. The module state above resets on every
+// launch, which is why the pill used to nag on each map open — especially
+// in the native shell, where WKWebView also exposes requestPermission.
+//   th_compass_perm = granted | denied (+ _at timestamp), th_compass_dismissed_at
+// granted: trust it and start silently. denied: suppress 30d (iOS won't
+// re-prompt anyway). dismissed (X): suppress 7d.
+const COMPASS_PERM_KEY = "th_compass_perm";
+const COMPASS_DISMISS_KEY = "th_compass_dismissed_at";
+const COMPASS_DISMISS_TTL_MS = 7 * 24 * 3600 * 1000;
+const COMPASS_DENIED_TTL_MS = 30 * 24 * 3600 * 1000;
+let _headingProbeTimer = null;
+let _headingProbeFailed = false; // silent start produced no events → a prompt is warranted
+const _persistCompass = (v) => { try { localStorage.setItem(COMPASS_PERM_KEY, v); localStorage.setItem(COMPASS_PERM_KEY + "_at", String(Date.now())); } catch (_) {} };
+const _clearStoredCompass = () => { try { localStorage.removeItem(COMPASS_PERM_KEY); localStorage.removeItem(COMPASS_PERM_KEY + "_at"); } catch (_) {} };
+try { if (typeof localStorage !== "undefined" && localStorage.getItem(COMPASS_PERM_KEY) === "granted") _deviceHeadingPermission = "granted"; } catch (_) {}
+const _compassPromptSuppressed = () => {
+  try {
+    const d = Number(localStorage.getItem(COMPASS_DISMISS_KEY) || 0);
+    if (d && Date.now() - d < COMPASS_DISMISS_TTL_MS) return true;
+    if (localStorage.getItem(COMPASS_PERM_KEY) === "denied") {
+      const at = Number(localStorage.getItem(COMPASS_PERM_KEY + "_at") || 0);
+      if (Date.now() - at < COMPASS_DENIED_TTL_MS) return true;
+    }
+  } catch (_) {}
+  return false;
+};
 
 const _broadcastHeading = (h) => {
   _deviceHeadingListeners.forEach(fn => { try { fn(h); } catch (_) {} });
@@ -1738,6 +1766,15 @@ const _handleOrientationEvent = (e) => {
     h = (360 - e.alpha) % 360;
   }
   if (h === null) return;
+  // A real reading is proof the compass is permitted — remember it so we
+  // never ask again on this device, and cancel any pending "no events" probe.
+  if (_deviceHeadingPermission !== "granted") {
+    _deviceHeadingPermission = "granted";
+    _headingProbeFailed = false;
+    if (_headingProbeTimer) { clearTimeout(_headingProbeTimer); _headingProbeTimer = null; }
+    _persistCompass("granted");
+    _notifyPuckListeners();
+  }
   // Screen-orientation compensation so portrait-vs-landscape both work.
   try {
     const so = (screen && screen.orientation && typeof screen.orientation.angle === "number") ? screen.orientation.angle : 0;
@@ -1792,12 +1829,14 @@ const requestDeviceHeadingPermission = async () => {
     try {
       const result = await DeviceOrientationEvent.requestPermission();
       _deviceHeadingPermission = result === "granted" ? "granted" : "denied";
-      if (_deviceHeadingPermission === "granted") _startDeviceHeadingListener();
-      _puckCountListeners.forEach(fn => { try { fn(_activePuckCount); } catch (_) {} });
+      _persistCompass(_deviceHeadingPermission);
+      if (_deviceHeadingPermission === "granted") { _headingProbeFailed = false; _startDeviceHeadingListener(); }
+      _notifyPuckListeners();
       return _deviceHeadingPermission;
     } catch (e) {
       console.warn("[heading] requestPermission failed", e);
       _deviceHeadingPermission = "denied";
+      _persistCompass("denied");
       return "denied";
     }
   }
@@ -1807,13 +1846,30 @@ const requestDeviceHeadingPermission = async () => {
   return "granted";
 };
 
+// Silent probe on puck mount. Attach the listener WITHOUT asking: where no
+// gate exists (Android, desktop), where the grant is remembered (Safari after
+// an earlier Allow), or in the native WKWebView shell, events just arrive and
+// we're done — no prompt, ever. Where iOS still gates it, the listener simply
+// receives nothing; after a short wait we flag that so CompassPermissionPill
+// can ask (once — the answer is then remembered). A stale remembered grant
+// that yields nothing is cleared so the pill can ask again next launch.
 const _autoStartDeviceHeadingIfFree = () => {
   if (typeof DeviceOrientationEvent === "undefined") return;
-  // iOS needs gesture-triggered requestPermission — skip auto-start.
-  if (typeof DeviceOrientationEvent.requestPermission === "function") return;
-  if (_deviceHeadingPermission === "granted") return;
-  _deviceHeadingPermission = "granted";
+  const hadStoredGrant = _deviceHeadingPermission === "granted";
+  if (!hadStoredGrant && typeof DeviceOrientationEvent.requestPermission !== "function") {
+    _deviceHeadingPermission = "granted"; // no gate on this platform
+  }
   _startDeviceHeadingListener();
+  if (_deviceHeadingValue !== null || _headingProbeTimer) return;
+  if (typeof DeviceOrientationEvent.requestPermission !== "function") return; // no gate → nothing to prompt
+  _headingProbeTimer = setTimeout(() => {
+    _headingProbeTimer = null;
+    if (_deviceHeadingValue !== null) return; // compass came alive — all good
+    if (hadStoredGrant) _clearStoredCompass();
+    _deviceHeadingPermission = "unknown";
+    _headingProbeFailed = true;
+    _notifyPuckListeners();
+  }, 5000);
 };
 
 // User location "puck" — a blue dot with a directional arrow rotated to
@@ -1982,10 +2038,14 @@ function CompassPermissionPill() {
   // Only iOS Safari exposes DeviceOrientationEvent.requestPermission. On
   // every other browser, _autoStartDeviceHeadingIfFree() already kicked
   // in inside useUserLocationPuck — nothing to prompt.
+  // …and only after the silent probe found no compass events, and only if
+  // the user hasn't recently dismissed/denied (remembered in localStorage).
   const needsPrompt = typeof DeviceOrientationEvent !== "undefined"
     && typeof DeviceOrientationEvent.requestPermission === "function"
     && perm !== "granted"
-    && perm !== "denied";
+    && perm !== "denied"
+    && _headingProbeFailed
+    && !_compassPromptSuppressed();
 
   if (!needsPrompt || count === 0 || dismissed) return null;
 
@@ -2001,7 +2061,7 @@ function CompassPermissionPill() {
         }}
         style={{ background: T.copper, color: T.white, border: "none", borderRadius: 999, padding: "5px 11px", fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, cursor: "pointer" }}
       >ENABLE</button>
-      <button onClick={() => setDismissed(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: 2 }}>
+      <button onClick={() => { setDismissed(true); try { localStorage.setItem(COMPASS_DISMISS_KEY, String(Date.now())); } catch (_) {} }} style={{ background: "none", border: "none", cursor: "pointer", padding: 2 }}>
         <X size={14} color={T.tertiary} />
       </button>
     </div>
