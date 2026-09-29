@@ -5111,6 +5111,7 @@ function GlobalSearch({
   forumUserReplies,
   forumViewCounts,
   feedItems,
+  blockedIds,
   allTripReports,
   allTripPlans,
   allBuilds,
@@ -5260,10 +5261,11 @@ function GlobalSearch({
     (serverUsers || []).forEach(u => pushUser(u));
     const matches = [];
     Object.values(byId).forEach(u => {
+      if (blockedIds && blockedIds.has(u.id)) return; // blocked users never surface in search
       if ((u.handle || "").toLowerCase().includes(q) || (u.name || "").toLowerCase().includes(q)) matches.push(u);
     });
     return matches;
-  }, [q, feedItems, allBuilds, forumThreadsBySub, serverUsers]);
+  }, [q, feedItems, allBuilds, forumThreadsBySub, serverUsers, blockedIds]);
 
   const totalResults = userResults.length + threadResults.length + tripResults.length + buildResults.length + spotResults.length + postResults.length;
 
@@ -25489,7 +25491,7 @@ function BugReportForm({ currentUserId, currentUserHandle, onClose, onSubmitted 
 }
 
 /* ─── PROFILE SCREEN (Own Profile) ─── */
-function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, initialUserBio, initialIsPublic, onViewUser, onLogout, userBuilds, onAddBuild, onUpdateBuild, onDeleteBuild, profilePic, onSetProfilePic, notifPrefs, onSetNotifPrefs, feedItems, onDeletePost, onEditPost, onUpdateConvoy, onGoToPost, myPoints: myPointsProp, onSaveProfile, followerCount, followingCount, convoyRsvps, onSubscribePush, onUnsubscribePush, renderFeedScopedTo, onViewBuild, savedRoutes, onUnsaveRoute, onStartNav, myTripPlans, onOpenTripPlan, onNewTripPlan, isAdmin, currentRole, savedTrips, onUnsaveTrip, onOpenSavedTrip, pendingScroll, onConsumePendingScroll, onOpenAdminDashboard, onOpenAmbassadorDashboard, onOpenContentPartnerDashboard, isContentPartner, isGravelGuide, onOpenFollowList }) {
+function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, initialUserBio, initialIsPublic, onViewUser, onLogout, onOpenBlockedUsers, userBuilds, onAddBuild, onUpdateBuild, onDeleteBuild, profilePic, onSetProfilePic, notifPrefs, onSetNotifPrefs, feedItems, onDeletePost, onEditPost, onUpdateConvoy, onGoToPost, myPoints: myPointsProp, onSaveProfile, followerCount, followingCount, convoyRsvps, onSubscribePush, onUnsubscribePush, renderFeedScopedTo, onViewBuild, savedRoutes, onUnsaveRoute, onStartNav, myTripPlans, onOpenTripPlan, onNewTripPlan, isAdmin, currentRole, savedTrips, onUnsaveTrip, onOpenSavedTrip, pendingScroll, onConsumePendingScroll, onOpenAdminDashboard, onOpenAmbassadorDashboard, onOpenContentPartnerDashboard, isContentPartner, isGravelGuide, onOpenFollowList }) {
   const [isPublic, setIsPublic] = useState(initialIsPublic == null ? true : !!initialIsPublic);
   const [activeTab, setActiveTab] = useState("builds");
   const [activeBuild, setActiveBuild] = useState(0);
@@ -25935,7 +25937,7 @@ function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, init
               </div>
               <ChevronRight size={16} color={T.tertiary} />
             </button>
-            <button style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: "none", border: "none", borderTop: `1px solid ${T.charcoal}`, cursor: "pointer", textAlign: "left" }}>
+            <button onClick={() => onOpenBlockedUsers && onOpenBlockedUsers()} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: "none", border: "none", borderTop: `1px solid ${T.charcoal}`, cursor: "pointer", textAlign: "left" }}>
               <Shield size={16} color={T.tertiary} />
               <div style={{ flex: 1 }}>
                 <span style={{ fontFamily: sans, fontSize: 13, color: T.white, display: "block" }}>Blocked Users</span>
@@ -26613,7 +26615,7 @@ function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, init
 }
 
 /* ─── OTHER USER PROFILE (Public view / Follow logic) ─── */
-function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, isAdmin, onAdminUpdateUserRole, onAdminDeclineAmbassador, onAdminToggleModerator, onAdminToggleBetaTester, onAdminToggleContentPartner, onAdminToggleGravelGuide, onAdminViewAsAmbassador, onReportContent, followingIds, onFollow, onUnfollow, fetchFollowCounts, renderFeedScopedTo, currentProfile, convoyRsvps, onViewBuild, allBuilds, onLoadAllBuilds, onlineUserIds, allTripPlans, allTripReports, onOpenTripPlan, onOpenFollowList }) {
+function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, isAdmin, onAdminUpdateUserRole, onAdminDeclineAmbassador, onAdminToggleModerator, onAdminToggleBetaTester, onAdminToggleContentPartner, onAdminToggleGravelGuide, onAdminViewAsAmbassador, onReportContent, followingIds, onFollow, onUnfollow, blockedIds, onBlock, onUnblock, fetchFollowCounts, renderFeedScopedTo, currentProfile, convoyRsvps, onViewBuild, allBuilds, onLoadAllBuilds, onlineUserIds, allTripPlans, allTripReports, onOpenTripPlan, onOpenFollowList }) {
   // Trigger the cross-user builds load — the builds tab below filters
   // allBuilds for the viewed user. Root is idempotent via a ref.
   useEffect(() => { if (typeof onLoadAllBuilds === "function") onLoadAllBuilds(); }, []);
@@ -26954,8 +26956,22 @@ function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, isAdmin,
           );
         })()}
 
+        {/* Blocked banner — replaces the action row for a user you've blocked.
+            App Review 1.2: block must be reachable and reversible. */}
+        {onUnblock && currentUserId && resolvedTargetId && blockedIds && blockedIds.has(resolvedTargetId) && (
+          <div style={{ margin: "0 16px 16px", padding: "12px 14px", borderRadius: 10, background: T.darkCard, border: `1px solid ${T.red}60`, display: "flex", alignItems: "center", gap: 10 }}>
+            <Shield size={16} color={T.red} style={{ flexShrink: 0 }} />
+            <div style={{ flex: 1, fontFamily: serif, fontSize: 12, color: T.white, lineHeight: 1.4 }}>You've blocked this user. Their posts, comments, and messages are hidden and they can't message you.</div>
+            <button onClick={() => onUnblock(resolvedTargetId)} style={{ background: "none", border: `1px solid ${T.tertiary}`, color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.8, padding: "6px 10px", borderRadius: 6, cursor: "pointer", flexShrink: 0 }}>UNBLOCK</button>
+          </div>
+        )}
         {/* Follow + Message Buttons */}
         <div style={{ display: "flex", justifyContent: "center", gap: 10, marginBottom: 16 }}>
+          {onBlock && currentUserId && resolvedTargetId && resolvedTargetId !== currentUserId && !(blockedIds && blockedIds.has(resolvedTargetId)) && (
+            <button onClick={() => { if (typeof confirm !== "function" || confirm(`Block @${(p.handle || "").replace(/^@/, "") || "this user"}? You won't see their posts, comments, or messages, and they can't message you. You can unblock later in Profile → Blocked Users.`)) onBlock(resolvedTargetId); }} title="Block this user" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 10, borderRadius: 8, cursor: "pointer", background: T.darkCard, border: `1px solid ${T.red}60`, color: T.red }}>
+              <Shield size={14} />
+            </button>
+          )}
           <button onClick={handleFollow} disabled={!canFollow} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "10px 24px", borderRadius: 8, cursor: canFollow ? "pointer" : "not-allowed", fontFamily: sans, fontSize: 12, fontWeight: 600, letterSpacing: 1, border: "none", transition: "all 0.2s",
             background: !canFollow ? T.darkCard : isFollowing ? T.darkCard : T.red,
             color: !canFollow ? T.tertiary : isFollowing ? T.green : T.white,
@@ -38868,6 +38884,43 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
    enter (guarantees a DM-able, de-duplicated entrant). Guests get a
    create-account CTA that prefills signup; signed-in users add a phone +
    submit (one entry per account, enforced by unique(event,user)). */
+/* ─── Blocked Users list (Profile → Settings → Blocked Users) ─────────────
+   App Review 1.2: blocking must be reversible from somewhere findable. */
+function BlockedUsersOverlay({ blockedIds, fetchProfiles, onUnblock, onViewUser, onClose }) {
+  const [rows, setRows] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetchProfiles().then(r => { if (!cancelled) setRows(r || []); }).catch(() => { if (!cancelled) setRows([]); });
+    return () => { cancelled = true; };
+  }, [blockedIds && blockedIds.size]);
+  const list = (rows || []).filter(r => blockedIds && blockedIds.has(r.id));
+  return (
+    <div style={{ position: "fixed", inset: 0, background: T.darkBg, zIndex: 1000, display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 16px", paddingTop: "max(14px, env(safe-area-inset-top, 0px))", borderBottom: `1px solid ${T.charcoal}`, flexShrink: 0 }}>
+        <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex" }}><ChevronLeft size={22} color={T.white} strokeWidth={1.5} /></button>
+        <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.8 }}>BLOCKED USERS</span>
+      </div>
+      <div className="th-scroll" style={{ flex: 1, overflowY: "auto", padding: 16 }}>
+        <div style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.5, marginBottom: 14 }}>People you block can't message you, and their posts, comments, and map pins are hidden from you. They aren't notified.</div>
+        {rows === null ? <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>Loading…</div>
+          : list.length === 0 ? <div style={{ fontFamily: sans, fontSize: 12, color: T.tertiary, textAlign: "center", padding: "32px 0" }}>You haven't blocked anyone.</div>
+          : list.map(u => (
+            <div key={u.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: `1px solid ${T.charcoal}` }}>
+              <div onClick={() => onViewUser && onViewUser(u.id)} style={{ width: 36, height: 36, borderRadius: "50%", background: T.charcoal, overflow: "hidden", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+                {u.avatar_url ? <img src={txImg(u.avatar_url, 96)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontFamily: sans, fontSize: 13, fontWeight: 700, color: T.white }}>{((u.full_name || u.handle || "?")[0] || "?").toUpperCase()}</span>}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.full_name || u.handle || "User"}</div>
+                {u.handle && <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>@{u.handle}</div>}
+              </div>
+              <button onClick={() => onUnblock(u.id)} style={{ background: "none", border: `1px solid ${T.tertiary}`, color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.8, padding: "6px 10px", borderRadius: 6, cursor: "pointer", flexShrink: 0 }}>UNBLOCK</button>
+            </div>
+          ))}
+      </div>
+    </div>
+  );
+}
+
 /* ─── Official Rules (sweepstakes / contest) ───────────────────────────────
    App Review 5.3.3 / 5.3.4: any prize promotion must present its official
    rules in-app, be sponsored by the developer (not Apple), and state that
@@ -46433,7 +46486,7 @@ const dmConversations = [
   },
 ];
 
-function DMScreen({ onClose, onViewUser, initialConvId, initialMessage, initialSharedPost, conversations, currentUserId, onSendMessage, onMarkRead, onLoadMessages, onSearchUsers, onCreateGroup, onOpenPost, onRsvpConvoy, convoyRsvps, onLeaveConversation, onUploadError, onlineUserIds, dmMessageReactions, onSetDmMessageReaction, onActiveConvChange, onDemoProposalSelectSlot, onDemoProposalLockIn, onDemoProposalViewMap }) {
+function DMScreen({ onClose, onViewUser, initialConvId, initialMessage, initialSharedPost, conversations, currentUserId, onSendMessage, onMarkRead, onLoadMessages, onSearchUsers, onCreateGroup, onOpenPost, onRsvpConvoy, convoyRsvps, onLeaveConversation, onBlockUser, onUploadError, onlineUserIds, dmMessageReactions, onSetDmMessageReaction, onActiveConvChange, onDemoProposalSelectSlot, onDemoProposalLockIn, onDemoProposalViewMap }) {
   const [view, setView] = useState(initialConvId ? "chat" : "inbox"); // "inbox" | "chat" | "new"
   const [activeConvId, setActiveConvId] = useState(initialConvId || null);
   // Always derive the active convo from the source-of-truth `conversations`
@@ -46755,6 +46808,12 @@ function DMScreen({ onClose, onViewUser, initialConvId, initialMessage, initialS
                       <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, display: "block" }}>{p.fullName}{isMe && <span style={{ color: T.tertiary, fontWeight: 400, marginLeft: 6 }}>· you</span>}</span>
                       {p.handle && <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>@{p.handle}</span>}
                     </div>
+                    {/* Block from inside a conversation (App Review 1.2). Direct
+                        convos disappear from the inbox on block; in groups
+                        their messages are stripped. */}
+                    {!isMe && onBlockUser && (
+                      <button onClick={(e) => { e.stopPropagation(); if (typeof confirm !== "function" || confirm(`Block ${p.fullName || (p.handle ? "@" + p.handle : "this user")}? You won't see their messages and they can't message you.`)) { setParticipantsExpanded(false); if (activeConvo.type === "direct") { setView("inbox"); setActiveConvId(null); } onBlockUser(p.userId); } }} title="Block" style={{ background: "none", border: `1px solid ${T.red}50`, color: T.red, fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, padding: "4px 8px", borderRadius: 4, cursor: "pointer", flexShrink: 0 }}>BLOCK</button>
+                    )}
                   </div>
                 );
               })}
@@ -49087,7 +49146,8 @@ export default function Trailhead() {
     Promise.all([
       supabase.from("follows").select("following_id").eq("follower_id", uid),
       supabase.from("follows").select("*", { count: "exact", head: true }).eq("following_id", uid),
-    ]).then(([outRes, fcRes]) => {
+      supabase.from("user_blocks").select("blocked_id").eq("blocker_id", uid),
+    ]).then(([outRes, fcRes, blRes]) => {
       if (outRes.error) console.error("[hydrate] follows out fetch error", outRes.error);
       if (fcRes.error) console.error("[hydrate] follower count fetch error", fcRes.error);
       if (Array.isArray(outRes.data)) {
@@ -49095,6 +49155,9 @@ export default function Trailhead() {
         setMyFollowingCount(outRes.data.length);
       }
       if (typeof fcRes.count === "number") setMyFollowerCount(fcRes.count);
+      // Blocked users — tolerate a missing table (migration not applied yet).
+      if (blRes && blRes.error) console.warn("[hydrate] user_blocks fetch error", blRes.error.message);
+      else if (blRes && Array.isArray(blRes.data)) setBlockedIds(new Set(blRes.data.map(r => r.blocked_id)));
     }).catch(e => console.error("[hydrate] follows fetch failed", e));
 
     // Engagement hydrate — likes, comments, comment likes for the loaded
@@ -49424,6 +49487,7 @@ export default function Trailhead() {
         setTripAuthors({});
         setFeedItems([]);
         setFollowingIds(new Set());
+        setBlockedIds(new Set());
         setMyFollowerCount(0);
         setMyFollowingCount(0);
         setDmConvos([]);
@@ -49451,6 +49515,13 @@ export default function Trailhead() {
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications", filter: "user_id=eq." + uid }, (payload) => {
         const bell = dbNotifToBell(payload.new);
         if (bell) setBellNotifs(prev => [bell, ...prev]);
+      })
+      // Block list stays in sync across the user's devices.
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "user_blocks", filter: "blocker_id=eq." + uid }, (payload) => {
+        const id = payload.new && payload.new.blocked_id; if (id) setBlockedIds(prev => { const n = new Set(prev); n.add(id); return n; });
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "user_blocks", filter: "blocker_id=eq." + uid }, (payload) => {
+        const id = payload.old && payload.old.blocked_id; if (id) setBlockedIds(prev => { const n = new Set(prev); n.delete(id); return n; });
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -51684,6 +51755,14 @@ export default function Trailhead() {
       document.querySelectorAll("[data-th-admin-dots]").forEach(i => { try { delete i.dataset.thAdminDots; } catch {} });
     };
   }, [isAdmin]);
+  // ─── Blocked users (App Review 1.2 — UGC apps must let users block) ────
+  // Set of uuids the signed-in user has blocked. Declared up here (before any
+  // memo that reads it) to avoid a TDZ on first render. Hydrated with the
+  // follow graph; mutated by blockUser/unblockUser; consumed by the
+  // visible* memos below so blocked people vanish from feed, comments,
+  // forum, DMs, map pins, search, and the bell in one place.
+  const [blockedIds, setBlockedIds] = useState(new Set());
+  const [showBlockedUsers, setShowBlockedUsers] = useState(false);
   const [feedItems, setFeedItems] = useState([]);
   // Ref mirror so mutating helpers (updatePost, onRsvpConvoy, etc.) can read
   // the latest feed state without closing over a stale snapshot.
@@ -51905,8 +51984,9 @@ export default function Trailhead() {
     for (const s of pendingWriteSpots) {
       if (s && s.id != null && !seen.has(s.id)) { seen.add(s.id); out.push(s); }
     }
-    return out;
-  }, [userCampingSpots, viewportCampingSpots, offlineContent, pendingWriteSpots]);
+    // Hide spots added by people the viewer has blocked (raw rows → user_id).
+    return blockedIds.size ? out.filter(s => !(s.user_id && blockedIds.has(s.user_id))) : out;
+  }, [userCampingSpots, viewportCampingSpots, offlineContent, pendingWriteSpots, blockedIds]);
   // Single setter shim so legacy mutators that called setCampingSpots(prev => ...)
   // still work — but only patch the user-owned slice (the viewport slice is
   // owned by the bbox fetcher). For optimistic adds + edits + deletes that's
@@ -52149,15 +52229,17 @@ export default function Trailhead() {
   const allTripReports = useMemo(() => {
     const reportRows = (tripReports || []).filter(t => !t.kind || t.kind === "report");
     const savedReports = (savedTripRows || []).filter(t => !t.kind || t.kind === "report");
-    return mergeTripSlices(reportRows, viewportTripReports, savedReports, (offlineContent.reports || []));
-  }, [tripReports, viewportTripReports, savedTripRows, offlineContent]);
+    const merged = mergeTripSlices(reportRows, viewportTripReports, savedReports, (offlineContent.reports || []));
+    return blockedIds.size ? merged.filter(t => !((t.user_id || t.userId) && blockedIds.has(t.user_id || t.userId))) : merged;
+  }, [tripReports, viewportTripReports, savedTripRows, offlineContent, blockedIds]);
   // Plans slice — owner sees own drafts + published; everyone sees published
   // PUBLIC plans via the bbox fetcher. Editor + planner tab read from this.
   const allTripPlans = useMemo(() => {
     const planRows = (tripReports || []).filter(t => t.kind === "plan");
     const savedPlans = (savedTripRows || []).filter(t => t.kind === "plan");
-    return mergeTripSlices(planRows, viewportTripPlans, savedPlans, (offlineContent.plans || []));
-  }, [tripReports, viewportTripPlans, savedTripRows, offlineContent]);
+    const merged = mergeTripSlices(planRows, viewportTripPlans, savedPlans, (offlineContent.plans || []));
+    return blockedIds.size ? merged.filter(t => !((t.user_id || t.userId) && blockedIds.has(t.user_id || t.userId))) : merged;
+  }, [tripReports, viewportTripPlans, savedTripRows, offlineContent, blockedIds]);
   // Threaded view counts derived from the live thread rows — fed into the
   // feed FORUM card + GlobalSearch result rows so their "X views" text
   // matches the source of truth without prop drilling the whole array.
@@ -52233,6 +52315,7 @@ export default function Trailhead() {
   const forumThreadsBySub = useMemo(() => {
     const out = {};
     (forumThreads || []).forEach(t => {
+      if (t.userId && blockedIds.has(t.userId)) return; // blocked author → hidden
       const subInfo = t.subcategorySlug ? forumSubBySlug[t.subcategorySlug] : null;
       const k = (subInfo && subInfo.name) || t.subName || "";
       if (!k) return;
@@ -52240,7 +52323,20 @@ export default function Trailhead() {
       out[k].push(t);
     });
     return out;
-  }, [forumThreads, forumSubBySlug]);
+  }, [forumThreads, forumSubBySlug, blockedIds]);
+  // ─── Viewer-visible slices (blocked users removed) ──────────────────────
+  // One memo per shape the screens consume; each is a cheap identity
+  // pass-through when nobody is blocked so nothing re-renders needlessly.
+  const visibleFeedItems = useMemo(() => blockedIds.size ? feedItems.filter(i => !(i.userId && blockedIds.has(i.userId))) : feedItems, [feedItems, blockedIds]);
+  const filterCommentMap = (map) => {
+    if (!blockedIds.size || !map) return map;
+    const out = {};
+    Object.keys(map).forEach(k => { out[k] = (map[k] || []).filter(c => !(c.userId && blockedIds.has(c.userId))); });
+    return out;
+  };
+  const visiblePostComments = useMemo(() => filterCommentMap(postComments), [postComments, blockedIds]);
+  const visibleBuildComments = useMemo(() => filterCommentMap(buildComments), [buildComments, blockedIds]);
+  const visibleForumReplies = useMemo(() => filterCommentMap(forumReplies), [forumReplies, blockedIds]);
   // Trip detail navigation effects — placed AFTER allTripReports so the
   // dep arrays don't TDZ-crash on the first render.
   //
@@ -55454,6 +55550,15 @@ export default function Trailhead() {
   const [dmSharedPost, setDmSharedPost] = useState(null); // { title, user, initial, image }
 
   const [bellNotifs, setBellNotifs] = useState([]);
+  // Blocked users: hide their direct conversations entirely, strip their
+  // messages from groups, and drop their notifications from the bell.
+  const visibleDmConvos = useMemo(() => {
+    if (!blockedIds.size) return dmConvos;
+    return dmConvos
+      .filter(c => !(c.type === "direct" && (c.participants || []).some(p => p.userId && blockedIds.has(p.userId))))
+      .map(c => (c.messages && c.messages.length) ? { ...c, messages: c.messages.filter(m => !(m.senderId && blockedIds.has(m.senderId))) } : c);
+  }, [dmConvos, blockedIds]);
+  const visibleBellNotifs = useMemo(() => blockedIds.size ? bellNotifs.filter(n => !(n.actorId && blockedIds.has(n.actorId))) : bellNotifs, [bellNotifs, blockedIds]);
   // Convoy RSVPs — per-post map of responder user_id → { status, name, handle, avatarUrl, initial }.
   // Populated at hydrate by joining convoy_rsvps with profiles, kept in sync
   // by the convoy_rsvps realtime subscription, and mutated optimistically by
@@ -56585,6 +56690,58 @@ export default function Trailhead() {
   // relying on PostgREST FK aliasing which is fragile if the FK names
   // change. Returns an array of {id, full_name, handle, avatar_url}.
   // Used by the FollowListOverlay opened from any profile's stats row.
+  // ─── Block / unblock ────────────────────────────────────────────────────
+  // Optimistic like follow. Blocking also unfollows them and drops any
+  // direct conversation from the inbox locally (the DB trigger stops them
+  // messaging you; the visible* memos hide everything else of theirs).
+  const blockUser = async (targetUserId) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid || !targetUserId || targetUserId === uid) return { error: "Invalid user" };
+    setBlockedIds(prev => { const n = new Set(prev); n.add(targetUserId); return n; });
+    setDmConvos(prev => prev.filter(c => !(c.type === "direct" && (c.participants || []).some(p => p.userId === targetUserId))));
+    try {
+      const { error } = await supabase.from("user_blocks").insert({ blocker_id: uid, blocked_id: targetUserId });
+      if (error && !/duplicate|unique/i.test(error.message || "")) {
+        console.error("[block] insert failed", error);
+        setBlockedIds(prev => { const n = new Set(prev); n.delete(targetUserId); return n; });
+        showErrorToast(`Couldn't block: ${error.message || error.code}`);
+        return { error: error.message };
+      }
+      if (followingIds.has(targetUserId)) { try { await unfollowUser(targetUserId); } catch (_) {} }
+      return { ok: true };
+    } catch (e) {
+      setBlockedIds(prev => { const n = new Set(prev); n.delete(targetUserId); return n; });
+      return { error: (e && e.message) || "Network error" };
+    }
+  };
+  const unblockUser = async (targetUserId) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid || !targetUserId) return { error: "Invalid user" };
+    setBlockedIds(prev => { const n = new Set(prev); n.delete(targetUserId); return n; });
+    try {
+      const { error } = await supabase.from("user_blocks").delete().eq("blocker_id", uid).eq("blocked_id", targetUserId);
+      if (error) {
+        console.error("[unblock] delete failed", error);
+        setBlockedIds(prev => { const n = new Set(prev); n.add(targetUserId); return n; });
+        return { error: error.message };
+      }
+      return { ok: true };
+    } catch (e) {
+      setBlockedIds(prev => { const n = new Set(prev); n.add(targetUserId); return n; });
+      return { error: (e && e.message) || "Network error" };
+    }
+  };
+  // Profile rows for the blocked list (handle/name/avatar), fetched on open.
+  const fetchBlockedProfiles = async () => {
+    const ids = Array.from(blockedIds);
+    if (!ids.length) return [];
+    try {
+      const { data, error } = await supabase.from("profiles").select("id, handle, full_name, avatar_url").in("id", ids);
+      if (error) { console.error("[block] profiles fetch", error); return []; }
+      return data || [];
+    } catch (_) { return []; }
+  };
+
   const fetchFollowList = async (targetUserId, kind) => {
     if (!targetUserId || (kind !== "followers" && kind !== "following")) return [];
     try {
@@ -59943,12 +60100,12 @@ export default function Trailhead() {
       tripAuthors={tripAuthors}
       onNewTripReport={() => setShowTripCreator(true)}
       onOpenTripDraft={(id) => setEditingTripId(id)}
-      feedItems={items != null ? items : feedItems}
+      feedItems={items != null ? items : visibleFeedItems}
       onUpdateFeed={requireAuth((items2) => setFeedItems(items2))}
       onUpdatePost={requireAuth(updatePost)}
       likedPostIds={likedPostIds}
       onTogglePostLike={requireAuth(togglePostLike)}
-      postComments={postComments}
+      postComments={visiblePostComments}
       onAddComment={requireAuth(addComment)}
       onDeleteComment={requireAuth(deleteComment)}
       likedCommentIds={likedCommentIds}
@@ -60252,7 +60409,7 @@ export default function Trailhead() {
         onOpenDM={(user, prefill, shared) => openDM(user, prefill, shared)}
         onRespondToRecovery={requireAuth(respondToRecovery)}
         dmUnread={dmUnreadCount}
-        bellNotifs={bellNotifs}
+        bellNotifs={visibleBellNotifs}
         onDismissNotif={(id) => { setBellNotifs(prev => prev.filter(n => n.id !== id)); supabase.from("notifications").delete().eq("id", id).then(({ error }) => { if (error) console.error("[notif] dismiss error", error); }); }}
         onClearNotifs={() => { const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id; setBellNotifs([]); if (uid) supabase.from("notifications").delete().eq("user_id", uid).then(({ error }) => { if (error) console.error("[notif] clear all error", error); }); }}
         profilePic={profilePic}
@@ -60276,9 +60433,9 @@ export default function Trailhead() {
           />
         ) : isProfile ? (
           isOtherProfile ? (
-            <OtherProfileScreen userId={profileStack[1]} onBack={goBack} onMessage={(user) => openDM(user)} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} onAdminUpdateUserRole={adminUpdateUserRole} onAdminDeclineAmbassador={adminDeclineAmbassadorRequest} onAdminToggleModerator={adminToggleUserModerator} onAdminToggleBetaTester={adminToggleUserBetaTester} onAdminToggleContentPartner={adminToggleUserContentPartner} onAdminToggleGravelGuide={adminToggleUserGravelGuide} onAdminViewAsAmbassador={adminViewAsAmbassador} onReportContent={requireAuth(openContentReport)} followingIds={followingIds} onFollow={requireAuth(followUser)} onUnfollow={requireAuth(unfollowUser)} fetchFollowCounts={fetchFollowCounts} onOpenFollowList={requireAuth(openFollowList)} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} allBuilds={allBuilds} onLoadAllBuilds={loadAllBuildsOnce} onlineUserIds={onlineUserIds} allTripPlans={allTripPlans} allTripReports={allTripReports} onOpenTripPlan={(id) => setDetailTripId(id)} />
+            <OtherProfileScreen userId={profileStack[1]} onBack={goBack} onMessage={(user) => openDM(user)} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} onAdminUpdateUserRole={adminUpdateUserRole} onAdminDeclineAmbassador={adminDeclineAmbassadorRequest} onAdminToggleModerator={adminToggleUserModerator} onAdminToggleBetaTester={adminToggleUserBetaTester} onAdminToggleContentPartner={adminToggleUserContentPartner} onAdminToggleGravelGuide={adminToggleUserGravelGuide} onAdminViewAsAmbassador={adminViewAsAmbassador} onReportContent={requireAuth(openContentReport)} followingIds={followingIds} onFollow={requireAuth(followUser)} onUnfollow={requireAuth(unfollowUser)} blockedIds={blockedIds} onBlock={requireAuth(blockUser)} onUnblock={requireAuth(unblockUser)} fetchFollowCounts={fetchFollowCounts} onOpenFollowList={requireAuth(openFollowList)} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} allBuilds={allBuilds} onLoadAllBuilds={loadAllBuildsOnce} onlineUserIds={onlineUserIds} allTripPlans={allTripPlans} allTripReports={allTripReports} onOpenTripPlan={(id) => setDetailTripId(id)} />
           ) : (
-            <ProfileScreen onOpenFollowList={openFollowList} onOpenAdminDashboard={() => { setProfileStack([]); setScreen("admin"); if (typeof window !== "undefined") window.history.pushState({}, "", "/admin"); }} onOpenAmbassadorDashboard={() => { setProfileStack([]); setScreen("ambassador"); }} onOpenContentPartnerDashboard={() => setShowContentPartnerDashboard(true)} isContentPartner={isContentPartner} isGravelGuide={isGravelGuide} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} currentRole={currentRole} convoyRsvps={convoyRsvps} followerCount={myFollowerCount} followingCount={myFollowingCount} onSubscribePush={subscribeToPush} onUnsubscribePush={unsubscribeFromPush} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} savedRoutes={savedRoutes} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} savedTrips={(() => { const ids = savedTripIds || {}; const pool = [...(allTripReports || []), ...(allTripPlans || [])]; const seen = {}; const out = []; pool.forEach(t => { if (t && t.id && ids[t.id] && !seen[t.id]) { seen[t.id] = true; out.push(t); } }); return out; })()} onUnsaveTrip={requireAuth(toggleSaveTrip)} onOpenSavedTrip={(t) => { if (!t) return; if (t.slug) setPendingTripNav(t.slug); else setDetailTripId(t.id); }} pendingScroll={pendingProfileScroll} onConsumePendingScroll={() => setPendingProfileScroll(null)} onStartNav={(route) => setActiveNavRoute(route)} myTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} onNewTripPlan={requireAuth(() => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("routes"); enterPlanBuilder(); })} initialUserName={(currentProfile && currentProfile.full_name) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name) || null} initialUserHandle={(currentProfile && currentProfile.handle) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle) || null} initialUserBio={currentProfile ? currentProfile.bio : null} initialIsPublic={currentProfile ? currentProfile.is_public : null} onSaveProfile={saveProfile} onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={deleteBuild} profilePic={profilePic} onSetProfilePic={requestProfilePicCrop} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => deletePost(id)} onEditPost={(id, newText) => updatePost(id, { title: newText })} onUpdateConvoy={(convoyId, updates) => {
+            <ProfileScreen onOpenBlockedUsers={() => setShowBlockedUsers(true)} onOpenFollowList={openFollowList} onOpenAdminDashboard={() => { setProfileStack([]); setScreen("admin"); if (typeof window !== "undefined") window.history.pushState({}, "", "/admin"); }} onOpenAmbassadorDashboard={() => { setProfileStack([]); setScreen("ambassador"); }} onOpenContentPartnerDashboard={() => setShowContentPartnerDashboard(true)} isContentPartner={isContentPartner} isGravelGuide={isGravelGuide} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} currentRole={currentRole} convoyRsvps={convoyRsvps} followerCount={myFollowerCount} followingCount={myFollowingCount} onSubscribePush={subscribeToPush} onUnsubscribePush={unsubscribeFromPush} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} savedRoutes={savedRoutes} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} savedTrips={(() => { const ids = savedTripIds || {}; const pool = [...(allTripReports || []), ...(allTripPlans || [])]; const seen = {}; const out = []; pool.forEach(t => { if (t && t.id && ids[t.id] && !seen[t.id]) { seen[t.id] = true; out.push(t); } }); return out; })()} onUnsaveTrip={requireAuth(toggleSaveTrip)} onOpenSavedTrip={(t) => { if (!t) return; if (t.slug) setPendingTripNav(t.slug); else setDetailTripId(t.id); }} pendingScroll={pendingProfileScroll} onConsumePendingScroll={() => setPendingProfileScroll(null)} onStartNav={(route) => setActiveNavRoute(route)} myTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} onNewTripPlan={requireAuth(() => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("routes"); enterPlanBuilder(); })} initialUserName={(currentProfile && currentProfile.full_name) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name) || null} initialUserHandle={(currentProfile && currentProfile.handle) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle) || null} initialUserBio={currentProfile ? currentProfile.bio : null} initialIsPublic={currentProfile ? currentProfile.is_public : null} onSaveProfile={saveProfile} onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={deleteBuild} profilePic={profilePic} onSetProfilePic={requestProfilePicCrop} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => deletePost(id)} onEditPost={(id, newText) => updatePost(id, { title: newText })} onUpdateConvoy={(convoyId, updates) => {
               updatePost(convoyId, updates);
               // DM going/maybe responders that the convoy was updated.
               const convoy = feedItemsRef.current.find(p => p.id === convoyId);
@@ -60294,9 +60451,9 @@ export default function Trailhead() {
           <>
             {isGuest && screen !== "routes" && <GuestBanner onSignIn={() => setShowGuestPrompt(true)} />}
             {screen === "feed" && renderFeedScopedTo({ hideFilters: false })}
-            {screen === "forum" && <ForumScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} isAdmin={isAdmin} isModerator={isModerator} isAmbassador={isAmbassador} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentUserName={(currentProfile && currentProfile.full_name) || "You"} currentUserHandle={(currentProfile && currentProfile.handle) || ""} currentUserAvatar={profilePic || (currentProfile && currentProfile.avatar_url) || null} pendingThread={pendingThread} onPendingHandled={() => setPendingThread(null)} pendingForumSubNav={pendingForumSubNav} onConsumePendingForumSubNav={() => setPendingForumSubNav(null)} pendingForumCatNav={pendingForumCatNav} onConsumePendingForumCatNav={() => setPendingForumCatNav(null)} onAddNotification={requireAuth(addNotification)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onOpenShareCompose={openShareCompose} onOpenShareIntent={openShareIntent} onAddFeedPost={requireAuth((post) => addPost(post))} threadsBySub={forumThreadsBySub} repliesByThread={forumReplies} onAddForumThread={requireAuth(addForumThread)} onUpdateForumThread={requireAuth(updateForumThread)} onDeleteForumThread={requireAuth(deleteForumThreadRouted)} onAddForumReply={requireAuth(addForumReply)} onDeleteForumReply={requireAuth(deleteForumReplyRouted)} onLoadForumReplies={loadForumReplies} likedForumThreadIds={likedForumThreadIds} forumThreadLikeCounts={forumThreadLikeCounts} onToggleForumThreadLike={requireAuth(toggleForumThreadLike)} likedForumReplyIds={likedForumReplyIds} forumReplyLikeCounts={forumReplyLikeCounts} onToggleForumReplyLike={requireAuth(toggleForumReplyLike)} onBumpForumThreadView={bumpForumThreadView} onAwardPoints={awardPoints} categoriesList={forumCategoriesList} onAddCategory={requireAuth(addForumCategory)} onUpdateCategory={requireAuth(updateForumCategory)} onDeleteCategory={requireAuth(deleteForumCategory)} onAddSubcategory={requireAuth(addForumSubcategory)} onUpdateSubcategory={requireAuth(updateForumSubcategory)} onDeleteSubcategory={requireAuth(deleteForumSubcategory)} onReportContent={requireAuth(openContentReport)} onViewUser={openUserProfile} onNotifyMentions={notifyMentions} />}
+            {screen === "forum" && <ForumScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} isAdmin={isAdmin} isModerator={isModerator} isAmbassador={isAmbassador} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentUserName={(currentProfile && currentProfile.full_name) || "You"} currentUserHandle={(currentProfile && currentProfile.handle) || ""} currentUserAvatar={profilePic || (currentProfile && currentProfile.avatar_url) || null} pendingThread={pendingThread} onPendingHandled={() => setPendingThread(null)} pendingForumSubNav={pendingForumSubNav} onConsumePendingForumSubNav={() => setPendingForumSubNav(null)} pendingForumCatNav={pendingForumCatNav} onConsumePendingForumCatNav={() => setPendingForumCatNav(null)} onAddNotification={requireAuth(addNotification)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onOpenShareCompose={openShareCompose} onOpenShareIntent={openShareIntent} onAddFeedPost={requireAuth((post) => addPost(post))} threadsBySub={forumThreadsBySub} repliesByThread={visibleForumReplies} onAddForumThread={requireAuth(addForumThread)} onUpdateForumThread={requireAuth(updateForumThread)} onDeleteForumThread={requireAuth(deleteForumThreadRouted)} onAddForumReply={requireAuth(addForumReply)} onDeleteForumReply={requireAuth(deleteForumReplyRouted)} onLoadForumReplies={loadForumReplies} likedForumThreadIds={likedForumThreadIds} forumThreadLikeCounts={forumThreadLikeCounts} onToggleForumThreadLike={requireAuth(toggleForumThreadLike)} likedForumReplyIds={likedForumReplyIds} forumReplyLikeCounts={forumReplyLikeCounts} onToggleForumReplyLike={requireAuth(toggleForumReplyLike)} onBumpForumThreadView={bumpForumThreadView} onAwardPoints={awardPoints} categoriesList={forumCategoriesList} onAddCategory={requireAuth(addForumCategory)} onUpdateCategory={requireAuth(updateForumCategory)} onDeleteCategory={requireAuth(deleteForumCategory)} onAddSubcategory={requireAuth(addForumSubcategory)} onUpdateSubcategory={requireAuth(updateForumSubcategory)} onDeleteSubcategory={requireAuth(deleteForumSubcategory)} onReportContent={requireAuth(openContentReport)} onViewUser={openUserProfile} onNotifyMentions={notifyMentions} />}
             {screen === "routes" && <RoutesScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} campingSpots={campingSpots} showCampingSpots={showCampingSpots} setShowCampingSpots={setShowCampingSpots} showPublicLands={showPublicLands} setShowPublicLands={setShowPublicLands} showSatellite={showSatellite} setShowSatellite={setShowSatellite} onOpenShareIntent={openShareIntent} tripAuthors={tripAuthors} onLoadRouteData={loadTripRouteData} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} tripReports={allTripReports} showTripReports={showTripReports} setShowTripReports={setShowTripReports} tripPlans={allTripPlans} showTripPlans={showTripPlans} setShowTripPlans={setShowTripPlans} onMapViewportChange={onMapViewportChange} onAddCampingSpot={requireAuth(addCampingSpot)} onUpdateCampingSpot={requireAuth(updateCampingSpot)} onDeleteCampingSpot={requireAuth(deleteCampingSpot)} onAddPhotoToSpot={requireAuth(addPhotoToSpot)} onDeletePhotoFromSpot={requireAuth(deletePhotoFromSpot)} onLoadCampingSpotPhotos={loadCampingSpotPhotos} onLoadCampingSpotElevation={loadCampingSpotElevation} spotAuthors={spotAuthors} onViewUser={openUserProfile} onStartNav={(route) => setActiveNavRoute(route)} onOpenTripDetail={(slug) => setPendingTripNav(slug)} onOpenTripPlanDraft={(id) => setDetailTripId(id)} onNewTripReport={() => setTripCreatorMode("report")} onNewTripPlan={() => requireAuth(() => enterPlanBuilder())()} pendingSpotNav={pendingSpotNav} onConsumePendingSpotNav={() => setPendingSpotNav(null)} pendingHQOpen={pendingHQOpen} onConsumePendingHQOpen={() => setPendingHQOpen(false)} pendingPlanNav={pendingPlanNav} onConsumePendingPlanNav={() => setPendingPlanNav(null)} onShareCampingSpotToFeed={requireAuth(shareCampingSpotToFeed)} onShareHQToFeed={requireAuth(shareHQToFeed)} onShareTripToFeed={requireAuth(shareTripToFeed)} onShareTripPlanToFeed={requireAuth(shareTripPlanToFeed)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onShowToast={showErrorToast} onOpenShareCompose={openShareCompose} savedTripIds={savedTripIds} onToggleSaveTrip={requireAuth(toggleSaveTrip)} onOfflineContentUpdated={reloadOfflineContent} planBuilder={{ active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, editingId: planBuilderEditingId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen, accent: (planBuilderEditingId && (tripReports || []).find(t => t.id === planBuilderEditingId && t.kind === "report")) ? T.purple : T.copper }} gearDropPinBuilder={{ active: gearDropPinBuilderActive, dropId: gearDropPinBuilderDropId, pins: gearDropPinBuilderPins, saving: gearDropPinBuilderSaving, mode: gearDropPinBuilderMode, addPin: addGearDropPin, removePin: removeGearDropPin, movePin: moveGearDropPin, updatePin: updateGearDropPin, commit: commitGearDropPinBuilder, exit: exitGearDropPinBuilder }} />}
-            {screen === "builds" && <BuildsScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onViewUser={openUserProfile} userBuilds={userBuilds} allBuilds={allBuilds} onLoadAllBuilds={loadAllBuildsOnce} onLoadBuildById={loadBuildById} allBuildsLoaded={allBuildsLoaded} buildSaving={buildSaving} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} followingIds={followingIds} pendingBuildNav={pendingBuildNav} onConsumePendingBuildNav={() => setPendingBuildNav(null)} onAddBuild={requireAuth(addBuild)} userRoutes={userRoutes} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onOpenShareCompose={openShareCompose} onOpenShareIntent={openShareIntent} onUpdateBuild={requireAuth(updateBuild)} likedBuildIds={likedBuildIds} buildLikeCounts={buildLikeCounts} onToggleBuildLike={requireAuth(toggleBuildLike)} onDeleteBuild={requireAuth(deleteBuild)} onPostBuildToFeed={requireAuth((b, opts) => { const rawBd = b.buildData; const bd = scrubLocalPhotosFromBuildData(rawBd); const isLocalUrl = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:")); const rawHero = b.image || (rawBd && rawBd.mainPhotos && rawBd.mainPhotos[0] && rawBd.mainPhotos[0].url) || null; const cleanHero = isLocalUrl(rawHero) ? ((bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url) || null) : rawHero; const heroImg = isLocalUrl(cleanHero) ? null : cleanHero; const meName = (currentProfile && currentProfile.full_name) || "You"; const myUid = supabaseSession && supabaseSession.user && supabaseSession.user.id; const isReshare = b.userId && myUid && b.userId !== myUid; const ownerHandle = isReshare ? (b.handle || "").replace(/^@/, "") : null; const ownerName = isReshare ? (b.owner || null) : null; addPost({ id: "feedbuild_" + Date.now(), type: "BUILDS", user: meName, initial: meName.charAt(0).toUpperCase(), time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, subtitle: isReshare ? `Shared @${ownerHandle}'s build` : "Added a new build", vehicle: `${b.year} ${b.make} ${b.model}`, photoUrls: heroImg ? [heroImg] : undefined, image: heroImg, likes: 0, comments: 0, buildData: bd, buildRawId: b.rawId != null ? b.rawId : null, sharedFromOwnerHandle: ownerHandle, sharedFromOwnerName: ownerName, _skipBuildIdCol: isReshare }); awardPoints(POINTS.feedPost, "Build Shared"); })} buildComments={buildComments} onLoadBuildComments={loadBuildComments} onAddBuildComment={requireAuth(addBuildComment)} onDeleteBuildComment={deleteBuildComment} likedBuildCommentIds={likedBuildCommentIds} buildCommentLikeCounts={buildCommentLikeCounts} onToggleBuildCommentLike={requireAuth(toggleBuildCommentLike)} currentUserName={(currentProfile && currentProfile.full_name) || ""} currentUserHandle={(currentProfile && currentProfile.handle) ? "@" + currentProfile.handle : ""} currentUserAvatar={(currentProfile && currentProfile.avatar_url) || null} allTripReports={allTripReports} onNotifyMentions={notifyMentions} />}
+            {screen === "builds" && <BuildsScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onViewUser={openUserProfile} userBuilds={userBuilds} allBuilds={allBuilds} onLoadAllBuilds={loadAllBuildsOnce} onLoadBuildById={loadBuildById} allBuildsLoaded={allBuildsLoaded} buildSaving={buildSaving} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} followingIds={followingIds} pendingBuildNav={pendingBuildNav} onConsumePendingBuildNav={() => setPendingBuildNav(null)} onAddBuild={requireAuth(addBuild)} userRoutes={userRoutes} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onOpenShareCompose={openShareCompose} onOpenShareIntent={openShareIntent} onUpdateBuild={requireAuth(updateBuild)} likedBuildIds={likedBuildIds} buildLikeCounts={buildLikeCounts} onToggleBuildLike={requireAuth(toggleBuildLike)} onDeleteBuild={requireAuth(deleteBuild)} onPostBuildToFeed={requireAuth((b, opts) => { const rawBd = b.buildData; const bd = scrubLocalPhotosFromBuildData(rawBd); const isLocalUrl = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:")); const rawHero = b.image || (rawBd && rawBd.mainPhotos && rawBd.mainPhotos[0] && rawBd.mainPhotos[0].url) || null; const cleanHero = isLocalUrl(rawHero) ? ((bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url) || null) : rawHero; const heroImg = isLocalUrl(cleanHero) ? null : cleanHero; const meName = (currentProfile && currentProfile.full_name) || "You"; const myUid = supabaseSession && supabaseSession.user && supabaseSession.user.id; const isReshare = b.userId && myUid && b.userId !== myUid; const ownerHandle = isReshare ? (b.handle || "").replace(/^@/, "") : null; const ownerName = isReshare ? (b.owner || null) : null; addPost({ id: "feedbuild_" + Date.now(), type: "BUILDS", user: meName, initial: meName.charAt(0).toUpperCase(), time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, subtitle: isReshare ? `Shared @${ownerHandle}'s build` : "Added a new build", vehicle: `${b.year} ${b.make} ${b.model}`, photoUrls: heroImg ? [heroImg] : undefined, image: heroImg, likes: 0, comments: 0, buildData: bd, buildRawId: b.rawId != null ? b.rawId : null, sharedFromOwnerHandle: ownerHandle, sharedFromOwnerName: ownerName, _skipBuildIdCol: isReshare }); awardPoints(POINTS.feedPost, "Build Shared"); })} buildComments={visibleBuildComments} onLoadBuildComments={loadBuildComments} onAddBuildComment={requireAuth(addBuildComment)} onDeleteBuildComment={deleteBuildComment} likedBuildCommentIds={likedBuildCommentIds} buildCommentLikeCounts={buildCommentLikeCounts} onToggleBuildCommentLike={requireAuth(toggleBuildCommentLike)} currentUserName={(currentProfile && currentProfile.full_name) || ""} currentUserHandle={(currentProfile && currentProfile.handle) ? "@" + currentProfile.handle : ""} currentUserAvatar={(currentProfile && currentProfile.avatar_url) || null} allTripReports={allTripReports} onNotifyMentions={notifyMentions} />}
             {screen === "ambassador" && (isGuest
               ? <GuestGateScreen title="AMBASSADOR DASHBOARD REQUIRES AN ACCOUNT" subtitle="Sign in to view your ambassador code, commissions, and payouts." onSignIn={goToLoginFromGuest} />
               : <AmbassadorDashboardScreen
@@ -60783,7 +60940,7 @@ export default function Trailhead() {
               onViewUser={(handleOrId) => { setDetailConvoyId(null); openUserProfile(handleOrId); }}
               convoyRsvps={convoyRsvps}
               onRsvpConvoy={requireAuth((postId, status) => setConvoyRsvp(postId, status))}
-              postComments={postComments}
+              postComments={visiblePostComments}
               onAddComment={requireAuth(addComment)}
               onDeleteComment={requireAuth(deleteComment)}
               likedCommentIds={likedCommentIds}
@@ -60842,6 +60999,15 @@ export default function Trailhead() {
           target={moderatorHideTarget}
           onClose={() => setModeratorHideTarget(null)}
           onSubmit={submitModeratorHide}
+        />
+      )}
+      {showBlockedUsers && (
+        <BlockedUsersOverlay
+          blockedIds={blockedIds}
+          fetchProfiles={fetchBlockedProfiles}
+          onUnblock={unblockUser}
+          onViewUser={openUserProfile}
+          onClose={() => setShowBlockedUsers(false)}
         />
       )}
       {followListTarget && (
@@ -61202,7 +61368,8 @@ export default function Trailhead() {
           forumThreadsBySub={forumThreadsBySub}
           forumUserReplies={forumReplies}
           forumViewCounts={forumViewCountsByThreadId}
-          feedItems={feedItems}
+          feedItems={visibleFeedItems}
+          blockedIds={blockedIds}
           allTripReports={allTripReports}
           allTripPlans={allTripPlans}
           allBuilds={allBuilds}
@@ -61218,7 +61385,8 @@ export default function Trailhead() {
           initialConvId={dmInitialConvId}
           initialMessage={dmInitialMessage}
           initialSharedPost={dmSharedPost}
-          conversations={dmConvos}
+          conversations={visibleDmConvos}
+          onBlockUser={requireAuth(blockUser)}
           currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id}
           onSendMessage={(convId, body, payload) => { setActiveDmConvId(convId); return sendDmMessage(convId, body, payload); }}
           onMarkRead={(convId) => { setActiveDmConvId(convId); return markDmConvRead(convId); }}
