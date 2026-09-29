@@ -1736,6 +1736,7 @@ const COMPASS_DISMISS_TTL_MS = 7 * 24 * 3600 * 1000;
 const COMPASS_DENIED_TTL_MS = 30 * 24 * 3600 * 1000;
 let _headingProbeTimer = null;
 let _headingProbeFailed = false; // silent start produced no events → a prompt is warranted
+let _nativeGestureHookArmed = false; // native shell: one-shot tap hook that grants the compass silently
 const _persistCompass = (v) => { try { localStorage.setItem(COMPASS_PERM_KEY, v); localStorage.setItem(COMPASS_PERM_KEY + "_at", String(Date.now())); } catch (_) {} };
 const _clearStoredCompass = () => { try { localStorage.removeItem(COMPASS_PERM_KEY); localStorage.removeItem(COMPASS_PERM_KEY + "_at"); } catch (_) {} };
 try { if (typeof localStorage !== "undefined" && localStorage.getItem(COMPASS_PERM_KEY) === "granted") _deviceHeadingPermission = "granted"; } catch (_) {}
@@ -1862,6 +1863,29 @@ const _autoStartDeviceHeadingIfFree = () => {
   _startDeviceHeadingListener();
   if (_deviceHeadingValue !== null || _headingProbeTimer) return;
   if (typeof DeviceOrientationEvent.requestPermission !== "function") return; // no gate → nothing to prompt
+  // Native shell (Capacitor): the WKWebView delegate auto-grants
+  // requestPermission (no UI), but WebKit still insists the call happens
+  // inside a user gesture — and the grant doesn't survive a relaunch. So
+  // piggyback the user's NEXT tap (a pan's touchend counts) to make the call
+  // silently, once per launch. No pill, ever, on native.
+  if (typeof isNativePlatform === "function" && isNativePlatform()) {
+    if (!_nativeGestureHookArmed) {
+      _nativeGestureHookArmed = true;
+      const onGesture = () => {
+        document.removeEventListener("touchend", onGesture, true);
+        document.removeEventListener("pointerup", onGesture, true);
+        document.removeEventListener("click", onGesture, true);
+        _nativeGestureHookArmed = false;
+        // Must run synchronously inside the gesture — requestDeviceHeadingPermission
+        // calls DeviceOrientationEvent.requestPermission() before any await.
+        requestDeviceHeadingPermission().then((r) => { if (r !== "granted") console.warn("[heading] native grant refused:", r); }).catch(() => {});
+      };
+      document.addEventListener("touchend", onGesture, true);
+      document.addEventListener("pointerup", onGesture, true);
+      document.addEventListener("click", onGesture, true);
+    }
+    return; // never fall through to the pill on native
+  }
   _headingProbeTimer = setTimeout(() => {
     _headingProbeTimer = null;
     if (_deviceHeadingValue !== null) return; // compass came alive — all good
@@ -2045,7 +2069,8 @@ function CompassPermissionPill() {
     && perm !== "granted"
     && perm !== "denied"
     && _headingProbeFailed
-    && !_compassPromptSuppressed();
+    && !_compassPromptSuppressed()
+    && !(typeof isNativePlatform === "function" && isNativePlatform()); // native grants on the next tap — no pill
 
   if (!needsPrompt || count === 0 || dismissed) return null;
 
