@@ -44283,6 +44283,10 @@ function SignupScreen({ onSignup, onGoToLogin, onSetProfilePic, onAddBuild, onAw
         email: form.email.trim(),
         password: form.password,
         options: {
+          // Native shell: send the confirmation link back INTO the app (same
+          // custom scheme Google sign-in returns on); the deep-link handler
+          // reads the tokens and signs the user in. Web keeps the Site URL.
+          ...(isNativePlatform() ? { emailRedirectTo: NATIVE_OAUTH_REDIRECT } : {}),
           // Stored on auth.users.raw_user_meta_data — available on session.user.user_metadata.
           // A DB trigger (handle_new_user) copies these into public.profiles.
           data: {
@@ -47561,7 +47565,7 @@ function VerifyEmailScreen({ session, email, onContinue, onCancel }) {
   const resend = async () => {
     setError(""); setResending(true); setResendOk(false);
     try {
-      const { error: err } = await supabase.auth.resend({ type: "signup", email });
+      const { error: err } = await supabase.auth.resend({ type: "signup", email, ...(isNativePlatform() ? { options: { emailRedirectTo: NATIVE_OAUTH_REDIRECT } } : {}) });
       if (err) setError(err.message || "Could not resend."); else setResendOk(true);
     } catch (e) { setError("Network error. Try again."); }
     setResending(false);
