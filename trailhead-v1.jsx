@@ -38928,7 +38928,7 @@ function BlockedUsersOverlay({ blockedIds, fetchProfiles, onUnblock, onViewUser,
    (random drawing) and gear drops (skill/first-to-finish contest).
    ▶ LEGAL REVIEW: sponsor address, eligibility territory, and age are the
    fields to confirm — see OFFICIAL_RULES_SPONSOR / _ELIGIBILITY below. */
-const OFFICIAL_RULES_SPONSOR = { name: "Lone Peak Overland", address: "Wenatchee, Washington, USA", contact: "kyle@lonepeakoverland.com" };
+const OFFICIAL_RULES_SPONSOR = { name: "Lone Peak Overland", address: "13 Pangborn Rd, East Wenatchee, WA 98802, USA", contact: "kyle@lonepeakoverland.com" };
 const OFFICIAL_RULES_ELIGIBILITY = "legal residents of the United States who are 18 years of age or older at the time of entry";
 const fmtRulesUsd = (c) => (c == null || isNaN(c)) ? null : `$${Math.round(c / 100).toLocaleString()}`;
 
