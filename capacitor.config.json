@@ -1,0 +1,24 @@
+{
+  "appId": "com.lonepeakoverland.trailhub",
+  "appName": "Trailhub",
+  "webDir": "deploy-v2.2",
+  "server": {
+    "androidScheme": "https",
+    "iosScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": false,
+      "backgroundColor": "#111111",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#111111"
+    },
+    "CapacitorUpdater": {
+      "autoUpdate": false,
+      "resetWhenUpdate": true
+    }
+  }
+}

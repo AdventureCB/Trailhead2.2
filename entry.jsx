@@ -1,1 +1,1 @@
-import Trailhead from "./trailhead-v1.jsx"; import React from "react"; import { createRoot } from "react-dom/client"; const root = createRoot(document.getElementById("root")); root.render(React.createElement(Trailhead));
+import Trailhead from "./trailhead-v1.jsx"; import React from "react"; import { createRoot } from "react-dom/client"; import { initNativeShell } from "./native-bridge.js"; const root = createRoot(document.getElementById("root")); root.render(React.createElement(Trailhead)); initNativeShell();

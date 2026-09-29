@@ -1,5 +1,5 @@
 // Vercel serverless function — generates Open Graph / Twitter card meta
-// tags for shareable Trailhead URLs so when users paste a link into
+// tags for shareable Trailhub URLs so when users paste a link into
 // social media (iMessage, Twitter, Slack, Facebook, Discord, etc.) the
 // platform's link scraper sees a rich preview instead of a bare URL.
 //
@@ -81,7 +81,7 @@ try {
 } catch (e) {
   // Fallback if the file isn't bundled — at least scrapers still get
   // the meta tags. The bundle reference will be missing.
-  SPA_HTML = `<!DOCTYPE html><html><head><title>Trailhead</title></head><body><div id="root"></div></body></html>`;
+  SPA_HTML = `<!DOCTYPE html><html><head><title>Trailhub</title></head><body><div id="root"></div></body></html>`;
 }
 
 const escapeHtml = (s) =>
@@ -109,7 +109,7 @@ function sanitizeForumHtml(html) {
 
 // Build the server-rendered article HTML for a forum thread. Injected into
 // the SPA root div so crawlers (Googlebot, Bingbot) see the actual content
-// in the initial HTML response — no "Loading Trailhead…" stall — and users
+// in the initial HTML response — no "Loading Trailhub…" stall — and users
 // loading the page over slow connections see the article paint immediately
 // before the React bundle parses. React replaces the root's children on
 // mount, so this content is transient for humans but indexable for bots.
@@ -185,7 +185,7 @@ function buildForumThreadSSR(article, canonicalUrl, origin) {
   const subInfo = subSlug && FORUM_SUB_TO_INFO[article.subcategorySlug];
   const subName = subInfo ? escapeHtml(subInfo.name) : (subSlug ? subSlug.replace(/-/g, " ") : "");
   const crumbs = [
-    `<a href="${origin}/" style="color:#C49A6C;text-decoration:none;">Trailhead</a>`,
+    `<a href="${origin}/" style="color:#C49A6C;text-decoration:none;">Trailhub</a>`,
     `<a href="${origin}/" style="color:#C49A6C;text-decoration:none;">Forum</a>`,
     subSlug ? `<a href="${origin}/forum/${subSlug}" style="color:#C49A6C;text-decoration:none;">${subName}</a>` : "",
   ].filter(Boolean).join(' <span style="color:#8B7D6B;">/</span> ');
@@ -217,7 +217,7 @@ function buildForumThreadSSR(article, canonicalUrl, origin) {
       ${statsRow}
       ${repliesHtml}
       <footer style="margin-top:48px;padding-top:24px;border-top:1px solid #2A2A28;font-family:'Trebuchet MS',sans-serif;font-size:12px;color:#8B7D6B;">
-        Posted by <a href="${origin}/" style="color:#C49A6C;text-decoration:none;">${authorName}</a> ${authorHandle ? `(@${authorHandle})` : ""} on the <a href="${origin}/" style="color:#C49A6C;text-decoration:none;">Trailhead Overlanding Forum</a> — the community for overlanders sharing trips, builds, and trail knowledge.
+        Posted by <a href="${origin}/" style="color:#C49A6C;text-decoration:none;">${authorName}</a> ${authorHandle ? `(@${authorHandle})` : ""} on the <a href="${origin}/" style="color:#C49A6C;text-decoration:none;">Trailhub Overlanding Forum</a> — the community for overlanders sharing trips, builds, and trail knowledge.
       </footer>
     </article>
   `;
@@ -356,7 +356,7 @@ async function resolveEntity(type, id) {
       imageAlt = findPhotoAlt(photos, row.hero_img);
     }
     if (!imageAlt) {
-      imageAlt = `${row.name} ${isReport ? "trip report" : "trip plan"} route map on Trailhead`;
+      imageAlt = `${row.name} ${isReport ? "trip report" : "trip plan"} route map on Trailhub`;
     }
     // Author profile for E-E-A-T Person schema.
     let author = null;
@@ -371,7 +371,7 @@ async function resolveEntity(type, id) {
       title: `${row.name}${isReport ? " · Trip Report" : " · Trip Plan"}`,
       description:
         row.description ||
-        `${isReport ? "Overlanding trip report" : "Planned overlanding trip"}${stat} on Trailhead.`,
+        `${isReport ? "Overlanding trip report" : "Planned overlanding trip"}${stat} on Trailhub.`,
       image,
       imageAlt,
       jsonLd: {
@@ -398,7 +398,7 @@ async function resolveEntity(type, id) {
       },
       breadcrumb: {
         items: [
-          { name: "Trailhead", url: null }, // url filled in handler with origin
+          { name: "Trailhub", url: null }, // url filled in handler with origin
           { name: isReport ? "Trip Reports" : "Trip Plans", url: null },
           { name: row.name, url: null },
         ],
@@ -457,7 +457,7 @@ async function resolveEntity(type, id) {
       },
       breadcrumb: {
         items: [
-          { name: "Trailhead", url: null },
+          { name: "Trailhub", url: null },
           { name: "Gear Drops", url: null },
           { name: row.title, url: null },
         ],
@@ -481,7 +481,7 @@ async function resolveEntity(type, id) {
       title: `${row.name} · Camping Spot`,
       description:
         row.description ||
-        `Camping spot on Trailhead${row.spot_type && row.spot_type !== "unknown" ? ` · ${row.spot_type}` : ""}.`,
+        `Camping spot on Trailhub${row.spot_type && row.spot_type !== "unknown" ? ` · ${row.spot_type}` : ""}.`,
       image,
       imageAlt: firstPhotoAlt || `${row.name} camping spot location map`,
       jsonLd: {
@@ -499,7 +499,7 @@ async function resolveEntity(type, id) {
       },
       breadcrumb: {
         items: [
-          { name: "Trailhead", url: null },
+          { name: "Trailhub", url: null },
           { name: "Camping Spots", url: null },
           { name: row.name, url: null },
         ],
@@ -525,8 +525,8 @@ async function resolveEntity(type, id) {
       if (prof) author = { name: prof.full_name || prof.handle || "Owner", handle: prof.handle || "", avatarUrl: prof.avatar_url || null };
     }
     return {
-      title: `${row.name || sub || "Build"} · Trailhead`,
-      description: sub ? `${sub} · Overlanding build on Trailhead.` : "Overlanding build on Trailhead.",
+      title: `${row.name || sub || "Build"} · Trailhub`,
+      description: sub ? `${sub} · Overlanding build on Trailhub.` : "Overlanding build on Trailhub.",
       image,
       imageAlt: heroAlt || `${row.name || sub} overlanding build photo`,
       jsonLd: {
@@ -543,7 +543,7 @@ async function resolveEntity(type, id) {
       },
       breadcrumb: {
         items: [
-          { name: "Trailhead", url: null },
+          { name: "Trailhub", url: null },
           { name: "Builds", url: null },
           { name: row.name || sub, url: null },
         ],
@@ -559,7 +559,7 @@ async function resolveEntity(type, id) {
       jsonLd: { kind: "HQ" },
       breadcrumb: {
         items: [
-          { name: "Trailhead", url: null },
+          { name: "Trailhub", url: null },
           { name: "HQ", url: null },
         ],
       },
@@ -583,14 +583,14 @@ async function resolveEntity(type, id) {
       row.description ? String(row.description).replace(/<[^>]+>/g, " ").slice(0, 160) : null,
     ].filter(Boolean).join(" · ");
     return {
-      title: `${row.title || "Bounty"} · Trailhead Bounty`,
-      description: description || "Earn cash credit + points completing a bounty on Trailhead.",
+      title: `${row.title || "Bounty"} · Trailhub Bounty`,
+      description: description || "Earn cash credit + points completing a bounty on Trailhub.",
       image: row.hero_img || null,
       imageAlt: `${row.title || "Bounty"} — ${row.category || "Community bounty"}`,
       jsonLd: { kind: "Bounty", name: row.title, description: row.description, category: row.category, reward: rewardLabel },
       breadcrumb: {
         items: [
-          { name: "Trailhead", url: null },
+          { name: "Trailhub", url: null },
           { name: "Bounties", url: null },
           { name: row.title || "Bounty", url: null },
         ],
@@ -629,8 +629,8 @@ async function resolveEntity(type, id) {
       }
     }
     const isRoute = row.type === "ROUTES";
-    const cleanTitle = (row.title || (isRoute ? "Route" : "Trailhead Post")).slice(0, 80);
-    const desc = (row.body || (isRoute ? "Overlanding route shared on Trailhead." : "Posted to Trailhead.")).slice(0, 200);
+    const cleanTitle = (row.title || (isRoute ? "Route" : "Trailhub Post")).slice(0, 80);
+    const desc = (row.body || (isRoute ? "Overlanding route shared on Trailhub." : "Posted to Trailhub.")).slice(0, 200);
     // Author profile so the SSR byline can show E-E-A-T signals.
     let author = null;
     if (row.user_id) {
@@ -644,12 +644,12 @@ async function resolveEntity(type, id) {
       title: `${cleanTitle}${isRoute ? " · Route" : ""}`,
       description: desc,
       image,
-      imageAlt: imageAlt || `${cleanTitle}${isRoute ? " route" : ""} on Trailhead`,
+      imageAlt: imageAlt || `${cleanTitle}${isRoute ? " route" : ""} on Trailhub`,
       article: {
         title: cleanTitle,
         body: row.body || "",
         image,
-        imageAlt: imageAlt || `${cleanTitle}${isRoute ? " route" : ""} on Trailhead`,
+        imageAlt: imageAlt || `${cleanTitle}${isRoute ? " route" : ""} on Trailhub`,
         author,
         createdAt: row.created_at,
         type: row.type,
@@ -666,8 +666,8 @@ async function resolveEntity(type, id) {
     );
     if (!row) {
       return {
-        title: "Forum Thread · Trailhead",
-        description: "Join the conversation on the Trailhead community forum.",
+        title: "Forum Thread · Trailhub",
+        description: "Join the conversation on the Trailhub community forum.",
         image: null,
         imageAlt: "",
       };
@@ -681,7 +681,7 @@ async function resolveEntity(type, id) {
       .replace(/<[^>]+>/g, " ")
       .replace(/\s+/g, " ")
       .trim();
-    const description = (plainBody || `Discussion on the Trailhead community forum.`).slice(0, 200);
+    const description = (plainBody || `Discussion on the Trailhub community forum.`).slice(0, 200);
     // Fan-out: author profile + replies + reply authors + thread like
     // count, in parallel. All public-readable, none gate the others.
     const [authorRow, replyRows, likeRows] = await Promise.all([
@@ -717,10 +717,10 @@ async function resolveEntity(type, id) {
     ].join(" ");
     const wordCount = (allText.match(/\S+/g) || []).length;
     return {
-      title: `${row.title} · Trailhead Forum`,
+      title: `${row.title} · Trailhub Forum`,
       description,
       image: heroUrl,
-      imageAlt: heroAlt || `${row.title} discussion on Trailhead Forum`,
+      imageAlt: heroAlt || `${row.title} discussion on Trailhub Forum`,
       // Carry extra fields so the caller can emit JSON-LD + SSR article.
       jsonLd: {
         kind: "DiscussionForumPosting",
@@ -789,8 +789,8 @@ async function resolveEntity(type, id) {
       // Unknown subcategory slug — return brand default rather than 404
       // so legacy /forum/<timestamp-id> URLs degrade gracefully.
       return {
-        title: "Forum · Trailhead",
-        description: "Join the conversation on the Trailhead community forum.",
+        title: "Forum · Trailhub",
+        description: "Join the conversation on the Trailhub community forum.",
         image: null,
         imageAlt: "",
       };
@@ -812,8 +812,8 @@ async function resolveEntity(type, id) {
       profs.forEach(p => { authorsById[p.id] = p; });
     }
     return {
-      title: `${subInfo.name} · ${subInfo.catName} · Trailhead Forum`,
-      description: `${threadRows.length} thread${threadRows.length === 1 ? "" : "s"} on ${subInfo.name.toLowerCase()} in the Trailhead overlanding community forum.`,
+      title: `${subInfo.name} · ${subInfo.catName} · Trailhub Forum`,
+      description: `${threadRows.length} thread${threadRows.length === 1 ? "" : "s"} on ${subInfo.name.toLowerCase()} in the Trailhub overlanding community forum.`,
       image: null,
       imageAlt: "",
       jsonLd: {
@@ -860,8 +860,8 @@ async function resolveEntity(type, id) {
     const bio = (profile.bio || "").trim();
     const description = bio
       ? bio.slice(0, 220)
-      : `${displayName} on Trailhead — ${(builds || []).length} build${(builds || []).length === 1 ? "" : "s"}, ${tripsPublic.length} trip${tripsPublic.length === 1 ? "" : "s"}, ${(threads || []).length} forum thread${(threads || []).length === 1 ? "" : "s"}`;
-    const titleStr = `${displayName} (@${handle}) — Trailhead`;
+      : `${displayName} on Trailhub — ${(builds || []).length} build${(builds || []).length === 1 ? "" : "s"}, ${tripsPublic.length} trip${tripsPublic.length === 1 ? "" : "s"}, ${(threads || []).length} forum thread${(threads || []).length === 1 ? "" : "s"}`;
+    const titleStr = `${displayName} (@${handle}) — Trailhub`;
     return {
       title: titleStr,
       description,
@@ -885,7 +885,7 @@ async function resolveEntity(type, id) {
       },
       breadcrumb: {
         items: [
-          { name: "Trailhead", url: null },
+          { name: "Trailhub", url: null },
           { name: "Users", url: null },
           { name: `@${handle}`, url: null },
         ],
@@ -932,21 +932,21 @@ async function resolveEntity(type, id) {
       };
     });
     return {
-      title: "Overlanding Vehicle Builds · Trailhead",
-      description: "Browse vehicle builds from the Trailhead overlanding community — 4Runners, Tacomas, Broncos, Jeeps, RAM 1500s, and more, with detailed mod lists and photos.",
+      title: "Overlanding Vehicle Builds · Trailhub",
+      description: "Browse vehicle builds from the Trailhub overlanding community — 4Runners, Tacomas, Broncos, Jeeps, RAM 1500s, and more, with detailed mod lists and photos.",
       image: null,
       imageAlt: "",
-      breadcrumb: { items: [{ name: "Trailhead", url: null }, { name: "Builds", url: null }] },
+      breadcrumb: { items: [{ name: "Trailhub", url: null }, { name: "Builds", url: null }] },
       jsonLd: {
         kind: "CollectionLanding",
         title: "Overlanding Vehicle Builds",
-        description: "Vehicle builds from the Trailhead overlanding community.",
+        description: "Vehicle builds from the Trailhub overlanding community.",
         items: listItems,
       },
       listSSR: {
         kind: "builds",
         heading: "Overlanding Vehicle Builds",
-        intro: "Browse recent builds from the Trailhead overlanding community. Each build details the vehicle, its mods, and the trips it's been on.",
+        intro: "Browse recent builds from the Trailhub overlanding community. Each build details the vehicle, its mods, and the trips it's been on.",
         items: listItems,
         accent: "#C49A6C",
       },
@@ -983,21 +983,21 @@ async function resolveEntity(type, id) {
       };
     });
     return {
-      title: "Overlanding Trip Reports · Trailhead",
-      description: "Real overlanding trip reports from the Trailhead community — GPS routes, camping stops, terrain notes, and photos across the western US and beyond.",
+      title: "Overlanding Trip Reports · Trailhub",
+      description: "Real overlanding trip reports from the Trailhub community — GPS routes, camping stops, terrain notes, and photos across the western US and beyond.",
       image: null,
       imageAlt: "",
-      breadcrumb: { items: [{ name: "Trailhead", url: null }, { name: "Trip Reports", url: null }] },
+      breadcrumb: { items: [{ name: "Trailhub", url: null }, { name: "Trip Reports", url: null }] },
       jsonLd: {
         kind: "CollectionLanding",
         title: "Overlanding Trip Reports",
-        description: "Community trip reports on Trailhead.",
+        description: "Community trip reports on Trailhub.",
         items: listItems,
       },
       listSSR: {
         kind: "trips",
         heading: "Overlanding Trip Reports",
-        intro: "Community trip reports with GPS routes, camping spots, terrain notes, and photos from the Trailhead overlanding community.",
+        intro: "Community trip reports with GPS routes, camping spots, terrain notes, and photos from the Trailhub overlanding community.",
         items: listItems,
         accent: "#8B6FAF",
       },
@@ -1038,15 +1038,15 @@ async function resolveEntity(type, id) {
       };
     });
     return {
-      title: "Overland Camping Spots · Trailhead",
+      title: "Overland Camping Spots · Trailhub",
       description: "Discover camping locations across the overland community — federal campgrounds, dispersed sites, and community-added spots with photos and notes.",
       image: null,
       imageAlt: "",
-      breadcrumb: { items: [{ name: "Trailhead", url: null }, { name: "Camping Spots", url: null }] },
+      breadcrumb: { items: [{ name: "Trailhub", url: null }, { name: "Camping Spots", url: null }] },
       jsonLd: {
         kind: "CollectionLanding",
         title: "Overland Camping Spots",
-        description: "Public camping spots on Trailhead.",
+        description: "Public camping spots on Trailhub.",
         items: listItems,
       },
       listSSR: {
@@ -1076,7 +1076,7 @@ function buildForumSubSSR(payload, origin) {
   const subSlug = escapeHtml(sub.slug || "");
   const catSlug = escapeHtml(sub.catSlug || "");
   const crumbs = [
-    `<a href="${origin}/" style="color:#C49A6C;text-decoration:none;">Trailhead</a>`,
+    `<a href="${origin}/" style="color:#C49A6C;text-decoration:none;">Trailhub</a>`,
     `<a href="${origin}/" style="color:#C49A6C;text-decoration:none;">Forum</a>`,
     `<span style="color:#fff;">${subName}</span>`,
   ].join(' <span style="color:#8B7D6B;">/</span> ');
@@ -1121,13 +1121,13 @@ function buildForumSubSSR(payload, origin) {
       <header style="margin-bottom:24px;">
         <span style="font-family:'Trebuchet MS',sans-serif;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:#C49A6C;">${catName}</span>
         <h1 style="margin:6px 0 8px;font-size:32px;font-family:'Trebuchet MS','Gill Sans',sans-serif;line-height:1.2;font-weight:700;color:#fff;">${subName}</h1>
-        <p style="margin:0;font-size:14px;color:#8B7D6B;">${threads.length} thread${threads.length === 1 ? "" : "s"} from the Trailhead overlanding community.</p>
+        <p style="margin:0;font-size:14px;color:#8B7D6B;">${threads.length} thread${threads.length === 1 ? "" : "s"} from the Trailhub overlanding community.</p>
       </header>
       <section style="margin:0;">
         ${threadsHtml}
       </section>
       <footer style="margin-top:48px;padding-top:24px;border-top:1px solid #2A2A28;font-family:'Trebuchet MS',sans-serif;font-size:12px;color:#8B7D6B;">
-        Browse more on the <a href="${origin}/" style="color:#C49A6C;text-decoration:none;">Trailhead Overlanding Forum</a> — the community for overlanders sharing trips, builds, and trail knowledge.
+        Browse more on the <a href="${origin}/" style="color:#C49A6C;text-decoration:none;">Trailhub Overlanding Forum</a> — the community for overlanders sharing trips, builds, and trail knowledge.
       </footer>
     </main>
   `;
@@ -1154,7 +1154,7 @@ function ssrArticleShell({ title, crumbs, byline, hero, heroAlt, body, footer, f
       ${bylineHtml}
       ${heroHtml}
       ${bodyHtml}
-      ${footerHtml || `<footer style="margin-top:48px;padding-top:24px;border-top:1px solid #2A2A28;font-family:'Trebuchet MS',sans-serif;font-size:12px;color:#8B7D6B;">${footerLabel || `Browse more on <a href="/" style="color:${accentColor};text-decoration:none;">Trailhead</a> — the overlanding community app.`}</footer>`}
+      ${footerHtml || `<footer style="margin-top:48px;padding-top:24px;border-top:1px solid #2A2A28;font-family:'Trebuchet MS',sans-serif;font-size:12px;color:#8B7D6B;">${footerLabel || `Browse more on <a href="/" style="color:${accentColor};text-decoration:none;">Trailhub</a> — the overlanding community app.`}</footer>`}
     </article>
   `;
 }
@@ -1204,7 +1204,7 @@ function buildTripArticleSSR(article, canonicalUrl, origin) {
   const isReport = article.isReport;
   const accent = isReport ? "#8B6FAF" : "#C49A6C";
   const crumbs = ssrCrumbs([
-    { name: "Trailhead", url: `${origin}/` },
+    { name: "Trailhub", url: `${origin}/` },
     { name: isReport ? "Trip Reports" : "Trip Plans" },
     { name: article.title },
   ], origin);
@@ -1241,7 +1241,7 @@ function buildTripArticleSSR(article, canonicalUrl, origin) {
     heroAlt: article.imageAlt ? escapeHtml(article.imageAlt) : escapeHtml(`${article.title} route map`),
     body,
     accent,
-    footerLabel: `${isReport ? "Trip report" : "Trip plan"} on the <a href="${origin}/" style="color:${accent};text-decoration:none;">Trailhead</a> overlanding community.`,
+    footerLabel: `${isReport ? "Trip report" : "Trip plan"} on the <a href="${origin}/" style="color:${accent};text-decoration:none;">Trailhub</a> overlanding community.`,
   });
 }
 
@@ -1254,7 +1254,7 @@ function buildGearDropSSR(d, canonicalUrl, origin) {
   if (!d || !d.title) return "";
   const accent = "#4A7C59";
   const crumbs = ssrCrumbs([
-    { name: "Trailhead", url: `${origin}/` },
+    { name: "Trailhub", url: `${origin}/` },
     { name: "Gear Drops" },
     { name: d.title },
   ], origin);
@@ -1296,7 +1296,7 @@ function buildGearDropSSR(d, canonicalUrl, origin) {
     heroAlt: escapeHtml(`${d.title} gear drop hosted by ${d.brand || "Lone Peak Overland"}`),
     body: dateRow + prizeTitle + prizeBody + aboutBody,
     accent,
-    footerLabel: `Gear drop event on <a href="${origin}/" style="color:${accent};text-decoration:none;">Trailhead</a> — sponsored route + prize race hosted by Lone Peak Overland and brand partners.`,
+    footerLabel: `Gear drop event on <a href="${origin}/" style="color:${accent};text-decoration:none;">Trailhub</a> — sponsored route + prize race hosted by Lone Peak Overland and brand partners.`,
   });
 }
 
@@ -1304,7 +1304,7 @@ function buildCampingSpotSSR(spot, canonicalUrl, origin) {
   if (!spot || !spot.name) return "";
   const accent = "#5B8C5A";
   const crumbs = ssrCrumbs([
-    { name: "Trailhead", url: `${origin}/` },
+    { name: "Trailhub", url: `${origin}/` },
     { name: "Camping Spots" },
     { name: spot.name },
   ], origin);
@@ -1326,7 +1326,7 @@ function buildCampingSpotSSR(spot, canonicalUrl, origin) {
     heroAlt: escapeHtml(`${spot.name} camping spot`),
     body: attrsRow + desc,
     accent,
-    footerLabel: `Camping spot on <a href="${origin}/" style="color:${accent};text-decoration:none;">Trailhead</a> — find more spots, share trip reports, and connect with the overlanding community.`,
+    footerLabel: `Camping spot on <a href="${origin}/" style="color:${accent};text-decoration:none;">Trailhub</a> — find more spots, share trip reports, and connect with the overlanding community.`,
   });
 }
 
@@ -1338,7 +1338,7 @@ function buildBuildSSR(b, canonicalUrl, origin) {
   const title = b.name || [b.year, b.make, b.model].filter(Boolean).join(" ");
   const vehicle = [b.year, b.make, b.model, b.trim].filter(Boolean).join(" ");
   const crumbs = ssrCrumbs([
-    { name: "Trailhead", url: `${origin}/` },
+    { name: "Trailhub", url: `${origin}/` },
     { name: "Builds" },
     { name: title },
   ], origin);
@@ -1354,7 +1354,7 @@ function buildBuildSSR(b, canonicalUrl, origin) {
     heroAlt: escapeHtml(`${title} overlanding build`),
     body: vehicleRow,
     accent,
-    footerLabel: `Overlanding build on <a href="${origin}/" style="color:${accent};text-decoration:none;">Trailhead</a>.`,
+    footerLabel: `Overlanding build on <a href="${origin}/" style="color:${accent};text-decoration:none;">Trailhub</a>.`,
   });
 }
 
@@ -1362,7 +1362,7 @@ function buildBuildSSR(b, canonicalUrl, origin) {
 function buildHQSSR(canonicalUrl, origin, image) {
   const accent = "#BD472A";
   const crumbs = ssrCrumbs([
-    { name: "Trailhead", url: `${origin}/` },
+    { name: "Trailhub", url: `${origin}/` },
     { name: "HQ" },
   ], origin);
   const addressBlock = `
@@ -1386,7 +1386,7 @@ function buildHQSSR(canonicalUrl, origin, image) {
     heroAlt: escapeHtml(`${LPO_HQ.name} location map`),
     body: addressBlock + ctas,
     accent,
-    footerLabel: `Home base of <a href="https://www.lonepeakoverland.com/" style="color:${accent};text-decoration:none;">Lone Peak Overland</a> — overlanding gear and the community behind <a href="${origin}/" style="color:${accent};text-decoration:none;">Trailhead</a>.`,
+    footerLabel: `Home base of <a href="https://www.lonepeakoverland.com/" style="color:${accent};text-decoration:none;">Lone Peak Overland</a> — overlanding gear and the community behind <a href="${origin}/" style="color:${accent};text-decoration:none;">Trailhub</a>.`,
   });
 }
 
@@ -1399,7 +1399,7 @@ function buildPostSSR(post, canonicalUrl, origin) {
   if (!post || (!post.title && !post.body)) return "";
   const accent = "#C49A6C";
   const crumbs = ssrCrumbs([
-    { name: "Trailhead", url: `${origin}/` },
+    { name: "Trailhub", url: `${origin}/` },
     { name: post.type === "ROUTES" ? "Routes" : post.type === "BUILDS" ? "Builds" : "Feed" },
     { name: post.title || "Post" },
   ], origin);
@@ -1412,22 +1412,22 @@ function buildPostSSR(post, canonicalUrl, origin) {
     crumbs,
     byline,
     hero: post.image ? escapeHtml(post.image) : null,
-    heroAlt: post.imageAlt ? escapeHtml(post.imageAlt) : escapeHtml(post.title || "Post on Trailhead"),
+    heroAlt: post.imageAlt ? escapeHtml(post.imageAlt) : escapeHtml(post.title || "Post on Trailhub"),
     body,
     accent,
-    footerLabel: `Posted on <a href="${origin}/" style="color:${accent};text-decoration:none;">Trailhead</a> — the overlanding community.`,
+    footerLabel: `Posted on <a href="${origin}/" style="color:${accent};text-decoration:none;">Trailhub</a> — the overlanding community.`,
   });
 }
 
 const DEFAULT_META = {
-  title: "Trailhead · The overlanding community app by Lone Peak Overland",
+  title: "Trailhub · The overlanding community app by Lone Peak Overland",
   description:
     "Discover camping spots, plan trips, share builds, and connect with the overlanding community.",
   // Fallback for the miss path (entity couldn't be resolved). Keeps
   // socials from rendering an image-less card when someone shares a
   // stale / deleted link.
   image: "https://trailhead.lonepeakoverland.com/summit-lp-logo.png",
-  imageAlt: "Trailhead by Lone Peak Overland",
+  imageAlt: "Trailhub by Lone Peak Overland",
 };
 
 function metaTagsFor({ title, description, image, imageAlt, url, article }) {
@@ -1449,7 +1449,7 @@ function metaTagsFor({ title, description, image, imageAlt, url, article }) {
   }
   return [
     `<meta property="og:type" content="article">`,
-    `<meta property="og:site_name" content="Trailhead">`,
+    `<meta property="og:site_name" content="Trailhub">`,
     `<meta property="og:title" content="${t}">`,
     `<meta property="og:description" content="${d}">`,
     `<meta property="og:url" content="${u}">`,
@@ -1490,7 +1490,7 @@ function buildProfileSSR(payload, canonicalUrl, origin) {
     ? `<span style="display:inline-block;padding:3px 8px;background:#C49A6C;color:#fff;border-radius:4px;font-family:'Trebuchet MS',sans-serif;font-size:10px;letter-spacing:1px;font-weight:700;margin-left:8px;">AMBASSADOR</span>`
     : "";
   const crumbs = [
-    `<a href="${origin}/" style="color:#C49A6C;text-decoration:none;">Trailhead</a>`,
+    `<a href="${origin}/" style="color:#C49A6C;text-decoration:none;">Trailhub</a>`,
     `<span style="color:#fff;">@${handleEsc}</span>`,
   ].join(' <span style="color:#8B7D6B;">/</span> ');
   // Helper: section render. Empty sections still emit a skeleton with
@@ -1579,7 +1579,7 @@ function buildProfileSSR(payload, canonicalUrl, origin) {
       ${threadsHtml}
       ${spotsHtml}
       <footer style="margin-top:48px;padding-top:24px;border-top:1px solid #2A2A28;font-family:'Trebuchet MS',sans-serif;font-size:12px;color:#8B7D6B;">
-        ${displayName} on <a href="${origin}/" style="color:#C49A6C;text-decoration:none;">Trailhead</a> — the overlanding community by Lone Peak Overland.
+        ${displayName} on <a href="${origin}/" style="color:#C49A6C;text-decoration:none;">Trailhub</a> — the overlanding community by Lone Peak Overland.
       </footer>
     </main>
   `;
@@ -1596,7 +1596,7 @@ function buildListingSSR(payload, canonicalUrl, origin) {
   const intro = escapeHtml(payload.intro || "");
   const items = payload.items;
   const crumbs = [
-    `<a href="${origin}/" style="color:${accent};text-decoration:none;">Trailhead</a>`,
+    `<a href="${origin}/" style="color:${accent};text-decoration:none;">Trailhub</a>`,
     `<span style="color:#fff;">${heading}</span>`,
   ].join(' <span style="color:#8B7D6B;">/</span> ');
   const cardsHtml = items.length === 0
@@ -1645,7 +1645,7 @@ function buildListingSSR(payload, canonicalUrl, origin) {
         ${cardsHtml}
       </section>
       <footer style="margin-top:48px;padding-top:24px;border-top:1px solid #2A2A28;font-family:'Trebuchet MS',sans-serif;font-size:12px;color:#8B7D6B;">
-        Browse more on <a href="${origin}/" style="color:${accent};text-decoration:none;">Trailhead</a> — the overlanding community by Lone Peak Overland.
+        Browse more on <a href="${origin}/" style="color:${accent};text-decoration:none;">Trailhub</a> — the overlanding community by Lone Peak Overland.
       </footer>
     </main>
   `;
@@ -1727,14 +1727,14 @@ module.exports = async function handler(req, res) {
   const canonicalTag = `<link rel="canonical" href="${escapeHtml(canonicalUrl)}">`;
 
   // BreadcrumbList JSON-LD — gives Google the navigation hierarchy so
-  // SERPs show "Trailhead › Forum › <subcategory> › <thread title>" (or
+  // SERPs show "Trailhub › Forum › <subcategory> › <thread title>" (or
   // the appropriate hierarchy for the entity type) instead of the raw URL.
   let breadcrumbLdTag = "";
   let breadcrumbItems = null;
   if (type === "forum-thread" && meta.article && meta.article.subcategorySlug) {
     const subInfo = FORUM_SUB_TO_INFO[meta.article.subcategorySlug];
     breadcrumbItems = [
-      { name: "Trailhead", url: `${origin}/` },
+      { name: "Trailhub", url: `${origin}/` },
       { name: "Forum", url: `${origin}/` },
     ];
     if (subInfo) breadcrumbItems.push({ name: subInfo.name, url: `${origin}/forum/${meta.article.subcategorySlug}` });
@@ -1742,7 +1742,7 @@ module.exports = async function handler(req, res) {
   } else if (type === "forum-sub" && meta.article && meta.article.subInfo) {
     const subInfo = meta.article.subInfo;
     breadcrumbItems = [
-      { name: "Trailhead", url: `${origin}/` },
+      { name: "Trailhub", url: `${origin}/` },
       { name: "Forum", url: `${origin}/` },
       { name: subInfo.name, url: canonicalUrl },
     ];
@@ -1795,7 +1795,7 @@ module.exports = async function handler(req, res) {
     const articleSection = subInfo ? `${subInfo.catName} / ${subInfo.name}` : undefined;
     const publisher = {
       "@type": "Organization",
-      name: "Trailhead",
+      name: "Trailhub",
       url: `${origin}/`,
       logo: { "@type": "ImageObject", url: `${origin}/lone-peak-flag.png` },
     };
@@ -1905,9 +1905,9 @@ module.exports = async function handler(req, res) {
     const ld = {
       "@context": "https://schema.org",
       "@type": "CollectionPage",
-      name: `${sub.name} · ${sub.catName} · Trailhead Forum`,
+      name: `${sub.name} · ${sub.catName} · Trailhub Forum`,
       url: canonicalUrl,
-      isPartOf: { "@type": "WebSite", name: "Trailhead", url: `${origin}/` },
+      isPartOf: { "@type": "WebSite", name: "Trailhub", url: `${origin}/` },
       mainEntity: {
         "@type": "ItemList",
         numberOfItems: threads.length,
@@ -1948,7 +1948,7 @@ module.exports = async function handler(req, res) {
       author: authorNode,
       publisher: {
         "@type": "Organization",
-        name: "Trailhead",
+        name: "Trailhub",
         url: `${origin}/`,
         logo: { "@type": "ImageObject", url: `${origin}/lone-peak-flag.png` },
       },
@@ -2020,7 +2020,7 @@ module.exports = async function handler(req, res) {
       about: vehicleEntity,
       publisher: {
         "@type": "Organization",
-        name: "Trailhead",
+        name: "Trailhub",
         url: `${origin}/`,
         logo: { "@type": "ImageObject", url: `${origin}/lone-peak-flag.png` },
       },
@@ -2120,7 +2120,7 @@ module.exports = async function handler(req, res) {
       name: j.title || undefined,
       description: j.description || undefined,
       url: canonicalUrl,
-      isPartOf: { "@type": "WebSite", name: "Trailhead", url: `${origin}/` },
+      isPartOf: { "@type": "WebSite", name: "Trailhub", url: `${origin}/` },
       mainEntity: {
         "@type": "ItemList",
         numberOfItems: itemNodes.length,
@@ -2150,7 +2150,7 @@ module.exports = async function handler(req, res) {
       "@type": "ProfilePage",
       url: canonicalUrl,
       dateCreated: j.createdAt || undefined,
-      isPartOf: { "@type": "WebSite", name: "Trailhead", url: `${origin}/` },
+      isPartOf: { "@type": "WebSite", name: "Trailhub", url: `${origin}/` },
       mainEntity: personNode,
       interactionStatistic: totalItems > 0 ? [{
         "@type": "InteractionCounter",
@@ -2170,7 +2170,7 @@ module.exports = async function handler(req, res) {
   // shell (deploy-v2.2/index.html). Without this, Facebook / Twitter /
   // iMessage / Slack scrapers see BOTH the generic app-level tags AND our
   // entity-specific ones, and per OG spec the FIRST occurrence wins — so
-  // every shared link fell back to the generic Trailhead logo + tagline.
+  // every shared link fell back to the generic Trailhub logo + tagline.
   // We only strip when we're about to replace them with entity-specific
   // versions (which is always the case in the injection path below).
   html = html.replace(/\s*<meta\s+(?:property|name)="(?:og:[a-z:_]+|twitter:[a-z:_]+|description|keywords)"[^>]*>\s*/gi, "");
@@ -2178,7 +2178,7 @@ module.exports = async function handler(req, res) {
   const headInjections = [canonicalTag, tags, breadcrumbLdTag, jsonLdTag].filter(Boolean).join("\n");
   html = html.replace("</head>", `${headInjections}\n</head>`);
   // SSR article: inject the article HTML into the SPA root div so crawlers
-  // see real content in the initial HTML response (not "Loading Trailhead").
+  // see real content in the initial HTML response (not "Loading Trailhub").
   // React's createRoot.render() replaces the root's children on mount, so
   // human visitors see the article paint immediately then transition to
   // the SPA's version. Currently forum threads + subcategory landing

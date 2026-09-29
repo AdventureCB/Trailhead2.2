@@ -4,3 +4,34 @@ node_modules/
 !deploy-v2.2/ota/*.zip
 test-debug-bundle.js
 test-entry.jsx
+
+# ── Native (Capacitor / Xcode) — generated or per-machine, never commit ──
+ios/App/App/public/            # copy of deploy-v2.2 written by `npx cap copy ios`
+ios/App/build/
+ios/DerivedData/
+**/xcuserdata/
+**/*.xcuserstate
+ios/App/Pods/
+ios/App/Podfile.lock
+android/app/build/
+android/.gradle/
+android/local.properties
+# signing material — belongs in the keychain / Apple portal, not git
+*.p8
+*.p12
+*.mobileprovision
+*.cer
+*.keystore
+*.jks
+GoogleService-Info.plist
+google-services.json
+
+# ── Local tooling / editor / assistant state ──
+supabase/.temp/
+.claude/
+.agents/
+.kiro/
+skills-lock.json
+*.code-workspace
+*.pages
+*.pen
