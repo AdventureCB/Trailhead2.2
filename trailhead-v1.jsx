@@ -32051,6 +32051,7 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, isGuest, onGuest
     }
   };
 
+  const [showRules, setShowRules] = useState(false); // Official Rules modal (App Review 5.3.3/5.3.4)
   const handleJoin = async () => {
     if (joining || !drop) return;
     // Guests need to sign up before they can be a racer — surface the
@@ -32900,9 +32901,13 @@ function GearDropDetailScreen({ dropId, currentUserId, isAdmin, isGuest, onGuest
             )}
           </div>
         ) : signupOpen ? (
-          <button onClick={handleJoin} disabled={joining} style={{ width: "100%", padding: "14px", background: joining ? T.charcoal : T.green, border: "none", borderRadius: 10, color: T.white, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 1, cursor: joining ? "default" : "pointer" }}>
-            {joining ? "JOINING…" : isGuest ? "SIGN IN TO JOIN" : "JOIN GEAR DROP"}
-          </button>
+          <div>
+            <button onClick={handleJoin} disabled={joining} style={{ width: "100%", padding: "14px", background: joining ? T.charcoal : T.green, border: "none", borderRadius: 10, color: T.white, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 1, cursor: joining ? "default" : "pointer" }}>
+              {joining ? "JOINING…" : isGuest ? "SIGN IN TO JOIN" : "JOIN GEAR DROP"}
+            </button>
+            <OfficialRulesFootnote onOpen={() => setShowRules(true)} />
+            {showRules && <OfficialRulesModal kind="gear_drop" drop={drop} onClose={() => setShowRules(false)} />}
+          </div>
         ) : (
           <div style={{ width: "100%", padding: "14px", background: T.darkCard, border: `1px solid ${T.charcoal}`, borderRadius: 10, color: T.tertiary, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 1, textAlign: "center" }}>
             {isEnded ? "EVENT CLOSED" : "SIGNUPS CLOSED"}
@@ -38863,9 +38868,77 @@ function BountyEditor({ bountyId, onBack, onLoad, onCreate, onUpdate, onDelete, 
    enter (guarantees a DM-able, de-duplicated entrant). Guests get a
    create-account CTA that prefills signup; signed-in users add a phone +
    submit (one entry per account, enforced by unique(event,user)). */
+/* ─── Official Rules (sweepstakes / contest) ───────────────────────────────
+   App Review 5.3.3 / 5.3.4: any prize promotion must present its official
+   rules in-app, be sponsored by the developer (not Apple), and state that
+   Apple is not a sponsor or involved in any way. Shared by the raffle
+   (random drawing) and gear drops (skill/first-to-finish contest).
+   ▶ LEGAL REVIEW: sponsor address, eligibility territory, and age are the
+   fields to confirm — see OFFICIAL_RULES_SPONSOR / _ELIGIBILITY below. */
+const OFFICIAL_RULES_SPONSOR = { name: "Lone Peak Overland", address: "Wenatchee, Washington, USA", contact: "kyle@lonepeakoverland.com" };
+const OFFICIAL_RULES_ELIGIBILITY = "legal residents of the United States who are 18 years of age or older at the time of entry";
+const fmtRulesUsd = (c) => (c == null || isNaN(c)) ? null : `$${Math.round(c / 100).toLocaleString()}`;
+
+function OfficialRulesFootnote({ onOpen }) {
+  return (
+    <div style={{ fontFamily: serif, fontSize: 10, color: T.tertiary, lineHeight: 1.5, marginTop: 10, textAlign: "center" }}>
+      No purchase necessary. By entering you agree to the{" "}
+      <span onClick={(e) => { e.stopPropagation(); onOpen(); }} style={{ color: T.copper, textDecoration: "underline", cursor: "pointer", fontWeight: 600 }}>Official Rules</span>.
+      Apple is not a sponsor of, or involved in, this promotion.
+    </div>
+  );
+}
+
+function OfficialRulesModal({ kind, event, drop, onClose }) {
+  const isRaffle = kind === "raffle";
+  const title = isRaffle ? (event && event.name) || "Drawing" : (drop && drop.title) || "Gear Drop";
+  const prize = isRaffle
+    ? `a one-time discount code for ${fmtRulesUsd(event && event.discount_cents) || "the stated amount"} off a qualifying Lone Peak Overland purchase${event && event.min_purchase_cents ? ` of ${fmtRulesUsd(event.min_purchase_cents)} or more` : ""}${event && event.code_expiry_days ? `, valid for ${event.code_expiry_days} days after issue` : ""}`
+    : (() => {
+        const items = drop && Array.isArray(drop.prize_items) && drop.prize_items.length ? drop.prize_items : (drop && drop.prize_title ? [{ title: drop.prize_title, value_cents: drop.prize_value_cents }] : []);
+        const total = items.reduce((a, i) => a + (Number(i.value_cents) || 0), 0);
+        const names = items.map(i => i.title).filter(Boolean).join(", ");
+        return `${names || "the prize described on the event page"}${total ? ` (approximate retail value ${fmtRulesUsd(total)})` : ""}`;
+      })();
+  const sponsor = OFFICIAL_RULES_SPONSOR;
+  const sec = (h, body) => (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ fontFamily: sans, fontSize: 10, color: T.copper, fontWeight: 700, letterSpacing: 1.2, marginBottom: 4 }}>{h}</div>
+      <div style={{ fontFamily: serif, fontSize: 13, color: T.white, lineHeight: 1.55, opacity: 0.92 }}>{body}</div>
+    </div>
+  );
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 12000, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 430, maxHeight: "88vh", display: "flex", flexDirection: "column", background: T.darkBg, borderRadius: "16px 16px 0 0", border: `1px solid ${T.charcoal}`, paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 16px", borderBottom: `1px solid ${T.charcoal}`, flexShrink: 0 }}>
+          <span style={{ flex: 1, fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.8 }}>OFFICIAL RULES</span>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex" }}><X size={18} color={T.tertiary} /></button>
+        </div>
+        <div className="th-scroll" style={{ overflowY: "auto", padding: "16px 16px 24px" }}>
+          <div style={{ fontFamily: sans, fontSize: 15, color: T.white, fontWeight: 700, marginBottom: 4 }}>{title}</div>
+          <div style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, marginBottom: 16, lineHeight: 1.5 }}>NO PURCHASE NECESSARY TO ENTER OR WIN. A purchase will not increase your chances of winning. Void where prohibited.</div>
+          {sec("SPONSOR", `${sponsor.name}, ${sponsor.address}. Questions: ${sponsor.contact}.`)}
+          {sec("ELIGIBILITY", `Open to ${OFFICIAL_RULES_ELIGIBILITY}. Employees of the Sponsor and their immediate families are not eligible. A free Trailhub account is required to enter; one entry per person${isRaffle ? " per drawing" : " per event"}.`)}
+          {sec("HOW TO ENTER", isRaffle
+            ? "Open the drawing in the Trailhub app, provide your name and phone number, agree to be contacted by the Sponsor, and tap Enter. Entries are accepted while the drawing is marked as collecting entries. No other method of entry is required."
+            : "Join the event in the Trailhub app before signups close, then complete the course during the live event window by checking in at each waypoint in order with a photo and note from within the check-in radius.")}
+          {sec("WINNER SELECTION", isRaffle
+            ? "One winner is selected at random from all eligible entries by the Sponsor after entries close. Odds of winning depend on the number of eligible entries received."
+            : "The winner is the eligible participant with the earliest recorded finish time, as captured on their device at the moment of their final check-in, once the event is ended by the host. Finish times captured while offline are honored when they sync. The Sponsor's determination is final.")}
+          {sec("PRIZE", `The winner receives ${prize}. Prizes are non-transferable and may not be redeemed for cash. The Sponsor may substitute a prize of equal or greater value. Any taxes are the winner's responsibility.`)}
+          {sec("NOTIFICATION", "The winner is notified through the Trailhub app (in-app message and push notification) and by the phone number provided. If a winner cannot be reached or is found ineligible, the Sponsor may select an alternate.")}
+          {sec("GENERAL", "By entering, you agree to these rules and to the Trailhub Terms of Service and Privacy Policy, and you consent to the Sponsor contacting you as described at entry. The Sponsor may disqualify entries that are fraudulent, automated, or in violation of these rules, and may cancel or modify the promotion if it cannot run as planned.")}
+          {sec("APPLE / GOOGLE", "This promotion is in no way sponsored, endorsed, administered by, or associated with Apple Inc. or Google LLC. Any questions, comments, or complaints regarding the promotion must be directed to the Sponsor, not to Apple or Google.")}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RaffleEntryScreen({ slug, currentUserId, currentProfile, currentUserEmail, onClose, onLoadEvent, onLoadMyEntry, onSubmitEntry, onGoSignUp, onCheckHost, onPickWinner, onLoadWinnerCode }) {
   const [event, setEvent] = useState(undefined); // undefined = loading; null = not found
   const [entered, setEntered] = useState(false);
+  const [showRules, setShowRules] = useState(false); // Official Rules modal (App Review 5.3.3/5.3.4)
   const [iWon, setIWon] = useState(false);
   const [winnerCode, setWinnerCode] = useState(null); // { code, expires_at, ... } (winner/admin only)
   const [isHost, setIsHost] = useState(false);
@@ -39012,6 +39085,8 @@ function RaffleEntryScreen({ slug, currentUserId, currentProfile, currentUserEma
     </label>
     {error && <div style={{ fontFamily: sans, fontSize: 12, color: T.red, marginBottom: 12 }}>{error}</div>}
     <button onClick={submit} disabled={!canSubmit} style={{ width: "100%", padding: "13px", borderRadius: 8, background: canSubmit ? T.copper : T.charcoal, color: canSubmit ? T.darkBg : T.tertiary, border: "none", fontFamily: sans, fontSize: 13, fontWeight: 700, letterSpacing: 1, cursor: canSubmit ? "pointer" : "default" }}>{submitting ? "ENTERING…" : "ENTER THE DRAWING"}</button>
+    <OfficialRulesFootnote onOpen={() => setShowRules(true)} />
+    {showRules && <OfficialRulesModal kind="raffle" event={event} onClose={() => setShowRules(false)} />}
   </>);
 }
 
