@@ -26010,7 +26010,9 @@ function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, init
 
           {/* App info */}
           <div style={{ textAlign: "center", marginTop: 20 }}>
-            <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1 }}>TRAILHUB v1.0</span>
+            {/* Bundle hash after the version — the quickest way to confirm an
+                OTA update landed on a device (compare to ota/latest.json). */}
+            <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1 }}>TRAILHUB v1.0{(() => { try { const s = document.querySelector('script[src*="trailhead-bundle."]'); const m = s && s.getAttribute("src").match(/trailhead-bundle\.([a-f0-9]+)\.js/); return m ? ` · ${m[1]}` : ""; } catch (_) { return ""; } })()}</span>
             <span style={{ fontFamily: serif, fontSize: 10, color: T.tertiary, display: "block", marginTop: 4 }}>Member since {user.joinDate}</span>
           </div>
         </div>
