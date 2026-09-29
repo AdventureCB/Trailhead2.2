@@ -25937,6 +25937,14 @@ function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, init
               </div>
               <ChevronRight size={16} color={T.tertiary} />
             </button>
+            <a href="https://trailhead.lonepeakoverland.com/privacy" target="_blank" rel="noopener" style={{ width: "100%", boxSizing: "border-box", display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: "none", border: "none", borderTop: `1px solid ${T.charcoal}`, cursor: "pointer", textAlign: "left", textDecoration: "none" }}>
+              <FileText size={16} color={T.tertiary} />
+              <div style={{ flex: 1 }}>
+                <span style={{ fontFamily: sans, fontSize: 13, color: T.white, display: "block" }}>Privacy Policy</span>
+                <span style={{ fontFamily: serif, fontSize: 11, color: T.tertiary }}>How Trailhub handles your data</span>
+              </div>
+              <ExternalLink size={16} color={T.tertiary} />
+            </a>
             <button onClick={() => onOpenBlockedUsers && onOpenBlockedUsers()} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: "none", border: "none", borderTop: `1px solid ${T.charcoal}`, cursor: "pointer", textAlign: "left" }}>
               <Shield size={16} color={T.tertiary} />
               <div style={{ flex: 1 }}>
@@ -44627,7 +44635,7 @@ function SignupScreen({ onSignup, onGoToLogin, onSetProfilePic, onAddBuild, onAw
 
         {/* Footer */}
         <div style={{ padding: "0 24px 24px", textAlign: "center", flexShrink: 0 }}>
-          <span style={{ fontFamily: serif, fontSize: 10, color: T.textGray, lineHeight: 1.6 }}>By continuing you agree to Trailhub's Terms of Service and Privacy Policy</span>
+          <span style={{ fontFamily: serif, fontSize: 10, color: T.textGray, lineHeight: 1.6 }}>By continuing you agree to Trailhub's Terms of Service and <a href="https://trailhead.lonepeakoverland.com/privacy" target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()} style={{ color: T.copper, textDecoration: "underline" }}>Privacy Policy</a></span>
         </div>
       </div>
     </div>
