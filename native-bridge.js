@@ -276,8 +276,29 @@ function initOneSignal(attempt = 0) {
       } catch (_) {}
     });
   } catch (_) {}
-  // Ask for push permission (native prompt; shown once).
-  try { OneSignal.Notifications.requestPermission(true); } catch (_) {}
+  // NOTE: no permission prompt here. Asking at boot (before sign-up) was the
+  // wrong moment and burned iOS's one system prompt. The app asks from the
+  // onboarding wizard's ENABLE button via requestNativePushPermission().
+}
+
+// Ask iOS for push permission through OneSignal. Resolves true when granted.
+// Polls for the plugin global like everything else here (cordova attaches
+// after our JS boots). Safe to call repeatedly — once decided, iOS returns
+// the stored answer without re-prompting.
+export async function requestNativePushPermission() {
+  if (!isNativePlatform()) return false;
+  initOneSignal();
+  let OneSignal = osApi();
+  for (let i = 0; !OneSignal && i < 30; i++) { await new Promise(r => setTimeout(r, 300)); OneSignal = osApi(); }
+  if (!OneSignal) return false;
+  try {
+    const already = await OneSignal.Notifications.getPermissionAsync();
+    if (already) return true;
+  } catch (_) {}
+  try {
+    const granted = await OneSignal.Notifications.requestPermission(true);
+    return !!granted;
+  } catch (e) { console.warn("[push] native permission request failed", e); return false; }
 }
 
 // Bind this device's push identity to the Supabase user id via OneSignal's
