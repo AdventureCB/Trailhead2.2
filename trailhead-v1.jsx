@@ -24677,11 +24677,11 @@ function ModFieldPhoto({ mod, setMod }) {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
     if (fRef.current) fRef.current.value = "";
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      setMod({ ...mod, photo: [{ id: Date.now(), url: ev.target.result, name: file.name }] });
-    };
-    reader.readAsDataURL(file);
+    // Shrink on intake (see fileToPreviewDataUrl) — a full-res base64 per mod
+    // photo is what pushed iOS Safari into a memory reload on Save.
+    fileToPreviewDataUrl(file).then((url) => {
+      setMod({ ...mod, photo: [{ id: Date.now(), url, name: file.name }] });
+    }).catch(() => {});
   };
   return (
     <>
@@ -45104,15 +45104,20 @@ function PhotoUploader({ photos, onChange, maxPhotos = 10, compact = false, onUp
           onChange([...photos, ...results]);
         }
       } else {
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-          results[idx] = { id: Date.now() + Math.random(), url: ev.target.result, name: file.name, size: file.size, type: "image", caption: "" };
+        // Shrink on intake: a 12-MP photo as raw base64 is ~6 MB in memory,
+        // and this picker allows 20 of them. Holding those in state until
+        // Save is what made iOS Safari reload the page mid-edit. The
+        // downscaled JPEG data URL (~300 KB) previews and uploads identically.
+        fileToPreviewDataUrl(file).then((url) => {
+          results[idx] = { id: Date.now() + Math.random(), url, name: file.name, size: file.size, type: "image", caption: "" };
           loaded++;
           if (loaded === allowed.length) {
-            onChange([...photos, ...results]);
+            onChange([...photos, ...results.filter(Boolean)]);
           }
-        };
-        reader.readAsDataURL(file);
+        }).catch(() => {
+          loaded++;
+          if (loaded === allowed.length) onChange([...photos, ...results.filter(Boolean)]);
+        });
       }
     });
   };
@@ -48041,42 +48046,82 @@ const __INITIAL_STRIPE_RETURN = (function() {
 // (or the original File if it already fits and we hit a decode error).
 async function compressImage(file, { maxDim = 512, maxBytes = 900 * 1024, mimeType = "image/jpeg" } = {}) {
   if (!file) return null;
-  // Skip work if already small enough and not huge dimension — we still
-  // re-encode to strip EXIF and normalize format.
-  const dataUrl = await new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(r.result);
-    r.onerror = reject;
-    r.readAsDataURL(file);
-  });
-  const img = await new Promise((resolve, reject) => {
-    // NOTE: can't use `new Image()` — the Trailhead module imports an `Image`
-    // icon from lucide-react which shadows the global constructor. Use the
-    // DOM API instead.
-    const i = document.createElement("img");
-    i.onload = () => resolve(i);
-    i.onerror = reject;
-    i.src = dataUrl;
-  });
-  let { width, height } = img;
-  if (width > maxDim || height > maxDim) {
-    const scale = Math.min(maxDim / width, maxDim / height);
-    width = Math.round(width * scale);
-    height = Math.round(height * scale);
+  // Memory-safe decode. iOS Safari kills and reloads the tab when a page
+  // holds too much image memory; the old path made a base64 copy of the full
+  // file (+33%) AND kept a full-resolution decoded bitmap alive. Now: decode
+  // straight from an object URL (no base64), let createImageBitmap downscale
+  // during decode where supported (never materializes the 12-MP bitmap), and
+  // release every buffer as soon as it's used.
+  const objectUrl = URL.createObjectURL(file);
+  let source = null; // ImageBitmap or <img>
+  let width = 0, height = 0;
+  try {
+    if (typeof createImageBitmap === "function") {
+      try {
+        // Probe dimensions cheaply, then decode already-scaled.
+        const probe = await createImageBitmap(file);
+        width = probe.width; height = probe.height;
+        if (width > maxDim || height > maxDim) {
+          const scale = Math.min(maxDim / width, maxDim / height);
+          const tw = Math.round(width * scale), th = Math.round(height * scale);
+          probe.close();
+          source = await createImageBitmap(file, { resizeWidth: tw, resizeHeight: th, resizeQuality: "high" });
+          width = tw; height = th;
+        } else {
+          source = probe;
+        }
+      } catch (_) { source = null; }
+    }
+    if (!source) {
+      // Fallback: <img> decode from the object URL (still no base64 copy).
+      // NOTE: can't use `new Image()` — a lucide `Image` icon shadows it.
+      const img = await new Promise((resolve, reject) => {
+        const i = document.createElement("img");
+        i.onload = () => resolve(i);
+        i.onerror = reject;
+        i.src = objectUrl;
+      });
+      width = img.naturalWidth || img.width; height = img.naturalHeight || img.height;
+      if (width > maxDim || height > maxDim) {
+        const scale = Math.min(maxDim / width, maxDim / height);
+        width = Math.round(width * scale); height = Math.round(height * scale);
+      }
+      source = img;
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(source, 0, 0, width, height);
+    if (source && typeof source.close === "function") { try { source.close(); } catch (_) {} }
+    // Step quality down until under maxBytes (or floor at 0.5).
+    let quality = 0.85;
+    let blob = await new Promise(res => canvas.toBlob(res, mimeType, quality));
+    while (blob && blob.size > maxBytes && quality > 0.5) {
+      quality -= 0.1;
+      blob = await new Promise(res => canvas.toBlob(res, mimeType, quality));
+    }
+    canvas.width = 0; canvas.height = 0; // hand the backing store back immediately
+    return blob || file;
+  } finally {
+    try { URL.revokeObjectURL(objectUrl); } catch (_) {}
   }
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  ctx.drawImage(img, 0, 0, width, height);
-  // Step quality down until under maxBytes (or floor at 0.5).
-  let quality = 0.85;
-  let blob = await new Promise(res => canvas.toBlob(res, mimeType, quality));
-  while (blob && blob.size > maxBytes && quality > 0.5) {
-    quality -= 0.1;
-    blob = await new Promise(res => canvas.toBlob(res, mimeType, quality));
-  }
-  return blob || file;
+}
+
+// Intake-time shrink for photo pickers. Instead of parking a full-resolution
+// base64 copy of each chosen photo in React state until Save (the pattern
+// that let iOS Safari run out of memory on a build with a dozen photos), we
+// downscale on selection and store a small JPEG data URL (~200-400 KB) —
+// still a data: URL, so every existing preview + uploadPostPhotoList path
+// works unchanged, just ~20x lighter. Falls back to the raw read on failure.
+async function fileToPreviewDataUrl(file, maxDim = 1600) {
+  const raw = () => new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = reject; r.readAsDataURL(file); });
+  try {
+    if (!file || !file.type || !file.type.startsWith("image/") || file.type === "image/gif") return await raw();
+    const blob = await compressImage(file, { maxDim, maxBytes: 1500 * 1024 });
+    if (!blob) return await raw();
+    return await new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = reject; r.readAsDataURL(blob); });
+  } catch (_) { return await raw(); }
 }
 
 function dbRowToLocalBuild(row, profile) {
