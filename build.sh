@@ -84,8 +84,20 @@ cat > ${DEPLOY_DIR}/index.html << HTMLEOF
   }
 </style>
 <script>
+// Boot-failure screen ONLY. Once the app has rendered, an uncaught error must
+// never replace the page — iOS 26 Safari leaks its own media-controls errors
+// (EmptyRanges / syncControl / played) to window.onerror, and that used to
+// wipe a working app to a red screen mid-session.
 window.onerror = function(msg, url, line, col, err) {
-  document.getElementById("root").innerHTML = '<pre style="color:red;padding:20px;word-wrap:break-word;font-size:12px">ERROR: ' + msg + '\\nLine: ' + line + '\\n' + (err && err.stack ? err.stack : '') + '</pre>';
+  try {
+    var stack = (err && err.stack) ? String(err.stack) : '';
+    // WebKit-internal scripts report no source URL; our bundle always does.
+    if (!url || /modern-media-controls|EmptyRanges|syncControl/.test(String(msg) + stack)) { console.warn('[shell] ignored browser-internal error:', msg); return true; }
+    var root = document.getElementById('root');
+    var booted = root && !/Loading Trailhub/.test(root.innerHTML);
+    if (booted) { console.error('[shell] uncaught error (app kept running):', msg, url, line, stack); return false; }
+    root.innerHTML = '<pre style="color:red;padding:20px;word-wrap:break-word;font-size:12px">ERROR: ' + msg + '\\nLine: ' + line + '\\n' + stack + '</pre>';
+  } catch (e) {}
 };
 </script>
 </head>
