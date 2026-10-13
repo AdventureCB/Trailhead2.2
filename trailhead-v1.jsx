@@ -6282,7 +6282,7 @@ function ImageCarousel({ images, startIndex, onClose }) {
 // Feed posts are now persisted to public.posts and hydrated on sign-in.
 // The legacy defaultFeedItems seed array was removed once the backend landed.
 
-function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShareCompose, onOpenShareIntent, onViewBuild, onOpenTripDetail, onOpenConvoy, feedItems, onUpdateFeed, onUpdatePost, likedPostIds, onTogglePostLike, postComments, onAddComment, onDeleteComment, likedCommentIds, onToggleCommentLike, currentUserId, currentUserName, currentUserHandle, currentUserAvatar, isAdmin, isModerator, isBetaTester, onDeletePost, onEditPost, onAddNotification, forumUserReplies, forumViewCounts, savedRoutes, onSaveRoute, onUnsaveRoute, onStartNav, onStartDirections, onAwardPoints, isGuest, onGuestTap, pendingPostNav, onConsumePendingPostNav, onSharedPostMissing, convoyRsvps, onRsvpConvoy, onSearchUsers, filterFn, hideFilters, onlineUserIds, tripReports, tripPlans, tripAuthors, onNewTripReport, onOpenTripDraft, onOpenSpotOnMap, onOpenHQOnMap, onOpenBountyById, onLoadMore, hasMore, loadingMore, onLoadTripRouteData, onReportContent, activeFilter: controlledFilter, setActiveFilter: setControlledFilter, gearDrops, gearDropWinners, myGearDropRuns, onOpenGearDrop, pollsById, myPollResponsesById, onSubmitPollResponse, pollAllBuilds, pollAllTripReports, pollCampingSpots, onNotifyMentions }) {
+function FeedScreen({ onViewUser, onBlockUser, onOpenMap, onOpenThread, onOpenDM, onOpenShareCompose, onOpenShareIntent, onViewBuild, onOpenTripDetail, onOpenConvoy, feedItems, onUpdateFeed, onUpdatePost, likedPostIds, onTogglePostLike, postComments, onAddComment, onDeleteComment, likedCommentIds, onToggleCommentLike, currentUserId, currentUserName, currentUserHandle, currentUserAvatar, isAdmin, isModerator, isBetaTester, onDeletePost, onEditPost, onAddNotification, forumUserReplies, forumViewCounts, savedRoutes, onSaveRoute, onUnsaveRoute, onStartNav, onStartDirections, onAwardPoints, isGuest, onGuestTap, pendingPostNav, onConsumePendingPostNav, onSharedPostMissing, convoyRsvps, onRsvpConvoy, onSearchUsers, filterFn, hideFilters, onlineUserIds, tripReports, tripPlans, tripAuthors, onNewTripReport, onOpenTripDraft, onOpenSpotOnMap, onOpenHQOnMap, onOpenBountyById, onLoadMore, hasMore, loadingMore, onLoadTripRouteData, onReportContent, activeFilter: controlledFilter, setActiveFilter: setControlledFilter, gearDrops, gearDropWinners, myGearDropRuns, onOpenGearDrop, pollsById, myPollResponsesById, onSubmitPollResponse, pollAllBuilds, pollAllTripReports, pollCampingSpots, onNotifyMentions }) {
   // Infinite-scroll sentinel — bottom of the feed list. When it scrolls
   // into view, ask the root to load the next page. Disabled when the
   // active filter is anything but ALL (filter-narrowed lists don't drive
@@ -6628,6 +6628,15 @@ function FeedScreen({ onViewUser, onOpenMap, onOpenThread, onOpenDM, onOpenShare
               <button onClick={(e) => { e.stopPropagation(); setPostMenuOpen(null); onReportContent && onReportContent(buildReportTarget()); }} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "10px 14px", background: "none", border: "none", cursor: "pointer" }}>
                 <Flag size={13} color={T.red} />
                 <span style={{ fontFamily: sans, fontSize: 12, color: T.red }}>Report</span>
+              </button>
+            )}
+            {/* Block the author straight from the post (App Review 1.2 — the
+                reviewer looks for it next to Report). Their content leaves
+                the feed instantly and the team is notified. */}
+            {onBlockUser && currentUserId && item.userId && item.userId !== currentUserId && (
+              <button onClick={(e) => { e.stopPropagation(); setPostMenuOpen(null); const h = (item.handle || "").replace(/^@/, ""); if (typeof confirm !== "function" || confirm(`Block ${h ? "@" + h : "this user"}? You won't see their posts, comments, or messages, and they can't message you. You can unblock in Profile → Blocked Users.`)) onBlockUser(item.userId, { handle: h, snippet: item.title || item.body || "" }); }} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "10px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
+                <Shield size={13} color={T.red} />
+                <span style={{ fontFamily: sans, fontSize: 12, color: T.red }}>Block {item.handle ? "@" + String(item.handle).replace(/^@/, "") : "user"}</span>
               </button>
             )}
           </div>
@@ -56800,9 +56809,29 @@ export default function Trailhead() {
   // Optimistic like follow. Blocking also unfollows them and drops any
   // direct conversation from the inbox locally (the DB trigger stops them
   // messaging you; the visible* memos hide everything else of theirs).
-  const blockUser = async (targetUserId) => {
+  const blockUser = async (targetUserId, meta) => {
     const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
     if (!uid || !targetUserId || targetUserId === uid) return { error: "Invalid user" };
+    // App Review 1.2: blocking must also notify the developer. File a report
+    // row (same queue + admin push as the Flag button) — fire-and-forget so a
+    // report hiccup never blocks the block.
+    (async () => {
+      try {
+        await supabase.from("content_reports").insert({
+          reporter_id: uid,
+          reporter_handle: (currentProfile && currentProfile.handle) || null,
+          reporter_name: (currentProfile && currentProfile.full_name) || null,
+          target_type: "user",
+          target_id: targetUserId,
+          target_owner_id: targetUserId,
+          target_owner_handle: (meta && meta.handle) || null,
+          target_snapshot: (meta && meta.snippet) ? String(meta.snippet).slice(0, 400) : "User blocked",
+          target_url: (meta && meta.handle) ? `/users/${meta.handle}` : null,
+          reason_code: "other",
+          reason_details: "Auto-filed: user blocked this account" + ((meta && meta.snippet) ? " from a post" : ""),
+        });
+      } catch (e) { console.warn("[block] report insert failed", e); }
+    })();
     setBlockedIds(prev => { const n = new Set(prev); n.add(targetUserId); return n; });
     setDmConvos(prev => prev.filter(c => !(c.type === "direct" && (c.participants || []).some(p => p.userId === targetUserId))));
     try {
@@ -60246,6 +60275,7 @@ export default function Trailhead() {
       tripPlans={allTripPlans}
       onOpenConvoy={(id) => setDetailConvoyId(id)}
       onReportContent={requireAuth(openContentReport)}
+      onBlockUser={requireAuth(blockUser)}
       pollsById={pollsById}
       myPollResponsesById={myPollResponsesById}
       onSubmitPollResponse={requireAuth(submitPollResponse)}
