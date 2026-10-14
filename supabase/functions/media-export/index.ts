@@ -101,9 +101,38 @@ async function dbxEnsureFolder(path: string) {
   try { await dbx("files/create_folder_v2", { path, autorename: false }); }
   catch (e) { const m = String((e as Error).message || ""); if (!/conflict/.test(m)) throw e; }
 }
-async function dbxSaveUrl(path: string, url: string) {
-  const d = await dbx("files/save_url", { path, url });
-  return (d && d.async_job_id) || null;
+// save_url is async: acceptance ≠ success. The fetch+commit happens later and
+// can still fail (most often the per-folder write lock when many jobs commit at
+// once). Poll the job to a terminal state and retry the whole save on failure.
+async function dbxSaveUrl(path: string, url: string): Promise<"done" | "sent"> {
+  let wait = 1500;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const d = await dbx("files/save_url", { path, url });
+    if (d && d[".tag"] === "complete") return "done";
+    const jobId = d && d.async_job_id;
+    if (!jobId) return "sent";
+    for (let poll = 0; poll < 10; poll++) {
+      await sleep(1000);
+      const st = await dbx("files/save_url/check_job_status", { async_job_id: jobId });
+      const tag = st && st[".tag"];
+      if (tag === "complete") return "done";
+      if (tag === "failed") {
+        const why = JSON.stringify(st.failed || st).slice(0, 200);
+        if (attempt === 3) throw new Error(`save_url job failed: ${why}`);
+        console.warn("[dbx] save_url job failed, retrying:", why);
+        await sleep(wait + Math.random() * 800); wait = Math.min(wait * 2, 12000);
+        break; // → next attempt
+      }
+      // in_progress → keep polling
+      if (poll === 9) return "sent"; // still running; reconciliation will confirm later
+    }
+  }
+  return "sent";
+}
+// Does the file exist in Dropbox? Used to reconcile earlier "sent" rows.
+async function dbxExists(path: string): Promise<boolean> {
+  try { const m = await dbx("files/get_metadata", { path }); return !!(m && m[".tag"] === "file"); }
+  catch (e) { if (/not_found/.test(String((e as Error).message))) return false; throw e; }
 }
 async function dbxUploadBytes(path: string, bytes: Uint8Array) {
   await dbxRaw("https://content.dropboxapi.com/2/files/upload", { "Content-Type": "application/octet-stream", "Dropbox-API-Arg": JSON.stringify({ path, mode: "overwrite", mute: true }) }, bytes, "files/upload");
@@ -135,9 +164,13 @@ async function handleFor(userId: string | null): Promise<string> {
   if (!userId) return "user";
   try { const p = await sb(`profiles?id=eq.${userId}&select=handle`); return slug(p?.[0]?.handle || userId.slice(0, 8), 32); } catch { return userId.slice(0, 8); }
 }
-async function alreadyExported(table: string, id: string): Promise<Set<string>> {
-  try { const rows = await sb(`media_exports?source_table=eq.${table}&source_id=eq.${id}&status=neq.error&select=media_key`); return new Set((rows || []).map((r: any) => r.media_key)); }
-  catch { return new Set(); }
+// Ledger rows for this source: done = confirmed in Dropbox; sent = accepted
+// but unconfirmed (verify before trusting); error = retry.
+async function ledgerRows(table: string, id: string): Promise<Map<string, { status: string; path: string | null }>> {
+  const out = new Map<string, { status: string; path: string | null }>();
+  try { const rows = await sb(`media_exports?source_table=eq.${table}&source_id=eq.${id}&select=media_key,status,dropbox_path`); (rows || []).forEach((r: any) => out.set(r.media_key, { status: r.status, path: r.dropbox_path })); }
+  catch { /* treat as empty */ }
+  return out;
 }
 async function ledger(table: string, id: string, userId: string | null, key: string, path: string | null, status: string, error?: string) {
   try { await sb(`media_exports`, { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify({ source_table: table, source_id: id, user_id: userId, media_key: key, dropbox_path: path, status, error: error ? error.slice(0, 500) : null }) }); }
@@ -237,18 +270,32 @@ Deno.serve(async (req) => {
     // they don't all hit Dropbox's per-folder write lock in the same instant.
     await sleep(Math.random() * 2500);
     const { userId, items } = await resolve(table, id);
-    const done = await alreadyExported(table, id);
-    const todo = items.filter(it => !done.has(it.key));
-    if (!todo.length) return json({ ok: true, exported: 0, skipped: items.length });
+    const seen = await ledgerRows(table, id);
+    // Decide per item: done → skip; sent → verify it's really in Dropbox
+    // (promote to done, else redo); error/unknown → do it.
+    const todo: Item[] = [];
+    let skipped = 0;
+    for (const it of items) {
+      const row = seen.get(it.key);
+      if (row && row.status === "done") { skipped++; continue; }
+      if (row && row.status === "sent" && row.path) {
+        let exists = false;
+        try { exists = await dbxExists(row.path); } catch (e) { console.warn("[dbx] metadata check failed", e); }
+        if (exists) { await ledger(table, id, userId, it.key, row.path, "done"); skipped++; continue; }
+      }
+      todo.push(it);
+    }
+    if (!todo.length) return json({ ok: true, exported: 0, skipped });
     const folders = new Set(todo.map(it => it.folder));
     for (const f of folders) { try { await dbxEnsureFolder(f); } catch (e) { console.warn("[dbx] folder", f, e); } }
     let exported = 0, failed = 0;
     for (const it of todo) {
       const path = `${it.folder}/${it.filename}`;
       try {
+        let status: "done" | "sent" = "done";
         if (it.bytes) await dbxUploadBytes(path, it.bytes);
-        else if (it.url) await dbxSaveUrl(path, it.url);
-        await ledger(table, id, userId, it.key, path, "sent");
+        else if (it.url) status = await dbxSaveUrl(path, it.url);
+        await ledger(table, id, userId, it.key, path, status);
         exported++;
       } catch (e) {
         failed++;
