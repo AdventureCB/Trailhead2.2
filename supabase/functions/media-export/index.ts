@@ -71,11 +71,31 @@ async function dbxPathRootHeader(): Promise<Record<string, string>> {
   }
   return _pathRoot ? { "Dropbox-API-Path-Root": _pathRoot } : {};
 }
+// Dropbox serializes writes per shared folder: parallel invocations writing
+// into the same folder get 409 too_many_write_operations (or 429). Those are
+// retryable — honor Retry-After, back off with jitter, give up after ~1 min.
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+function retryable(status: number, text: string) {
+  return status === 429 || (status === 409 && /too_many_write_operations|too_many_requests/.test(text)) || status >= 500;
+}
+async function dbxRaw(url: string, headers: Record<string, string>, body: BodyInit, label: string) {
+  let wait = 1000;
+  for (let attempt = 0; attempt < 7; attempt++) {
+    const res = await fetch(url, { method: "POST", headers: { Authorization: `Bearer ${await dbxToken()}`, ...(await dbxPathRootHeader()), ...headers }, body });
+    const text = await res.text();
+    if (res.ok) { try { return text ? JSON.parse(text) : null; } catch { return text; } }
+    if (retryable(res.status, text) && attempt < 6) {
+      const ra = Number(res.headers.get("Retry-After") || 0);
+      await sleep(Math.max(ra * 1000, wait) + Math.random() * 500);
+      wait = Math.min(wait * 2, 16000);
+      continue;
+    }
+    throw new Error(`dropbox ${label} ${res.status}: ${text.slice(0, 300)}`);
+  }
+  throw new Error(`dropbox ${label}: retries exhausted`);
+}
 async function dbx(endpoint: string, body: unknown) {
-  const res = await fetch(`https://api.dropboxapi.com/2/${endpoint}`, { method: "POST", headers: { Authorization: `Bearer ${await dbxToken()}`, "Content-Type": "application/json", ...(await dbxPathRootHeader()) }, body: JSON.stringify(body) });
-  const text = await res.text(); let d: any = null; try { d = text ? JSON.parse(text) : null; } catch { d = text; }
-  if (!res.ok) throw new Error(`dropbox ${endpoint} ${res.status}: ${typeof d === "string" ? d : JSON.stringify(d).slice(0, 300)}`);
-  return d;
+  return dbxRaw(`https://api.dropboxapi.com/2/${endpoint}`, { "Content-Type": "application/json" }, JSON.stringify(body), endpoint);
 }
 async function dbxEnsureFolder(path: string) {
   try { await dbx("files/create_folder_v2", { path, autorename: false }); }
@@ -86,8 +106,7 @@ async function dbxSaveUrl(path: string, url: string) {
   return (d && d.async_job_id) || null;
 }
 async function dbxUploadBytes(path: string, bytes: Uint8Array) {
-  const res = await fetch("https://content.dropboxapi.com/2/files/upload", { method: "POST", headers: { Authorization: `Bearer ${await dbxToken()}`, "Content-Type": "application/octet-stream", "Dropbox-API-Arg": JSON.stringify({ path, mode: "overwrite", mute: true }), ...(await dbxPathRootHeader()) }, body: bytes });
-  if (!res.ok) throw new Error(`dropbox upload ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  await dbxRaw("https://content.dropboxapi.com/2/files/upload", { "Content-Type": "application/octet-stream", "Dropbox-API-Arg": JSON.stringify({ path, mode: "overwrite", mute: true }) }, bytes, "files/upload");
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -214,6 +233,9 @@ Deno.serve(async (req) => {
   if (!table || !id) return json({ error: "table + id required" }, 400);
 
   try {
+    // Backfills fire every row at once; spread the invocations out a little so
+    // they don't all hit Dropbox's per-folder write lock in the same instant.
+    await sleep(Math.random() * 2500);
     const { userId, items } = await resolve(table, id);
     const done = await alreadyExported(table, id);
     const todo = items.filter(it => !done.has(it.key));
