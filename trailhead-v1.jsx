@@ -48458,6 +48458,7 @@ async function attachAltTextToPhotos(list) {
 async function uploadPostPhotoList(list, uid) {
   if (!Array.isArray(list) || list.length === 0) return list;
   const out = [];
+  const dropped = []; // local entries we could NOT upload — excluded, user is told
   for (let i = 0; i < list.length; i++) {
     const entry = list[i];
     const url = typeof entry === "string" ? entry : (entry && entry.url);
@@ -48475,7 +48476,7 @@ async function uploadPostPhotoList(list, uid) {
         // (mp4/quicktime/webm). Stops SVG/HTML/exe etc. labeled as video.
         if (!isAllowedVideoMime(blob.type)) {
           console.warn("[post-photos] rejected MIME", blob.type);
-          out.push(entry); continue;
+          dropped.push(entry); continue;
         }
         contentType = blob.type;
         ext = (contentType.split("/")[1] || "mp4").split(";")[0];
@@ -48486,19 +48487,31 @@ async function uploadPostPhotoList(list, uid) {
         contentType = "image/jpeg";
         ext = "jpg";
       }
-      const path = `${uid}/${Date.now()}-${i}.${ext}`;
-      const { error: upErr } = await supabase.storage
-        .from("post-photos")
-        .upload(path, uploadBlob, { contentType, upsert: true });
-      if (upErr) { console.error("[post-photos] upload error", upErr); out.push(entry); continue; }
-      const { data: pub } = supabase.storage.from("post-photos").getPublicUrl(path);
-      const publicUrl = pub && pub.publicUrl;
-      if (!publicUrl) { out.push(entry); continue; }
+      // Retry transient storage failures (3 attempts, backoff). If it still
+      // fails, DROP the photo and tell the user — never persist the local
+      // data:/blob: entry, which bakes a base64 image into the row (bloats
+      // jsonb, renders for nobody else, and can't be archived/transformed).
+      let publicUrl = null, lastErr = null;
+      for (let attempt = 0; attempt < 3 && !publicUrl; attempt++) {
+        if (attempt > 0) await new Promise(r => setTimeout(r, attempt === 1 ? 800 : 2500));
+        const path = `${uid}/${Date.now()}-${i}.${ext}`;
+        const { error: upErr } = await supabase.storage
+          .from("post-photos")
+          .upload(path, uploadBlob, { contentType, upsert: true });
+        if (upErr) { lastErr = upErr; console.warn(`[post-photos] upload error (attempt ${attempt + 1})`, upErr); continue; }
+        const { data: pub } = supabase.storage.from("post-photos").getPublicUrl(path);
+        publicUrl = (pub && pub.publicUrl) || null;
+      }
+      if (!publicUrl) { console.error("[post-photos] upload failed after retries", lastErr); dropped.push(entry); continue; }
       out.push(typeof entry === "string" ? publicUrl : { ...entry, url: publicUrl });
     } catch (e) {
       console.error("[post-photos] upload failed", e);
-      out.push(entry);
+      dropped.push(entry);
     }
+  }
+  if (dropped.length > 0 && typeof window !== "undefined") {
+    const n = dropped.length;
+    try { window.dispatchEvent(new CustomEvent("trailhead:upload_rejected", { detail: { reason: n === 1 ? "1 photo couldn't be uploaded and was left out — try adding it again." : `${n} photos couldn't be uploaded and were left out — try adding them again.` } })); } catch (_) {}
   }
   // Generate accessibility + SEO alt text via the Edge Function. Runs
   // every image in parallel; videos and already-tagged entries are
@@ -58807,6 +58820,40 @@ export default function Trailhead() {
     }
     return draft.id;
   };
+
+  // Self-heal rows that carry inline base64/blob photos (a failed upload used
+  // to persist the local entry). When the OWNER or an ADMIN loads such a post
+  // or camp spot, upload the real file and patch the row — which also lets the
+  // media export pick it up. Once per row per session; unfetchable blob: URLs
+  // from a past session simply drop out of the list.
+  const healedMediaRef = useRef(new Set());
+  useEffect(() => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) return;
+    const urlOf = (p) => (typeof p === "string" ? p : (p && p.url));
+    const isLocal = (u) => typeof u === "string" && (u.startsWith("data:") || u.startsWith("blob:"));
+    (feedItems || []).forEach((item) => {
+      if (!item || typeof item.id !== "string" || item.id.length < 20 || !Array.isArray(item.photoUrls)) return;
+      if (!(item.userId === uid || isAdmin) || healedMediaRef.current.has("post:" + item.id)) return;
+      if (!item.photoUrls.some(p => isLocal(urlOf(p)))) return;
+      healedMediaRef.current.add("post:" + item.id);
+      (async () => {
+        try {
+          const fixed = await uploadPostPhotoList(item.photoUrls, uid);
+          if (fixed.some(p => isLocal(urlOf(p)))) return; // still local → leave it, try next session
+          await updatePost(item.id, { photoUrls: fixed });
+          console.info("[heal] repaired inline photos on post", item.id);
+        } catch (e) { console.warn("[heal] post media", e); }
+      })();
+    });
+    (campingSpots || []).forEach((s) => {
+      if (!s || typeof s.id !== "string" || s.id.length < 20 || !Array.isArray(s.photos)) return;
+      if (!(s.user_id === uid || isAdmin) || healedMediaRef.current.has("spot:" + s.id)) return;
+      if (!s.photos.some(p => isLocal(urlOf(p)))) return;
+      healedMediaRef.current.add("spot:" + s.id);
+      Promise.resolve(updateCampingSpot(s.id, { photos: s.photos })).then(() => console.info("[heal] repaired inline photos on spot", s.id)).catch((e) => console.warn("[heal] spot media", e));
+    });
+  }, [feedItems, campingSpots, isAdmin, supabaseSession]);
 
   const addCampingSpot = async (spot) => {
     const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
