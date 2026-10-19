@@ -8335,14 +8335,18 @@ function dbRowToForumReply(row, profile) {
    time via `processForumBodyImages`. */
 // Admin-only "link button" section: { type: "url", label, url }. Renders as a
 // copper CTA in the thread (and a plain anchor in the legacy HTML / SSR).
-function ForumUrlSectionEditor({ label, url, onChange, onRemove }) {
+function ForumUrlSectionEditor({ label, url, onChange, onRemove, onMoveUp, onMoveDown }) {
   const ok = /^https?:\/\/\S+/i.test((url || "").trim());
   const field = { width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none" };
   return (
     <div style={{ marginBottom: 14, padding: 12, borderRadius: 10, background: T.darkCard, border: `1px solid ${T.copper}50` }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
         <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.2, fontWeight: 700 }}>LINK BUTTON · ADMIN</span>
-        <button onClick={onRemove} style={{ background: "none", border: "none", cursor: "pointer", padding: 2 }}><X size={14} color={T.tertiary} /></button>
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <button onClick={onMoveUp} disabled={!onMoveUp} title="Move up" style={{ display: "flex", padding: "4px 6px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}30`, cursor: onMoveUp ? "pointer" : "default", opacity: onMoveUp ? 1 : 0.35 }}><ArrowUp size={11} color={T.tertiary} /></button>
+          <button onClick={onMoveDown} disabled={!onMoveDown} title="Move down" style={{ display: "flex", padding: "4px 6px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}30`, cursor: onMoveDown ? "pointer" : "default", opacity: onMoveDown ? 1 : 0.35 }}><ArrowDown size={11} color={T.tertiary} /></button>
+          <button onClick={onRemove} title="Remove" style={{ background: "none", border: "none", cursor: "pointer", padding: 2, display: "flex" }}><X size={14} color={T.tertiary} /></button>
+        </div>
       </div>
       <input value={label || ""} onChange={(e) => onChange({ label: e.target.value })} placeholder="Button text (e.g. Shop the kit)" style={{ ...field, marginBottom: 8 }} />
       <input value={url || ""} onChange={(e) => onChange({ url: e.target.value })} placeholder="https://…" type="url" inputMode="url" autoCapitalize="none" style={{ ...field, borderColor: (url && !ok) ? T.red : T.charcoal }} />
@@ -8352,7 +8356,7 @@ function ForumUrlSectionEditor({ label, url, onChange, onRemove }) {
   );
 }
 
-function ForumSectionEditor({ subheading, onSubheadingChange, value, onChange, onRemove, showRemove, placeholder, autoFocusBody, sectionNumber, videoUrl, onVideoUrlChange }) {
+function ForumSectionEditor({ subheading, onSubheadingChange, value, onChange, onRemove, showRemove, placeholder, autoFocusBody, sectionNumber, videoUrl, onVideoUrlChange, onMoveUp, onMoveDown }) {
   const bodyRef = useRef(null);
   const [activeFormats, setActiveFormats] = useState({});
   const [linkInputOpen, setLinkInputOpen] = useState(false);
@@ -8397,11 +8401,19 @@ function ForumSectionEditor({ subheading, onSubheadingChange, value, onChange, o
         <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600 }}>
           {sectionNumber ? `SECTION ${sectionNumber}` : "SECTION"}
         </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          {(onMoveUp || onMoveDown) && (
+            <>
+              <button onClick={onMoveUp} disabled={!onMoveUp} title="Move up" style={{ display: "flex", padding: "4px 6px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}30`, cursor: onMoveUp ? "pointer" : "default", opacity: onMoveUp ? 1 : 0.35 }}><ArrowUp size={11} color={T.tertiary} /></button>
+              <button onClick={onMoveDown} disabled={!onMoveDown} title="Move down" style={{ display: "flex", padding: "4px 6px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}30`, cursor: onMoveDown ? "pointer" : "default", opacity: onMoveDown ? 1 : 0.35 }}><ArrowDown size={11} color={T.tertiary} /></button>
+            </>
+          )}
         {showRemove && (
           <button onClick={onRemove} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", borderRadius: 6, background: "none", border: `1px solid ${T.tertiary}30`, cursor: "pointer", color: T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 600 }} title="Remove section">
             <Trash2 size={11} color={T.tertiary} /> Remove
           </button>
         )}
+        </div>
       </div>
       <input
         value={subheading || ""}
@@ -8974,6 +8986,10 @@ function ForumScreen({ pendingThread, onPendingHandled, onLoadThreadTeaser, pend
   const updateSection = (id, patch) => setNtSections(prev => prev.map(s => s.id === id ? { ...s, ...patch } : s));
   const addSection = () => setNtSections(prev => [...prev, { id: newSectionId(), subheading: "", body: "", videoUrl: "" }]);
   const removeSection = (id) => setNtSections(prev => prev.length > 1 ? prev.filter(s => s.id !== id) : prev);
+  // Reorder: any section (incl. admin link buttons) can move up/down.
+  const moveSectionInList = (list, id, dir) => { const i = list.findIndex(s => s.id === id); const j = i + dir; if (i < 0 || j < 0 || j >= list.length) return list; const next = list.slice(); [next[i], next[j]] = [next[j], next[i]]; return next; };
+  const moveSection = (id, dir) => setNtSections(prev => moveSectionInList(prev, id, dir));
+  const moveEditSection = (id, dir) => setEditSections(prev => moveSectionInList(prev, id, dir));
   const [ntShareToFeed, setNtShareToFeed] = useState(true);
   const [ntPhotos, setNtPhotos] = useState([]);
   const [ntPickCat, setNtPickCat] = useState(null); // for category picker in new thread from home
@@ -9309,7 +9325,7 @@ function ForumScreen({ pendingThread, onPendingHandled, onLoadThreadTeaser, pend
               {/* Sections — each is { subheading (h2), body (paragraph + inline) }.
                   Title above is the h1. "+ Add Section" appends an empty section. */}
               {ntSections.map((s, i) => s.type === "url" ? (
-                <ForumUrlSectionEditor key={s.id} label={s.label} url={s.url} onChange={(patch) => updateSection(s.id, patch)} onRemove={() => removeSection(s.id)} />
+                <ForumUrlSectionEditor key={s.id} label={s.label} url={s.url} onChange={(patch) => updateSection(s.id, patch)} onRemove={() => removeSection(s.id)} onMoveUp={i > 0 ? () => moveSection(s.id, -1) : null} onMoveDown={i < ntSections.length - 1 ? () => moveSection(s.id, 1) : null} />
               ) : (
                 <ForumSectionEditor
                   key={s.id}
@@ -9322,6 +9338,8 @@ function ForumScreen({ pendingThread, onPendingHandled, onLoadThreadTeaser, pend
                   onVideoUrlChange={(v) => updateSection(s.id, { videoUrl: v })}
                   showRemove={ntSections.length > 1}
                   onRemove={() => removeSection(s.id)}
+                  onMoveUp={i > 0 ? () => moveSection(s.id, -1) : null}
+                  onMoveDown={i < ntSections.length - 1 ? () => moveSection(s.id, 1) : null}
                   autoFocusBody={false}
                   placeholder={i === 0
                     ? "Share your knowledge, ask a question, or start a discussion..."
@@ -10210,7 +10228,7 @@ function ForumScreen({ pendingThread, onPendingHandled, onLoadThreadTeaser, pend
                       Title above is the h1; each subheading becomes <h2>; bodies
                       are paragraph-only with inline formatting + images. */}
                   {editSections.map((s, i) => s.type === "url" ? (
-                    <ForumUrlSectionEditor key={s.id} label={s.label} url={s.url} onChange={(patch) => updateEditSection(s.id, patch)} onRemove={() => removeEditSection(s.id)} />
+                    <ForumUrlSectionEditor key={s.id} label={s.label} url={s.url} onChange={(patch) => updateEditSection(s.id, patch)} onRemove={() => removeEditSection(s.id)} onMoveUp={i > 0 ? () => moveEditSection(s.id, -1) : null} onMoveDown={i < editSections.length - 1 ? () => moveEditSection(s.id, 1) : null} />
                   ) : (
                     <ForumSectionEditor
                       key={s.id}
@@ -10223,6 +10241,8 @@ function ForumScreen({ pendingThread, onPendingHandled, onLoadThreadTeaser, pend
                       onVideoUrlChange={(v) => updateEditSection(s.id, { videoUrl: v })}
                       showRemove={editSections.length > 1}
                       onRemove={() => removeEditSection(s.id)}
+                      onMoveUp={i > 0 ? () => moveEditSection(s.id, -1) : null}
+                      onMoveDown={i < editSections.length - 1 ? () => moveEditSection(s.id, 1) : null}
                       placeholder={i === 0
                         ? "Share your knowledge, ask a question, or start a discussion..."
                         : "Continue the discussion..."}
