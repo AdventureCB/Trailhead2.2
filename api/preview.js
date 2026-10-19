@@ -129,6 +129,10 @@ function buildForumThreadSSR(article, canonicalUrl, origin) {
   if (Array.isArray(article.sections) && article.sections.length > 0) {
     sectionsHtml = article.sections.map(s => {
       if (!s) return "";
+      if (s.type === "url" && /^https?:\/\//i.test(s.url || "")) {
+        const esc = (v) => String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        return `<p style="margin:16px 0;"><a href="${esc(s.url)}" target="_blank" rel="noopener" style="display:inline-block;padding:12px 18px;border-radius:10px;background:#C49A6C;color:#111;text-decoration:none;font-family:'Trebuchet MS',sans-serif;font-weight:800;letter-spacing:0.8px;font-size:13px;">${esc(s.label || "Open link")}</a></p>`;
+      }
       const sub = (s.subheading || "").trim();
       const body = sanitizeForumHtml((s.body || "").trim());
       if (!sub && !body) return "";
@@ -280,6 +284,19 @@ const staticMapWithPath = (coords, lineColor, accentColor) => {
   return `https://api.mapbox.com/styles/v1/mapbox/outdoors-v12/static/${path},${startPin},${endPin}/auto/1200x630@2x?padding=60&access_token=${MAPBOX_TOKEN}`;
 };
 
+// POST /rest/v1/rpc/<fn> with the anon key; returns the first row or null.
+async function supabaseRpc(fn, args) {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+      method: "POST",
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}`, "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(args || {}),
+    });
+    if (!res.ok) return null;
+    const rows = await res.json();
+    return Array.isArray(rows) ? rows[0] || null : rows || null;
+  } catch (e) { return null; }
+}
 async function supabaseFetch(table, queryStr) {
   const url = `${SUPABASE_URL}/rest/v1/${table}?${queryStr}`;
   try {
@@ -665,6 +682,19 @@ async function resolveEntity(type, id) {
       `slug=eq.${encodeURIComponent(id)}&select=id,title,body,sections,photos,category_slug,subcategory_slug,view_count,created_at,updated_at,user_id&limit=1`
     );
     if (!row) {
+      // Not visible to the anonymous key — it may be inside a members-only
+      // reading window. The teaser RPC returns title/home only, so the share
+      // card still looks right and the SPA shows its sign-in gate.
+      const teaser = await supabaseRpc("forum_thread_teaser", { p_id: null, p_slug: id });
+      if (teaser && teaser.members_only_until && new Date(teaser.members_only_until) > new Date()) {
+        const until = new Date(teaser.members_only_until).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        return {
+          title: `${teaser.title} · Trailhub`,
+          description: `Members-only discussion until ${until} — sign in free to Trailhub to read it now.`,
+          image: teaser.hero_url || null,
+          imageAlt: "",
+        };
+      }
       return {
         title: "Forum Thread · Trailhub",
         description: "Join the conversation on the Trailhub community forum.",

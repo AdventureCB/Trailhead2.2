@@ -8246,6 +8246,11 @@ function assembleSectionsHtml(sections) {
   const parts = [];
   sections.forEach(s => {
     if (!s) return;
+    if (s.type === "url" && s.url) { // admin link button → plain anchor in the legacy HTML
+      const esc = (v) => String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+      parts.push(`<p><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.label || s.url)}</a></p>`);
+      return;
+    }
     const sub = (s.subheading || "").trim();
     const body = (s.body || "").trim();
     if (!sub && !body) return;
@@ -8273,6 +8278,7 @@ function dbRowToForumThread(row, profile) {
     sections: Array.isArray(row.sections) ? row.sections : [],
     photos: Array.isArray(row.photos) ? row.photos : [],
     pinned: !!row.pinned,
+    membersOnlyUntil: row.members_only_until || null, // guests can't read while this is in the future
     views: row.view_count || 0,
     replies: 0, // live count comes from repliesByThread length
     time: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
@@ -8327,6 +8333,25 @@ function dbRowToForumReply(row, profile) {
    forcing body to <p> + inline formatting keeps the SEO heading hierarchy
    intact across every thread. Inline images get alt text added at submit
    time via `processForumBodyImages`. */
+// Admin-only "link button" section: { type: "url", label, url }. Renders as a
+// copper CTA in the thread (and a plain anchor in the legacy HTML / SSR).
+function ForumUrlSectionEditor({ label, url, onChange, onRemove }) {
+  const ok = /^https?:\/\/\S+/i.test((url || "").trim());
+  const field = { width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none" };
+  return (
+    <div style={{ marginBottom: 14, padding: 12, borderRadius: 10, background: T.darkCard, border: `1px solid ${T.copper}50` }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+        <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.2, fontWeight: 700 }}>LINK BUTTON · ADMIN</span>
+        <button onClick={onRemove} style={{ background: "none", border: "none", cursor: "pointer", padding: 2 }}><X size={14} color={T.tertiary} /></button>
+      </div>
+      <input value={label || ""} onChange={(e) => onChange({ label: e.target.value })} placeholder="Button text (e.g. Shop the kit)" style={{ ...field, marginBottom: 8 }} />
+      <input value={url || ""} onChange={(e) => onChange({ url: e.target.value })} placeholder="https://…" type="url" inputMode="url" autoCapitalize="none" style={{ ...field, borderColor: (url && !ok) ? T.red : T.charcoal }} />
+      {url && !ok && <div style={{ fontFamily: sans, fontSize: 10, color: T.red, marginTop: 6 }}>Needs a full https:// link.</div>}
+      {ok && <div style={{ marginTop: 10, display: "inline-flex", alignItems: "center", gap: 6, padding: "9px 14px", borderRadius: 8, background: T.copper, color: T.darkBg, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 0.6 }}><ExternalLink size={13} />{(label || "").trim() || "Open link"}</div>}
+    </div>
+  );
+}
+
 function ForumSectionEditor({ subheading, onSubheadingChange, value, onChange, onRemove, showRemove, placeholder, autoFocusBody, sectionNumber, videoUrl, onVideoUrlChange }) {
   const bodyRef = useRef(null);
   const [activeFormats, setActiveFormats] = useState({});
@@ -8505,7 +8530,7 @@ function ForumSectionEditor({ subheading, onSubheadingChange, value, onChange, o
   );
 }
 
-function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onConsumePendingForumSubNav, pendingForumCatNav, onConsumePendingForumCatNav, onAddNotification, onOpenDM, onOpenShareCompose, onOpenShareIntent, onAddFeedPost, threadsBySub, repliesByThread, onAddForumThread, onUpdateForumThread, onDeleteForumThread, onAddForumReply, onDeleteForumReply, onLoadForumReplies, likedForumThreadIds, forumThreadLikeCounts, onToggleForumThreadLike, likedForumReplyIds, forumReplyLikeCounts, onToggleForumReplyLike, onBumpForumThreadView, onAwardPoints, isGuest, onGuestTap, currentUserId, currentUserName, currentUserHandle, currentUserAvatar, isAdmin, isModerator, isAmbassador, categoriesList, onAddCategory, onUpdateCategory, onDeleteCategory, onAddSubcategory, onUpdateSubcategory, onDeleteSubcategory, onReportContent, onViewUser, onNotifyMentions }) {
+function ForumScreen({ pendingThread, onPendingHandled, onLoadThreadTeaser, pendingForumSubNav, onConsumePendingForumSubNav, pendingForumCatNav, onConsumePendingForumCatNav, onAddNotification, onOpenDM, onOpenShareCompose, onOpenShareIntent, onAddFeedPost, threadsBySub, repliesByThread, onAddForumThread, onUpdateForumThread, onDeleteForumThread, onAddForumReply, onDeleteForumReply, onLoadForumReplies, likedForumThreadIds, forumThreadLikeCounts, onToggleForumThreadLike, likedForumReplyIds, forumReplyLikeCounts, onToggleForumReplyLike, onBumpForumThreadView, onAwardPoints, isGuest, onGuestTap, currentUserId, currentUserName, currentUserHandle, currentUserAvatar, isAdmin, isModerator, isAmbassador, categoriesList, onAddCategory, onUpdateCategory, onDeleteCategory, onAddSubcategory, onUpdateSubcategory, onDeleteSubcategory, onReportContent, onViewUser, onNotifyMentions }) {
   // Phase 2 brings cats + subs in from the DB-backed `categoriesList` prop.
   // The brief race window between mount and the first hydrate returning
   // shows an empty grid; once hydrate completes the grid populates.
@@ -8694,6 +8719,7 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
   //      threadsBySub or cats hydrate (loadForumThreadBySlugFast on the root
   //      will populate forumThreads in flight). Only clear it if we have
   //      enough state to be sure the thread genuinely isn't here.
+  const teaserTriedRef = useRef(null); // threadId we already asked the teaser RPC about
   useEffect(() => {
     if (!pendingThread) return;
     const { threadId, catName, subName } = pendingThread;
@@ -8734,6 +8760,23 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
         if (foundCat) break;
       }
       if (foundCat && foundSub) { resolveBy(foundCat, foundSub, thread); return; }
+    }
+    // Guest + not in the hydrated set: it may be a members-only thread the
+    // server withheld. Ask for the teaser (title + home) once and show the
+    // gate so a share link lands somewhere useful instead of nowhere.
+    if (isGuest && onLoadThreadTeaser && teaserTriedRef.current !== threadId) {
+      teaserTriedRef.current = threadId;
+      Promise.resolve(onLoadThreadTeaser(threadId)).then((teaser) => {
+        if (!teaser || !teaser.membersOnlyUntil || new Date(teaser.membersOnlyUntil) <= new Date()) return;
+        let tCat = null, tSub = null;
+        for (const c of cats) { for (const s of c.subs) { if ((s.slug && s.slug === teaser.subcategorySlug) || s.name === teaser.subName) { tCat = c; tSub = s; break; } } if (tCat) break; }
+        if (tCat) setSelectedCat(tCat);
+        if (tSub) setSelectedSub(tSub);
+        setSelectedThread(teaser);
+        setView("thread");
+        onPendingHandled && onPendingHandled();
+      }).catch(() => {});
+      return;
     }
     // Couldn't resolve yet — keep pendingThread alive so the next
     // threadsBySub / cats update gives the effect another try. Root-side
@@ -8892,7 +8935,9 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
     setEditingThreadId(thread.id);
     setEditTitle(thread.title || "");
     const fromSections = Array.isArray(thread.sections) && thread.sections.length > 0
-      ? thread.sections.map(s => ({ id: newSectionId(), subheading: s.subheading || "", body: s.body || "", videoUrl: s.videoUrl || "" }))
+      ? thread.sections.map(s => (s && s.type === "url")
+          ? { id: newSectionId(), type: "url", label: s.label || "", url: s.url || "" }
+          : { id: newSectionId(), subheading: s.subheading || "", body: s.body || "", videoUrl: s.videoUrl || "" })
       : [{ id: newSectionId(), subheading: "", body: thread.body || "" }];
     setEditSections(fromSections);
     setEditPhotos(thread.photos ? thread.photos.map((u, i) => ({ url: u.url || u, id: i, type: u.type || "image", caption: u.caption || "", alt: u.alt || "" })) : []);
@@ -8921,6 +8966,11 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
   // <h2> in the published article — locked-down heading hierarchy for SEO.
   const newSectionId = () => "sec_" + Math.random().toString(36).slice(2, 8);
   const [ntSections, setNtSections] = useState([{ id: newSectionId(), subheading: "", body: "", videoUrl: "" }]);
+  // Admin-only: members-only reading window for a NEW thread (hours; 0 = off).
+  const [ntMembersOnlyHours, setNtMembersOnlyHours] = useState(0);
+  const addUrlSection = () => setNtSections(prev => [...prev, { id: newSectionId(), type: "url", label: "", url: "" }]);
+  const addEditUrlSection = () => setEditSections(prev => [...prev, { id: newSectionId(), type: "url", label: "", url: "" }]);
+  const MEMBERS_ONLY_CHOICES = [[0, "Off — public"], [24, "24 hours"], [72, "3 days"], [168, "1 week"], [336, "2 weeks"], [720, "30 days"]];
   const updateSection = (id, patch) => setNtSections(prev => prev.map(s => s.id === id ? { ...s, ...patch } : s));
   const addSection = () => setNtSections(prev => [...prev, { id: newSectionId(), subheading: "", body: "", videoUrl: "" }]);
   const removeSection = (id) => setNtSections(prev => prev.length > 1 ? prev.filter(s => s.id !== id) : prev);
@@ -9073,6 +9123,11 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
       // alt text in one shot.
       const processedSections = [];
       for (const s of ntSections) {
+        if (s.type === "url") { // admin link button — kept only when the URL is real
+          const u = (s.url || "").trim();
+          if (/^https?:\/\/\S+/i.test(u)) processedSections.push({ type: "url", label: (s.label || "").trim() || "Open link", url: u });
+          continue;
+        }
         const subheading = (s.subheading || "").trim();
         const rawBody = (s.body || "").trim();
         const processedBody = await processForumBodyImages(rawBody, currentUserId);
@@ -9094,6 +9149,7 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
         body: bodyHtml,
         sections: processedSections,
         photos: photoPayload,
+        membersOnlyUntil: (isAdmin && ntMembersOnlyHours > 0) ? new Date(Date.now() + ntMembersOnlyHours * 3600 * 1000).toISOString() : null,
         categoryName: catName,
         subcategoryName: subName,
       });
@@ -9252,7 +9308,9 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
             <>
               {/* Sections — each is { subheading (h2), body (paragraph + inline) }.
                   Title above is the h1. "+ Add Section" appends an empty section. */}
-              {ntSections.map((s, i) => (
+              {ntSections.map((s, i) => s.type === "url" ? (
+                <ForumUrlSectionEditor key={s.id} label={s.label} url={s.url} onChange={(patch) => updateSection(s.id, patch)} onRemove={() => removeSection(s.id)} />
+              ) : (
                 <ForumSectionEditor
                   key={s.id}
                   sectionNumber={ntSections.length > 1 ? i + 1 : null}
@@ -9274,6 +9332,19 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
                 <Plus size={14} color={T.copper} />
                 ADD SECTION
               </button>
+              {isAdmin && (
+                <div style={{ marginTop: 10, padding: 12, borderRadius: 10, background: T.darkCard, border: `1px solid ${T.charcoal}` }}>
+                  <div style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.2, fontWeight: 700, marginBottom: 8 }}>ADMIN</div>
+                  <button onClick={addUrlSection} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", borderRadius: 8, background: "none", border: `1px dashed ${T.copper}80`, color: T.copper, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 1, cursor: "pointer", marginBottom: 10 }}>
+                    <ExternalLink size={14} color={T.copper} /> ADD LINK BUTTON
+                  </button>
+                  <label style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 4 }}>MEMBERS-ONLY WINDOW</label>
+                  <select value={ntMembersOnlyHours} onChange={(e) => setNtMembersOnlyHours(Number(e.target.value))} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13 }}>
+                    {MEMBERS_ONLY_CHOICES.map(([h, l]) => <option key={h} value={h}>{l}</option>)}
+                  </select>
+                  <div style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, marginTop: 6, lineHeight: 1.4 }}>While the window is active only signed-in members can read this thread; it opens to everyone (and search engines) when it ends.</div>
+                </div>
+              )}
             </>
           )}
           <style>{`
@@ -9768,6 +9839,20 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
               </div>
             );
           })()}
+          {isAdmin && onUpdateForumThread && (() => {
+            const until = selectedThread.membersOnlyUntil ? new Date(selectedThread.membersOnlyUntil) : null;
+            const active = until && until > new Date();
+            return (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 0 12px", padding: "8px 10px", borderRadius: 8, background: T.darkCard, border: `1px solid ${active ? T.copper : T.charcoal}` }}>
+                <Lock size={13} color={active ? T.copper : T.tertiary} />
+                <span style={{ fontFamily: sans, fontSize: 10, color: active ? T.copper : T.tertiary, letterSpacing: 1, fontWeight: 700, flex: 1 }}>{active ? `MEMBERS ONLY UNTIL ${until.toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : "PUBLIC · MEMBERS-ONLY OFF"}</span>
+                <select value="" onChange={async (e) => { const h = Number(e.target.value); const iso = h > 0 ? new Date(Date.now() + h * 3600 * 1000).toISOString() : null; await onUpdateForumThread(selectedThread.id, { membersOnlyUntil: iso }); setSelectedThread(prev => prev ? { ...prev, membersOnlyUntil: iso } : prev); }} style={{ padding: "6px 8px", borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 11 }}>
+                  <option value="" disabled>{active ? "Change…" : "Set window…"}</option>
+                  {MEMBERS_ONLY_CHOICES.map(([h, l]) => <option key={h} value={h}>{l}</option>)}
+                </select>
+              </div>
+            );
+          })()}
           {(() => {
             // Prefer the structured sections array (post-May-2026 threads).
             // Renders title-as-h1 implicit (the page header already shows it),
@@ -9775,6 +9860,20 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
             // contents, plus an optional YouTube embed below the section text.
             // Falls back to the legacy single `body` blob for older threads
             // that pre-date the multi-section editor.
+            // Members-only window: guests see a gate instead of the body.
+            // (The server already withholds the row from anonymous readers;
+            // this is the teaser path from a share link.)
+            const gateUntil = selectedThread.membersOnlyUntil ? new Date(selectedThread.membersOnlyUntil) : null;
+            if (isGuest && gateUntil && gateUntil > new Date()) {
+              return (
+                <div style={{ padding: 18, borderRadius: 12, background: T.darkCard, border: `1px solid ${T.copper}50`, textAlign: "center" }}>
+                  <Lock size={22} color={T.copper} style={{ marginBottom: 8 }} />
+                  <div style={{ fontFamily: sans, fontSize: 12, color: T.copper, fontWeight: 700, letterSpacing: 1.2, marginBottom: 6 }}>MEMBERS ONLY</div>
+                  <div style={{ fontFamily: serif, fontSize: 13, color: T.white, lineHeight: 1.5, marginBottom: 14 }}>This thread is for Trailhub members until {gateUntil.toLocaleDateString("en-US", { month: "short", day: "numeric" })}. Sign in free to read it now.</div>
+                  <button onClick={() => onGuestTap && onGuestTap()} style={{ padding: "12px 20px", borderRadius: 8, background: T.copper, color: T.darkBg, border: "none", fontFamily: sans, fontSize: 12, fontWeight: 800, letterSpacing: 1, cursor: "pointer" }}>SIGN IN TO READ</button>
+                </div>
+              );
+            }
             const hasSections = Array.isArray(selectedThread.sections) && selectedThread.sections.length > 0;
             if (!hasSections && !selectedThread.body) return null;
             if (!hasSections) {
@@ -9787,6 +9886,15 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
               <div style={{ fontFamily: serif, fontSize: 14, color: T.warmStone, lineHeight: 1.6, margin: 0 }}>
                 <div dangerouslySetInnerHTML={{ __html: thRbCSS }} />
                 {selectedThread.sections.map((s, i) => {
+                  if (s && s.type === "url" && /^https?:\/\//i.test(s.url || "")) {
+                    return (
+                      <div key={i} style={{ margin: "14px 0" }}>
+                        <a href={s.url} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", boxSizing: "border-box", padding: "13px 16px", borderRadius: 10, background: T.copper, color: T.darkBg, textDecoration: "none", fontFamily: sans, fontSize: 13, fontWeight: 800, letterSpacing: 0.8 }}>
+                          <ExternalLink size={15} />{s.label || "Open link"}
+                        </a>
+                      </div>
+                    );
+                  }
                   const sub = ((s && s.subheading) || "").trim();
                   const body = ((s && s.body) || "").trim();
                   const vid = parseYouTubeId((s && s.videoUrl) || "");
@@ -10014,6 +10122,11 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
                   // new images dropped in during edit get proper URLs + alt.
                   const processedSections = [];
                   for (const s of editSections) {
+                    if (s.type === "url") { // admin link button — kept only when the URL is real
+                      const u = (s.url || "").trim();
+                      if (/^https?:\/\/\S+/i.test(u)) processedSections.push({ type: "url", label: (s.label || "").trim() || "Open link", url: u });
+                      continue;
+                    }
                     const subheading = (s.subheading || "").trim();
                     const rawBody = (s.body || "").trim();
                     const processedBody = await processForumBodyImages(rawBody, currentUserId);
@@ -10096,7 +10209,9 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
                   {/* Edit sections — mirror of the new-thread multi-section editor.
                       Title above is the h1; each subheading becomes <h2>; bodies
                       are paragraph-only with inline formatting + images. */}
-                  {editSections.map((s, i) => (
+                  {editSections.map((s, i) => s.type === "url" ? (
+                    <ForumUrlSectionEditor key={s.id} label={s.label} url={s.url} onChange={(patch) => updateEditSection(s.id, patch)} onRemove={() => removeEditSection(s.id)} />
+                  ) : (
                     <ForumSectionEditor
                       key={s.id}
                       sectionNumber={editSections.length > 1 ? i + 1 : null}
@@ -10117,6 +10232,11 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
                     <Plus size={14} color={T.copper} />
                     ADD SECTION
                   </button>
+                  {isAdmin && (
+                    <button onClick={addEditUrlSection} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", borderRadius: 8, background: "none", border: `1px dashed ${T.copper}80`, color: T.copper, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 1, cursor: "pointer", marginTop: 8 }}>
+                      <ExternalLink size={14} color={T.copper} /> ADD LINK BUTTON (ADMIN)
+                    </button>
+                  )}
                 </>
               )}
               {/* Edit hero image */}
@@ -10224,6 +10344,7 @@ function ForumScreen({ pendingThread, onPendingHandled, pendingForumSubNav, onCo
                   <div style={{ position: "absolute", top: 10, right: 12, padding: "2px 8px", borderRadius: 4, background: T.tertiary, color: T.white, fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 1.5 }}>WITHDRAWN</div>
                 )}
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                  {t.membersOnlyUntil && new Date(t.membersOnlyUntil) > new Date() && <span title="Members-only reading window" style={{ fontFamily: sans, fontSize: 9, color: T.copper, background: `${T.copper}20`, padding: "2px 6px", borderRadius: 3, letterSpacing: 0.8, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 3 }}><Lock size={9} /> MEMBERS</span>}
                   {t.pinned && <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, background: `${T.copper}20`, padding: "2px 6px", borderRadius: 3, letterSpacing: 1 }}>PINNED</span>}
                 </div>
                 <p style={{ fontFamily: serif, fontSize: 14, color: T.white, margin: "0 0 8px", lineHeight: 1.4, paddingRight: isMkt && status !== "active" ? 80 : 0 }}>{t.title}</p>
@@ -50875,6 +50996,21 @@ export default function Trailhead() {
   // reporter_id = auth.uid(). The DB trigger fans the row out to every
   // admin via the notifications table (bell + push). Caller is expected
   // to close the form on success.
+  // Members-only forum threads are withheld from guests by RLS. This returns
+  // just enough (title, home category, window end) to render the sign-in gate.
+  // Plain function (not useCallback): forumSubBySlug/forumCatBySlug are
+  // declared further down the root, so a deps array here would TDZ-crash.
+  const loadForumThreadTeaser = async (threadId) => {
+    if (!threadId) return null;
+    try {
+      const { data, error } = await supabase.rpc("forum_thread_teaser", { p_id: threadId, p_slug: null });
+      if (error || !data || !data[0]) return null;
+      const r = data[0];
+      const sub = r.subcategory_slug ? forumSubBySlug[r.subcategory_slug] : null;
+      const cat = r.category_slug ? forumCatBySlug[r.category_slug] : null;
+      return { id: r.id, title: r.title || "Members-only thread", slug: r.slug, sections: [], body: "", photos: r.hero_url ? [{ url: r.hero_url }] : [], pinned: false, views: 0, time: r.created_at, user: "", handle: "", initial: "", avatarUrl: null, userId: null, author: "", categorySlug: r.category_slug, subcategorySlug: r.subcategory_slug, subName: (sub && sub.name) || "", catName: (cat && cat.name) || "", membersOnlyUntil: r.members_only_until, gated: true };
+    } catch (_) { return null; }
+  };
   const submitContentReport = useCallback(async (payload) => {
     const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
     if (!uid) { showErrorToast("Sign in to submit a report."); return false; }
@@ -59568,7 +59704,7 @@ export default function Trailhead() {
   // retry mirroring trip_reports), optimistically prepends to state, and
   // returns the translated row so the caller can chain (e.g. auto-share to
   // feed). RLS gates on auth.uid() = user_id.
-  const addForumThread = async ({ title, body, sections, photos, categoryName, subcategoryName, listingPrice, listingCurrency, listingDetails }) => {
+  const addForumThread = async ({ title, body, sections, photos, categoryName, subcategoryName, listingPrice, listingCurrency, listingDetails, membersOnlyUntil }) => {
     const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
     if (!uid) return null;
     if (!title || !title.trim()) return null;
@@ -59591,6 +59727,7 @@ export default function Trailhead() {
         body: body || null,
         sections: Array.isArray(sections) ? sections : [],
         photos: Array.isArray(photos) ? photos : [],
+        members_only_until: membersOnlyUntil || null,
       };
       if (isMarketplace) {
         row.listing_price = (listingPrice != null && listingPrice !== "") ? Number(listingPrice) : null;
@@ -59638,6 +59775,7 @@ export default function Trailhead() {
     if (Array.isArray(updates.sections)) patch.sections = updates.sections;
     if (Array.isArray(updates.photos)) patch.photos = updates.photos;
     if (typeof updates.pinned === "boolean") patch.pinned = updates.pinned;
+    if ("membersOnlyUntil" in updates) patch.members_only_until = updates.membersOnlyUntil || null;
     // Marketplace fields. listing_price: null clears; explicit number sets.
     // listing_status accepts only the three valid values (DB check guards).
     if ("listingPrice" in updates) patch.listing_price = (updates.listingPrice == null || updates.listingPrice === "") ? null : Number(updates.listingPrice);
@@ -60635,7 +60773,7 @@ export default function Trailhead() {
           <>
             {isGuest && screen !== "routes" && <GuestBanner onSignIn={() => setShowGuestPrompt(true)} />}
             {screen === "feed" && renderFeedScopedTo({ hideFilters: false })}
-            {screen === "forum" && <ForumScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} isAdmin={isAdmin} isModerator={isModerator} isAmbassador={isAmbassador} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentUserName={(currentProfile && currentProfile.full_name) || "You"} currentUserHandle={(currentProfile && currentProfile.handle) || ""} currentUserAvatar={profilePic || (currentProfile && currentProfile.avatar_url) || null} pendingThread={pendingThread} onPendingHandled={() => setPendingThread(null)} pendingForumSubNav={pendingForumSubNav} onConsumePendingForumSubNav={() => setPendingForumSubNav(null)} pendingForumCatNav={pendingForumCatNav} onConsumePendingForumCatNav={() => setPendingForumCatNav(null)} onAddNotification={requireAuth(addNotification)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onOpenShareCompose={openShareCompose} onOpenShareIntent={openShareIntent} onAddFeedPost={requireAuth((post) => addPost(post))} threadsBySub={forumThreadsBySub} repliesByThread={visibleForumReplies} onAddForumThread={requireAuth(addForumThread)} onUpdateForumThread={requireAuth(updateForumThread)} onDeleteForumThread={requireAuth(deleteForumThreadRouted)} onAddForumReply={requireAuth(addForumReply)} onDeleteForumReply={requireAuth(deleteForumReplyRouted)} onLoadForumReplies={loadForumReplies} likedForumThreadIds={likedForumThreadIds} forumThreadLikeCounts={forumThreadLikeCounts} onToggleForumThreadLike={requireAuth(toggleForumThreadLike)} likedForumReplyIds={likedForumReplyIds} forumReplyLikeCounts={forumReplyLikeCounts} onToggleForumReplyLike={requireAuth(toggleForumReplyLike)} onBumpForumThreadView={bumpForumThreadView} onAwardPoints={awardPoints} categoriesList={forumCategoriesList} onAddCategory={requireAuth(addForumCategory)} onUpdateCategory={requireAuth(updateForumCategory)} onDeleteCategory={requireAuth(deleteForumCategory)} onAddSubcategory={requireAuth(addForumSubcategory)} onUpdateSubcategory={requireAuth(updateForumSubcategory)} onDeleteSubcategory={requireAuth(deleteForumSubcategory)} onReportContent={requireAuth(openContentReport)} onViewUser={openUserProfile} onNotifyMentions={notifyMentions} />}
+            {screen === "forum" && <ForumScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} isAdmin={isAdmin} isModerator={isModerator} isAmbassador={isAmbassador} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentUserName={(currentProfile && currentProfile.full_name) || "You"} currentUserHandle={(currentProfile && currentProfile.handle) || ""} currentUserAvatar={profilePic || (currentProfile && currentProfile.avatar_url) || null} pendingThread={pendingThread} onPendingHandled={() => setPendingThread(null)} pendingForumSubNav={pendingForumSubNav} onConsumePendingForumSubNav={() => setPendingForumSubNav(null)} pendingForumCatNav={pendingForumCatNav} onConsumePendingForumCatNav={() => setPendingForumCatNav(null)} onAddNotification={requireAuth(addNotification)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onOpenShareCompose={openShareCompose} onOpenShareIntent={openShareIntent} onAddFeedPost={requireAuth((post) => addPost(post))} threadsBySub={forumThreadsBySub} repliesByThread={visibleForumReplies} onAddForumThread={requireAuth(addForumThread)} onUpdateForumThread={requireAuth(updateForumThread)} onDeleteForumThread={requireAuth(deleteForumThreadRouted)} onAddForumReply={requireAuth(addForumReply)} onDeleteForumReply={requireAuth(deleteForumReplyRouted)} onLoadForumReplies={loadForumReplies} likedForumThreadIds={likedForumThreadIds} forumThreadLikeCounts={forumThreadLikeCounts} onToggleForumThreadLike={requireAuth(toggleForumThreadLike)} likedForumReplyIds={likedForumReplyIds} forumReplyLikeCounts={forumReplyLikeCounts} onToggleForumReplyLike={requireAuth(toggleForumReplyLike)} onBumpForumThreadView={bumpForumThreadView} onAwardPoints={awardPoints} categoriesList={forumCategoriesList} onAddCategory={requireAuth(addForumCategory)} onUpdateCategory={requireAuth(updateForumCategory)} onDeleteCategory={requireAuth(deleteForumCategory)} onAddSubcategory={requireAuth(addForumSubcategory)} onUpdateSubcategory={requireAuth(updateForumSubcategory)} onDeleteSubcategory={requireAuth(deleteForumSubcategory)} onReportContent={requireAuth(openContentReport)} onViewUser={openUserProfile} onNotifyMentions={notifyMentions} onLoadThreadTeaser={loadForumThreadTeaser} />}
             {screen === "routes" && <RoutesScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} campingSpots={campingSpots} showCampingSpots={showCampingSpots} setShowCampingSpots={setShowCampingSpots} showPublicLands={showPublicLands} setShowPublicLands={setShowPublicLands} showSatellite={showSatellite} setShowSatellite={setShowSatellite} onOpenShareIntent={openShareIntent} tripAuthors={tripAuthors} onLoadRouteData={loadTripRouteData} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} tripReports={allTripReports} showTripReports={showTripReports} setShowTripReports={setShowTripReports} tripPlans={allTripPlans} showTripPlans={showTripPlans} setShowTripPlans={setShowTripPlans} onMapViewportChange={onMapViewportChange} onAddCampingSpot={requireAuth(addCampingSpot)} onUpdateCampingSpot={requireAuth(updateCampingSpot)} onDeleteCampingSpot={requireAuth(deleteCampingSpot)} onAddPhotoToSpot={requireAuth(addPhotoToSpot)} onDeletePhotoFromSpot={requireAuth(deletePhotoFromSpot)} onLoadCampingSpotPhotos={loadCampingSpotPhotos} onLoadCampingSpotElevation={loadCampingSpotElevation} spotAuthors={spotAuthors} onViewUser={openUserProfile} onStartNav={(route) => setActiveNavRoute(route)} onOpenTripDetail={(slug) => setPendingTripNav(slug)} onOpenTripPlanDraft={(id) => setDetailTripId(id)} onNewTripReport={() => setTripCreatorMode("report")} onNewTripPlan={() => requireAuth(() => enterPlanBuilder())()} pendingSpotNav={pendingSpotNav} onConsumePendingSpotNav={() => setPendingSpotNav(null)} pendingHQOpen={pendingHQOpen} onConsumePendingHQOpen={() => setPendingHQOpen(false)} pendingPlanNav={pendingPlanNav} onConsumePendingPlanNav={() => setPendingPlanNav(null)} onShareCampingSpotToFeed={requireAuth(shareCampingSpotToFeed)} onShareHQToFeed={requireAuth(shareHQToFeed)} onShareTripToFeed={requireAuth(shareTripToFeed)} onShareTripPlanToFeed={requireAuth(shareTripPlanToFeed)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onShowToast={showErrorToast} onOpenShareCompose={openShareCompose} savedTripIds={savedTripIds} onToggleSaveTrip={requireAuth(toggleSaveTrip)} onOfflineContentUpdated={reloadOfflineContent} planBuilder={{ active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, editingId: planBuilderEditingId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen, accent: (planBuilderEditingId && (tripReports || []).find(t => t.id === planBuilderEditingId && t.kind === "report")) ? T.purple : T.copper }} gearDropPinBuilder={{ active: gearDropPinBuilderActive, dropId: gearDropPinBuilderDropId, pins: gearDropPinBuilderPins, saving: gearDropPinBuilderSaving, mode: gearDropPinBuilderMode, addPin: addGearDropPin, removePin: removeGearDropPin, movePin: moveGearDropPin, updatePin: updateGearDropPin, commit: commitGearDropPinBuilder, exit: exitGearDropPinBuilder }} />}
             {screen === "builds" && <BuildsScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onViewUser={openUserProfile} userBuilds={userBuilds} allBuilds={allBuilds} onLoadAllBuilds={loadAllBuildsOnce} onLoadBuildById={loadBuildById} allBuildsLoaded={allBuildsLoaded} buildSaving={buildSaving} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} followingIds={followingIds} pendingBuildNav={pendingBuildNav} onConsumePendingBuildNav={() => setPendingBuildNav(null)} onAddBuild={requireAuth(addBuild)} userRoutes={userRoutes} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onOpenShareCompose={openShareCompose} onOpenShareIntent={openShareIntent} onUpdateBuild={requireAuth(updateBuild)} likedBuildIds={likedBuildIds} buildLikeCounts={buildLikeCounts} onToggleBuildLike={requireAuth(toggleBuildLike)} onDeleteBuild={requireAuth(deleteBuild)} onPostBuildToFeed={requireAuth((b, opts) => { const rawBd = b.buildData; const bd = scrubLocalPhotosFromBuildData(rawBd); const isLocalUrl = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:")); const rawHero = b.image || (rawBd && rawBd.mainPhotos && rawBd.mainPhotos[0] && rawBd.mainPhotos[0].url) || null; const cleanHero = isLocalUrl(rawHero) ? ((bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url) || null) : rawHero; const heroImg = isLocalUrl(cleanHero) ? null : cleanHero; const meName = (currentProfile && currentProfile.full_name) || "You"; const myUid = supabaseSession && supabaseSession.user && supabaseSession.user.id; const isReshare = b.userId && myUid && b.userId !== myUid; const ownerHandle = isReshare ? (b.handle || "").replace(/^@/, "") : null; const ownerName = isReshare ? (b.owner || null) : null; addPost({ id: "feedbuild_" + Date.now(), type: "BUILDS", user: meName, initial: meName.charAt(0).toUpperCase(), time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, subtitle: isReshare ? `Shared @${ownerHandle}'s build` : "Added a new build", vehicle: `${b.year} ${b.make} ${b.model}`, photoUrls: heroImg ? [heroImg] : undefined, image: heroImg, likes: 0, comments: 0, buildData: bd, buildRawId: b.rawId != null ? b.rawId : null, sharedFromOwnerHandle: ownerHandle, sharedFromOwnerName: ownerName, _skipBuildIdCol: isReshare }); awardPoints(POINTS.feedPost, "Build Shared"); })} buildComments={visibleBuildComments} onLoadBuildComments={loadBuildComments} onAddBuildComment={requireAuth(addBuildComment)} onDeleteBuildComment={deleteBuildComment} likedBuildCommentIds={likedBuildCommentIds} buildCommentLikeCounts={buildCommentLikeCounts} onToggleBuildCommentLike={requireAuth(toggleBuildCommentLike)} currentUserName={(currentProfile && currentProfile.full_name) || ""} currentUserHandle={(currentProfile && currentProfile.handle) ? "@" + currentProfile.handle : ""} currentUserAvatar={(currentProfile && currentProfile.avatar_url) || null} allTripReports={allTripReports} onNotifyMentions={notifyMentions} />}
             {screen === "ambassador" && (isGuest
