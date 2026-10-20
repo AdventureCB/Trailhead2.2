@@ -44215,12 +44215,72 @@ function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserNam
 }
 
 /* ─── LOGIN SCREEN ─── */
+// Set a new password after a recovery link. Supabase has already exchanged
+// the link's tokens for a session (web: PASSWORD_RECOVERY event; native: the
+// custom-scheme callback), so updateUser is all that's left.
+function ResetPasswordScreen({ onDone, onCancel }) {
+  const [pw, setPw] = useState("");
+  const [pw2, setPw2] = useState("");
+  const [show, setShow] = useState(false);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const submit = async () => {
+    setError("");
+    if (pw.length < 8) return setError("Use at least 8 characters.");
+    if (pw !== pw2) return setError("Passwords don't match.");
+    setSaving(true);
+    try {
+      const { error: err } = await supabase.auth.updateUser({ password: pw });
+      if (err) { setError(err.message || "Couldn't update password."); setSaving(false); return; }
+      onDone && onDone();
+    } catch (e) { setError("Network error. Try again."); setSaving(false); }
+  };
+  const field = { width: "100%", boxSizing: "border-box", padding: "13px 44px 13px 14px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 15, outline: "none" };
+  return (
+    <div style={{ minHeight: "100vh", background: T.darkBg, display: "flex", flexDirection: "column", justifyContent: "center", padding: "max(24px, env(safe-area-inset-top, 0px)) 24px 24px" }}>
+      <div style={{ width: "100%", maxWidth: 400, margin: "0 auto" }}>
+        <div style={{ fontFamily: sans, fontSize: 11, color: T.copper, letterSpacing: 2, fontWeight: 700, marginBottom: 8 }}>TRAILHUB</div>
+        <h1 style={{ fontFamily: sans, fontSize: 22, color: T.white, fontWeight: 700, margin: "0 0 6px" }}>Set a new password</h1>
+        <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, margin: "0 0 22px", lineHeight: 1.5 }}>You're signed in through your reset link. Choose a new password to finish.</p>
+        <div style={{ position: "relative", marginBottom: 12 }}>
+          <input type={show ? "text" : "password"} value={pw} onChange={(e) => setPw(e.target.value)} placeholder="New password" autoComplete="new-password" style={field} />
+          <button onClick={() => setShow(s => !s)} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex" }}>{show ? <EyeOff size={16} color={T.tertiary} /> : <Eye size={16} color={T.tertiary} />}</button>
+        </div>
+        <input type={show ? "text" : "password"} value={pw2} onChange={(e) => setPw2(e.target.value)} placeholder="Confirm new password" autoComplete="new-password" onKeyDown={(e) => { if (e.key === "Enter") submit(); }} style={{ ...field, marginBottom: 16 }} />
+        {error && <div style={{ fontFamily: sans, fontSize: 12, color: T.red, marginBottom: 12 }}>{error}</div>}
+        <button onClick={submit} disabled={saving} style={{ width: "100%", padding: "14px 0", borderRadius: 8, background: T.red, border: "none", cursor: saving ? "default" : "pointer", opacity: saving ? 0.7 : 1 }}>
+          <span style={{ fontFamily: sans, fontSize: 13, fontWeight: 600, color: T.white, letterSpacing: 1.5 }}>{saving ? "SAVING…" : "SAVE PASSWORD"}</span>
+        </button>
+        {onCancel && <button onClick={onCancel} style={{ width: "100%", marginTop: 12, padding: 10, background: "none", border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, letterSpacing: 1 }}>SKIP FOR NOW</button>}
+      </div>
+    </div>
+  );
+}
+
 function LoginScreen({ onLogin, onGoToSignup, onGuestEnter }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  // Forgot-password: inline email prompt → Supabase sends the recovery link.
+  // Web lands back on the site (PASSWORD_RECOVERY event → reset screen);
+  // native lands on the app's custom scheme (same handler as OAuth).
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const [forgotSending, setForgotSending] = useState(false);
+  const [forgotMsg, setForgotMsg] = useState("");
+  const sendReset = async () => {
+    const em = email.trim();
+    if (!em || !/\S+@\S+\.\S+/.test(em)) { setForgotMsg(""); setError("Enter the email on your account first."); return; }
+    setError(""); setForgotMsg(""); setForgotSending(true);
+    try {
+      const redirectTo = isNativePlatform() ? NATIVE_OAUTH_REDIRECT : (typeof window !== "undefined" ? window.location.origin + "/" : undefined);
+      const { error: err } = await supabase.auth.resetPasswordForEmail(em, { redirectTo });
+      if (err) setError(err.message || "Couldn't send the reset email.");
+      else setForgotMsg(`Reset link sent to ${em}. Open it on this device to choose a new password.`);
+    } catch (e) { setError("Network error. Try again."); }
+    setForgotSending(false);
+  };
 
   const handleSubmit = async () => {
     if (!email.trim()) return setError("Enter your email to continue.");
@@ -44305,9 +44365,17 @@ function LoginScreen({ onLogin, onGoToSignup, onGuestEnter }) {
             </div>
           </div>
 
-          <div style={{ textAlign: "right", marginBottom: 24 }}>
-            <span style={{ fontFamily: sans, fontSize: 11, color: T.copper, cursor: "pointer" }}>Forgot password?</span>
+          <div style={{ textAlign: "right", marginBottom: forgotOpen ? 10 : 24 }}>
+            <span onClick={() => { setForgotOpen(o => !o); setForgotMsg(""); }} style={{ fontFamily: sans, fontSize: 11, color: T.copper, cursor: "pointer" }}>Forgot password?</span>
           </div>
+          {forgotOpen && (
+            <div style={{ marginBottom: 20, padding: 12, borderRadius: 10, background: T.darkCard, border: `1px solid ${T.charcoal}` }}>
+              <div style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.5, marginBottom: 10 }}>We'll email a reset link to the address above{email.trim() ? ` (${email.trim()})` : ""}.</div>
+              {forgotMsg
+                ? <div style={{ fontFamily: sans, fontSize: 12, color: T.green, lineHeight: 1.5 }}>{forgotMsg}</div>
+                : <button onClick={sendReset} disabled={forgotSending} style={{ width: "100%", padding: "11px 0", borderRadius: 8, background: T.copper, border: "none", cursor: forgotSending ? "default" : "pointer", fontFamily: sans, fontSize: 12, fontWeight: 700, color: T.darkBg, letterSpacing: 1 }}>{forgotSending ? "SENDING…" : "SEND RESET LINK"}</button>}
+            </div>
+          )}
 
           <button onClick={handleSubmit} disabled={loading} style={{ width: "100%", padding: "14px 0", borderRadius: 8, background: T.red, border: "none", cursor: loading ? "wait" : "pointer", marginBottom: 16, opacity: loading ? 0.7 : 1 }}>
             <span style={{ fontFamily: sans, fontSize: 13, fontWeight: 600, color: T.white, letterSpacing: 1.5 }}>{loading ? "SIGNING IN..." : "SIGN IN"}</span>
@@ -48063,6 +48131,17 @@ function GuestPromptModal({ onClose, onSignIn }) {
 // runs inside the component body would see "/" on the second invocation
 // and return null, overwriting our seed. Caching at module scope makes
 // parsing idempotent regardless of how many times the component renders.
+// Password-recovery link (web): Supabase lands on `/#access_token=…&type=recovery`
+// and consumes the hash while it builds the session. Read the type here at
+// module load — before that happens and before React mounts — so the root can
+// route to the reset screen even if the PASSWORD_RECOVERY event fires before
+// the auth listener is attached.
+const __INITIAL_RECOVERY = (function() {
+  try {
+    const h = (typeof window !== "undefined" && window.location && window.location.hash) || "";
+    return /(^#|&)type=recovery(&|$)/.test(h);
+  } catch (e) { return false; }
+})();
 const __INITIAL_SHARED_LINK = (function() {
   try {
     const path = (typeof window !== "undefined" && window.location && window.location.pathname) || "";
@@ -48782,6 +48861,7 @@ export default function Trailhead() {
   // show the login screen (unless we're in guest/shared-link mode).
   const [supabaseSession, setSupabaseSession] = useState(null);
   const [sessionHydrated, setSessionHydrated] = useState(false);
+  const recoveryRoutedRef = useRef(false); // password-recovery link routed once
   // Native push (OneSignal): bind this device's External ID to the signed-in
   // user so send-push can target them. No-op on web / until OneSignal is set up.
   useEffect(() => {
@@ -48803,6 +48883,9 @@ export default function Trailhead() {
         const refresh_token = q.get("refresh_token");
         if (access_token && refresh_token) {
           await supabase.auth.setSession({ access_token, refresh_token });
+          // Password-recovery link opened in the native app → go straight to
+          // the new-password screen (the web path gets PASSWORD_RECOVERY).
+          if (q.get("type") === "recovery") setAuthState("reset-password");
         }
       } catch (_) { /* non-fatal */ }
       try { closeInAppBrowser(); } catch (_) {}
@@ -49617,6 +49700,17 @@ export default function Trailhead() {
       const session = data && data.session;
       setSupabaseSession(session || null);
       setSessionHydrated(true);
+      if (__INITIAL_RECOVERY && session && !recoveryRoutedRef.current) {
+        // Recovery session already restored by the time we got here — go
+        // straight to the reset screen; hydrate behind it so "SKIP" lands
+        // in a ready app.
+        recoveryRoutedRef.current = true;
+        setIsGuest(false);
+        setAuthState("reset-password");
+        const hasHandle = !!(session.user && session.user.user_metadata && session.user.user_metadata.handle);
+        if (hasHandle) hydrateUserData(session); else setAppReady(true);
+        return;
+      }
       // Universal fast-path for any deep link — fetch JUST the targeted
       // entity first and unblock the splash the moment it returns. The
       // rest of the data (hydrateGuestData or hydrateUserData) keeps
@@ -49696,6 +49790,15 @@ export default function Trailhead() {
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       if (cancelled) return;
       setSupabaseSession(session || null);
+      // Recovery link whose PASSWORD_RECOVERY event fired before this listener
+      // existed: the first event we DO see with a session routes to reset.
+      if (__INITIAL_RECOVERY && session && !recoveryRoutedRef.current) {
+        recoveryRoutedRef.current = true;
+        setIsGuest(false);
+        setAuthState("reset-password");
+        if (session.user && session.user.user_metadata && session.user.user_metadata.handle) hydrateUserData(session);
+        return;
+      }
       if (event === "SIGNED_IN" && session) {
         // Link current sessionStorage session to the newly signed-in user
         // so guest→signup source attribution can be computed on the admin
@@ -49717,12 +49820,19 @@ export default function Trailhead() {
           // browser redirect away), so they must be allowed to advance. Email
           // signup uses email confirmation (returns no session), so it never
           // reaches this handler mid-flow — safe to advance on signup too.
-          if (prev === "verify-email" || prev === "onboarding" || prev === "install-pwa") return prev;
+          if (prev === "verify-email" || prev === "onboarding" || prev === "install-pwa" || prev === "reset-password") return prev;
           if (wizardPending) return "onboarding";
           return hasHandle ? "app" : "onboarding";
         });
         setIsGuest(false);
         if (hasHandle && !wizardPending) hydrateUserData(session);
+      }
+      // Web recovery link: Supabase exchanged the hash for a session and
+      // tells us it was a reset — show the new-password screen. (Belt for
+      // the module-level __INITIAL_RECOVERY suspenders below.)
+      if (event === "PASSWORD_RECOVERY" && session) {
+        setIsGuest(false);
+        setAuthState("reset-password");
       }
       if (event === "SIGNED_OUT") {
         hydratedForUidRef.current = null;
@@ -60357,6 +60467,12 @@ export default function Trailhead() {
         } catch (e) { console.warn("[onboarding] profileComplete award failed", e); }
         setAuthState("install-pwa");
       }}
+    />;
+  }
+  if (authState === "reset-password") {
+    return <ResetPasswordScreen
+      onDone={() => { showErrorToast("Password updated."); setAuthState("app"); }}
+      onCancel={() => setAuthState("app")}
     />;
   }
   if (authState === "install-pwa") {
