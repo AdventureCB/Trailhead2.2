@@ -129,6 +129,12 @@ function buildForumThreadSSR(article, canonicalUrl, origin) {
   if (Array.isArray(article.sections) && article.sections.length > 0) {
     sectionsHtml = article.sections.map(s => {
       if (!s) return "";
+      if (s.type === "poll") {
+        // Admin poll: static question + options for crawlers; voting is SPA-only.
+        const opts = Array.isArray(s.options) ? s.options.filter(o => o && o.label) : [];
+        if (!s.question || opts.length < 2) return "";
+        return `<div style="margin:18px 0;padding:14px;border-radius:12px;background:#1A1A1A;border:1px solid #2A2A28;"><div style="font-size:10px;letter-spacing:1.2px;font-weight:700;color:#C49A6C;font-family:'Trebuchet MS',sans-serif;margin-bottom:6px;">POLL</div><p style="margin:0 0 10px;font-size:16px;font-weight:700;color:#fff;font-family:'Trebuchet MS',sans-serif;">${escapeHtml(s.question)}</p><ul style="margin:0;padding-left:18px;color:#F5F2ED;">${opts.map(o => `<li style="margin:4px 0;">${escapeHtml(o.label)}</li>`).join("")}</ul></div>`;
+      }
       if (s.type === "url" && /^https?:\/\//i.test(s.url || "")) {
         const esc = (v) => String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
         return `<p style="margin:16px 0;"><a href="${esc(s.url)}" target="_blank" rel="noopener" style="display:inline-block;padding:12px 18px;border-radius:10px;background:#C49A6C;color:#111;text-decoration:none;font-family:'Trebuchet MS',sans-serif;font-weight:800;letter-spacing:0.8px;font-size:13px;">${esc(s.label || "Open link")}</a></p>`;
