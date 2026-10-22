@@ -1760,6 +1760,22 @@ module.exports = async function handler(req, res) {
   // slash variants, etc.). Emitted for every entity type since Google
   // strongly prefers it.
   const origin = `${proto}://${host}`;
+  // Schema.org Person for any author/commenter. Search Console flags
+  // "Missing field url (in author)" without it — point at the public profile
+  // page (/users/<handle>); authors with no profile row (deleted accounts)
+  // fall back to a named member of the site so the field is never empty.
+  const personLd = (a, extra) => {
+    if (!a) return { "@type": "Person", name: "Trailhub member", url: `${origin}/` };
+    return Object.fromEntries(Object.entries({
+      "@type": "Person",
+      name: a.name || a.handle || "Trailhub member",
+      alternateName: a.handle ? `@${a.handle}` : undefined,
+      identifier: a.handle || undefined,
+      image: a.avatarUrl || undefined,
+      url: a.handle ? `${origin}/users/${encodeURIComponent(a.handle)}` : `${origin}/`,
+      ...(extra || {}),
+    }).filter(([, v]) => v !== undefined));
+  };
   const canonicalTag = `<link rel="canonical" href="${escapeHtml(canonicalUrl)}">`;
 
   // BreadcrumbList JSON-LD — gives Google the navigation hierarchy so
@@ -1818,15 +1834,7 @@ module.exports = async function handler(req, res) {
   let jsonLdTag = "";
   if (meta.jsonLd && meta.jsonLd.kind === "DiscussionForumPosting") {
     const a = meta.jsonLd.author || null;
-    const authorNode = a
-      ? Object.fromEntries(Object.entries({
-          "@type": "Person",
-          name: a.name || undefined,
-          alternateName: a.handle ? `@${a.handle}` : undefined,
-          identifier: a.handle || undefined,
-          image: a.avatarUrl || undefined,
-        }).filter(([, v]) => v !== undefined))
-      : undefined;
+    const authorNode = personLd(a);
     const subInfo = meta.jsonLd.subcategorySlug ? FORUM_SUB_TO_INFO[meta.jsonLd.subcategorySlug] : null;
     const articleSection = subInfo ? `${subInfo.catName} / ${subInfo.name}` : undefined;
     const publisher = {
@@ -1842,12 +1850,7 @@ module.exports = async function handler(req, res) {
           "@type": "Comment",
           text: (r.body || "").slice(0, 2000),
           datePublished: r.createdAt || undefined,
-          author: r.author ? Object.fromEntries(Object.entries({
-            "@type": "Person",
-            name: r.author.name || undefined,
-            alternateName: r.author.handle ? `@${r.author.handle}` : undefined,
-            identifier: r.author.handle || undefined,
-          }).filter(([, v]) => v !== undefined)) : undefined,
+          author: personLd(r.author),
         }).filter(([, v]) => v !== undefined)))
       : undefined;
     // interactionStatistic — surfaces engagement counts to Google as
@@ -1962,13 +1965,7 @@ module.exports = async function handler(req, res) {
     // image, geo coords from start_lat/lng, and topical keywords from
     // terrains + tags. Plans add planned dates; reports add distance/elev.
     const j = meta.jsonLd;
-    const authorNode = j.author ? Object.fromEntries(Object.entries({
-      "@type": "Person",
-      name: j.author.name || undefined,
-      alternateName: j.author.handle ? `@${j.author.handle}` : undefined,
-      identifier: j.author.handle || undefined,
-      image: j.author.avatarUrl || undefined,
-    }).filter(([, v]) => v !== undefined)) : undefined;
+    const authorNode = j.author ? personLd(j.author) : undefined;
     const keywords = [...(j.terrains || []), ...(j.tags || []), j.region, j.stateCode].filter(Boolean).join(", ") || undefined;
     const ld = {
       "@context": "https://schema.org",
@@ -2029,13 +2026,7 @@ module.exports = async function handler(req, res) {
     // which we don't collect). `about` carries the make/model/year as
     // a Vehicle sub-entity so Google still ties it to that topical entity.
     const j = meta.jsonLd;
-    const authorNode = j.author ? Object.fromEntries(Object.entries({
-      "@type": "Person",
-      name: j.author.name || undefined,
-      alternateName: j.author.handle ? `@${j.author.handle}` : undefined,
-      identifier: j.author.handle || undefined,
-      image: j.author.avatarUrl || undefined,
-    }).filter(([, v]) => v !== undefined)) : undefined;
+    const authorNode = j.author ? personLd(j.author) : undefined;
     const vehicleEntity = (j.year || j.make || j.model) ? Object.fromEntries(Object.entries({
       "@type": "Vehicle",
       name: [j.year, j.make, j.model, j.trim].filter(Boolean).join(" "),
