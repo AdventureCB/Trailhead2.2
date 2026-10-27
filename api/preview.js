@@ -487,6 +487,57 @@ async function resolveEntity(type, id) {
       },
     };
   }
+  if (type === "interest") {
+    const row = await supabaseFetch(
+      "interest_lists",
+      `slug=eq.${encodeURIComponent(id)}&select=name,slug,headline,description,hero_img,forum_subcategory_slug,status,created_at,updated_at&limit=1`
+    );
+    if (!row || row.status === "draft") return null;
+    // Update threads newest-first (anon call → gated threads come back as
+    // title-only teasers, which is exactly what a crawler should see).
+    let updates = [];
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/interest_list_updates`, {
+        method: "POST",
+        headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}`, "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ p_slug: id, p_limit: 50 }),
+      });
+      if (res.ok) { const rows = await res.json(); if (Array.isArray(rows)) updates = rows; }
+    } catch (e) { /* page still renders without the list */ }
+    const description = (row.headline || row.description || `Follow the launch of ${row.name} from Lone Peak Overland — sign up for updates.`).replace(/\s+/g, " ").trim();
+    return {
+      title: `${row.name} · Coming Soon`,
+      description: description.length > 240 ? description.slice(0, 237) + "…" : description,
+      image: row.hero_img || null,
+      imageAlt: row.hero_img ? `${row.name} — Lone Peak Overland` : "",
+      jsonLd: {
+        kind: "InterestList",
+        name: row.name,
+        slug: row.slug,
+        headline: row.headline || "",
+        description: row.description || "",
+        image: row.hero_img || null,
+        status: row.status,
+        createdAt: row.created_at,
+        modifiedAt: row.updated_at && row.updated_at !== row.created_at ? row.updated_at : null,
+        updates: updates.map(u => ({
+          id: u.id,
+          title: u.title,
+          url: `/forum/${u.subcategory_slug}/${u.slug}`,
+          createdAt: u.created_at,
+          membersOnlyUntil: u.members_only_until,
+          excerpt: (u.excerpt || "").replace(/\s+/g, " ").trim(),
+        })),
+      },
+      breadcrumb: {
+        items: [
+          { name: "Trailhub", url: null },
+          { name: "Coming Soon", url: null },
+          { name: row.name, url: null },
+        ],
+      },
+    };
+  }
   if (type === "spot") {
     const row = await supabaseFetch(
       "camping_spots",
@@ -1286,6 +1337,41 @@ function buildTripArticleSSR(article, canonicalUrl, origin) {
 // prize summary, plain-text about (rich-text stripped server-side), date
 // + status row. Crawlers + people-on-slow-networks see the article before
 // the SPA mounts.
+// Interest list (/interest/<slug>) — the launch hub: pitch + signup CTA +
+// links to every update thread (hub → spokes, so crawlers find the threads
+// from the page the website CTA points at).
+function buildInterestListSSR(d, canonicalUrl, origin) {
+  if (!d || !d.name) return "";
+  const accent = "#C49A6C";
+  const crumbs = ssrCrumbs([
+    { name: "Trailhub", url: `${origin}/` },
+    { name: "Coming Soon" },
+    { name: d.name },
+  ], origin);
+  const headline = d.headline ? `<p style="font-size:17px;color:${accent};font-weight:600;margin:0 0 12px;line-height:1.4;">${escapeHtml(d.headline)}</p>` : "";
+  const desc = d.description ? `<div style="font-size:16px;color:#F5F2ED;margin:0 0 22px;line-height:1.7;white-space:pre-wrap;">${escapeHtml(d.description)}</div>` : "";
+  const cta = d.status === "open"
+    ? `<a href="${canonicalUrl}" style="display:block;text-align:center;padding:14px 18px;border-radius:10px;background:${accent};color:#111;text-decoration:none;font-family:'Trebuchet MS',sans-serif;font-size:13px;font-weight:700;letter-spacing:1px;margin:0 0 28px;">KEEP ME POSTED</a>`
+    : "";
+  const updates = Array.isArray(d.updates) ? d.updates : [];
+  const list = updates.length
+    ? `<h2 style="font-family:'Trebuchet MS',sans-serif;font-size:14px;color:#fff;letter-spacing:1.2px;margin:0 0 12px;">LAUNCH UPDATES</h2><ol reversed style="list-style:none;padding:0;margin:0 0 28px;">${updates.map(u => {
+        const date = u.createdAt ? new Date(u.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "";
+        const gated = u.membersOnlyUntil && new Date(u.membersOnlyUntil).getTime() > Date.now();
+        return `<li style="padding:12px 14px;margin:0 0 8px;border-radius:12px;background:#1A1A1A;border:1px solid #2A2A28;"><div style="font-family:'Trebuchet MS',sans-serif;font-size:11px;color:#8B7D6B;margin-bottom:4px;">${escapeHtml(date)}${gated ? ` · <span style="color:${accent};">MEMBERS</span>` : ""}</div><a href="${u.url}" style="font-family:'Trebuchet MS',sans-serif;font-size:16px;font-weight:700;color:#fff;text-decoration:none;">${escapeHtml(u.title)}</a>${u.excerpt ? `<p style="margin:6px 0 0;font-size:14px;color:#8B7D6B;line-height:1.5;">${escapeHtml(u.excerpt)}</p>` : ""}</li>`;
+      }).join("")}</ol>`
+    : `<p style="font-size:14px;color:#8B7D6B;margin:0 0 28px;">No updates yet — sign up and you'll be the first to know.</p>`;
+  return ssrArticleShell({
+    title: escapeHtml(d.name),
+    crumbs,
+    hero: d.image || null,
+    heroAlt: d.name,
+    body: headline + desc + cta + list,
+    footer: `<a href="${origin}/" style="color:${accent};text-decoration:none;">Trailhub</a> · by Lone Peak Overland`,
+    accent,
+  });
+}
+
 function buildGearDropSSR(d, canonicalUrl, origin) {
   if (!d || !d.title) return "";
   const accent = "#4A7C59";
@@ -1706,6 +1792,7 @@ module.exports = async function handler(req, res) {
     type === "trip" ? `/trips/${id}` :
     type === "plan" ? `/plans/${id}` :
     type === "gear-drop" ? `/drops/${id}` :
+    type === "interest" ? `/interest/${id}` :
     type === "spot" ? `/spots/${id}` :
     type === "build" ? `/builds/${id}` :
     type === "bounty" ? `/bounties/${id}` :
@@ -1960,6 +2047,41 @@ module.exports = async function handler(req, res) {
     };
     const serialized = JSON.stringify(ld).replace(/</g, "\\u003c");
     jsonLdTag = `<script type="application/ld+json">${serialized}</script>`;
+  } else if (meta.jsonLd && meta.jsonLd.kind === "InterestList") {
+    // Launch hub: a CollectionPage whose ItemList is the update threads
+    // (hub → spokes), with the product as the page's main entity.
+    const j = meta.jsonLd;
+    const updates = Array.isArray(j.updates) ? j.updates : [];
+    const ld = {
+      "@context": "https://schema.org",
+      "@type": "CollectionPage",
+      name: j.name,
+      headline: j.headline || undefined,
+      description: (j.description || j.headline || "").slice(0, 500) || undefined,
+      url: canonicalUrl,
+      image: j.image || undefined,
+      datePublished: j.createdAt || undefined,
+      dateModified: j.modifiedAt || j.createdAt || undefined,
+      about: { "@type": "Product", name: j.name, brand: { "@type": "Brand", name: "Lone Peak Overland" } },
+      publisher: {
+        "@type": "Organization",
+        name: "Trailhub",
+        url: `${origin}/`,
+        logo: { "@type": "ImageObject", url: `${origin}/lone-peak-flag.png` },
+      },
+      mainEntity: updates.length ? {
+        "@type": "ItemList",
+        itemListOrder: "https://schema.org/ItemListOrderDescending",
+        numberOfItems: updates.length,
+        itemListElement: updates.map((u, i) => ({
+          "@type": "ListItem",
+          position: i + 1,
+          name: u.title,
+          url: `${origin}${u.url}`,
+        })),
+      } : undefined,
+    };
+    jsonLdTag = `<script type="application/ld+json">${JSON.stringify(Object.fromEntries(Object.entries(ld).filter(([, v]) => v !== undefined))).replace(/</g, "\\u003c")}</script>`;
   } else if (meta.jsonLd && meta.jsonLd.kind === "TripReport") {
     // Article schema for trip reports + plans. Carries author (Person),
     // image, geo coords from start_lat/lng, and topical keywords from
@@ -2219,6 +2341,8 @@ module.exports = async function handler(req, res) {
     ssrHtml = buildForumSubSSR({ ...meta.article, subInfo: subInfoWithSlug }, origin);
   } else if (type === "gear-drop" && meta.jsonLd && meta.jsonLd.kind === "GearDrop") {
     ssrHtml = buildGearDropSSR(meta.jsonLd, canonicalUrl, origin);
+  } else if (type === "interest" && meta.jsonLd && meta.jsonLd.kind === "InterestList") {
+    ssrHtml = buildInterestListSSR(meta.jsonLd, canonicalUrl, origin);
   } else if ((type === "trip" || type === "plan") && meta.jsonLd && meta.jsonLd.kind === "TripReport") {
     ssrHtml = buildTripArticleSSR({ ...meta.jsonLd, imageAlt: meta.imageAlt }, canonicalUrl, origin);
   } else if (type === "spot" && meta.jsonLd && meta.jsonLd.kind === "CampingSpot") {

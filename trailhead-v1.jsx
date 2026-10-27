@@ -39507,6 +39507,368 @@ function RaffleEntryScreen({ slug, currentUserId, currentProfile, currentUserEma
   </>);
 }
 
+/* ─── InterestListScreen ─── public /interest/<slug> page. A product-launch
+   "keep me posted" list: pitch + signup (account required, consent required —
+   same rules as the drawing) + the launch's update threads newest-first. */
+function InterestListScreen({ slug, source, utm, currentUserId, currentProfile, currentUserEmail, isAdmin, onClose, onLoadList, onLoadUpdates, onLoadMySignup, onSubmitSignup, onGoSignUp, onOpenThread, onGoSignIn }) {
+  const [list, setList] = useState(undefined); // undefined = loading; null = not found
+  const [updates, setUpdates] = useState(null);
+  const [signedUp, setSignedUp] = useState(false);
+  const [name, setName] = useState((currentProfile && currentProfile.full_name) || "");
+  const [email, setEmail] = useState(currentUserEmail || "");
+  const [phone, setPhone] = useState((currentProfile && currentProfile.phone) || "");
+  const [contactOptIn, setContactOptIn] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const l = await onLoadList(slug);
+      if (cancelled) return;
+      setList(l || null);
+      if (!l) return;
+      const [ups, me] = await Promise.all([onLoadUpdates(slug), currentUserId ? onLoadMySignup(l.id) : Promise.resolve(null)]);
+      if (cancelled) return;
+      setUpdates(ups || []);
+      if (me) setSignedUp(true);
+    })();
+    return () => { cancelled = true; };
+  }, [slug, currentUserId]);
+  useEffect(() => {
+    if (currentProfile) {
+      if (!name && currentProfile.full_name) setName(currentProfile.full_name);
+      if (!phone && currentProfile.phone) setPhone(currentProfile.phone);
+    }
+    if (!email && currentUserEmail) setEmail(currentUserEmail);
+  }, [currentProfile && currentProfile.full_name, currentProfile && currentProfile.phone, currentUserEmail]);
+
+  const field = { width: "100%", boxSizing: "border-box", padding: "11px 12px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none", marginBottom: 12 };
+  const label = { fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 700, display: "block", marginBottom: 4 };
+  const wrap = (children) => (
+    <div style={{ position: "fixed", inset: 0, background: T.darkBg, zIndex: 220, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+      <div style={{ position: "sticky", top: 0, zIndex: 2, background: T.darkBg, borderBottom: `1px solid ${T.charcoal}`, padding: "14px 16px", paddingTop: "max(14px, env(safe-area-inset-top, 0px))", display: "flex", alignItems: "center", gap: 8 }}>
+        <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><ChevronLeft size={20} color={T.white} /></button>
+        <Bell size={16} color={T.copper} />
+        <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 0.8 }}>KEEP ME POSTED</span>
+      </div>
+      <div style={{ flex: 1, padding: 20, maxWidth: 520, width: "100%", margin: "0 auto", boxSizing: "border-box" }}>{children}</div>
+    </div>
+  );
+  if (list === undefined) return wrap(<div style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, textAlign: "center", padding: 40 }}>Loading…</div>);
+  if (list === null) return wrap(<div style={{ fontFamily: serif, fontSize: 14, color: T.tertiary, textAlign: "center", padding: 40 }}>This page isn't available.</div>);
+
+  const closed = list.status === "closed";
+  const canSubmit = name.trim() && /\d{7,}/.test(phone.replace(/\D/g, "")) && contactOptIn && !submitting;
+  const submit = async () => {
+    if (!canSubmit) return;
+    setSubmitting(true); setError("");
+    const res = await onSubmitSignup(list.id, { name: name.trim(), phone: phone.trim(), email: (email || currentUserEmail || "").trim(), contactOptIn, source, utm });
+    setSubmitting(false);
+    if (res && res.error) { setError(res.error); return; }
+    setSignedUp(true);
+  };
+
+  const header = (
+    <div style={{ marginBottom: 22 }}>
+      {list.hero_img && <img src={txImg(list.hero_img, 1000)} alt={list.name} style={{ width: "100%", height: 200, objectFit: "cover", borderRadius: 12, marginBottom: 16, display: "block" }} />}
+      <div style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 2, fontWeight: 700, marginBottom: 6 }}>COMING SOON · LONE PEAK OVERLAND</div>
+      <h1 style={{ fontFamily: sans, fontSize: 24, color: T.white, fontWeight: 800, margin: "0 0 6px", lineHeight: 1.2 }}>{list.name}</h1>
+      {list.headline && <p style={{ fontFamily: serif, fontSize: 15, color: T.copper, margin: "0 0 10px", fontWeight: 600, lineHeight: 1.4 }}>{list.headline}</p>}
+      {list.description && <p style={{ fontFamily: serif, fontSize: 14, color: T.warmStone, margin: 0, lineHeight: 1.65, whiteSpace: "pre-wrap" }}>{list.description}</p>}
+    </div>
+  );
+
+  let signupCard;
+  if (closed) {
+    signupCard = <div style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, textAlign: "center", padding: "16px 0" }}>Signups are closed for this list.</div>;
+  } else if (signedUp) {
+    signupCard = (
+      <div style={{ background: `${T.green}12`, border: `1px solid ${T.green}`, borderRadius: 12, padding: 18, textAlign: "center" }}>
+        <CheckCircle size={28} color={T.green} style={{ marginBottom: 6 }} />
+        <div style={{ fontFamily: sans, fontSize: 15, color: T.white, fontWeight: 700, marginBottom: 4 }}>You're on the list</div>
+        <div style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, lineHeight: 1.5 }}>We'll notify you here when there's a new update, and our team will reach out as the launch gets closer. Keep notifications on.</div>
+      </div>
+    );
+  } else if (!currentUserId) {
+    signupCard = (
+      <div style={{ background: T.darkCard, border: `1px solid ${T.copper}60`, borderRadius: 12, padding: 16 }}>
+        <div style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.5, fontWeight: 700, marginBottom: 8 }}>GET UPDATES</div>
+        <p style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, lineHeight: 1.6, margin: "0 0 14px" }}>Create a free Trailhub account to follow the launch — you'll get every update as it's posted, and first access when it's ready.</p>
+        <label style={label}>NAME</label>
+        <input value={name} onChange={e => setName(e.target.value)} placeholder="Your name" style={field} />
+        <label style={label}>EMAIL</label>
+        <input value={email} onChange={e => setEmail(e.target.value)} type="email" placeholder="you@email.com" style={field} />
+        <button onClick={() => onGoSignUp({ name: name.trim(), email: email.trim() })} style={{ width: "100%", padding: "13px", borderRadius: 8, background: T.copper, color: T.darkBg, border: "none", fontFamily: sans, fontSize: 13, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>CREATE ACCOUNT & FOLLOW</button>
+        <button onClick={onGoSignIn} style={{ width: "100%", marginTop: 8, padding: 8, background: "none", border: "none", cursor: "pointer", fontFamily: sans, fontSize: 11, color: T.tertiary, letterSpacing: 0.5 }}>Already have an account? <span style={{ color: T.copper, fontWeight: 700 }}>Sign in</span></button>
+      </div>
+    );
+  } else {
+    signupCard = (
+      <div style={{ background: T.darkCard, border: `1px solid ${T.copper}60`, borderRadius: 12, padding: 16 }}>
+        <div style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.5, fontWeight: 700, marginBottom: 10 }}>GET UPDATES</div>
+        <label style={label}>NAME</label>
+        <input value={name} onChange={e => setName(e.target.value)} placeholder="Your name" style={{ ...field, background: T.darkBg }} />
+        <label style={label}>PHONE</label>
+        <input value={phone} onChange={e => setPhone(e.target.value)} type="tel" placeholder="(555) 123-4567" style={{ ...field, background: T.darkBg }} />
+        <label onClick={() => setContactOptIn(v => !v)} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "11px 12px", borderRadius: 8, background: T.darkBg, border: `1px solid ${contactOptIn ? T.copper : T.charcoal}`, cursor: "pointer", marginBottom: 12 }}>
+          <div style={{ width: 18, height: 18, flexShrink: 0, borderRadius: 4, marginTop: 1, background: contactOptIn ? T.copper : "transparent", border: `2px solid ${contactOptIn ? T.copper : T.tertiary}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {contactOptIn && <CheckCircle size={12} color={T.darkBg} strokeWidth={3} />}
+          </div>
+          <div>
+            <div style={{ fontFamily: sans, fontSize: 12, fontWeight: 700, color: T.white, letterSpacing: 0.3 }}>Yes, Lone Peak Overland can contact me <span style={{ color: T.copper, fontSize: 9, letterSpacing: 1 }}>REQUIRED</span></div>
+            <div style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, lineHeight: 1.4, marginTop: 2 }}>Our team may reach you by phone, text, or email about this launch, campers, builds, and offers. You can opt out anytime.</div>
+          </div>
+        </label>
+        {error && <div style={{ fontFamily: sans, fontSize: 12, color: T.red, marginBottom: 12 }}>{error}</div>}
+        <button onClick={submit} disabled={!canSubmit} style={{ width: "100%", padding: "13px", borderRadius: 8, background: canSubmit ? T.copper : T.charcoal, color: canSubmit ? T.darkBg : T.tertiary, border: "none", fontFamily: sans, fontSize: 13, fontWeight: 700, letterSpacing: 1, cursor: canSubmit ? "pointer" : "default" }}>{submitting ? "SAVING…" : "KEEP ME POSTED"}</button>
+      </div>
+    );
+  }
+
+  const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "";
+  const updatesBlock = (
+    <div style={{ marginTop: 26 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <span style={{ fontFamily: sans, fontSize: 11, color: T.white, letterSpacing: 1.5, fontWeight: 700 }}>LAUNCH UPDATES</span>
+        {updates && updates.length > 0 && <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{updates.length} · newest first</span>}
+      </div>
+      {updates === null ? <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>Loading…</div>
+        : updates.length === 0 ? <div style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, padding: "14px 0", lineHeight: 1.5 }}>No updates yet — sign up and you'll be the first to know.</div>
+        : updates.map((u, i) => {
+          const gated = !!(u.members_only_until && new Date(u.members_only_until).getTime() > Date.now());
+          const lockedForMe = gated && !currentUserId;
+          return (
+            <button key={u.id} onClick={() => lockedForMe ? onGoSignUp({ name: name.trim(), email: email.trim() }) : onOpenThread(u)} style={{ display: "flex", gap: 12, width: "100%", textAlign: "left", padding: 12, marginBottom: 8, borderRadius: 12, background: T.darkCard, border: `1px solid ${i === 0 ? T.copper + "70" : T.charcoal}`, cursor: "pointer" }}>
+              {u.hero_url && <img src={txImg(u.hero_url, 200)} alt="" style={{ width: 64, height: 64, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                  {i === 0 && <span style={{ fontFamily: sans, fontSize: 8, fontWeight: 800, letterSpacing: 1, color: T.darkBg, background: T.copper, padding: "2px 6px", borderRadius: 4 }}>LATEST</span>}
+                  <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{fmtDate(u.created_at)}</span>
+                  {gated && <span style={{ fontFamily: sans, fontSize: 8, fontWeight: 700, letterSpacing: 0.8, color: T.copper, display: "inline-flex", alignItems: "center", gap: 3 }}><Lock size={9} /> MEMBERS</span>}
+                </div>
+                <div style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, lineHeight: 1.3 }}>{u.title}</div>
+                {u.excerpt && <div style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.45, marginTop: 4, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{u.excerpt}</div>}
+                {lockedForMe && <div style={{ fontFamily: sans, fontSize: 10, color: T.copper, marginTop: 5, fontWeight: 600 }}>Sign up to read this update</div>}
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6, fontFamily: sans, fontSize: 10, color: T.tertiary }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}><MessageCircle size={10} /> {u.reply_count || 0}</span>
+                  <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 2, color: T.copper, fontWeight: 700 }}>READ <ChevronRight size={11} /></span>
+                </div>
+              </div>
+            </button>
+          );
+        })}
+    </div>
+  );
+
+  return wrap(<>{header}{signupCard}{updatesBlock}
+    {isAdmin && <div style={{ marginTop: 18, fontFamily: sans, fontSize: 10, color: T.tertiary, textAlign: "center" }}>Admin: manage signups + send update notifications from Admin → Interest Lists.</div>}
+  </>);
+}
+
+/* ─── InterestAdminScreen ─── admin surface: create/manage interest lists,
+   view + export signups, and notify a list about an update thread. */
+function InterestAdminScreen({ onBack, onLoadLists, onCreateList, onUpdateList, onLoadSignups, onLoadUpdates, onNotify, categoriesList }) {
+  const [lists, setLists] = useState(null);
+  const [selected, setSelected] = useState(null);
+  const [signups, setSignups] = useState(null);
+  const [updates, setUpdates] = useState(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [draft, setDraft] = useState({ name: "", headline: "", description: "", hero_img: "", forum_subcategory_slug: "" });
+  const [saving, setSaving] = useState(false);
+  const [edit, setEdit] = useState(null);
+  const [notifyThread, setNotifyThread] = useState("");
+  const [notifyBody, setNotifyBody] = useState("");
+  const [notifyMsg, setNotifyMsg] = useState("");
+  const [notifying, setNotifying] = useState(false);
+  const subOptions = [];
+  (categoriesList || []).forEach(c => (c.subs || []).forEach(s => subOptions.push({ slug: s.slug, label: `${c.name} / ${s.name}` })));
+  const reload = async () => { const r = await onLoadLists(); setLists(r || []); };
+  useEffect(() => { reload(); }, []);
+  const openList = async (l) => {
+    setSelected(l); setSignups(null); setUpdates(null); setNotifyMsg(""); setNotifyThread(""); setNotifyBody("");
+    setEdit({ name: l.name || "", headline: l.headline || "", description: l.description || "", hero_img: l.hero_img || "", forum_subcategory_slug: l.forum_subcategory_slug || "", status: l.status || "open" });
+    const [s, u] = await Promise.all([onLoadSignups(l.id), onLoadUpdates(l.slug)]);
+    setSignups(s || []); setUpdates(u || []);
+  };
+  const inputStyle = { width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none" };
+  const lbl = { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 4 };
+  const formFields = (d, setD) => (
+    <>
+      <label style={lbl}>NAME (PRODUCT)</label>
+      <input value={d.name} onChange={e => setD({ ...d, name: e.target.value })} placeholder="e.g. The new Lone Peak camper" style={{ ...inputStyle, marginBottom: 10 }} />
+      <label style={lbl}>HEADLINE</label>
+      <input value={d.headline} onChange={e => setD({ ...d, headline: e.target.value })} placeholder="One line — what it is and when" style={{ ...inputStyle, marginBottom: 10 }} />
+      <label style={lbl}>DESCRIPTION</label>
+      <textarea value={d.description} onChange={e => setD({ ...d, description: e.target.value })} rows={4} placeholder="The pitch. Plain text; line breaks are kept." style={{ ...inputStyle, marginBottom: 10, resize: "vertical" }} />
+      <label style={lbl}>HERO IMAGE URL (OPTIONAL)</label>
+      <input value={d.hero_img} onChange={e => setD({ ...d, hero_img: e.target.value })} placeholder="https://…" style={{ ...inputStyle, marginBottom: 10, fontFamily: "ui-monospace, Menlo, monospace", fontSize: 11 }} />
+      <label style={lbl}>UPDATES SUBCATEGORY (threads here show on the page, newest first)</label>
+      <select value={d.forum_subcategory_slug} onChange={e => setD({ ...d, forum_subcategory_slug: e.target.value })} style={{ ...inputStyle, marginBottom: 10, fontFamily: sans, fontSize: 12 }}>
+        <option value="">— none —</option>
+        {subOptions.map(o => <option key={o.slug} value={o.slug}>{o.label}</option>)}
+      </select>
+      {"status" in d && (
+        <>
+          <label style={lbl}>STATUS</label>
+          <select value={d.status} onChange={e => setD({ ...d, status: e.target.value })} style={{ ...inputStyle, marginBottom: 10, fontFamily: sans, fontSize: 12 }}>
+            <option value="draft">Draft (hidden)</option>
+            <option value="open">Open (collecting signups)</option>
+            <option value="closed">Closed (page visible, no new signups)</option>
+          </select>
+        </>
+      )}
+    </>
+  );
+  const createList = async () => {
+    if (!draft.name.trim() || saving) return;
+    setSaving(true);
+    const res = await onCreateList({ ...draft, name: draft.name.trim() });
+    setSaving(false);
+    if (res && res.error) { alert(res.error); return; }
+    setShowCreate(false); setDraft({ name: "", headline: "", description: "", hero_img: "", forum_subcategory_slug: "" });
+    reload();
+  };
+  const saveEdit = async () => {
+    if (!selected || !edit || saving) return;
+    setSaving(true);
+    const res = await onUpdateList(selected.id, edit);
+    setSaving(false);
+    if (res && res.error) { alert(res.error); return; }
+    const fresh = { ...selected, ...edit };
+    setSelected(fresh); reload();
+    if (edit.forum_subcategory_slug !== selected.forum_subcategory_slug) setUpdates(await onLoadUpdates(selected.slug) || []);
+  };
+  const exportCsv = () => {
+    if (!signups || signups.length === 0) return;
+    const esc = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
+    const rows = [["Name", "Email", "Phone", "Signed up", "Contact consent", "Consented at", "Source", "UTM"].map(esc).join(",")];
+    signups.forEach(s => rows.push([s.name, s.email, s.phone, s.created_at ? new Date(s.created_at).toLocaleString() : "", s.contact_opt_in ? "YES" : "", s.contact_opt_in_at ? new Date(s.contact_opt_in_at).toLocaleString() : "", s.source || "", s.utm ? JSON.stringify(s.utm) : ""].map(esc).join(",")));
+    const blob = new Blob([rows.join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `${selected.slug || "interest"}-signups.csv`;
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  };
+  const sendNotify = async () => {
+    if (!selected || !notifyThread || notifying) return;
+    const th = (updates || []).find(u => u.id === notifyThread);
+    if (typeof confirm === "function" && !confirm(`Notify ${signups ? signups.length : "all"} signup${signups && signups.length === 1 ? "" : "s"} about "${th ? th.title : "this update"}"?`)) return;
+    setNotifying(true); setNotifyMsg("");
+    const res = await onNotify(selected.id, notifyThread, notifyBody.trim() || null);
+    setNotifying(false);
+    if (res && res.error) { setNotifyMsg(res.error); return; }
+    setNotifyMsg(`Sent to ${res && res.sent_to != null ? res.sent_to : "the list"}.`);
+    setNotifyBody("");
+  };
+
+  if (selected) {
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://trailhead.lonepeakoverland.com";
+    const publicUrl = `${origin}/interest/${selected.slug}`;
+    const websiteUrl = `${publicUrl}?src=website`;
+    const consented = (signups || []).filter(s => s.contact_opt_in).length;
+    const bySource = {};
+    (signups || []).forEach(s => { const k = s.source || "direct"; bySource[k] = (bySource[k] || 0) + 1; });
+    return (
+      <div style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 16px", borderBottom: `1px solid ${T.charcoal}` }}>
+          <button onClick={() => setSelected(null)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><ChevronLeft size={20} color={T.white} /></button>
+          <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, letterSpacing: 0.8, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selected.name}</span>
+          <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, background: `${T.copper}20`, padding: "3px 8px", borderRadius: 4, letterSpacing: 0.8, fontWeight: 700 }}>{(selected.status || "").toUpperCase()}</span>
+        </div>
+        <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ background: T.darkCard, borderRadius: 12, padding: 14, border: `1px solid ${T.charcoal}` }}>
+            <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700, marginBottom: 8 }}>PUBLIC LINK</div>
+            <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+              <input readOnly value={publicUrl} style={{ ...inputStyle, fontFamily: "ui-monospace, Menlo, monospace", fontSize: 11 }} onFocus={e => e.target.select()} />
+              <button onClick={() => { try { navigator.clipboard.writeText(publicUrl); } catch (_) {} }} style={{ padding: "0 14px", borderRadius: 8, background: T.copper, color: T.darkBg, border: "none", fontFamily: sans, fontSize: 10, fontWeight: 700, cursor: "pointer" }}>COPY</button>
+            </div>
+            <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600, marginBottom: 4 }}>WEBSITE CTA LINK (tags the source)</div>
+            <div style={{ display: "flex", gap: 6 }}>
+              <input readOnly value={websiteUrl} style={{ ...inputStyle, fontFamily: "ui-monospace, Menlo, monospace", fontSize: 11 }} onFocus={e => e.target.select()} />
+              <button onClick={() => { try { navigator.clipboard.writeText(websiteUrl); } catch (_) {} }} style={{ padding: "0 14px", borderRadius: 8, background: T.copper, color: T.darkBg, border: "none", fontFamily: sans, fontSize: 10, fontWeight: 700, cursor: "pointer" }}>COPY</button>
+            </div>
+          </div>
+
+          <div style={{ background: T.darkCard, borderRadius: 12, padding: 14, border: `1px solid ${T.copper}` }}>
+            <div style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.5, fontWeight: 700, marginBottom: 10 }}>NOTIFY THE LIST</div>
+            <label style={lbl}>UPDATE THREAD</label>
+            <select value={notifyThread} onChange={e => setNotifyThread(e.target.value)} style={{ ...inputStyle, marginBottom: 10, fontFamily: sans, fontSize: 12 }}>
+              <option value="">— pick a thread —</option>
+              {(updates || []).map(u => <option key={u.id} value={u.id}>{u.title}</option>)}
+            </select>
+            {updates && updates.length === 0 && <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, marginBottom: 10 }}>No threads in the updates subcategory yet — post one in the forum first.</div>}
+            <label style={lbl}>MESSAGE (OPTIONAL — shown in the push)</label>
+            <input value={notifyBody} onChange={e => setNotifyBody(e.target.value)} maxLength={280} placeholder="posted a new update" style={{ ...inputStyle, marginBottom: 10 }} />
+            <button onClick={sendNotify} disabled={!notifyThread || notifying} style={{ width: "100%", padding: "12px", borderRadius: 8, background: notifyThread ? T.red : T.charcoal, color: T.white, border: "none", fontFamily: sans, fontSize: 12, fontWeight: 800, letterSpacing: 1, cursor: notifyThread ? "pointer" : "default" }}>{notifying ? "SENDING…" : `SEND TO ${signups ? signups.length : "…"} SIGNUP${signups && signups.length === 1 ? "" : "S"}`}</button>
+            {notifyMsg && <div style={{ fontFamily: sans, fontSize: 12, color: /^Sent/.test(notifyMsg) ? T.green : T.red, marginTop: 10 }}>{notifyMsg}</div>}
+          </div>
+
+          <div style={{ background: T.darkCard, borderRadius: 12, padding: 14, border: `1px solid ${T.charcoal}` }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+              <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700 }}>SIGNUPS ({signups ? signups.length : "…"}{signups && signups.length ? ` · ${consented} consented` : ""})</span>
+              <button onClick={exportCsv} disabled={!signups || signups.length === 0} style={{ padding: "6px 12px", borderRadius: 6, background: "none", border: `1px solid ${T.copper}`, color: T.copper, fontFamily: sans, fontSize: 10, fontWeight: 700, cursor: "pointer" }}>EXPORT CSV</button>
+            </div>
+            {signups && signups.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+                {Object.entries(bySource).map(([k, n]) => <span key={k} style={{ fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, padding: "3px 8px", borderRadius: 4, background: T.darkBg, color: T.tertiary, border: `1px solid ${T.charcoal}` }}>{k.toUpperCase()} · {n}</span>)}
+              </div>
+            )}
+            {signups === null ? <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>Loading…</div>
+              : signups.length === 0 ? <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>No signups yet.</div>
+              : signups.map((s, i) => (
+                <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderTop: i > 0 ? `1px solid ${T.charcoal}` : "none" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.name || "—"}</div>
+                    <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.email || ""}{s.phone ? ` · ${s.phone}` : ""}{s.source ? ` · ${s.source}` : ""}</div>
+                  </div>
+                  <span style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, flexShrink: 0 }}>{s.created_at ? new Date(s.created_at).toLocaleDateString() : ""}</span>
+                </div>
+              ))}
+          </div>
+
+          <div style={{ background: T.darkCard, borderRadius: 12, padding: 14, border: `1px solid ${T.charcoal}` }}>
+            <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700, marginBottom: 10 }}>EDIT</div>
+            {edit && formFields(edit, setEdit)}
+            <button onClick={saveEdit} disabled={saving} style={{ width: "100%", padding: "11px", borderRadius: 8, background: T.copper, color: T.darkBg, border: "none", fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>{saving ? "SAVING…" : "SAVE CHANGES"}</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 16px", borderBottom: `1px solid ${T.charcoal}` }}>
+        <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><ChevronLeft size={20} color={T.white} /></button>
+        <Bell size={16} color={T.copper} />
+        <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, letterSpacing: 0.8, flex: 1 }}>INTEREST LISTS</span>
+        <button onClick={() => setShowCreate(s => !s)} style={{ background: T.copper, border: "none", color: T.darkBg, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.8, padding: "8px 14px", borderRadius: 6, cursor: "pointer" }}>{showCreate ? "CANCEL" : "+ NEW"}</button>
+      </div>
+      <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+        {showCreate && (
+          <div style={{ background: T.darkCard, borderRadius: 12, padding: 14, border: `1px solid ${T.copper}40` }}>
+            <div style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.5, fontWeight: 700, marginBottom: 10 }}>NEW INTEREST LIST</div>
+            {formFields(draft, setDraft)}
+            <button onClick={createList} disabled={!draft.name.trim() || saving} style={{ width: "100%", padding: "11px", borderRadius: 8, background: draft.name.trim() ? T.copper : T.charcoal, color: draft.name.trim() ? T.darkBg : T.tertiary, border: "none", fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>{saving ? "CREATING…" : "CREATE LIST"}</button>
+          </div>
+        )}
+        {lists === null ? <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>Loading…</div>
+          : lists.length === 0 ? <div style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, textAlign: "center", padding: "30px 0" }}>No interest lists yet. Create one for the next launch.</div>
+          : lists.map(l => (
+            <button key={l.id} onClick={() => openList(l)} style={{ display: "flex", alignItems: "center", gap: 12, padding: 14, borderRadius: 12, background: T.darkCard, border: `1px solid ${T.charcoal}`, cursor: "pointer", textAlign: "left", width: "100%" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{l.name}</div>
+                <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 2 }}>/interest/{l.slug} · {l.signup_count != null ? `${l.signup_count} signup${l.signup_count === 1 ? "" : "s"}` : "…"}</div>
+              </div>
+              <span style={{ fontFamily: sans, fontSize: 9, color: l.status === "open" ? T.green : T.tertiary, background: `${l.status === "open" ? T.green : T.tertiary}20`, padding: "3px 8px", borderRadius: 4, letterSpacing: 0.8, fontWeight: 700, flexShrink: 0 }}>{(l.status || "").toUpperCase()}</span>
+              <ChevronRight size={16} color={T.tertiary} />
+            </button>
+          ))}
+      </div>
+    </div>
+  );
+}
+
 /* ─── RaffleAdminScreen ─── admin surface: create/manage event drawings,
    set reusable prize params, assign hosts, view + CSV-export entries.
    (Pick-winner + code delivery land in Phase 2.) */
@@ -39750,6 +40112,7 @@ function AdminHubScreen({ onBack, onSelect, openReportCount, openBugCount, isAdm
     !guideOnly && { key: "push",       label: "PUSH",       desc: "Broadcast push notifications and view history.",   icon: Bell,           color: T.copper },
     !guideOnly && { key: "polls",      label: "POLLS",      desc: "Community polls with per-question response breakdown.", icon: BarChart3, color: T.copper },
     !guideOnly && { key: "raffles",    label: "EVENT DRAWINGS", desc: "Expo raffles: public entry page, host draws, prize codes, CSV export.", icon: Gift, color: T.copper },
+    !guideOnly && { key: "interest",   label: "INTEREST LISTS", desc: "Product-launch signup pages: leads to the CRM, update threads, notify the list.", icon: Bell, color: T.copper },
     !guideOnly && { key: "analytics",  label: "ANALYTICS",  desc: "Active users, signups, posts, engagement.",        icon: TrendingUp,     color: T.green },
   ].filter(Boolean);
   return (
@@ -48356,6 +48719,18 @@ const __INITIAL_SHARED_LINK = (function() {
     if (dropMatch) {
       return { kind: "gear-drop", slug: decodeURIComponent(dropMatch[1]) };
     }
+    // /interest/<slug> — product-interest signup page. Keeps ?src= / utm_*
+    // from the website CTA so the signup records which placement sent them.
+    const interestMatch = path.match(/^\/interest\/(.+?)\/?$/);
+    if (interestMatch) {
+      let source = null, utm = null;
+      try {
+        const q = new URLSearchParams(window.location.search || "");
+        source = q.get("src") || q.get("source") || q.get("utm_source") || null;
+        q.forEach((v, k) => { if (/^utm_/i.test(k)) { utm = utm || {}; utm[k.toLowerCase()] = v; } });
+      } catch (e) {}
+      return { kind: "interest", slug: decodeURIComponent(interestMatch[1]), source, utm };
+    }
     // /win/<slug> — public event drawing (raffle) entry page.
     const winMatch = path.match(/^\/win\/(.+?)\/?$/);
     if (winMatch) {
@@ -51054,6 +51429,11 @@ export default function Trailhead() {
   );
   // Prefill stash carried from the guest raffle view into signup.
   const [rafflePrefill, setRafflePrefill] = useState(null); // { name, email } | null
+  // Product-interest list overlay — the public /interest/<slug> page.
+  // Carries the website CTA's ?src= / utm_* through to the signup row.
+  const [interestNav, setInterestNav] = useState(
+    (initialSharedLink && initialSharedLink.kind === "interest") ? { slug: initialSharedLink.slug, source: initialSharedLink.source || null, utm: initialSharedLink.utm || null } : null
+  );
   // The current user's gear-drop runs, keyed by gear_drop_id. Populated
   // from trip_reports where kind='gear_drop_run'. Lets the detail screen
   // show "you're in" + the run screen route correctly.
@@ -54047,6 +54427,123 @@ export default function Trailhead() {
     } catch (e) { return { error: (e && e.message) || "Network error" }; }
   };
 
+  // ─── Interest lists (product-launch signups) ───
+  const loadInterestListBySlug = async (slug) => {
+    if (!slug) return null;
+    try {
+      const { data, error } = await supabase.from("interest_lists").select("*").eq("slug", slug).maybeSingle();
+      if (error) { console.warn("[interest] list load", error); return null; }
+      return data || null;
+    } catch (e) { return null; }
+  };
+  // Update threads for the list (newest first; teaser-only for gated threads
+  // when the viewer is a guest — the RPC decides).
+  const loadInterestUpdates = async (slug) => {
+    if (!slug) return [];
+    try {
+      const { data, error } = await supabase.rpc("interest_list_updates", { p_slug: slug, p_limit: 50 });
+      if (error) { console.warn("[interest] updates", error); return []; }
+      return Array.isArray(data) ? data : [];
+    } catch (e) { return []; }
+  };
+  const loadMyInterestSignup = async (listId) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid || !listId) return null;
+    try {
+      const { data } = await supabase.from("interest_signups").select("id").eq("list_id", listId).eq("user_id", uid).maybeSingle();
+      return data || null;
+    } catch (e) { return null; }
+  };
+  const submitInterestSignup = async (listId, { name, phone, email, contactOptIn, source, utm }) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) return { error: "You must be signed in." };
+    if (!listId) return { error: "Missing list." };
+    if (!contactOptIn) return { error: "Please agree to be contacted." };
+    const sessionEmail = (supabaseSession && supabaseSession.user && supabaseSession.user.email) || null;
+    try {
+      const { error } = await supabase.from("interest_signups").insert({
+        list_id: listId, user_id: uid,
+        name: (name || "").trim() || null,
+        email: (email || sessionEmail || "").trim() || null,
+        phone: (phone || "").trim() || null,
+        contact_opt_in: true, contact_opt_in_at: new Date().toISOString(),
+        source: source || null, utm: utm || null,
+      });
+      if (error) {
+        if (/duplicate|unique/i.test(error.message || "")) return { ok: true, already: true };
+        if (/row-level security/i.test(error.message || "")) return { error: "Signups are closed for this list." };
+        return { error: error.message || "Couldn't sign you up." };
+      }
+      if (phone && currentProfile && !currentProfile.phone) {
+        try { await supabase.from("profiles").update({ phone: phone.trim() }).eq("id", uid); } catch (_) {}
+      }
+      return { ok: true };
+    } catch (e) { return { error: (e && e.message) || "Network error." }; }
+  };
+  // Admin
+  const interestSlugify = (s) => (s || "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "launch";
+  const loadInterestLists = async () => {
+    if (!isAdmin) return [];
+    try {
+      const { data, error } = await supabase.from("interest_lists").select("*").order("created_at", { ascending: false });
+      if (error) { console.error("[interest] lists", error); return []; }
+      const lists = data || [];
+      await Promise.all(lists.map(async (l) => {
+        try {
+          const { count } = await supabase.from("interest_signups").select("id", { count: "exact", head: true }).eq("list_id", l.id);
+          l.signup_count = count != null ? count : 0;
+        } catch (_) { l.signup_count = null; }
+      }));
+      return lists;
+    } catch (e) { return []; }
+  };
+  const createInterestList = async ({ name, headline, description, hero_img, forum_subcategory_slug }) => {
+    if (!isAdmin) return { error: "Admin only" };
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    const base = interestSlugify(name);
+    for (let i = 0; i < 5; i++) {
+      const slug = i === 0 ? base : `${base}-${i + 1}`;
+      const { data, error } = await supabase.from("interest_lists").insert({
+        name, slug,
+        headline: (headline || "").trim() || null,
+        description: (description || "").trim() || null,
+        hero_img: (hero_img || "").trim() || null,
+        forum_subcategory_slug: forum_subcategory_slug || null,
+        status: "open", created_by: uid,
+      }).select("*").maybeSingle();
+      if (!error && data) return { ok: true, row: data };
+      if (error && !/duplicate|unique/i.test(error.message || "")) return { error: error.message || "Create failed" };
+    }
+    return { error: "Slug collision — try a different name." };
+  };
+  const updateInterestList = async (id, patch) => {
+    if (!isAdmin || !id) return { error: "Not authorized" };
+    const allowed = ["name", "headline", "description", "hero_img", "forum_subcategory_slug", "status"];
+    const body = {};
+    allowed.forEach(k => { if (k in patch) body[k] = typeof patch[k] === "string" ? (patch[k].trim() || null) : patch[k]; });
+    if (!body.name) delete body.name;
+    body.updated_at = new Date().toISOString();
+    const { error } = await supabase.from("interest_lists").update(body).eq("id", id);
+    if (error) return { error: error.message };
+    return { ok: true };
+  };
+  const loadInterestSignups = async (listId) => {
+    if (!isAdmin || !listId) return [];
+    try {
+      const { data, error } = await supabase.from("interest_signups").select("*").eq("list_id", listId).order("created_at", { ascending: false });
+      if (error) { console.error("[interest] signups", error); return []; }
+      return data || [];
+    } catch (e) { return []; }
+  };
+  const notifyInterestList = async (listId, threadId, body) => {
+    if (!isAdmin) return { error: "Admin only" };
+    try {
+      const { data, error } = await supabase.rpc("interest_list_notify", { p_list_id: listId, p_thread_id: threadId, p_body: body || null });
+      if (error) return { error: error.message || "Send failed" };
+      return { ok: true, sent_to: data && data.sent_to };
+    } catch (e) { return { error: (e && e.message) || "Network error" }; }
+  };
+
   const loadPollsWithCounts = async () => {
     if (!isAdmin) return { error: "Admin only" };
     try {
@@ -56875,6 +57372,13 @@ export default function Trailhead() {
       if (win) {
         setProfileStack([]); setShowRecovery(false); setShowCompose(false);
         setRaffleSlug(decodeURIComponent(win[1]));
+        return;
+      }
+      // /interest/<slug> — product-interest signup page.
+      const interest = url.match(/^\/interest\/([\w-]+)/);
+      if (interest) {
+        setProfileStack([]); setShowRecovery(false); setShowCompose(false);
+        setInterestNav({ slug: decodeURIComponent(interest[1]), source: null, utm: null });
         return;
       }
       // Any other in-app path (forum thread, trip, build, profile, admin,
@@ -61235,6 +61739,17 @@ export default function Trailhead() {
                     allTripReports={allTripReports}
                     campingSpots={campingSpots}
                   />
+                : adminSubScreen === "interest"
+                ? <InterestAdminScreen
+                    onBack={() => setAdminSubScreen(null)}
+                    onLoadLists={loadInterestLists}
+                    onCreateList={createInterestList}
+                    onUpdateList={updateInterestList}
+                    onLoadSignups={loadInterestSignups}
+                    onLoadUpdates={loadInterestUpdates}
+                    onNotify={notifyInterestList}
+                    categoriesList={forumCategoriesList}
+                  />
                 : adminSubScreen === "raffles"
                 ? <RaffleAdminScreen
                     isAdmin={isAdmin}
@@ -62125,6 +62640,31 @@ export default function Trailhead() {
           onPickWinner={pickRaffleWinner}
           onLoadWinnerCode={loadRaffleWinnerCode}
           onGoSignUp={(prefill) => { setRafflePrefill(prefill || null); setAuthState("signup"); }}
+        />
+      )}
+      {interestNav && (
+        <InterestListScreen
+          slug={interestNav.slug}
+          source={interestNav.source}
+          utm={interestNav.utm}
+          currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id}
+          currentProfile={currentProfile}
+          currentUserEmail={(supabaseSession && supabaseSession.user && supabaseSession.user.email) || null}
+          isAdmin={isAdmin}
+          onClose={() => { setInterestNav(null); if (typeof window !== "undefined" && /^\/interest\//.test(window.location.pathname || "")) window.history.pushState({}, "", "/"); }}
+          onLoadList={loadInterestListBySlug}
+          onLoadUpdates={loadInterestUpdates}
+          onLoadMySignup={loadMyInterestSignup}
+          onSubmitSignup={submitInterestSignup}
+          onGoSignUp={(prefill) => { setRafflePrefill(prefill || null); setAuthState("signup"); }}
+          onGoSignIn={() => setAuthState("login")}
+          onOpenThread={(u) => {
+            // Close the overlay, then open the thread in the forum stack.
+            setInterestNav(null);
+            if (typeof window !== "undefined" && /^\/interest\//.test(window.location.pathname || "")) window.history.pushState({}, "", "/");
+            setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("forum");
+            openForumThreadById(u.id);
+          }}
         />
       )}
       {viewingGearDropId && GEAR_DROPS_ENABLED && (

@@ -36,6 +36,10 @@
       "destination": "/api/preview?type=gear-drop&id=:slug"
     },
     {
+      "source": "/interest/:slug",
+      "destination": "/api/preview?type=interest&id=:slug"
+    },
+    {
       "source": "/spots/:id",
       "destination": "/api/preview?type=spot&id=:id"
     },
