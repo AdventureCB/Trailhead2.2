@@ -8704,7 +8704,7 @@ function ForumSectionEditor({ subheading, onSubheadingChange, value, onChange, o
   );
 }
 
-function ForumScreen({ pendingThread, onPendingHandled, onLoadThreadTeaser, pendingForumSubNav, onConsumePendingForumSubNav, pendingForumCatNav, onConsumePendingForumCatNav, onAddNotification, onOpenDM, onOpenShareCompose, onOpenShareIntent, onAddFeedPost, threadsBySub, repliesByThread, onAddForumThread, onUpdateForumThread, onDeleteForumThread, onAddForumReply, onDeleteForumReply, onLoadForumReplies, likedForumThreadIds, forumThreadLikeCounts, onToggleForumThreadLike, likedForumReplyIds, forumReplyLikeCounts, onToggleForumReplyLike, onBumpForumThreadView, onAwardPoints, isGuest, onGuestTap, currentUserId, currentUserName, currentUserHandle, currentUserAvatar, isAdmin, isModerator, isAmbassador, categoriesList, onAddCategory, onUpdateCategory, onDeleteCategory, onAddSubcategory, onUpdateSubcategory, onDeleteSubcategory, onReportContent, onViewUser, onNotifyMentions }) {
+function ForumScreen({ pendingThread, onPendingHandled, onLoadThreadTeaser, pendingForumSubNav, onConsumePendingForumSubNav, pendingForumCatNav, onConsumePendingForumCatNav, onAddNotification, onOpenDM, onOpenShareCompose, onOpenShareIntent, onAddFeedPost, threadsBySub, repliesByThread, onAddForumThread, onUpdateForumThread, onDeleteForumThread, onAddForumReply, onDeleteForumReply, onLoadForumReplies, likedForumThreadIds, forumThreadLikeCounts, onToggleForumThreadLike, likedForumReplyIds, forumReplyLikeCounts, onToggleForumReplyLike, onBumpForumThreadView, onAwardPoints, isGuest, onGuestTap, currentUserId, currentUserName, currentUserHandle, currentUserAvatar, isAdmin, isModerator, isAmbassador, categoriesList, onAddCategory, onUpdateCategory, onDeleteCategory, onAddSubcategory, onUpdateSubcategory, onDeleteSubcategory, onReportContent, onViewUser, onNotifyMentions, interestLists, interestTagsByThread, onSetInterestTag }) {
   // Phase 2 brings cats + subs in from the DB-backed `categoriesList` prop.
   // The brief race window between mount and the first hydrate returning
   // shows an empty grid; once hydrate completes the grid populates.
@@ -9144,6 +9144,9 @@ function ForumScreen({ pendingThread, onPendingHandled, onLoadThreadTeaser, pend
   const [ntSections, setNtSections] = useState([{ id: newSectionId(), subheading: "", body: "", videoUrl: "" }]);
   // Admin-only: members-only reading window for a NEW thread (hours; 0 = off).
   const [ntMembersOnlyHours, setNtMembersOnlyHours] = useState(0);
+  // Admin: explicit "show on launch page" toggles — listId → bool. Unset =
+  // follows the list's linked subcategory (auto-include).
+  const [ntInterestOverrides, setNtInterestOverrides] = useState({});
   const addUrlSection = () => setNtSections(prev => [...prev, { id: newSectionId(), type: "url", label: "", url: "" }]);
   const addEditUrlSection = () => setEditSections(prev => [...prev, { id: newSectionId(), type: "url", label: "", url: "" }]);
   const newPollSection = () => ({ id: newSectionId(), type: "poll", pollId: "poll_" + Math.random().toString(36).slice(2, 10), question: "", options: [{ id: newPollOptionId(), label: "" }, { id: newPollOptionId(), label: "" }], multi: false, closesAt: null, closeHours: 0 });
@@ -9347,6 +9350,19 @@ function ForumScreen({ pendingThread, onPendingHandled, onLoadThreadTeaser, pend
       });
       }
       if (!created) return;
+      // Admin launch-page tags: write an override only where the choice
+      // differs from the subcategory default (include from elsewhere, or
+      // exclude from the linked sub). Fire-and-forget.
+      if (isAdmin && onSetInterestTag && Array.isArray(interestLists) && interestLists.length > 0) {
+        const subSlug = sub.slug || forumSlugify(sub.name || "");
+        interestLists.forEach(l => {
+          const auto = l.forum_subcategory_slug === subSlug;
+          const on = (l.id in ntInterestOverrides) ? !!ntInterestOverrides[l.id] : auto;
+          if (on && !auto) onSetInterestTag(l.id, created.id, "include", false);
+          else if (!on && auto) onSetInterestTag(l.id, created.id, "exclude", false);
+        });
+        setNtInterestOverrides({});
+      }
       // Auto-share to feed if toggle is on. Uses the live current user info,
       // not a hardcoded handle.
       if (ntShareToFeed && onAddFeedPost) {
@@ -9537,6 +9553,26 @@ function ForumScreen({ pendingThread, onPendingHandled, onLoadThreadTeaser, pend
                   <button onClick={addPollSection} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", borderRadius: 8, background: "none", border: `1px dashed ${T.copper}60`, cursor: "pointer", fontFamily: sans, fontSize: 12, color: T.copper, letterSpacing: 1, fontWeight: 600, marginBottom: 12 }}>
                     <BarChart3 size={14} color={T.copper} /> ADD POLL
                   </button>
+                  {Array.isArray(interestLists) && interestLists.length > 0 && (() => {
+                    const subSlug = activeSub ? (activeSub.slug || forumSlugify(activeSub.name || "")) : "";
+                    return (
+                      <div style={{ marginBottom: 12 }}>
+                        <label style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 6 }}>SHOW ON LAUNCH PAGE</label>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                          {interestLists.map(l => {
+                            const auto = !!(subSlug && l.forum_subcategory_slug === subSlug);
+                            const on = (l.id in ntInterestOverrides) ? !!ntInterestOverrides[l.id] : auto;
+                            return (
+                              <button key={l.id} onClick={() => setNtInterestOverrides(prev => ({ ...prev, [l.id]: !on }))} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "6px 10px", borderRadius: 16, background: on ? `${T.copper}22` : "none", border: `1px solid ${on ? T.copper : T.charcoal}`, color: on ? T.copper : T.tertiary, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}>
+                                {on ? <CheckCircle size={12} /> : <CircleDashed size={12} />}{l.name}{auto && on && !(l.id in ntInterestOverrides) ? <span style={{ fontSize: 8, opacity: 0.7 }}>AUTO</span> : null}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, marginTop: 6, lineHeight: 1.4 }}>Threads in a list's linked subcategory are on automatically; toggle to add this thread from elsewhere or keep it off the page.</div>
+                      </div>
+                    );
+                  })()}
                   <label style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 4 }}>MEMBERS-ONLY WINDOW</label>
                   <select value={ntMembersOnlyHours} onChange={(e) => setNtMembersOnlyHours(Number(e.target.value))} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 13 }}>
                     {MEMBERS_ONLY_CHOICES.map(([h, l]) => <option key={h} value={h}>{l}</option>)}
@@ -10049,6 +10085,38 @@ function ForumScreen({ pendingThread, onPendingHandled, onLoadThreadTeaser, pend
                   <option value="" disabled>{active ? "Change…" : "Set window…"}</option>
                   {MEMBERS_ONLY_CHOICES.map(([h, l]) => <option key={h} value={h}>{l}</option>)}
                 </select>
+              </div>
+            );
+          })()}
+          {isAdmin && onSetInterestTag && Array.isArray(interestLists) && interestLists.length > 0 && (() => {
+            // Launch-page chips: effective state = include row, or (in the
+            // linked sub AND no exclude row). Tap toggles; star pins.
+            const tags = (interestTagsByThread && interestTagsByThread[selectedThread.id]) || {};
+            const subSlug = selectedThread.subcategorySlug || "";
+            return (
+              <div style={{ margin: "0 0 12px", padding: "8px 10px", borderRadius: 8, background: T.darkCard, border: `1px solid ${T.charcoal}` }}>
+                <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1, fontWeight: 700, marginBottom: 6 }}>LAUNCH PAGE</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {interestLists.map(l => {
+                    const row = tags[l.id];
+                    const auto = l.forum_subcategory_slug === subSlug;
+                    const on = row ? row.mode === "include" || (auto && row.mode !== "exclude") : auto;
+                    const pinned = !!(row && row.pinned && on);
+                    const toggle = () => {
+                      if (on) { if (auto) onSetInterestTag(l.id, selectedThread.id, "exclude", false); else onSetInterestTag(l.id, selectedThread.id, null); }
+                      else { if (auto) onSetInterestTag(l.id, selectedThread.id, null); else onSetInterestTag(l.id, selectedThread.id, "include", false); }
+                    };
+                    const togglePin = (e) => { e.stopPropagation(); onSetInterestTag(l.id, selectedThread.id, auto ? (row && row.mode === "exclude" ? "exclude" : "include") : "include", !pinned); };
+                    return (
+                      <span key={l.id} style={{ display: "inline-flex", alignItems: "center", borderRadius: 16, border: `1px solid ${on ? T.copper : T.charcoal}`, background: on ? `${T.copper}22` : "none", overflow: "hidden" }}>
+                        <button onClick={toggle} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "6px 8px 6px 10px", background: "none", border: "none", color: on ? T.copper : T.tertiary, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}>
+                          {on ? <CheckCircle size={12} /> : <CircleDashed size={12} />}{l.name}
+                        </button>
+                        {on && <button onClick={togglePin} title={pinned ? "Unpin from top" : "Pin to top of the page"} style={{ display: "flex", padding: "6px 8px 6px 4px", background: "none", border: "none", cursor: "pointer" }}><Star size={12} color={pinned ? T.copper : T.tertiary} fill={pinned ? T.copper : "none"} /></button>}
+                      </span>
+                    );
+                  })}
+                </div>
               </div>
             );
           })()}
@@ -39642,7 +39710,8 @@ function InterestListScreen({ slug, source, utm, currentUserId, currentProfile, 
               {u.hero_url && <img src={txImg(u.hero_url, 200)} alt="" style={{ width: 64, height: 64, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                  {i === 0 && <span style={{ fontFamily: sans, fontSize: 8, fontWeight: 800, letterSpacing: 1, color: T.darkBg, background: T.copper, padding: "2px 6px", borderRadius: 4 }}>LATEST</span>}
+                  {u.pinned && <span style={{ fontFamily: sans, fontSize: 8, fontWeight: 800, letterSpacing: 1, color: T.copper, display: "inline-flex", alignItems: "center", gap: 3 }}><Star size={9} fill={T.copper} /> PINNED</span>}
+                  {i === 0 && !u.pinned && <span style={{ fontFamily: sans, fontSize: 8, fontWeight: 800, letterSpacing: 1, color: T.darkBg, background: T.copper, padding: "2px 6px", borderRadius: 4 }}>LATEST</span>}
                   <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{fmtDate(u.created_at)}</span>
                   {gated && <span style={{ fontFamily: sans, fontSize: 8, fontWeight: 700, letterSpacing: 0.8, color: T.copper, display: "inline-flex", alignItems: "center", gap: 3 }}><Lock size={9} /> MEMBERS</span>}
                 </div>
@@ -39667,7 +39736,7 @@ function InterestListScreen({ slug, source, utm, currentUserId, currentProfile, 
 
 /* ─── InterestAdminScreen ─── admin surface: create/manage interest lists,
    view + export signups, and notify a list about an update thread. */
-function InterestAdminScreen({ onBack, onLoadLists, onCreateList, onUpdateList, onLoadSignups, onLoadUpdates, onNotify, categoriesList }) {
+function InterestAdminScreen({ onBack, onLoadLists, onCreateList, onUpdateList, onLoadSignups, onLoadUpdates, onNotify, onSetTag, categoriesList }) {
   const [lists, setLists] = useState(null);
   const [selected, setSelected] = useState(null);
   const [signups, setSignups] = useState(null);
@@ -39801,6 +39870,26 @@ function InterestAdminScreen({ onBack, onLoadLists, onCreateList, onUpdateList, 
             <input value={notifyBody} onChange={e => setNotifyBody(e.target.value)} maxLength={280} placeholder="posted a new update" style={{ ...inputStyle, marginBottom: 10 }} />
             <button onClick={sendNotify} disabled={!notifyThread || notifying} style={{ width: "100%", padding: "12px", borderRadius: 8, background: notifyThread ? T.red : T.charcoal, color: T.white, border: "none", fontFamily: sans, fontSize: 12, fontWeight: 800, letterSpacing: 1, cursor: notifyThread ? "pointer" : "default" }}>{notifying ? "SENDING…" : `SEND TO ${signups ? signups.length : "…"} SIGNUP${signups && signups.length === 1 ? "" : "S"}`}</button>
             {notifyMsg && <div style={{ fontFamily: sans, fontSize: 12, color: /^Sent/.test(notifyMsg) ? T.green : T.red, marginTop: 10 }}>{notifyMsg}</div>}
+          </div>
+
+          <div style={{ background: T.darkCard, borderRadius: 12, padding: 14, border: `1px solid ${T.charcoal}` }}>
+            <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700, marginBottom: 4 }}>ON THE PAGE ({updates ? updates.length : "…"})</div>
+            <div style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, marginBottom: 10, lineHeight: 1.4 }}>Threads in the linked subcategory plus any you tag from elsewhere (composer or thread page → LAUNCH PAGE). Pinned first, then newest.</div>
+            {updates === null ? <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>Loading…</div>
+              : updates.length === 0 ? <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>Nothing yet.</div>
+              : updates.map((u, i) => {
+                const refresh = async () => setUpdates(await onLoadUpdates(selected.slug) || []);
+                return (
+                  <div key={u.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderTop: i > 0 ? `1px solid ${T.charcoal}` : "none" }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.title}</div>
+                      <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 0.5 }}>{u.created_at ? new Date(u.created_at).toLocaleDateString() : ""} · {u.source === "tagged" ? "TAGGED" : "SUBCATEGORY"}{u.subcategory_slug ? ` · ${u.subcategory_slug}` : ""}</div>
+                    </div>
+                    {onSetTag && <button onClick={async () => { await onSetTag(selected.id, u.id, u.source === "tagged" ? "include" : "include", !u.pinned); refresh(); }} title={u.pinned ? "Unpin" : "Pin to top"} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex" }}><Star size={14} color={u.pinned ? T.copper : T.tertiary} fill={u.pinned ? T.copper : "none"} /></button>}
+                    {onSetTag && <button onClick={async () => { await onSetTag(selected.id, u.id, u.source === "tagged" ? null : "exclude", false); refresh(); }} title="Remove from the page" style={{ background: "none", border: `1px solid ${T.red}40`, color: T.red, fontFamily: sans, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, padding: "4px 8px", borderRadius: 6, cursor: "pointer" }}>REMOVE</button>}
+                  </div>
+                );
+              })}
           </div>
 
           <div style={{ background: T.darkCard, borderRadius: 12, padding: 14, border: `1px solid ${T.charcoal}` }}>
@@ -51434,6 +51523,15 @@ export default function Trailhead() {
   const [interestNav, setInterestNav] = useState(
     (initialSharedLink && initialSharedLink.kind === "interest") ? { slug: initialSharedLink.slug, source: initialSharedLink.source || null, utm: initialSharedLink.utm || null } : null
   );
+  // Admin-only: open interest lists + per-thread overrides, for the forum
+  // composer "SHOW ON LAUNCH PAGE" chips and the thread-page admin bar.
+  const [interestLists, setInterestLists] = useState([]);
+  const [interestTagRows, setInterestTagRows] = useState([]); // [{list_id, thread_id, mode, pinned}]
+  const interestTagsByThread = useMemo(() => {
+    const m = {};
+    interestTagRows.forEach(r => { (m[r.thread_id] = m[r.thread_id] || {})[r.list_id] = r; });
+    return m;
+  }, [interestTagRows]);
   // The current user's gear-drop runs, keyed by gear_drop_id. Populated
   // from trip_reports where kind='gear_drop_run'. Lets the detail screen
   // show "you're in" + the run screen route correctly.
@@ -54534,6 +54632,25 @@ export default function Trailhead() {
       if (error) { console.error("[interest] signups", error); return []; }
       return data || [];
     } catch (e) { return []; }
+  };
+  // Per-list thread overrides (include / exclude / pin). Admin-only table;
+  // loaded once for admins so the composer + thread page can show chips.
+  const setInterestListThreadTag = async (listId, threadId, mode, pinned) => {
+    if (!isAdmin || !listId || !threadId) return { error: "Admin only" };
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    try {
+      if (!mode) {
+        const { error } = await supabase.from("interest_list_threads").delete().eq("list_id", listId).eq("thread_id", threadId);
+        if (error) return { error: error.message };
+        setInterestTagRows(prev => prev.filter(r => !(r.list_id === listId && r.thread_id === threadId)));
+        return { ok: true };
+      }
+      const row = { list_id: listId, thread_id: threadId, mode, pinned: !!pinned, added_by: uid };
+      const { error } = await supabase.from("interest_list_threads").upsert(row, { onConflict: "list_id,thread_id" });
+      if (error) return { error: error.message };
+      setInterestTagRows(prev => [...prev.filter(r => !(r.list_id === listId && r.thread_id === threadId)), row]);
+      return { ok: true };
+    } catch (e) { return { error: (e && e.message) || "Network error" }; }
   };
   const notifyInterestList = async (listId, threadId, body) => {
     if (!isAdmin) return { error: "Admin only" };
@@ -60351,6 +60468,23 @@ export default function Trailhead() {
   // ─── Forum CATEGORIES + SUBCATEGORIES (Phase 2; DB-backed)
   // Public SELECT, fetched in parallel + sorted by sort_order. Cheap query;
   // runs alongside hydrateForumThreads on both guest + signed-in boot.
+  // Admin: interest lists + tag overrides for the forum tagging UI.
+  useEffect(() => {
+    if (!isAdmin) { setInterestLists([]); setInterestTagRows([]); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const [{ data: lists }, { data: tags }] = await Promise.all([
+          supabase.from("interest_lists").select("id, name, slug, forum_subcategory_slug, status").neq("status", "closed").order("created_at", { ascending: false }),
+          supabase.from("interest_list_threads").select("list_id, thread_id, mode, pinned"),
+        ]);
+        if (cancelled) return;
+        setInterestLists(lists || []);
+        setInterestTagRows(tags || []);
+      } catch (e) { /* tables may not exist yet — chips just don't render */ }
+    })();
+    return () => { cancelled = true; };
+  }, [isAdmin]);
   const hydrateForumCategories = async () => {
     try {
       const [catRes, subRes] = await Promise.all([
@@ -61605,7 +61739,7 @@ export default function Trailhead() {
           <>
             {isGuest && screen !== "routes" && <GuestBanner onSignIn={() => setShowGuestPrompt(true)} />}
             {screen === "feed" && renderFeedScopedTo({ hideFilters: false })}
-            {screen === "forum" && <ForumScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} isAdmin={isAdmin} isModerator={isModerator} isAmbassador={isAmbassador} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentUserName={(currentProfile && currentProfile.full_name) || "You"} currentUserHandle={(currentProfile && currentProfile.handle) || ""} currentUserAvatar={profilePic || (currentProfile && currentProfile.avatar_url) || null} pendingThread={pendingThread} onPendingHandled={() => setPendingThread(null)} pendingForumSubNav={pendingForumSubNav} onConsumePendingForumSubNav={() => setPendingForumSubNav(null)} pendingForumCatNav={pendingForumCatNav} onConsumePendingForumCatNav={() => setPendingForumCatNav(null)} onAddNotification={requireAuth(addNotification)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onOpenShareCompose={openShareCompose} onOpenShareIntent={openShareIntent} onAddFeedPost={requireAuth((post) => addPost(post))} threadsBySub={forumThreadsBySub} repliesByThread={visibleForumReplies} onAddForumThread={requireAuth(addForumThread)} onUpdateForumThread={requireAuth(updateForumThread)} onDeleteForumThread={requireAuth(deleteForumThreadRouted)} onAddForumReply={requireAuth(addForumReply)} onDeleteForumReply={requireAuth(deleteForumReplyRouted)} onLoadForumReplies={loadForumReplies} likedForumThreadIds={likedForumThreadIds} forumThreadLikeCounts={forumThreadLikeCounts} onToggleForumThreadLike={requireAuth(toggleForumThreadLike)} likedForumReplyIds={likedForumReplyIds} forumReplyLikeCounts={forumReplyLikeCounts} onToggleForumReplyLike={requireAuth(toggleForumReplyLike)} onBumpForumThreadView={bumpForumThreadView} onAwardPoints={awardPoints} categoriesList={forumCategoriesList} onAddCategory={requireAuth(addForumCategory)} onUpdateCategory={requireAuth(updateForumCategory)} onDeleteCategory={requireAuth(deleteForumCategory)} onAddSubcategory={requireAuth(addForumSubcategory)} onUpdateSubcategory={requireAuth(updateForumSubcategory)} onDeleteSubcategory={requireAuth(deleteForumSubcategory)} onReportContent={requireAuth(openContentReport)} onViewUser={openUserProfile} onNotifyMentions={notifyMentions} onLoadThreadTeaser={loadForumThreadTeaser} />}
+            {screen === "forum" && <ForumScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} isAdmin={isAdmin} isModerator={isModerator} isAmbassador={isAmbassador} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} currentUserName={(currentProfile && currentProfile.full_name) || "You"} currentUserHandle={(currentProfile && currentProfile.handle) || ""} currentUserAvatar={profilePic || (currentProfile && currentProfile.avatar_url) || null} pendingThread={pendingThread} onPendingHandled={() => setPendingThread(null)} pendingForumSubNav={pendingForumSubNav} onConsumePendingForumSubNav={() => setPendingForumSubNav(null)} pendingForumCatNav={pendingForumCatNav} onConsumePendingForumCatNav={() => setPendingForumCatNav(null)} onAddNotification={requireAuth(addNotification)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onOpenShareCompose={openShareCompose} onOpenShareIntent={openShareIntent} onAddFeedPost={requireAuth((post) => addPost(post))} threadsBySub={forumThreadsBySub} repliesByThread={visibleForumReplies} onAddForumThread={requireAuth(addForumThread)} onUpdateForumThread={requireAuth(updateForumThread)} onDeleteForumThread={requireAuth(deleteForumThreadRouted)} onAddForumReply={requireAuth(addForumReply)} onDeleteForumReply={requireAuth(deleteForumReplyRouted)} onLoadForumReplies={loadForumReplies} likedForumThreadIds={likedForumThreadIds} forumThreadLikeCounts={forumThreadLikeCounts} onToggleForumThreadLike={requireAuth(toggleForumThreadLike)} likedForumReplyIds={likedForumReplyIds} forumReplyLikeCounts={forumReplyLikeCounts} onToggleForumReplyLike={requireAuth(toggleForumReplyLike)} onBumpForumThreadView={bumpForumThreadView} onAwardPoints={awardPoints} categoriesList={forumCategoriesList} onAddCategory={requireAuth(addForumCategory)} onUpdateCategory={requireAuth(updateForumCategory)} onDeleteCategory={requireAuth(deleteForumCategory)} onAddSubcategory={requireAuth(addForumSubcategory)} onUpdateSubcategory={requireAuth(updateForumSubcategory)} onDeleteSubcategory={requireAuth(deleteForumSubcategory)} onReportContent={requireAuth(openContentReport)} onViewUser={openUserProfile} onNotifyMentions={notifyMentions} onLoadThreadTeaser={loadForumThreadTeaser} interestLists={interestLists} interestTagsByThread={interestTagsByThread} onSetInterestTag={setInterestListThreadTag} />}
             {screen === "routes" && <RoutesScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} campingSpots={campingSpots} showCampingSpots={showCampingSpots} setShowCampingSpots={setShowCampingSpots} showPublicLands={showPublicLands} setShowPublicLands={setShowPublicLands} showSatellite={showSatellite} setShowSatellite={setShowSatellite} onOpenShareIntent={openShareIntent} tripAuthors={tripAuthors} onLoadRouteData={loadTripRouteData} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} tripReports={allTripReports} showTripReports={showTripReports} setShowTripReports={setShowTripReports} tripPlans={allTripPlans} showTripPlans={showTripPlans} setShowTripPlans={setShowTripPlans} onMapViewportChange={onMapViewportChange} onAddCampingSpot={requireAuth(addCampingSpot)} onUpdateCampingSpot={requireAuth(updateCampingSpot)} onDeleteCampingSpot={requireAuth(deleteCampingSpot)} onAddPhotoToSpot={requireAuth(addPhotoToSpot)} onDeletePhotoFromSpot={requireAuth(deletePhotoFromSpot)} onLoadCampingSpotPhotos={loadCampingSpotPhotos} onLoadCampingSpotElevation={loadCampingSpotElevation} spotAuthors={spotAuthors} onViewUser={openUserProfile} onStartNav={(route) => setActiveNavRoute(route)} onOpenTripDetail={(slug) => setPendingTripNav(slug)} onOpenTripPlanDraft={(id) => setDetailTripId(id)} onNewTripReport={() => setTripCreatorMode("report")} onNewTripPlan={() => requireAuth(() => enterPlanBuilder())()} pendingSpotNav={pendingSpotNav} onConsumePendingSpotNav={() => setPendingSpotNav(null)} pendingHQOpen={pendingHQOpen} onConsumePendingHQOpen={() => setPendingHQOpen(false)} pendingPlanNav={pendingPlanNav} onConsumePendingPlanNav={() => setPendingPlanNav(null)} onShareCampingSpotToFeed={requireAuth(shareCampingSpotToFeed)} onShareHQToFeed={requireAuth(shareHQToFeed)} onShareTripToFeed={requireAuth(shareTripToFeed)} onShareTripPlanToFeed={requireAuth(shareTripPlanToFeed)} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onShowToast={showErrorToast} onOpenShareCompose={openShareCompose} savedTripIds={savedTripIds} onToggleSaveTrip={requireAuth(toggleSaveTrip)} onOfflineContentUpdated={reloadOfflineContent} planBuilder={{ active: planBuilderActive, points: planBuilderPoints, endAnchorId: planBuilderEndAnchorId, editingId: planBuilderEditingId, setEndAnchor: setPlanBuilderEndAnchor, clearEndAnchor: clearPlanBuilderEndAnchor, enter: requireAuth(enterPlanBuilder), exit: exitPlanBuilder, add: addPlanPoint, update: updatePlanPoint, remove: removePlanPoint, commit: commitPlanToDraft, savePromptOpen: planSavePromptOpen, setSavePromptOpen: setPlanSavePromptOpen, accent: (planBuilderEditingId && (tripReports || []).find(t => t.id === planBuilderEditingId && t.kind === "report")) ? T.purple : T.copper }} gearDropPinBuilder={{ active: gearDropPinBuilderActive, dropId: gearDropPinBuilderDropId, pins: gearDropPinBuilderPins, saving: gearDropPinBuilderSaving, mode: gearDropPinBuilderMode, addPin: addGearDropPin, removePin: removeGearDropPin, movePin: moveGearDropPin, updatePin: updateGearDropPin, commit: commitGearDropPinBuilder, exit: exitGearDropPinBuilder }} />}
             {screen === "builds" && <BuildsScreen isGuest={isGuest} onGuestTap={() => setShowGuestPrompt(true)} onViewUser={openUserProfile} userBuilds={userBuilds} allBuilds={allBuilds} onLoadAllBuilds={loadAllBuildsOnce} onLoadBuildById={loadBuildById} allBuildsLoaded={allBuildsLoaded} buildSaving={buildSaving} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} followingIds={followingIds} pendingBuildNav={pendingBuildNav} onConsumePendingBuildNav={() => setPendingBuildNav(null)} onAddBuild={requireAuth(addBuild)} userRoutes={userRoutes} onOpenDM={(user, msg, sp) => openDM(user, msg, sp)} onOpenShareCompose={openShareCompose} onOpenShareIntent={openShareIntent} onUpdateBuild={requireAuth(updateBuild)} likedBuildIds={likedBuildIds} buildLikeCounts={buildLikeCounts} onToggleBuildLike={requireAuth(toggleBuildLike)} onDeleteBuild={requireAuth(deleteBuild)} onPostBuildToFeed={requireAuth((b, opts) => { const rawBd = b.buildData; const bd = scrubLocalPhotosFromBuildData(rawBd); const isLocalUrl = (u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:")); const rawHero = b.image || (rawBd && rawBd.mainPhotos && rawBd.mainPhotos[0] && rawBd.mainPhotos[0].url) || null; const cleanHero = isLocalUrl(rawHero) ? ((bd && bd.mainPhotos && bd.mainPhotos[0] && bd.mainPhotos[0].url) || null) : rawHero; const heroImg = isLocalUrl(cleanHero) ? null : cleanHero; const meName = (currentProfile && currentProfile.full_name) || "You"; const myUid = supabaseSession && supabaseSession.user && supabaseSession.user.id; const isReshare = b.userId && myUid && b.userId !== myUid; const ownerHandle = isReshare ? (b.handle || "").replace(/^@/, "") : null; const ownerName = isReshare ? (b.owner || null) : null; addPost({ id: "feedbuild_" + Date.now(), type: "BUILDS", user: meName, initial: meName.charAt(0).toUpperCase(), time: Date.now(), title: b.name, body: `${b.year} ${b.make} ${b.model}`, subtitle: isReshare ? `Shared @${ownerHandle}'s build` : "Added a new build", vehicle: `${b.year} ${b.make} ${b.model}`, photoUrls: heroImg ? [heroImg] : undefined, image: heroImg, likes: 0, comments: 0, buildData: bd, buildRawId: b.rawId != null ? b.rawId : null, sharedFromOwnerHandle: ownerHandle, sharedFromOwnerName: ownerName, _skipBuildIdCol: isReshare }); awardPoints(POINTS.feedPost, "Build Shared"); })} buildComments={visibleBuildComments} onLoadBuildComments={loadBuildComments} onAddBuildComment={requireAuth(addBuildComment)} onDeleteBuildComment={deleteBuildComment} likedBuildCommentIds={likedBuildCommentIds} buildCommentLikeCounts={buildCommentLikeCounts} onToggleBuildCommentLike={requireAuth(toggleBuildCommentLike)} currentUserName={(currentProfile && currentProfile.full_name) || ""} currentUserHandle={(currentProfile && currentProfile.handle) ? "@" + currentProfile.handle : ""} currentUserAvatar={(currentProfile && currentProfile.avatar_url) || null} allTripReports={allTripReports} onNotifyMentions={notifyMentions} />}
             {screen === "ambassador" && (isGuest
@@ -61748,6 +61882,7 @@ export default function Trailhead() {
                     onLoadSignups={loadInterestSignups}
                     onLoadUpdates={loadInterestUpdates}
                     onNotify={notifyInterestList}
+                    onSetTag={setInterestListThreadTag}
                     categoriesList={forumCategoriesList}
                   />
                 : adminSubScreen === "raffles"
