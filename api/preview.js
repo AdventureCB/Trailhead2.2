@@ -1874,7 +1874,7 @@ module.exports = async function handler(req, res) {
     const subInfo = FORUM_SUB_TO_INFO[meta.article.subcategorySlug];
     breadcrumbItems = [
       { name: "Trailhub", url: `${origin}/` },
-      { name: "Forum", url: `${origin}/` },
+      { name: "Forum", url: `${origin}/forum` },
     ];
     if (subInfo) breadcrumbItems.push({ name: subInfo.name, url: `${origin}/forum/${meta.article.subcategorySlug}` });
     breadcrumbItems.push({ name: meta.article.title || "Thread", url: canonicalUrl });
@@ -1882,19 +1882,22 @@ module.exports = async function handler(req, res) {
     const subInfo = meta.article.subInfo;
     breadcrumbItems = [
       { name: "Trailhub", url: `${origin}/` },
-      { name: "Forum", url: `${origin}/` },
+      { name: "Forum", url: `${origin}/forum` },
       { name: subInfo.name, url: canonicalUrl },
     ];
   } else if (meta.breadcrumb && Array.isArray(meta.breadcrumb.items)) {
     // Generic breadcrumb path declared by the entity resolver — fill in
-    // any null URLs with sensible defaults (home for first, canonical
-    // for last). Middle items keep null `url` since we don't have routes
-    // for "Trip Reports" / "Builds" / etc. yet (the SPA route lists are
-    // app-internal); Google still gets the name hierarchy.
-    breadcrumbItems = meta.breadcrumb.items.map((it, i, arr) => ({
+    // any null URLs: home for first, canonical for last, and the real
+    // index page for middle items that have one. Schema.org requires
+    // `item` on every entry except the last (Search Console: Missing field
+    // "item"), so a middle item with no page is DROPPED rather than
+    // emitted URL-less.
+    const INDEX_PAGES = { "Builds": "/builds", "Trip Reports": "/trips", "Camping Spots": "/spots" };
+    const last = meta.breadcrumb.items.length - 1;
+    breadcrumbItems = meta.breadcrumb.items.map((it, i) => ({
       name: it.name,
-      url: it.url || (i === 0 ? `${origin}/` : (i === arr.length - 1 ? canonicalUrl : null)),
-    }));
+      url: it.url || (i === 0 ? `${origin}/` : (i === last ? canonicalUrl : (INDEX_PAGES[it.name] ? `${origin}${INDEX_PAGES[it.name]}` : null))),
+    })).filter((it, i) => it.url || i === last);
   }
   if (breadcrumbItems) {
     const breadcrumb = {
