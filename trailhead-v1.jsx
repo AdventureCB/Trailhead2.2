@@ -4857,7 +4857,7 @@ function RecoveryNotifPanel({ onClose, onGoToRecovery, alerts, onDismiss, onClea
   );
 }
 
-function UnifiedNotifPanel({ onClose, onViewUser, onGoToPost, onGoToBuild, onGoToForumThread, onGoToAdminBugs, onGoToAdminReports, notifs, onDismissNotif, onClearNotifs, recoveryAlerts, onDismissAlert, onClearAlerts, onGoToRecovery, onOpenMap, onOpenDM, onRespondToRecovery, initialTab }) {
+function UnifiedNotifPanel({ onClose, onViewUser, onGoToPost, onGoToBuild, onGoToForumThread, onGoToAdminBugs, onGoToAdminReports, onGoToAdminBotDrafts, notifs, onDismissNotif, onClearNotifs, recoveryAlerts, onDismissAlert, onClearAlerts, onGoToRecovery, onOpenMap, onOpenDM, onRespondToRecovery, initialTab }) {
   const [tab, setTab] = useState(initialTab || "general");
   const urgencyColor = (u) => u === "HIGH" ? T.red : T.copper;
   const tabBtn = (key, label, count, color) => (
@@ -4914,7 +4914,7 @@ function UnifiedNotifPanel({ onClose, onViewUser, onGoToPost, onGoToBuild, onGoT
           ) : notifs.map((n) => {
             const Icon = n.icon;
             return (
-              <div key={n.id} onClick={() => { if (n.type === "bug_report") { onGoToAdminBugs && onGoToAdminBugs(); } else if (n.type === "content_report") { onGoToAdminReports && onGoToAdminReports(); } else if (n.forumThreadId) { onGoToForumThread && onGoToForumThread(n.forumThreadId); } else if (n.buildId) { onGoToBuild && onGoToBuild(n.buildId, n.target); } else if (n.postId) { onGoToPost && onGoToPost(n.postId); } }} style={{ display: "flex", gap: 10, padding: "12px 16px", borderBottom: `1px solid ${T.charcoal}22`, cursor: "pointer", transition: "background 0.15s", position: "relative" }} onMouseEnter={(e) => e.currentTarget.style.background = `${T.charcoal}` } onMouseLeave={(e) => e.currentTarget.style.background = "transparent" }>
+              <div key={n.id} onClick={() => { if (n.type === "bug_report") { onGoToAdminBugs && onGoToAdminBugs(); } else if (n.type === "content_report") { onGoToAdminReports && onGoToAdminReports(); } else if (n.type === "forum_bot_draft") { onGoToAdminBotDrafts && onGoToAdminBotDrafts(); } else if (n.forumThreadId) { onGoToForumThread && onGoToForumThread(n.forumThreadId); } else if (n.buildId) { onGoToBuild && onGoToBuild(n.buildId, n.target); } else if (n.postId) { onGoToPost && onGoToPost(n.postId); } }} style={{ display: "flex", gap: 10, padding: "12px 16px", borderBottom: `1px solid ${T.charcoal}22`, cursor: "pointer", transition: "background 0.15s", position: "relative" }} onMouseEnter={(e) => e.currentTarget.style.background = `${T.charcoal}` } onMouseLeave={(e) => e.currentTarget.style.background = "transparent" }>
                 <div style={{ width: 32, height: 32, borderRadius: "50%", background: `${n.iconColor}18`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2 }}>
                   <Icon size={14} color={n.iconColor} strokeWidth={1.8} />
                 </div>
@@ -4992,7 +4992,7 @@ function UnifiedNotifPanel({ onClose, onViewUser, onGoToPost, onGoToBuild, onGoT
   );
 }
 
-function TopBar({ onProfile, onBack, showBack, title, onHome, onViewUser, onGoToPost, onGoToBuild, onGoToForumThread, onGoToRecovery, onGoToAdminBugs, onGoToAdminReports, onOpenMap, onSearch, onOpenDM, onRespondToRecovery, dmUnread, bellNotifs, onDismissNotif, onClearNotifs, profilePic, notifPrefs, recoveryAlerts, setRecoveryAlerts }) {
+function TopBar({ onProfile, onBack, showBack, title, onHome, onViewUser, onGoToPost, onGoToBuild, onGoToForumThread, onGoToRecovery, onGoToAdminBugs, onGoToAdminReports, onGoToAdminBotDrafts, onOpenMap, onSearch, onOpenDM, onRespondToRecovery, dmUnread, bellNotifs, onDismissNotif, onClearNotifs, profilePic, notifPrefs, recoveryAlerts, setRecoveryAlerts }) {
   const notifTypeMap = { like: "likes", comment: "comments", reply: "replies", follow: "follows", mention: "mentions" };
   const filteredNotifs = bellNotifs.filter(n => { const pref = notifTypeMap[n.type]; return !pref || (notifPrefs && notifPrefs[pref] !== false); });
   const [openPanel, setOpenPanel] = useState(null); // null | "notif"
@@ -5064,6 +5064,7 @@ function TopBar({ onProfile, onBack, showBack, title, onHome, onViewUser, onGoTo
           onGoToForumThread={(threadId) => { setOpenPanel(null); onGoToForumThread && onGoToForumThread(threadId); }}
           onGoToAdminBugs={() => { setOpenPanel(null); onGoToAdminBugs && onGoToAdminBugs(); }}
           onGoToAdminReports={() => { setOpenPanel(null); onGoToAdminReports && onGoToAdminReports(); }}
+          onGoToAdminBotDrafts={() => { setOpenPanel(null); onGoToAdminBotDrafts && onGoToAdminBotDrafts(); }}
           notifs={filteredNotifs}
           onDismissNotif={onDismissNotif}
           onClearNotifs={onClearNotifs}
@@ -39971,6 +39972,212 @@ function InterestAdminScreen({ onBack, onLoadLists, onCreateList, onUpdateList, 
   );
 }
 
+/* ─── BotDraftsAdminScreen ─── review queue for AI-drafted forum threads
+   (forum_bot_drafts, written by the forum-bot-draft Edge Function). Admin
+   edits title / subcategory / sections / photos, then APPROVE & PUBLISH
+   (publish_forum_bot_draft → real thread as the chosen admin) or REJECT. */
+function BotDraftsAdminScreen({ onBack, onLoad, onSave, onPublish, onReject, onDelete, onLoadAdmins, onOpenThread, categoriesList, currentUserId }) {
+  const [tab, setTab] = useState("pending");
+  const [drafts, setDrafts] = useState(null);
+  const [selected, setSelected] = useState(null);
+  const [edit, setEdit] = useState(null);
+  const [admins, setAdmins] = useState([]);
+  const [authorId, setAuthorId] = useState(currentUserId || "");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const subOptions = [];
+  (categoriesList || []).forEach(c => (c.subs || []).forEach(s => subOptions.push({ slug: s.slug, label: `${c.name} / ${s.name}` })));
+  const reload = async () => { const r = await onLoad(); setDrafts(r || []); };
+  useEffect(() => { reload(); if (onLoadAdmins) onLoadAdmins().then(a => setAdmins(a || [])); }, []);
+  const newId = () => "sec_" + Math.random().toString(36).slice(2, 8);
+  const open = (d) => {
+    setSelected(d); setMsg("");
+    setEdit({
+      title: d.title || "",
+      subcategory_slug: d.subcategory_slug || "",
+      members_only_hours: d.members_only_hours || 0,
+      photos: Array.isArray(d.photos) ? d.photos : [],
+      sections: (Array.isArray(d.sections) && d.sections.length ? d.sections : [{ subheading: "", body: "" }]).map(s => ({ id: newId(), subheading: s.subheading || "", body: s.body || "", videoUrl: s.videoUrl || "" })),
+    });
+  };
+  const patchSection = (id, patch) => setEdit(e => ({ ...e, sections: e.sections.map(s => s.id === id ? { ...s, ...patch } : s) }));
+  const moveSec = (id, dir) => setEdit(e => { const i = e.sections.findIndex(s => s.id === id); const j = i + dir; if (i < 0 || j < 0 || j >= e.sections.length) return e; const n = e.sections.slice(); [n[i], n[j]] = [n[j], n[i]]; return { ...e, sections: n }; });
+  const payload = () => ({
+    title: edit.title.trim(),
+    subcategory_slug: edit.subcategory_slug || null,
+    members_only_hours: Number(edit.members_only_hours) || 0,
+    photos: edit.photos,
+    sections: edit.sections.map(s => { const o = { subheading: (s.subheading || "").trim(), body: (s.body || "").trim() }; if (s.videoUrl) o.videoUrl = s.videoUrl; return o; }).filter(s => s.subheading || s.body || s.videoUrl),
+  });
+  const save = async () => {
+    if (!selected || busy) return false;
+    setBusy(true); setMsg("");
+    const res = await onSave(selected.id, payload());
+    setBusy(false);
+    if (res && res.error) { setMsg(res.error); return false; }
+    setMsg("Saved.");
+    return true;
+  };
+  const publish = async () => {
+    if (!selected || busy) return;
+    if (!edit.title.trim()) { setMsg("Title required."); return; }
+    if (!edit.subcategory_slug) { setMsg("Pick a subcategory first."); return; }
+    if (typeof confirm === "function" && !confirm(`Publish "${edit.title.trim()}" to the forum now?`)) return;
+    setBusy(true); setMsg("");
+    const saved = await onSave(selected.id, payload());
+    if (saved && saved.error) { setBusy(false); setMsg(saved.error); return; }
+    const res = await onPublish(selected.id, authorId || null);
+    setBusy(false);
+    if (res && res.error) { setMsg(res.error); return; }
+    setMsg("Published.");
+    await reload();
+    if (res && res.thread_id && onOpenThread) onOpenThread(res.thread_id);
+    setSelected(null);
+  };
+  const reject = async () => {
+    if (!selected || busy) return;
+    const why = typeof prompt === "function" ? prompt("Why? (sent back to the bot as review notes)", "") : "";
+    if (why === null) return;
+    setBusy(true);
+    const res = await onReject(selected.id, why || "");
+    setBusy(false);
+    if (res && res.error) { setMsg(res.error); return; }
+    await reload(); setSelected(null);
+  };
+  const del = async () => {
+    if (!selected || busy) return;
+    if (typeof confirm === "function" && !confirm("Delete this draft permanently?")) return;
+    setBusy(true); await onDelete(selected.id); setBusy(false); await reload(); setSelected(null);
+  };
+  const inputStyle = { width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none" };
+  const lbl = { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 4 };
+
+  if (selected && edit) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 16px", borderBottom: `1px solid ${T.charcoal}` }}>
+          <button onClick={() => setSelected(null)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><ChevronLeft size={20} color={T.white} /></button>
+          <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, letterSpacing: 0.8, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>REVIEW DRAFT</span>
+          <span style={{ fontFamily: sans, fontSize: 9, color: T.copper, background: `${T.copper}20`, padding: "3px 8px", borderRadius: 4, letterSpacing: 0.8, fontWeight: 700 }}>{(selected.source || "bot").toUpperCase()} · {(selected.status || "").toUpperCase()}</span>
+        </div>
+        <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 14 }}>
+          {selected.bot_notes && (
+            <div style={{ background: T.darkCard, borderRadius: 12, padding: 12, border: `1px solid ${T.copper}50` }}>
+              <div style={{ fontFamily: sans, fontSize: 9, color: T.copper, letterSpacing: 1.5, fontWeight: 700, marginBottom: 4 }}>NOTE FROM THE BOT</div>
+              <div style={{ fontFamily: serif, fontSize: 13, color: T.warmStone, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{selected.bot_notes}</div>
+            </div>
+          )}
+          {selected.status === "published" && selected.thread_id && (
+            <button onClick={() => onOpenThread && onOpenThread(selected.thread_id)} style={{ padding: "11px", borderRadius: 8, background: T.green, color: T.white, border: "none", fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>OPEN PUBLISHED THREAD</button>
+          )}
+          <label style={lbl}>TITLE</label>
+          <input value={edit.title} onChange={e => setEdit({ ...edit, title: e.target.value })} style={{ ...inputStyle, fontFamily: sans, fontSize: 16, fontWeight: 700 }} />
+          <label style={lbl}>SUBCATEGORY</label>
+          <select value={edit.subcategory_slug} onChange={e => setEdit({ ...edit, subcategory_slug: e.target.value })} style={{ ...inputStyle, fontFamily: sans, fontSize: 12, borderColor: edit.subcategory_slug ? T.charcoal : T.red }}>
+            <option value="">— pick one —</option>
+            {subOptions.map(o => <option key={o.slug} value={o.slug}>{o.label}</option>)}
+          </select>
+          {edit.photos.length > 0 && (
+            <div>
+              <label style={lbl}>PHOTOS (FIRST = HERO)</label>
+              <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+                {edit.photos.map((p, i) => (
+                  <div key={(p.url || p) + i} style={{ position: "relative", flexShrink: 0 }}>
+                    <img src={txImg(p.url || p, 240)} alt={p.alt || ""} style={{ width: 96, height: 96, objectFit: "cover", borderRadius: 8, border: `1px solid ${i === 0 ? T.copper : T.charcoal}` }} />
+                    <button onClick={() => setEdit({ ...edit, photos: edit.photos.filter((_, j) => j !== i) })} style={{ position: "absolute", top: 4, right: 4, background: "rgba(0,0,0,0.7)", border: "none", borderRadius: 10, padding: 3, display: "flex", cursor: "pointer" }}><X size={12} color={T.white} /></button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          <div>
+            <label style={lbl}>BODY</label>
+            {edit.sections.map((s, i) => (
+              <ForumSectionEditor
+                key={s.id}
+                sectionNumber={edit.sections.length > 1 ? i + 1 : null}
+                subheading={s.subheading}
+                onSubheadingChange={(v) => patchSection(s.id, { subheading: v })}
+                value={s.body}
+                onChange={(v) => patchSection(s.id, { body: v })}
+                videoUrl={s.videoUrl}
+                onVideoUrlChange={(v) => patchSection(s.id, { videoUrl: v })}
+                showRemove={edit.sections.length > 1}
+                onRemove={() => setEdit(e => ({ ...e, sections: e.sections.filter(x => x.id !== s.id) }))}
+                onMoveUp={i > 0 ? () => moveSec(s.id, -1) : null}
+                onMoveDown={i < edit.sections.length - 1 ? () => moveSec(s.id, 1) : null}
+                placeholder="Section text…"
+              />
+            ))}
+            <button onClick={() => setEdit(e => ({ ...e, sections: [...e.sections, { id: newId(), subheading: "", body: "", videoUrl: "" }] }))} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", borderRadius: 8, background: "none", border: `1px dashed ${T.charcoal}`, cursor: "pointer", fontFamily: sans, fontSize: 12, color: T.copper, letterSpacing: 1, fontWeight: 600 }}><Plus size={14} color={T.copper} /> ADD SECTION</button>
+          </div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ flex: 1, minWidth: 160 }}>
+              <label style={lbl}>MEMBERS-ONLY WINDOW</label>
+              <select value={edit.members_only_hours} onChange={e => setEdit({ ...edit, members_only_hours: Number(e.target.value) })} style={{ ...inputStyle, fontFamily: sans, fontSize: 12 }}>
+                {MEMBERS_ONLY_CHOICES.map(([h, l]) => <option key={h} value={h}>{l}</option>)}
+              </select>
+            </div>
+            <div style={{ flex: 1, minWidth: 160 }}>
+              <label style={lbl}>PUBLISH AS</label>
+              <select value={authorId} onChange={e => setAuthorId(e.target.value)} style={{ ...inputStyle, fontFamily: sans, fontSize: 12 }}>
+                {admins.map(a => <option key={a.id} value={a.id}>{a.full_name || a.handle || a.id.slice(0, 8)}{a.handle ? ` (@${a.handle})` : ""}{a.id === currentUserId ? " — you" : ""}</option>)}
+              </select>
+            </div>
+          </div>
+          {msg && <div style={{ fontFamily: sans, fontSize: 12, color: /^(Saved|Published)/.test(msg) ? T.green : T.red }}>{msg}</div>}
+          {selected.status !== "published" ? (
+            <>
+              <button onClick={publish} disabled={busy} style={{ width: "100%", padding: "13px", borderRadius: 8, background: T.green, color: T.white, border: "none", fontFamily: sans, fontSize: 13, fontWeight: 800, letterSpacing: 1, cursor: busy ? "default" : "pointer", opacity: busy ? 0.7 : 1 }}>{busy ? "WORKING…" : "APPROVE & PUBLISH"}</button>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={save} disabled={busy} style={{ flex: 1, padding: "11px", borderRadius: 8, background: T.copper, color: T.darkBg, border: "none", fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>SAVE EDITS</button>
+                <button onClick={reject} disabled={busy} style={{ flex: 1, padding: "11px", borderRadius: 8, background: "none", color: T.red, border: `1px solid ${T.red}60`, fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>REJECT</button>
+              </div>
+            </>
+          ) : null}
+          <button onClick={del} disabled={busy} style={{ padding: "8px", background: "none", border: "none", color: T.tertiary, fontFamily: sans, fontSize: 10, letterSpacing: 1, cursor: "pointer" }}>DELETE DRAFT</button>
+        </div>
+      </div>
+    );
+  }
+
+  const shown = (drafts || []).filter(d => tab === "pending" ? d.status === "pending" : tab === "published" ? d.status === "published" : d.status === "rejected");
+  const counts = { pending: (drafts || []).filter(d => d.status === "pending").length };
+  return (
+    <div style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 16px", borderBottom: `1px solid ${T.charcoal}` }}>
+        <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><ChevronLeft size={20} color={T.white} /></button>
+        <FileText size={16} color={T.copper} />
+        <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, letterSpacing: 0.8, flex: 1 }}>BOT DRAFTS</span>
+      </div>
+      <div style={{ display: "flex", gap: 6, padding: "12px 16px 0" }}>
+        {[["pending", `PENDING${counts.pending ? ` · ${counts.pending}` : ""}`], ["published", "PUBLISHED"], ["rejected", "REJECTED"]].map(([k, l]) => (
+          <button key={k} onClick={() => setTab(k)} style={{ padding: "7px 12px", borderRadius: 16, background: tab === k ? T.copper : "none", border: `1px solid ${tab === k ? T.copper : T.charcoal}`, color: tab === k ? T.darkBg : T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>{l}</button>
+        ))}
+      </div>
+      <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+        {drafts === null ? <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>Loading…</div>
+          : shown.length === 0 ? <div style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, textAlign: "center", padding: "30px 0", lineHeight: 1.5 }}>{tab === "pending" ? "No drafts waiting. When the bot submits one you'll get a notification." : "Nothing here yet."}</div>
+          : shown.map(d => {
+            const hero = Array.isArray(d.photos) && d.photos[0] ? (d.photos[0].url || d.photos[0]) : null;
+            const sub = subOptions.find(o => o.slug === d.subcategory_slug);
+            return (
+              <button key={d.id} onClick={() => open(d)} style={{ display: "flex", gap: 12, padding: 12, borderRadius: 12, background: T.darkCard, border: `1px solid ${T.charcoal}`, cursor: "pointer", textAlign: "left", width: "100%" }}>
+                {hero && <img src={txImg(hero, 200)} alt="" style={{ width: 64, height: 64, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, lineHeight: 1.3 }}>{d.title}</div>
+                  <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 4 }}>{(d.source || "bot").toUpperCase()} · {d.created_at ? new Date(d.created_at).toLocaleString() : ""}{sub ? ` · ${sub.label}` : (d.subcategory_slug ? ` · ${d.subcategory_slug}` : " · no subcategory")}</div>
+                  {d.review_notes && d.status === "rejected" && <div style={{ fontFamily: serif, fontSize: 11, color: T.red, marginTop: 4 }}>{d.review_notes}</div>}
+                </div>
+                <ChevronRight size={16} color={T.tertiary} style={{ flexShrink: 0, alignSelf: "center" }} />
+              </button>
+            );
+          })}
+      </div>
+    </div>
+  );
+}
+
 /* ─── RaffleAdminScreen ─── admin surface: create/manage event drawings,
    set reusable prize params, assign hosts, view + CSV-export entries.
    (Pick-winner + code delivery land in Phase 2.) */
@@ -40197,7 +40404,7 @@ function RaffleAdminScreen({ onBack, isAdmin, onLoadEvents, onCreateEvent, onUpd
   );
 }
 
-function AdminHubScreen({ onBack, onSelect, openReportCount, openBugCount, isAdmin, isGravelGuide }) {
+function AdminHubScreen({ onBack, onSelect, openReportCount, openBugCount, pendingBotDraftCount, isAdmin, isGravelGuide }) {
   // Non-admin gravel guides only see their two cards (BOUNTIES + DEMO
   // PROGRESS). Admins see the full grid. isAdmin already implies gravel
   // guide inheritance, so guide-only viewers land here with isAdmin=false.
@@ -40214,6 +40421,7 @@ function AdminHubScreen({ onBack, onSelect, openReportCount, openBugCount, isAdm
     !guideOnly && { key: "push",       label: "PUSH",       desc: "Broadcast push notifications and view history.",   icon: Bell,           color: T.copper },
     !guideOnly && { key: "polls",      label: "POLLS",      desc: "Community polls with per-question response breakdown.", icon: BarChart3, color: T.copper },
     !guideOnly && { key: "raffles",    label: "EVENT DRAWINGS", desc: "Expo raffles: public entry page, host draws, prize codes, CSV export.", icon: Gift, color: T.copper },
+    !guideOnly && { key: "botdrafts",  label: "BOT DRAFTS", desc: "AI-drafted forum posts waiting for your edit + approval.", icon: FileText, badge: pendingBotDraftCount, color: T.copper },
     !guideOnly && { key: "interest",   label: "INTEREST LISTS", desc: "Product-launch signup pages: leads to the CRM, update threads, notify the list.", icon: Bell, color: T.copper },
     !guideOnly && { key: "analytics",  label: "ANALYTICS",  desc: "Active users, signups, posts, engagement.",        icon: TrendingUp,     color: T.green },
   ].filter(Boolean);
@@ -49102,7 +49310,7 @@ function clientDataToDbBuild(data, userId) {
 // derived client-side from the type field.
 function dbNotifToBell(row) {
   if (!row) return null;
-  const iconMap = { like: { icon: Heart, iconColor: T.red }, comment: { icon: MessageCircle, iconColor: T.copper }, mention: { icon: AtSign, iconColor: T.copper }, reply: { icon: MessageCircle, iconColor: T.copper }, follow: { icon: UserPlus, iconColor: T.green }, rsvp: { icon: Users, iconColor: T.green }, role: { icon: Shield, iconColor: T.copper }, bug_fix: { icon: CheckCircle, iconColor: T.green }, bug_report: { icon: AlertTriangle, iconColor: T.red }, content_report: { icon: Flag, iconColor: T.red } };
+  const iconMap = { forum_bot_draft: { icon: FileText, iconColor: T.copper }, like: { icon: Heart, iconColor: T.red }, comment: { icon: MessageCircle, iconColor: T.copper }, mention: { icon: AtSign, iconColor: T.copper }, reply: { icon: MessageCircle, iconColor: T.copper }, follow: { icon: UserPlus, iconColor: T.green }, rsvp: { icon: Users, iconColor: T.green }, role: { icon: Shield, iconColor: T.copper }, bug_fix: { icon: CheckCircle, iconColor: T.green }, bug_report: { icon: AlertTriangle, iconColor: T.red }, content_report: { icon: Flag, iconColor: T.red } };
   const ic = iconMap[row.type] || { icon: Bell, iconColor: T.tertiary };
   return {
     id: row.id,
@@ -51553,6 +51761,7 @@ export default function Trailhead() {
   );
   // Admin-only: open interest lists + per-thread overrides, for the forum
   // composer "SHOW ON LAUNCH PAGE" chips and the thread-page admin bar.
+  const [pendingBotDraftCount, setPendingBotDraftCount] = useState(0); // badge on the Admin Hub card
   const [interestLists, setInterestLists] = useState([]);
   const [interestTagRows, setInterestTagRows] = useState([]); // [{list_id, thread_id, mode, pinned}]
   const interestTagsByThread = useMemo(() => {
@@ -54658,6 +54867,54 @@ export default function Trailhead() {
     try {
       const { data, error } = await supabase.from("interest_signups").select("*").eq("list_id", listId).order("created_at", { ascending: false });
       if (error) { console.error("[interest] signups", error); return []; }
+      return data || [];
+    } catch (e) { return []; }
+  };
+  // ─── Bot drafts (AI-authored forum posts, admin-reviewed) ───
+  const loadBotDrafts = async () => {
+    if (!isAdmin) return [];
+    try {
+      const { data, error } = await supabase.from("forum_bot_drafts").select("*").order("created_at", { ascending: false }).limit(200);
+      if (error) { console.error("[bot drafts] load", error); return []; }
+      setPendingBotDraftCount((data || []).filter(d => d.status === "pending").length);
+      return data || [];
+    } catch (e) { return []; }
+  };
+  const updateBotDraft = async (id, patch) => {
+    if (!isAdmin || !id) return { error: "Admin only" };
+    const body = {};
+    ["title", "subcategory_slug", "sections", "photos", "members_only_hours"].forEach(k => { if (k in patch) body[k] = patch[k]; });
+    body.updated_at = new Date().toISOString();
+    const { error } = await supabase.from("forum_bot_drafts").update(body).eq("id", id);
+    return error ? { error: error.message } : { ok: true };
+  };
+  const publishBotDraft = async (id, authorId) => {
+    if (!isAdmin || !id) return { error: "Admin only" };
+    try {
+      const { data, error } = await supabase.rpc("publish_forum_bot_draft", { p_draft_id: id, p_author_id: authorId || null });
+      if (error) return { error: error.message || "Publish failed" };
+      // Graft the new thread into local state (the realtime echo skips own
+      // inserts, and this one may be authored by another admin account).
+      if (data && data.slug) { try { await loadForumThreadBySlugFast(data.slug); } catch (_) {} }
+      setPendingBotDraftCount(c => Math.max(0, c - 1));
+      return { ok: true, thread_id: data && data.thread_id, slug: data && data.slug };
+    } catch (e) { return { error: (e && e.message) || "Network error" }; }
+  };
+  const rejectBotDraft = async (id, notes) => {
+    if (!isAdmin || !id) return { error: "Admin only" };
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    const { error } = await supabase.from("forum_bot_drafts").update({ status: "rejected", review_notes: notes || null, reviewed_by: uid, reviewed_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", id);
+    if (!error) setPendingBotDraftCount(c => Math.max(0, c - 1));
+    return error ? { error: error.message } : { ok: true };
+  };
+  const deleteBotDraft = async (id) => {
+    if (!isAdmin || !id) return false;
+    const { error } = await supabase.from("forum_bot_drafts").delete().eq("id", id);
+    return !error;
+  };
+  const loadAdminProfiles = async () => {
+    try {
+      const { data } = await supabase.from("profiles").select("id, handle, full_name").eq("role", "admin").order("full_name");
       return data || [];
     } catch (e) { return []; }
   };
@@ -60510,6 +60767,11 @@ export default function Trailhead() {
         setInterestLists(lists || []);
         setInterestTagRows(tags || []);
       } catch (e) { /* tables may not exist yet — chips just don't render */ }
+      // Pending bot drafts → badge on the Admin Hub card.
+      try {
+        const { count } = await supabase.from("forum_bot_drafts").select("id", { count: "exact", head: true }).eq("status", "pending");
+        if (!cancelled && count != null) setPendingBotDraftCount(count);
+      } catch (e) { /* table may not exist yet */ }
     })();
     return () => { cancelled = true; };
   }, [isAdmin]);
@@ -61720,6 +61982,13 @@ export default function Trailhead() {
           setScreen("admin");
           if (typeof window !== "undefined" && window.location.pathname !== "/admin") window.history.pushState({}, "", "/admin");
         }}
+        onGoToAdminBotDrafts={() => {
+          if (!isAdmin) return;
+          setProfileStack([]); setShowRecovery(false); setShowCompose(false);
+          setAdminSubScreen("botdrafts");
+          setScreen("admin");
+          if (typeof window !== "undefined" && window.location.pathname !== "/admin") window.history.pushState({}, "", "/admin");
+        }}
         onOpenMap={openMap}
         onSearch={() => setShowGlobalSearch(true)}
         onOpenDM={(user, prefill, shared) => openDM(user, prefill, shared)}
@@ -61901,6 +62170,19 @@ export default function Trailhead() {
                     allTripReports={allTripReports}
                     campingSpots={campingSpots}
                   />
+                : adminSubScreen === "botdrafts"
+                ? <BotDraftsAdminScreen
+                    onBack={() => setAdminSubScreen(null)}
+                    onLoad={loadBotDrafts}
+                    onSave={updateBotDraft}
+                    onPublish={publishBotDraft}
+                    onReject={rejectBotDraft}
+                    onDelete={deleteBotDraft}
+                    onLoadAdmins={loadAdminProfiles}
+                    onOpenThread={(threadId) => { setAdminSubScreen(null); setScreen("forum"); openForumThreadById(threadId); }}
+                    categoriesList={forumCategoriesList}
+                    currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id}
+                  />
                 : adminSubScreen === "interest"
                 ? <InterestAdminScreen
                     onBack={() => setAdminSubScreen(null)}
@@ -61966,6 +62248,7 @@ export default function Trailhead() {
                     isAdmin={isAdmin}
                   />
                 : <AdminHubScreen
+                    pendingBotDraftCount={pendingBotDraftCount}
                     onBack={() => { setScreen("feed"); if (typeof window !== "undefined" && window.location.pathname === "/admin") window.history.pushState({}, "", "/"); }}
                     onSelect={(k) => setAdminSubScreen(k)}
                     openReportCount={pendingReportCount}
