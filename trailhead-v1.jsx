@@ -48345,7 +48345,7 @@ function GuestBanner({ onSignIn, overlay }) {
 // App Store listing. Fill APP_STORE_ID (the digits after "id" in the App
 // Store URL) once Kyle sends it — build.sh reads this same constant to emit
 // the Smart App Banner meta tag, so it's the single source of truth.
-const APP_STORE_ID = "";
+const APP_STORE_ID = "6812875250";
 const APP_STORE_URL = APP_STORE_ID
   ? `https://apps.apple.com/app/id${APP_STORE_ID}`
   : "https://apps.apple.com/us/search?term=trailhub%20lone%20peak";
