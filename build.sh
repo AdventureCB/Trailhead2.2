@@ -5,6 +5,14 @@
 set -e
 
 DEPLOY_DIR="deploy-v2.2"
+# Smart App Banner (iOS Safari "Open in the Trailhub app"). Reads APP_STORE_ID
+# from trailhead-v1.jsx so there's one place to set it; emits nothing until set.
+APP_STORE_ID=$(grep -o 'const APP_STORE_ID = "[0-9]*"' trailhead-v1.jsx | grep -o '[0-9]\+' || true)
+if [ -n "${APP_STORE_ID}" ]; then
+  SMART_BANNER_META="<meta name=\"apple-itunes-app\" content=\"app-id=${APP_STORE_ID}\">"
+else
+  SMART_BANNER_META="<!-- apple-itunes-app meta omitted: APP_STORE_ID not set in trailhead-v1.jsx -->"
+fi
 HASH=$(date +%s | md5sum | head -c 8)
 BUNDLE_NAME="trailhead-bundle.${HASH}.js"
 
@@ -49,6 +57,7 @@ cat > ${DEPLOY_DIR}/index.html << HTMLEOF
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Trailhub">
+${SMART_BANNER_META}
 <meta name="application-name" content="Trailhub">
 <link rel="apple-touch-icon" href="/summit-lp-logo.png">
 <link rel="icon" type="image/png" href="/summit-lp-logo.png">

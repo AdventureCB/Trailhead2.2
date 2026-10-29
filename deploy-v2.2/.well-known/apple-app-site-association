@@ -1,0 +1,27 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appIDs": ["A2D3JGS69P.com.lonepeakoverland.trailhub"],
+        "components": [
+          { "/": "/post/*" },
+          { "/": "/trips/*" },
+          { "/": "/plans/*" },
+          { "/": "/spots/*" },
+          { "/": "/builds/*" },
+          { "/": "/forum/*" },
+          { "/": "/users/*" },
+          { "/": "/drops/*" },
+          { "/": "/bounties/*" },
+          { "/": "/win/*" },
+          { "/": "/interest/*" },
+          { "/": "/hq" }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": ["A2D3JGS69P.com.lonepeakoverland.trailhub"]
+  }
+}

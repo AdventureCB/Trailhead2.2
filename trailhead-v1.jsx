@@ -48342,6 +48342,13 @@ function GuestBanner({ onSignIn, overlay }) {
 // LPO owns all content, may use it for marketing, may contact users via
 // supplied info, may moderate/remove/delete at will. Update freely as
 // real legal copy lands.
+// App Store listing. Fill APP_STORE_ID (the digits after "id" in the App
+// Store URL) once Kyle sends it — build.sh reads this same constant to emit
+// the Smart App Banner meta tag, so it's the single source of truth.
+const APP_STORE_ID = "";
+const APP_STORE_URL = APP_STORE_ID
+  ? `https://apps.apple.com/app/id${APP_STORE_ID}`
+  : "https://apps.apple.com/us/search?term=trailhub%20lone%20peak";
 const TRAILHEAD_TOS_VERSION = "2026-05-20";
 const TRAILHEAD_TOS_BODY = `TRAILHUB TERMS OF SERVICE
 Last updated: May 2026
@@ -48506,17 +48513,25 @@ function InstallPWAScreen({ onContinue, onSkip }) {
         <div style={{ width: 64, height: 64, borderRadius: "50%", background: `${T.green}15`, border: `2px solid ${T.green}`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
           <Smartphone size={28} color={T.green} strokeWidth={1.5} />
         </div>
-        <h2 style={{ fontFamily: sans, fontSize: 22, color: T.white, margin: "0 0 8px", fontWeight: 700, letterSpacing: 0.5, textAlign: "center" }}>SAVE AS APP</h2>
-        <p style={{ fontFamily: serif, fontSize: 14, color: T.tertiary, textAlign: "center", margin: "0 0 24px", lineHeight: 1.6 }}>Install Trailhub on your home screen to get push notifications, faster loads, and a full-screen experience.</p>
+        <h2 style={{ fontFamily: sans, fontSize: 22, color: T.white, margin: "0 0 8px", fontWeight: 700, letterSpacing: 0.5, textAlign: "center" }}>{isIOS ? "GET THE APP" : "SAVE AS APP"}</h2>
+        <p style={{ fontFamily: serif, fontSize: 14, color: T.tertiary, textAlign: "center", margin: "0 0 24px", lineHeight: 1.6 }}>{isIOS ? "Push notifications, offline maps, and faster loads — Trailhub works best as the app." : "Install Trailhub on your home screen to get push notifications, faster loads, and a full-screen experience."}</p>
         {isIOS ? (
-          <div style={{ background: T.darkCard, borderRadius: 12, padding: 18, border: `1px solid ${T.charcoal}`, marginBottom: 18 }}>
-            <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700, display: "block", marginBottom: 12 }}>ON IPHONE / IPAD (SAFARI)</span>
-            <ol style={{ margin: 0, paddingLeft: 20, fontFamily: serif, fontSize: 14, color: T.white, lineHeight: 1.8 }}>
-              <li>Tap the <strong style={{ color: T.copper }}>Share</strong> button at the bottom of Safari (square with an arrow ↑)</li>
-              <li>Scroll down and tap <strong style={{ color: T.copper }}>Add to Home Screen</strong></li>
-              <li>Tap <strong style={{ color: T.copper }}>Add</strong> in the top right</li>
-              <li>Open Trailhub from your home screen — you'll be prompted to enable push notifications next</li>
-            </ol>
+          // iPhone: the App Store app is now the primary path (approved
+          // Oct 2026). Add-to-Home-Screen stays available as a fallback.
+          <div style={{ background: T.darkCard, borderRadius: 12, padding: 18, border: `1px solid ${T.copper}60`, marginBottom: 18 }}>
+            <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.5, fontWeight: 700, display: "block", marginBottom: 10 }}>ON IPHONE</span>
+            <p style={{ fontFamily: serif, fontSize: 14, color: T.white, lineHeight: 1.6, margin: "0 0 14px" }}>Trailhub is on the App Store — get the app for offline maps, push notifications, and the full-screen experience. Sign in with the account you just created.</p>
+            <a href={APP_STORE_URL} target="_blank" rel="noopener noreferrer" style={{ display: "block", width: 180, margin: "0 auto 12px" }}>
+              <img src="/app-store-badge.svg" alt="Download on the App Store" style={{ width: "100%", height: "auto", display: "block" }} />
+            </a>
+            <details style={{ marginTop: 6 }}>
+              <summary style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, letterSpacing: 0.5, cursor: "pointer", listStyle: "none", textAlign: "center" }}>Prefer the browser? Add to Home Screen instead ▾</summary>
+              <ol style={{ margin: "10px 0 0", paddingLeft: 20, fontFamily: serif, fontSize: 13, color: T.white, lineHeight: 1.8 }}>
+                <li>Tap the <strong style={{ color: T.copper }}>Share</strong> button at the bottom of Safari (square with an arrow ↑)</li>
+                <li>Scroll down and tap <strong style={{ color: T.copper }}>Add to Home Screen</strong>, then <strong style={{ color: T.copper }}>Add</strong></li>
+                <li>Open Trailhub from your home screen</li>
+              </ol>
+            </details>
           </div>
         ) : (
           <div style={{ background: T.darkCard, borderRadius: 12, padding: 18, border: `1px solid ${T.charcoal}`, marginBottom: 18 }}>

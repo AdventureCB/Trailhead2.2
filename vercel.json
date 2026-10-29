@@ -72,6 +72,10 @@
       "destination": "/api/preview?type=hq"
     },
     {
+      "source": "/app",
+      "destination": "/app.html"
+    },
+    {
       "source": "/privacy",
       "destination": "/privacy.html"
     },
@@ -116,6 +120,19 @@
     {
       "source": "/manifest.json",
       "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600"
+        }
+      ]
+    },
+    {
+      "source": "/.well-known/apple-app-site-association",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/json"
+        },
         {
           "key": "Cache-Control",
           "value": "public, max-age=3600"
