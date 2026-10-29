@@ -28912,24 +28912,61 @@ function ProfilePicCropperModal({ file, onClose, onCropped }) {
   const startRef = useRef({ x: 0, y: 0, ox: 0, oy: 0 });
   const pinchRef = useRef(null);
 
-  // Load source file into a data URL the moment the modal opens.
+  // Decode the picked file ONCE into a working canvas (≤ 2048px, EXIF
+  // orientation applied) and use that same bitmap for BOTH the preview and
+  // the crop. Previously the preview was an <img> of the full-res data URL
+  // and the crop re-decoded that URL into drawImage — on iPhone photos
+  // (12–48 MP) Safari silently subsamples large images, so the crop's source
+  // rectangle landed on a smaller bitmap than the math assumed and the saved
+  // avatar came out zoomed way in. One shared bitmap = preview and save
+  // can't disagree, and it's far lighter on memory (see feedback_ios_photo_memory).
+  const workCanvasRef = useRef(null);
   useEffect(() => {
     if (!file) return;
     let cancelled = false;
-    const r = new FileReader();
-    r.onload = () => {
-      if (cancelled) return;
-      const url = String(r.result || "");
-      setSrc(url);
-      // document.createElement("img") instead of new Image() — the
-      // lucide-react `Image` import shadows the global constructor.
-      const probe = document.createElement("img");
-      probe.onload = () => { if (!cancelled) setImgDims({ w: probe.naturalWidth || 0, h: probe.naturalHeight || 0 }); };
-      probe.src = url;
-    };
-    r.onerror = () => { if (!cancelled) setErr("Couldn't read image."); };
-    r.readAsDataURL(file);
-    return () => { cancelled = true; };
+    const MAX = 2048;
+    (async () => {
+      try {
+        let source = null, w = 0, h = 0;
+        if (typeof createImageBitmap === "function") {
+          try {
+            const probe = await createImageBitmap(file, { imageOrientation: "from-image" });
+            w = probe.width; h = probe.height;
+            if (w > MAX || h > MAX) {
+              const s = Math.min(MAX / w, MAX / h);
+              const tw = Math.round(w * s), th = Math.round(h * s);
+              probe.close();
+              source = await createImageBitmap(file, { imageOrientation: "from-image", resizeWidth: tw, resizeHeight: th, resizeQuality: "high" });
+              w = tw; h = th;
+            } else source = probe;
+          } catch (_) { source = null; }
+        }
+        if (!source) {
+          // Fallback: <img> decode (browser applies EXIF orientation), then scale.
+          const objectUrl = URL.createObjectURL(file);
+          try {
+            const img = await new Promise((resolve, reject) => {
+              const i = document.createElement("img"); // not `new Image()` — lucide shadows it
+              i.onload = () => resolve(i); i.onerror = reject; i.src = objectUrl;
+            });
+            w = img.naturalWidth || img.width; h = img.naturalHeight || img.height;
+            if (w > MAX || h > MAX) { const s = Math.min(MAX / w, MAX / h); w = Math.round(w * s); h = Math.round(h * s); }
+            source = img;
+          } finally { URL.revokeObjectURL(objectUrl); }
+        }
+        if (cancelled || !w || !h) return;
+        const c = document.createElement("canvas");
+        c.width = w; c.height = h;
+        c.getContext("2d").drawImage(source, 0, 0, w, h);
+        if (source && typeof source.close === "function") { try { source.close(); } catch (_) {} }
+        workCanvasRef.current = c;
+        setImgDims({ w, h });
+        setSrc(c.toDataURL("image/jpeg", 0.9));
+      } catch (e) {
+        if (!cancelled) setErr("Couldn't read image.");
+      }
+    })();
+    return () => { cancelled = true; workCanvasRef.current = null; };
   }, [file]);
 
   // Derived: base scale that fits the source image into the container
@@ -28996,10 +29033,10 @@ function ProfilePicCropperModal({ file, onClose, onCropped }) {
     if (busy || !src || imgDims.w === 0) return;
     setBusy(true); setErr("");
     try {
-      // document.createElement("img") instead of new Image() — same
-      // lucide shadow trap as above.
-      const img = document.createElement("img");
-      await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = src; });
+      // Crop from the SAME canvas the preview is showing (see the decode
+      // effect above) — never re-decode the original file here.
+      const img = workCanvasRef.current;
+      if (!img) throw new Error("image not ready");
       // Translate visible viewport coords → source image coords.
       // (offset.x, offset.y) is the displayed image translation from center.
       // imgLeft/imgTop are the top-left of the displayed image inside the container.
