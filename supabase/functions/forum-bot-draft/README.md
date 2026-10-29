@@ -33,6 +33,24 @@ Rules the converter follows:
 - `members_only_hours` (0–720): signed-in-only reading window after publish. Optional.
 - `notes`: a message to the reviewer (not published).
 
+## YouTube videos
+Each section can carry **one** embedded YouTube video; it renders as a player below that section's text. Three ways to attach one:
+
+1. **In markdown** — put the YouTube link alone on its own line, inside the section it belongs to:
+   ```
+   ## The test
+   Same truck, same dune, three pressures.
+
+   https://youtu.be/dQw4w9WgXcQ
+
+   Here is what the footage shows…
+   ```
+   (`@youtube https://…` or `video: https://…` on the line also works.) A second link in the same section starts a new untitled section so nothing is dropped.
+2. **Top-level** — `"video_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"` attaches to the first section (handy for a single-video post).
+3. **In `sections`** — `{ "subheading": "…", "body": "<p>…</p>", "video_url": "https://youtu.be/…" }`.
+
+Accepted forms: `youtube.com/watch?v=ID`, `youtu.be/ID`, `youtube.com/shorts/ID`, `youtube.com/live/ID`, `youtube.com/embed/ID`, or the bare 11-character ID. Anything else is rejected with a 400 naming the bad link. Only YouTube is supported (no Vimeo/TikTok). Embeds aren't allowed inside the HTML body — a pasted `<iframe>` is stripped — so always use one of the three methods above.
+
 Alternatively send `sections: [{ "subheading": "…", "body": "<p>HTML</p>" }]` (allowed tags: p, br, strong, em, u, a, ul, ol, li, code, blockquote) or a single `body_html`.
 
 ## Check what happened

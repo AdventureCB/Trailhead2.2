@@ -41,6 +41,29 @@ async function sb(path: string, init: RequestInit = {}) {
   return data;
 }
 
+// ── YouTube ─────────────────────────────────────────────────────────────────
+// Mirrors the app's parseYouTubeId. A section may carry ONE video, stored as
+// `videoUrl` (canonical watch URL); the thread renders it as an embed below
+// the section's text.
+function parseYouTubeId(input: unknown): string | null {
+  if (!input || typeof input !== "string") return null;
+  const t = input.trim();
+  if (!t) return null;
+  if (/^[A-Za-z0-9_-]{11}$/.test(t)) return t;
+  let m;
+  if ((m = t.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/|v\/))([A-Za-z0-9_-]{11})/))) return m[1];
+  if ((m = t.match(/youtu\.be\/([A-Za-z0-9_-]{11})/))) return m[1];
+  if ((m = t.match(/[?&]v=([A-Za-z0-9_-]{11})/))) return m[1];
+  return null;
+}
+const youtubeWatchUrl = (id: string) => `https://www.youtube.com/watch?v=${id}`;
+// A line that is ONLY a YouTube link (optionally "@youtube <url>" / "video: <url>").
+function youtubeLineId(line: string): string | null {
+  const t = line.trim().replace(/^(?:@youtube|youtube:|video:)\s*/i, "");
+  if (!/^(?:https?:\/\/)?(?:www\.|m\.)?(?:youtube\.com|youtu\.be)\/\S+$/i.test(t)) return null;
+  return parseYouTubeId(t);
+}
+
 // ── Markdown → forum sections ───────────────────────────────────────────────
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 function inline(md: string): string {
@@ -75,21 +98,31 @@ function blocksToHtml(lines: string[]): string {
   flushPara(); flushList();
   return out.join("");
 }
-function markdownToSections(md: string, title: string): Array<{ subheading: string; body: string }> {
-  const sections: Array<{ subheading: string; lines: string[] }> = [{ subheading: "", lines: [] }];
+type Section = { subheading: string; body: string; videoUrl?: string };
+function markdownToSections(md: string, title: string): Section[] {
+  const sections: Array<{ subheading: string; lines: string[]; videoUrl?: string }> = [{ subheading: "", lines: [] }];
   for (const line of md.replace(/\r/g, "").split("\n")) {
     const h = line.match(/^\s*#{1,3}\s+(.+?)\s*#*\s*$/);
     if (h) {
       // A leading "# Title" that just repeats the thread title isn't a section.
       if (sections.length === 1 && sections[0].lines.join("").trim() === "" && h[1].trim().toLowerCase() === (title || "").trim().toLowerCase()) continue;
       sections.push({ subheading: h[1].trim(), lines: [] });
-    } else {
-      sections[sections.length - 1].lines.push(line);
+      continue;
     }
+    // A YouTube link alone on a line → that section's embedded video (one per
+    // section; a second one starts a new untitled section so nothing is lost).
+    const vid = youtubeLineId(line);
+    if (vid) {
+      let cur = sections[sections.length - 1];
+      if (cur.videoUrl) { cur = { subheading: "", lines: [] }; sections.push(cur); }
+      cur.videoUrl = youtubeWatchUrl(vid);
+      continue;
+    }
+    sections[sections.length - 1].lines.push(line);
   }
   return sections
-    .map(s => ({ subheading: s.subheading, body: blocksToHtml(s.lines) }))
-    .filter(s => s.subheading || s.body);
+    .map(s => { const o: Section = { subheading: s.subheading, body: blocksToHtml(s.lines) }; if (s.videoUrl) o.videoUrl = s.videoUrl; return o; })
+    .filter(s => s.subheading || s.body || s.videoUrl);
 }
 
 // Minimal allowlist sanitizer for bot-supplied HTML sections.
@@ -139,15 +172,31 @@ async function create(body: any) {
     const ok = await sb(`forum_subcategories?slug=eq.${encodeURIComponent(subSlug)}&select=slug&limit=1`);
     if (!ok || !ok.length) return json({ error: `unknown subcategory_slug "${subSlug}" — call action=subcategories for valid values` }, 400);
   }
-  let sections: Array<{ subheading: string; body: string }> = [];
+  let sections: Section[] = [];
+  const badVideos: string[] = [];
   if (Array.isArray(body.sections) && body.sections.length) {
-    sections = body.sections.map((s: any) => ({ subheading: String(s?.subheading || "").trim().slice(0, 200), body: sanitizeHtml(String(s?.body || s?.body_html || "")) })).filter((s: any) => s.subheading || s.body);
+    sections = body.sections.map((s: any) => {
+      const o: Section = { subheading: String(s?.subheading || "").trim().slice(0, 200), body: sanitizeHtml(String(s?.body || s?.body_html || "")) };
+      const raw = s?.video_url ?? s?.videoUrl ?? s?.youtube ?? s?.youtube_url;
+      if (raw) { const id = parseYouTubeId(String(raw)); if (id) o.videoUrl = youtubeWatchUrl(id); else badVideos.push(String(raw)); }
+      return o;
+    }).filter((s: Section) => s.subheading || s.body || s.videoUrl);
   } else if (typeof body.body_markdown === "string" && body.body_markdown.trim()) {
     sections = markdownToSections(body.body_markdown, title);
   } else if (typeof body.body_html === "string" && body.body_html.trim()) {
     sections = [{ subheading: "", body: sanitizeHtml(body.body_html) }];
   }
-  if (!sections.length) return json({ error: "body_markdown, body_html, or sections required" }, 400);
+  // Top-level video_url → the first section (or its own section if that one already has a video).
+  const topVideo = body.video_url ?? body.videoUrl ?? body.youtube_url;
+  if (topVideo) {
+    const id = parseYouTubeId(String(topVideo));
+    if (!id) badVideos.push(String(topVideo));
+    else if (!sections.length) sections.push({ subheading: "", body: "", videoUrl: youtubeWatchUrl(id) });
+    else if (!sections[0].videoUrl) sections[0].videoUrl = youtubeWatchUrl(id);
+    else sections.splice(1, 0, { subheading: "", body: "", videoUrl: youtubeWatchUrl(id) });
+  }
+  if (badVideos.length) return json({ error: `not a YouTube link: ${badVideos.join(", ")} — use a youtube.com/watch?v=…, youtu.be/…, or shorts URL` }, 400);
+  if (!sections.length) return json({ error: "body_markdown, body_html, sections, or video_url required" }, 400);
 
   const photos: Array<{ url: string; alt: string }> = [];
   const rawPhotos = Array.isArray(body.photos) ? body.photos.slice(0, MAX_PHOTOS) : [];
