@@ -1362,7 +1362,11 @@ function txImg(url, width) {
   if (url.indexOf("/render/image/") >= 0) return url;
   if (_txDisabledUntil > Date.now()) return url; // transforms known-bad right now → original
   const w = Math.round(width * Math.min(window.devicePixelRatio || 1, 2));
-  return url.replace("/storage/v1/object/", "/storage/v1/render/image/") + (url.indexOf("?") >= 0 ? "&" : "?") + "width=" + w + "&quality=75";
+  // resize=contain is REQUIRED: with only `width`, the default (cover) keeps
+  // the ORIGINAL height — a 512² avatar came back 320×512 and a 1600×1200
+  // photo 320×1200 — so every object-fit:cover render looked zoomed in.
+  // contain + width-only scales proportionally (320×320 / 320×240).
+  return url.replace("/storage/v1/object/", "/storage/v1/render/image/") + (url.indexOf("?") >= 0 ? "&" : "?") + "width=" + w + "&resize=contain&quality=75";
 }
 
 // True for any Supabase storage URL on our project — covers both the
