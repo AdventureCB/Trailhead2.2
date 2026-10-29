@@ -8182,10 +8182,23 @@ function parseYouTubeId(input) {
 // <iframe>. Uses the privacy-enhanced youtube-nocookie host.
 function YouTubeEmbed({ videoId, style }) {
   if (!videoId) return null;
+  // Native shell: the WebView origin is https://localhost, which YouTube's
+  // player refuses to embed for (no valid referrer → "Video unavailable").
+  // Frame our own /yt.html shim instead — it embeds the player from the real
+  // domain, so the referrer is one YouTube accepts. Web embeds directly.
+  const native = typeof isNativePlatform === "function" && isNativePlatform();
+  const src = native
+    ? `https://trailhead.lonepeakoverland.com/yt.html?v=${encodeURIComponent(videoId)}`
+    : `https://www.youtube-nocookie.com/embed/${videoId}`;
   return (
     <div style={{ position: "relative", width: "100%", paddingBottom: "56.25%", height: 0, borderRadius: 10, overflow: "hidden", background: "#000", ...(style || {}) }}>
+      {native && (
+        <button onClick={() => openOAuthUrl(`https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`)} title="Open on YouTube" style={{ position: "absolute", top: 8, right: 8, zIndex: 2, display: "flex", alignItems: "center", gap: 4, padding: "5px 9px", borderRadius: 6, background: "rgba(0,0,0,0.6)", border: "none", color: "#fff", fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.6, cursor: "pointer" }}>
+          <ExternalLink size={11} /> YOUTUBE
+        </button>
+      )}
       <iframe
-        src={`https://www.youtube-nocookie.com/embed/${videoId}`}
+        src={src}
         title="YouTube video"
         loading="lazy"
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
