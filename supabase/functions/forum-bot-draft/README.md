@@ -51,6 +51,24 @@ Each section can carry **one** embedded YouTube video; it renders as a player be
 
 Accepted forms: `youtube.com/watch?v=ID`, `youtu.be/ID`, `youtube.com/shorts/ID`, `youtube.com/live/ID`, `youtube.com/embed/ID`, or the bare 11-character ID. Anything else is rejected with a 400 naming the bad link. Only YouTube is supported (no Vimeo/TikTok). Embeds aren't allowed inside the HTML body — a pasted `<iframe>` is stripped — so always use one of the three methods above.
 
+## Link buttons (calls to action)
+A button is a full-width copper link rendered between sections (e.g. "Shop the kit", "Book a demo"). Three ways to add one:
+
+1. **In markdown** — a line of its own, placed where the button should appear:
+   ```
+   ## Takeaway
+   Start at 15 psi and go lower only with beadlocks.
+
+   [button: Shop beadlock wheels](https://www.lonepeakoverland.com/collections/wheels)
+
+   ## What's next
+   ```
+   `@button Shop beadlock wheels | https://…` also works. Any number of buttons, anywhere.
+2. **Top-level** — `"buttons": [{ "label": "Shop the kit", "url": "https://…" }]` appends them after the body (max 5).
+3. **In `sections`** — `{ "type": "url", "label": "Shop the kit", "url": "https://…" }` as its own entry in the array, in position.
+
+Labels are trimmed to 80 characters; the URL must be a full `https://` link or the request is rejected with a 400. Admins can move, relabel, or remove buttons in the review screen before publishing.
+
 Alternatively send `sections: [{ "subheading": "…", "body": "<p>HTML</p>" }]` (allowed tags: p, br, strong, em, u, a, ul, ol, li, code, blockquote) or a single `body_html`.
 
 ## Check what happened

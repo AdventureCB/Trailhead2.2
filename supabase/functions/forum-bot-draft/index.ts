@@ -98,31 +98,51 @@ function blocksToHtml(lines: string[]): string {
   flushPara(); flushList();
   return out.join("");
 }
-type Section = { subheading: string; body: string; videoUrl?: string };
+type Section = { subheading: string; body: string; videoUrl?: string } | { type: "url"; label: string; url: string };
+const isUrlSection = (s: any) => s && s.type === "url";
+// A line that is a call-to-action button: "[button: Label](https://url)" or
+// "@button Label | https://url". Becomes its own {type:'url'} section at that
+// position (the thread renders it as a full-width copper button).
+function buttonLine(line: string): { label: string; url: string } | null {
+  let m = line.trim().match(/^\[button:\s*([^\]]+?)\s*\]\((https?:\/\/\S+?)\)$/i);
+  if (!m) m = line.trim().match(/^@button\s+(.+?)\s*\|\s*(https?:\/\/\S+)$/i);
+  return m ? { label: m[1].trim().slice(0, 80), url: m[2].trim() } : null;
+}
 function markdownToSections(md: string, title: string): Section[] {
-  const sections: Array<{ subheading: string; lines: string[]; videoUrl?: string }> = [{ subheading: "", lines: [] }];
+  type Draft = { subheading: string; lines: string[]; videoUrl?: string } | { type: "url"; label: string; url: string };
+  const sections: Draft[] = [{ subheading: "", lines: [] }];
+  const last = () => sections[sections.length - 1];
+  const lastText = () => { const l = last(); if ("type" in l) { const n = { subheading: "", lines: [] as string[] }; sections.push(n); return n; } return l; };
   for (const line of md.replace(/\r/g, "").split("\n")) {
     const h = line.match(/^\s*#{1,3}\s+(.+?)\s*#*\s*$/);
     if (h) {
       // A leading "# Title" that just repeats the thread title isn't a section.
-      if (sections.length === 1 && sections[0].lines.join("").trim() === "" && h[1].trim().toLowerCase() === (title || "").trim().toLowerCase()) continue;
+      const first = sections[0] as any;
+      if (sections.length === 1 && !("type" in first) && first.lines.join("").trim() === "" && h[1].trim().toLowerCase() === (title || "").trim().toLowerCase()) continue;
       sections.push({ subheading: h[1].trim(), lines: [] });
       continue;
     }
+    const btn = buttonLine(line);
+    if (btn) { sections.push({ type: "url", label: btn.label, url: btn.url }); continue; }
     // A YouTube link alone on a line → that section's embedded video (one per
     // section; a second one starts a new untitled section so nothing is lost).
     const vid = youtubeLineId(line);
     if (vid) {
-      let cur = sections[sections.length - 1];
+      let cur = lastText();
       if (cur.videoUrl) { cur = { subheading: "", lines: [] }; sections.push(cur); }
       cur.videoUrl = youtubeWatchUrl(vid);
       continue;
     }
-    sections[sections.length - 1].lines.push(line);
+    lastText().lines.push(line);
   }
   return sections
-    .map(s => { const o: Section = { subheading: s.subheading, body: blocksToHtml(s.lines) }; if (s.videoUrl) o.videoUrl = s.videoUrl; return o; })
-    .filter(s => s.subheading || s.body || s.videoUrl);
+    .map((s): Section => {
+      if ("type" in s) return { type: "url", label: s.label, url: s.url };
+      const o: Section = { subheading: s.subheading, body: blocksToHtml(s.lines) };
+      if (s.videoUrl) (o as any).videoUrl = s.videoUrl;
+      return o;
+    })
+    .filter((s: any) => s.type === "url" ? /^https?:\/\/\S+$/i.test(s.url) : (s.subheading || s.body || s.videoUrl));
 }
 
 // Minimal allowlist sanitizer for bot-supplied HTML sections.
@@ -174,13 +194,19 @@ async function create(body: any) {
   }
   let sections: Section[] = [];
   const badVideos: string[] = [];
+  const badButtons: string[] = [];
   if (Array.isArray(body.sections) && body.sections.length) {
-    sections = body.sections.map((s: any) => {
-      const o: Section = { subheading: String(s?.subheading || "").trim().slice(0, 200), body: sanitizeHtml(String(s?.body || s?.body_html || "")) };
+    sections = body.sections.map((s: any): Section | null => {
+      if (s && (s.type === "url" || s.type === "button")) {
+        const url = String(s.url || "").trim();
+        if (!/^https?:\/\/\S+$/i.test(url)) { badButtons.push(url || "(empty url)"); return null; }
+        return { type: "url", label: String(s.label || s.text || "Open link").trim().slice(0, 80), url };
+      }
+      const o: any = { subheading: String(s?.subheading || "").trim().slice(0, 200), body: sanitizeHtml(String(s?.body || s?.body_html || "")) };
       const raw = s?.video_url ?? s?.videoUrl ?? s?.youtube ?? s?.youtube_url;
       if (raw) { const id = parseYouTubeId(String(raw)); if (id) o.videoUrl = youtubeWatchUrl(id); else badVideos.push(String(raw)); }
       return o;
-    }).filter((s: Section) => s.subheading || s.body || s.videoUrl);
+    }).filter((s: any) => s && (s.type === "url" || s.subheading || s.body || s.videoUrl)) as Section[];
   } else if (typeof body.body_markdown === "string" && body.body_markdown.trim()) {
     sections = markdownToSections(body.body_markdown, title);
   } else if (typeof body.body_html === "string" && body.body_html.trim()) {
@@ -195,6 +221,14 @@ async function create(body: any) {
     else if (!sections[0].videoUrl) sections[0].videoUrl = youtubeWatchUrl(id);
     else sections.splice(1, 0, { subheading: "", body: "", videoUrl: youtubeWatchUrl(id) });
   }
+  // Top-level buttons[] → appended after the body, in order.
+  const btns = Array.isArray(body.buttons) ? body.buttons : (body.button ? [body.button] : []);
+  for (const b of btns.slice(0, 5)) {
+    const url = String((b && (b.url || b.href)) || "").trim();
+    if (!/^https?:\/\/\S+$/i.test(url)) { badButtons.push(url || "(empty url)"); continue; }
+    sections.push({ type: "url", label: String((b && (b.label || b.text)) || "Open link").trim().slice(0, 80), url });
+  }
+  if (badButtons.length) return json({ error: `button url must be a full https:// link: ${badButtons.join(", ")}` }, 400);
   if (badVideos.length) return json({ error: `not a YouTube link: ${badVideos.join(", ")} — use a youtube.com/watch?v=…, youtu.be/…, or shorts URL` }, 400);
   if (!sections.length) return json({ error: "body_markdown, body_html, sections, or video_url required" }, 400);
 

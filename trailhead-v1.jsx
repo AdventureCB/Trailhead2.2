@@ -40040,9 +40040,13 @@ function BotDraftsAdminScreen({ onBack, onLoad, onSave, onPublish, onReject, onD
       subcategory_slug: d.subcategory_slug || "",
       members_only_hours: d.members_only_hours || 0,
       photos: Array.isArray(d.photos) ? d.photos : [],
-      sections: (Array.isArray(d.sections) && d.sections.length ? d.sections : [{ subheading: "", body: "" }]).map(s => ({ id: newId(), subheading: s.subheading || "", body: s.body || "", videoUrl: s.videoUrl || "" })),
+      sections: (Array.isArray(d.sections) && d.sections.length ? d.sections : [{ subheading: "", body: "" }]).map(s =>
+        (s && s.type === "url") ? { id: newId(), type: "url", label: s.label || "", url: s.url || "" }
+        : (s && s.type === "poll") ? { id: newId(), type: "poll", raw: s }   // polls pass through untouched; edit them on the thread after publish
+        : { id: newId(), subheading: (s && s.subheading) || "", body: (s && s.body) || "", videoUrl: (s && s.videoUrl) || "" }),
     });
   };
+  const addButton = () => setEdit(e => ({ ...e, sections: [...e.sections, { id: newId(), type: "url", label: "", url: "" }] }));
   const patchSection = (id, patch) => setEdit(e => ({ ...e, sections: e.sections.map(s => s.id === id ? { ...s, ...patch } : s) }));
   const moveSec = (id, dir) => setEdit(e => { const i = e.sections.findIndex(s => s.id === id); const j = i + dir; if (i < 0 || j < 0 || j >= e.sections.length) return e; const n = e.sections.slice(); [n[i], n[j]] = [n[j], n[i]]; return { ...e, sections: n }; });
   const payload = () => ({
@@ -40050,7 +40054,11 @@ function BotDraftsAdminScreen({ onBack, onLoad, onSave, onPublish, onReject, onD
     subcategory_slug: edit.subcategory_slug || null,
     members_only_hours: Number(edit.members_only_hours) || 0,
     photos: edit.photos,
-    sections: edit.sections.map(s => { const o = { subheading: (s.subheading || "").trim(), body: (s.body || "").trim() }; if (s.videoUrl) o.videoUrl = s.videoUrl; return o; }).filter(s => s.subheading || s.body || s.videoUrl),
+    sections: edit.sections.map(s => {
+      if (s.type === "url") { const u = (s.url || "").trim(); return /^https?:\/\/\S+/i.test(u) ? { type: "url", label: (s.label || "").trim() || "Open link", url: u } : null; }
+      if (s.type === "poll") return s.raw || null;
+      const o = { subheading: (s.subheading || "").trim(), body: (s.body || "").trim() }; if (s.videoUrl) o.videoUrl = s.videoUrl; return o;
+    }).filter(s => s && (s.type || s.subheading || s.body || s.videoUrl)),
   });
   const save = async () => {
     if (!selected || busy) return false;
@@ -40135,7 +40143,17 @@ function BotDraftsAdminScreen({ onBack, onLoad, onSave, onPublish, onReject, onD
           )}
           <div>
             <label style={lbl}>BODY</label>
-            {edit.sections.map((s, i) => (
+            {edit.sections.map((s, i) => s.type === "url" ? (
+              <ForumUrlSectionEditor key={s.id} label={s.label} url={s.url} onChange={(patch) => patchSection(s.id, patch)} onRemove={() => setEdit(e => ({ ...e, sections: e.sections.filter(x => x.id !== s.id) }))} onMoveUp={i > 0 ? () => moveSec(s.id, -1) : null} onMoveDown={i < edit.sections.length - 1 ? () => moveSec(s.id, 1) : null} />
+            ) : s.type === "poll" ? (
+              <div key={s.id} style={{ marginBottom: 14, padding: 12, borderRadius: 10, background: T.darkCard, border: `1px solid ${T.copper}50`, display: "flex", alignItems: "center", gap: 8 }}>
+                <BarChart3 size={14} color={T.copper} />
+                <div style={{ flex: 1, minWidth: 0, fontFamily: sans, fontSize: 12, color: T.white, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>Poll: {(s.raw && s.raw.question) || "(untitled)"}</div>
+                <button onClick={() => moveSec(s.id, -1)} disabled={i === 0} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, opacity: i === 0 ? 0.3 : 1 }}><ArrowUp size={12} color={T.tertiary} /></button>
+                <button onClick={() => moveSec(s.id, 1)} disabled={i === edit.sections.length - 1} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, opacity: i === edit.sections.length - 1 ? 0.3 : 1 }}><ArrowDown size={12} color={T.tertiary} /></button>
+                <button onClick={() => setEdit(e => ({ ...e, sections: e.sections.filter(x => x.id !== s.id) }))} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><X size={14} color={T.tertiary} /></button>
+              </div>
+            ) : (
               <ForumSectionEditor
                 key={s.id}
                 sectionNumber={edit.sections.length > 1 ? i + 1 : null}
@@ -40152,7 +40170,10 @@ function BotDraftsAdminScreen({ onBack, onLoad, onSave, onPublish, onReject, onD
                 placeholder="Section text…"
               />
             ))}
-            <button onClick={() => setEdit(e => ({ ...e, sections: [...e.sections, { id: newId(), subheading: "", body: "", videoUrl: "" }] }))} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", borderRadius: 8, background: "none", border: `1px dashed ${T.charcoal}`, cursor: "pointer", fontFamily: sans, fontSize: 12, color: T.copper, letterSpacing: 1, fontWeight: 600 }}><Plus size={14} color={T.copper} /> ADD SECTION</button>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => setEdit(e => ({ ...e, sections: [...e.sections, { id: newId(), subheading: "", body: "", videoUrl: "" }] }))} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", borderRadius: 8, background: "none", border: `1px dashed ${T.charcoal}`, cursor: "pointer", fontFamily: sans, fontSize: 12, color: T.copper, letterSpacing: 1, fontWeight: 600 }}><Plus size={14} color={T.copper} /> ADD SECTION</button>
+              <button onClick={addButton} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", borderRadius: 8, background: "none", border: `1px dashed ${T.copper}60`, cursor: "pointer", fontFamily: sans, fontSize: 12, color: T.copper, letterSpacing: 1, fontWeight: 600 }}><ExternalLink size={14} color={T.copper} /> ADD LINK BUTTON</button>
+            </div>
           </div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <div style={{ flex: 1, minWidth: 160 }}>
