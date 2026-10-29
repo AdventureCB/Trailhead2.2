@@ -8385,6 +8385,9 @@ function ForumUrlSectionEditor({ label, url, onChange, onRemove, onMoveUp, onMov
 // multi, closesAt }. Votes live in public.forum_poll_votes (one row per
 // user+option); the section carries only the definition. Editor state keeps
 // `closeHours` (0 = never, -1 = keep the existing closesAt when editing).
+// Members-only reading window choices (hours). Module scope: used by ForumScreen
+// AND the module-level BotDraftsAdminScreen (inside-component consts aren't reachable there).
+const MEMBERS_ONLY_CHOICES = [[0, "Off — public"], [24, "24 hours"], [72, "3 days"], [168, "1 week"], [336, "2 weeks"], [720, "30 days"]];
 const POLL_CLOSE_CHOICES = [[0, "Never closes"], [24, "Closes in 1 day"], [72, "Closes in 3 days"], [168, "Closes in 1 week"], [336, "Closes in 2 weeks"], [720, "Closes in 30 days"]];
 const newPollOptionId = () => "o_" + Math.random().toString(36).slice(2, 8);
 function ForumPollSectionEditor({ question, options, multi, closeHours, closesAt, onChange, onRemove, onMoveUp, onMoveDown }) {
@@ -9178,7 +9181,6 @@ function ForumScreen({ pendingThread, onPendingHandled, onLoadThreadTeaser, pend
     const closesAt = s.closeHours === -1 ? (s.closesAt || null) : (s.closeHours > 0 ? new Date(Date.now() + s.closeHours * 3600 * 1000).toISOString() : null);
     return { type: "poll", pollId: s.pollId, question, options, multi: !!s.multi, closesAt };
   };
-  const MEMBERS_ONLY_CHOICES = [[0, "Off — public"], [24, "24 hours"], [72, "3 days"], [168, "1 week"], [336, "2 weeks"], [720, "30 days"]];
   const updateSection = (id, patch) => setNtSections(prev => prev.map(s => s.id === id ? { ...s, ...patch } : s));
   const addSection = () => setNtSections(prev => [...prev, { id: newSectionId(), subheading: "", body: "", videoUrl: "" }]);
   const removeSection = (id) => setNtSections(prev => prev.length > 1 ? prev.filter(s => s.id !== id) : prev);
