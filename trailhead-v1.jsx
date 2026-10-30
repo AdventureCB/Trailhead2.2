@@ -9573,6 +9573,9 @@ function ForumScreen({ pendingThread, onPendingHandled, onLoadThreadTeaser, pend
                   <button onClick={addPollSection} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", borderRadius: 8, background: "none", border: `1px dashed ${T.copper}60`, cursor: "pointer", fontFamily: sans, fontSize: 12, color: T.copper, letterSpacing: 1, fontWeight: 600, marginBottom: 12 }}>
                     <BarChart3 size={14} color={T.copper} /> ADD POLL
                   </button>
+                  {(!Array.isArray(interestLists) || interestLists.length === 0) && (
+                    <div style={{ marginBottom: 12, fontFamily: serif, fontSize: 11, color: T.tertiary, lineHeight: 1.4 }}>Launch page tagging appears here once an interest list exists (Admin → Interest Lists → + NEW).</div>
+                  )}
                   {Array.isArray(interestLists) && interestLists.length > 0 && (() => {
                     const subSlug = activeSub ? (activeSub.slug || forumSlugify(activeSub.name || "")) : "";
                     return (
@@ -54910,7 +54913,10 @@ export default function Trailhead() {
         forum_subcategory_slug: forum_subcategory_slug || null,
         status: "open", created_by: uid,
       }).select("*").maybeSingle();
-      if (!error && data) return { ok: true, row: data };
+      if (!error && data) {
+        setInterestLists(prev => [{ id: data.id, name: data.name, slug: data.slug, forum_subcategory_slug: data.forum_subcategory_slug, status: data.status }, ...prev.filter(l => l.id !== data.id)]);
+        return { ok: true, row: data };
+      }
       if (error && !/duplicate|unique/i.test(error.message || "")) return { error: error.message || "Create failed" };
     }
     return { error: "Slug collision — try a different name." };
@@ -54924,6 +54930,10 @@ export default function Trailhead() {
     body.updated_at = new Date().toISOString();
     const { error } = await supabase.from("interest_lists").update(body).eq("id", id);
     if (error) return { error: error.message };
+    setInterestLists(prev => {
+      const next = prev.map(l => l.id === id ? { ...l, ...body } : l).filter(l => l.status !== "closed");
+      return next;
+    });
     return { ok: true };
   };
   const loadInterestSignups = async (listId) => {
@@ -60838,7 +60848,9 @@ export default function Trailhead() {
       } catch (e) { /* table may not exist yet */ }
     })();
     return () => { cancelled = true; };
-  }, [isAdmin]);
+    // Re-run when the admin lands on the forum or admin screens so a list
+    // created mid-session shows up in the composer / thread-page chips.
+  }, [isAdmin, screen === "forum" || screen === "admin" ? screen : "other"]);
   const hydrateForumCategories = async () => {
     try {
       const [catRes, subRes] = await Promise.all([
