@@ -8330,6 +8330,7 @@ function dbRowToForumThread(row, profile) {
     subcategorySlug: row.subcategory_slug,
     subName: subInfo ? subInfo.name : "",
     catName: catInfo ? catInfo.name : "",
+    catVisibility: catInfo ? (catInfo.visibility || "public") : "public", // "ambassadors" → no share-to-feed / share links
     // Marketplace listing fields. Null/undefined on every non-marketplace
     // thread; populated on marketplace threads regardless of subcategory.
     // listingDetails is a free-form jsonb blob (brand/model/year/location/
@@ -9396,7 +9397,7 @@ function ForumScreen({ pendingThread, onPendingHandled, onLoadThreadTeaser, pend
       }
       // Auto-share to feed if toggle is on. Uses the live current user info,
       // not a hardcoded handle.
-      if (ntShareToFeed && onAddFeedPost) {
+      if (ntShareToFeed && onAddFeedPost && !(cat && cat.visibility === "ambassadors")) {
         onAddFeedPost({
           id: Date.now() + 1,
           type: "FORUM",
@@ -9640,7 +9641,11 @@ function ForumScreen({ pendingThread, onPendingHandled, onLoadThreadTeaser, pend
             <PhotoUploader photos={ntPhotos} onChange={setNtPhotos} />
           </div>
 
-          {/* Share to feed toggle */}
+          {/* Share to feed toggle — not offered in ambassadors-only categories
+              (the feed is public; sharing would leak the thread). */}
+          {(activeCat || ntPickCat) && (activeCat || ntPickCat).visibility === "ambassadors" ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 0", borderTop: `1px solid ${T.charcoal}`, fontFamily: sans, fontSize: 11, color: T.green }}><ShieldCheck size={12} /> Ambassadors-only category — not shared to the feed.</div>
+          ) : (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 0", borderTop: `1px solid ${T.charcoal}`, marginBottom: 16 }}>
             <div>
               <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, display: "block" }}>Share to Feed</span>
@@ -9650,8 +9655,9 @@ function ForumScreen({ pendingThread, onPendingHandled, onLoadThreadTeaser, pend
               <div style={{ width: 22, height: 22, borderRadius: "50%", background: T.white, position: "absolute", top: 2, left: ntShareToFeed ? 23 : 2, transition: "left 0.2s" }} />
             </button>
           </div>
+          )}
 
-          {ntShareToFeed && (
+          {ntShareToFeed && !((activeCat || ntPickCat) && (activeCat || ntPickCat).visibility === "ambassadors") && (
             <div style={{ background: T.darkCard, borderRadius: 8, padding: "12px 14px", marginBottom: 16, border: `1px solid ${T.charcoal}` }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
                 <MessageCircle size={12} color={T.copper} />
@@ -9827,9 +9833,11 @@ function ForumScreen({ pendingThread, onPendingHandled, onLoadThreadTeaser, pend
             <MessageCircle size={12} color={T.tertiary} strokeWidth={1.5} />
             <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>Reply</span>
           </button>
+          {selectedThread.catVisibility !== "ambassadors" && (
           <button onClick={() => onOpenShareIntent && onOpenShareIntent({ kind: "forum", data: { id: selectedThread.id, threadId: selectedThread.id, title: selectedThread.title, body: post.body, author: post.author, forumCat: selectedCat?.name || "", forumSub: selectedSub?.name || "", subSlug: forumSlugify(selectedSub?.name || ""), slug: selectedThread.slug, image: (selectedThread.photos && selectedThread.photos[0]) || null, categorySlug: selectedThread.categorySlug || null, listingPrice: selectedThread.listingPrice != null ? selectedThread.listingPrice : null, listingCurrency: selectedThread.listingCurrency || "USD", listingStatus: selectedThread.listingStatus || "active", listingDetails: selectedThread.listingDetails || null, sharedFromOwnerHandle: (selectedThread.handle || "").replace(/^@/, "") || null, sharedFromOwnerName: selectedThread.author || null, sharedFromOwnerUserId: selectedThread.userId || null } })} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px" }}>
             <Share2 size={12} color={T.tertiary} strokeWidth={1.5} />
           </button>
+          )}
           {/* Report reply — non-owner, signed-in. Comes before Delete so
               Delete sits at the far right (owner-only). */}
           {replyId && onReportContent && currentUserId && post.userId && currentUserId !== post.userId && (
@@ -10227,9 +10235,11 @@ function ForumScreen({ pendingThread, onPendingHandled, onLoadThreadTeaser, pend
               <Eye size={14} color={T.tertiary} />
               <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{getViewCount(selectedThread)} views</span>
             </div>
+            {selectedThread.catVisibility !== "ambassadors" && (
             <button onClick={() => onOpenShareIntent && onOpenShareIntent({ kind: "forum", data: { id: selectedThread.id, threadId: selectedThread.id, title: selectedThread.title, body: selectedThread.body, author: selectedThread.author, forumCat: selectedCat?.name || "", forumSub: selectedSub?.name || "", subSlug: forumSlugify(selectedSub?.name || ""), slug: selectedThread.slug, image: (selectedThread.photos && selectedThread.photos[0]) || null, categorySlug: selectedThread.categorySlug || null, listingPrice: selectedThread.listingPrice != null ? selectedThread.listingPrice : null, listingCurrency: selectedThread.listingCurrency || "USD", listingStatus: selectedThread.listingStatus || "active", listingDetails: selectedThread.listingDetails || null, sharedFromOwnerHandle: (selectedThread.handle || "").replace(/^@/, "") || null, sharedFromOwnerName: selectedThread.author || null, sharedFromOwnerUserId: selectedThread.userId || null } })} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px", marginLeft: "auto" }}>
               <Share2 size={14} color={T.tertiary} strokeWidth={1.5} />
             </button>
+            )}
             {/* Report thread — hidden for owner + when not signed in. */}
             {onReportContent && currentUserId && selectedThread.userId !== currentUserId && (
               <button onClick={() => onReportContent({
@@ -10864,6 +10874,7 @@ function ForumScreen({ pendingThread, onPendingHandled, onLoadThreadTeaser, pend
             <div key={cat.id || cat.name} style={{ background: T.darkCard, borderRadius: 8, padding: "14px", cursor: "pointer", borderLeft: `3px solid ${cat.color}`, position: "relative" }}>
               <div onClick={() => openCategory(cat)}>
                 <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, display: "block", marginBottom: 4, paddingRight: isAdmin ? 18 : 0 }}>{cat.name}</span>
+                {cat.visibility === "ambassadors" && <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontFamily: sans, fontSize: 8, fontWeight: 700, letterSpacing: 1, color: T.green, background: `${T.green}20`, padding: "2px 7px", borderRadius: 4, marginBottom: 6 }}><ShieldCheck size={9} /> AMBASSADORS</span>}
                 <span style={{ fontFamily: serif, fontSize: 11, color: T.tertiary }}>{totalThreads(cat)} threads</span>
                 <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, display: "block", marginTop: 2 }}>{cat.subs.length} subcategories</span>
               </div>
@@ -10943,13 +10954,14 @@ function ForumCategoryModal({ modal, onClose, onAdd, onUpdate, colorOptions, ico
   const [color, setColor] = useState(initial.color || colorOptions[0].value);
   const [icon, setIcon] = useState(initial.icon || iconOptions[0].name);
   const [adminOnly, setAdminOnly] = useState(!!initial.adminOnlyThreads);
+  const [ambassadorsOnly, setAmbassadorsOnly] = useState(initial.visibility === "ambassadors");
   const [saving, setSaving] = useState(false);
   const submit = async () => {
     if (!name.trim()) return;
     setSaving(true);
     const fn = isEdit
-      ? () => onUpdate(initial.id, { name: name.trim(), color, icon, admin_only_threads: adminOnly })
-      : () => onAdd({ name: name.trim(), color, icon, adminOnlyThreads: adminOnly });
+      ? () => onUpdate(initial.id, { name: name.trim(), color, icon, admin_only_threads: adminOnly, visibility: ambassadorsOnly ? "ambassadors" : "public" })
+      : () => onAdd({ name: name.trim(), color, icon, adminOnlyThreads: adminOnly, visibility: ambassadorsOnly ? "ambassadors" : "public" });
     const res = await fn();
     setSaving(false);
     if (res && res.error) { alert(res.error); return; }
@@ -10990,6 +11002,20 @@ function ForumCategoryModal({ modal, onClose, onAdd, onUpdate, colorOptions, ico
             </div>
             <span style={{ width: 36, height: 20, borderRadius: 10, background: adminOnly ? T.copper : T.charcoal, position: "relative", flexShrink: 0, transition: "background 120ms" }}>
               <span style={{ position: "absolute", top: 2, left: adminOnly ? 18 : 2, width: 16, height: 16, borderRadius: "50%", background: T.white, transition: "left 120ms" }} />
+            </span>
+          </button>
+        )}
+        {/* Visibility — admins only. 'ambassadors' hides the category and
+            everything under it from non-ambassadors (RLS-enforced). */}
+        {isAdmin && (
+          <button onClick={() => setAmbassadorsOnly(v => !v)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", marginBottom: 16, borderRadius: 8, background: ambassadorsOnly ? `${T.green}20` : T.darkBg, border: `1px solid ${ambassadorsOnly ? T.green : T.charcoal}`, cursor: "pointer" }}>
+            <ShieldCheck size={14} color={ambassadorsOnly ? T.green : T.tertiary} style={{ flexShrink: 0 }} />
+            <div style={{ flex: 1, textAlign: "left" }}>
+              <div style={{ fontFamily: sans, fontSize: 11, color: ambassadorsOnly ? T.green : T.white, fontWeight: 700, letterSpacing: 0.5 }}>AMBASSADORS ONLY</div>
+              <div style={{ fontFamily: serif, fontSize: 10, color: T.tertiary, lineHeight: 1.3, marginTop: 2 }}>Only ambassadors and admins can see this category and its threads. Hidden from everyone else, search, and the web.</div>
+            </div>
+            <span style={{ width: 36, height: 20, borderRadius: 10, background: ambassadorsOnly ? T.green : T.charcoal, position: "relative", flexShrink: 0, transition: "background 120ms" }}>
+              <span style={{ position: "absolute", top: 2, left: ambassadorsOnly ? 18 : 2, width: 16, height: 16, borderRadius: "50%", background: T.white, transition: "left 120ms" }} />
             </span>
           </button>
         )}
@@ -53872,6 +53898,7 @@ export default function Trailhead() {
       sort_order: c.sort_order,
       created_by: c.created_by,
       adminOnlyThreads: !!c.admin_only_threads,
+      visibility: c.visibility || "public",
       subs: (subsByCat[c.id] || []).map(s => ({
         id: s.id,
         name: s.name,
@@ -53885,7 +53912,7 @@ export default function Trailhead() {
   const forumCatBySlug = useMemo(() => {
     const out = {};
     (forumCategoryRows || []).forEach(c => {
-      out[c.slug] = { id: c.id, name: c.name, slug: c.slug, color: c.color, icon: c.icon };
+      out[c.slug] = { id: c.id, name: c.name, slug: c.slug, color: c.color, icon: c.icon, visibility: c.visibility || "public" };
     });
     return out;
   }, [forumCategoryRows]);
@@ -61129,7 +61156,7 @@ export default function Trailhead() {
   // Category CRUD — admin-only (RLS enforces, .select("id") returns zero
   // rows for non-admin so the client surfaces "blocked"). Slug auto-derived
   // from name via forumSlugify, with -2/-3 collision retry up to 5 tries.
-  const addForumCategory = async ({ name, color, icon, adminOnlyThreads }) => {
+  const addForumCategory = async ({ name, color, icon, adminOnlyThreads, visibility }) => {
     if (!isAdmin) return { error: "Not authorized" };
     const baseSlug = forumSlugify(name || "");
     if (!baseSlug) return { error: "Name required" };
@@ -61138,7 +61165,7 @@ export default function Trailhead() {
     for (let i = 0; i < 5; i++) {
       const slug = i === 0 ? baseSlug : `${baseSlug}-${i + 1}`;
       const { data, error } = await supabase.from("forum_categories").insert({
-        slug, name, color: color || T.copper, icon: icon || "tag", sort_order: maxOrder + 1, created_by: uid, admin_only_threads: !!adminOnlyThreads,
+        slug, name, color: color || T.copper, icon: icon || "tag", sort_order: maxOrder + 1, created_by: uid, admin_only_threads: !!adminOnlyThreads, visibility: visibility === "ambassadors" ? "ambassadors" : "public",
       }).select("*").maybeSingle();
       if (!error && data) { setForumCategoryRows(prev => [...prev, data]); return { ok: true, row: data }; }
       if (error && !/duplicate/i.test(error.message || "")) return { error: error.message || "Insert failed" };
@@ -61148,7 +61175,7 @@ export default function Trailhead() {
   const updateForumCategory = async (id, patch) => {
     if (!isAdmin) return { error: "Not authorized" };
     if (!id) return { error: "Missing id" };
-    const allowed = ["name", "color", "icon", "sort_order", "admin_only_threads"];
+    const allowed = ["name", "color", "icon", "sort_order", "admin_only_threads", "visibility"];
     const body = {};
     allowed.forEach(k => { if (k in patch) body[k] = patch[k]; });
     body.updated_at = new Date().toISOString();
