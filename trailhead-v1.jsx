@@ -37568,6 +37568,157 @@ function BountyPayoutsQueue({ onLoadQueue, onLoadPendingSubmissionsForUser, onIs
   );
 }
 
+/* ─── BountyPaidLedger ─── every payout ever recorded (gift card, manual,
+   and direct awards), newest first. Filters: method, user, date preset,
+   free-text (handle / name / reference / notes). Totals strip matches the
+   active filter. CSV export. Backed by admin_bounty_paid_ledger(_totals). */
+function BountyPaidLedger({ onLoadLedger, onLoadTotals, onSearchUsers, onViewUser }) {
+  const PAGE = 100;
+  const [rows, setRows] = useState(null);
+  const [totals, setTotals] = useState(null);
+  const [error, setError] = useState("");
+  const [method, setMethod] = useState("all"); // all | gift_card | manual | award
+  const [range, setRange] = useState("all");   // 30 | 90 | ytd | all
+  const [q, setQ] = useState("");
+  const [user, setUser] = useState(null);      // { id, handle, full_name }
+  const [userQ, setUserQ] = useState("");
+  const [userResults, setUserResults] = useState([]);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const debounceRef = useRef(null);
+  const userDebounceRef = useRef(null);
+  const filters = () => {
+    const now = new Date();
+    let from = null;
+    if (range === "30") from = new Date(now.getTime() - 30 * 86400000).toISOString();
+    else if (range === "90") from = new Date(now.getTime() - 90 * 86400000).toISOString();
+    else if (range === "ytd") from = new Date(now.getFullYear(), 0, 1).toISOString();
+    return { user_id: user ? user.id : null, method: method === "all" ? null : method, from, to: null, q: q.trim() || null };
+  };
+  const load = async () => {
+    setRows(null); setTotals(null); setError("");
+    const f = filters();
+    const [r, t] = await Promise.all([onLoadLedger({ ...f, limit: PAGE, offset: 0 }), onLoadTotals(f)]);
+    if (r && r.error) { setError(r.error); setRows([]); return; }
+    const list = (r && r.data) || [];
+    setRows(list); setHasMore(list.length === PAGE);
+    setTotals(t && t.data ? t.data : null);
+  };
+  const loadMore = async () => {
+    if (loadingMore || !rows) return;
+    setLoadingMore(true);
+    const r = await onLoadLedger({ ...filters(), limit: PAGE, offset: rows.length });
+    setLoadingMore(false);
+    if (r && r.data) { setRows(prev => [...prev, ...r.data]); setHasMore(r.data.length === PAGE); }
+  };
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(load, q ? 300 : 0);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [method, range, q, user && user.id]);
+  useEffect(() => {
+    if (userDebounceRef.current) clearTimeout(userDebounceRef.current);
+    if (!userQ || userQ.trim().length < 2 || !onSearchUsers) { setUserResults([]); return; }
+    userDebounceRef.current = setTimeout(async () => {
+      try { const r = await onSearchUsers(userQ.trim(), 6); setUserResults(Array.isArray(r) ? r : []); } catch { setUserResults([]); }
+    }, 250);
+    return () => { if (userDebounceRef.current) clearTimeout(userDebounceRef.current); };
+  }, [userQ]);
+  const usd = (c) => `$${((c || 0) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const methodLabel = (r) => r.is_award
+    ? (r.method === "manual" ? "AWARD · MANUAL" : "AWARD · GIFT CARD")
+    : (r.method === "manual" ? "MANUAL" : r.method === "shopify_gift_card_new" ? "GIFT CARD · NEW" : "GIFT CARD · TOP-UP");
+  const exportCsv = () => {
+    if (!rows || rows.length === 0) return;
+    const esc = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
+    const out = [["Paid at", "Recipient", "Handle", "Amount USD", "Method", "Direct award", "Bounties cleared", "Submissions", "Reference", "Notes", "Paid by", "Payout ID"].map(esc).join(",")];
+    rows.forEach(r => out.push([
+      r.paid_at ? new Date(r.paid_at).toLocaleString() : "", r.full_name || "", r.handle || "", ((r.amount_cents || 0) / 100).toFixed(2),
+      methodLabel(r), r.is_award ? "YES" : "", (r.bounty_titles || []).join(" | "), r.submission_count || 0, r.reference || "", r.notes || "",
+      r.paid_by_handle || r.paid_by_name || "", r.payout_id,
+    ].map(esc).join(",")));
+    const blob = new Blob([out.join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `bounty-paid-ledger-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  };
+  const chip = (active) => ({ padding: "6px 10px", borderRadius: 14, background: active ? T.copper : "none", border: `1px solid ${active ? T.copper : T.charcoal}`, color: active ? T.darkBg : T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer", whiteSpace: "nowrap" });
+  const inputStyle = { width: "100%", boxSizing: "border-box", padding: "9px 12px", borderRadius: 8, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none" };
+  return (
+    <div>
+      {/* Totals */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginBottom: 12 }}>
+        {[["PAID OUT", totals ? usd(totals.total_cents) : "…"], ["PAYOUTS", totals ? String(totals.payout_count) : "…"], ["PEOPLE", totals ? String(totals.users_paid) : "…"],
+          ["GIFT CARD", totals ? usd(totals.gift_card_cents) : "…"], ["MANUAL", totals ? usd(totals.manual_cents) : "…"], ["DIRECT AWARDS", totals ? usd(totals.award_cents) : "…"]].map(([l, v]) => (
+          <div key={l} style={{ background: T.darkCard, borderRadius: 10, padding: "10px 12px", border: `1px solid ${T.charcoal}` }}>
+            <div style={{ fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 1.2, fontWeight: 700 }}>{l}</div>
+            <div style={{ fontFamily: sans, fontSize: 15, color: T.white, fontWeight: 800, marginTop: 2 }}>{v}</div>
+          </div>
+        ))}
+      </div>
+      {/* Filters */}
+      <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6, marginBottom: 6 }}>
+        {[["all", "ALL"], ["gift_card", "GIFT CARD"], ["manual", "MANUAL"], ["award", "DIRECT AWARDS"]].map(([k, l]) => <button key={k} onClick={() => setMethod(k)} style={chip(method === k)}>{l}</button>)}
+        <span style={{ width: 1, background: T.charcoal, margin: "0 2px", flexShrink: 0 }} />
+        {[["30", "30D"], ["90", "90D"], ["ytd", "YTD"], ["all", "ALL TIME"]].map(([k, l]) => <button key={k} onClick={() => setRange(k)} style={chip(range === k)}>{l}</button>)}
+      </div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search name, handle, reference, notes…" style={inputStyle} />
+        <button onClick={exportCsv} disabled={!rows || rows.length === 0} style={{ padding: "0 12px", borderRadius: 8, background: "none", border: `1px solid ${T.copper}`, color: T.copper, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer", whiteSpace: "nowrap" }}>CSV</button>
+      </div>
+      <div style={{ position: "relative", marginBottom: 12 }}>
+        {user ? (
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 14, background: `${T.copper}22`, border: `1px solid ${T.copper}`, fontFamily: sans, fontSize: 11, color: T.white }}>
+            {user.full_name || user.handle}{user.handle ? <span style={{ color: T.tertiary }}>@{user.handle}</span> : null}
+            <button onClick={() => setUser(null)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" }}><X size={12} color={T.copper} /></button>
+          </div>
+        ) : (
+          <input value={userQ} onChange={e => setUserQ(e.target.value)} placeholder="Filter by user…" style={inputStyle} />
+        )}
+        {!user && userResults.length > 0 && (
+          <div style={{ position: "absolute", left: 0, right: 0, top: "100%", zIndex: 5, background: T.darkBg, border: `1px solid ${T.charcoal}`, borderRadius: 8, marginTop: 4, overflow: "hidden" }}>
+            {userResults.map(r => (
+              <button key={r.id} onClick={() => { setUser(r); setUserQ(""); setUserResults([]); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 12px", background: "none", border: "none", borderBottom: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 12, cursor: "pointer" }}>
+                {r.full_name || r.handle}{r.handle ? <span style={{ color: T.tertiary }}> @{r.handle}</span> : null}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      {error && <div style={{ fontFamily: sans, fontSize: 12, color: T.red, marginBottom: 10 }}>{error}</div>}
+      {rows === null ? <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, padding: "20px 0", textAlign: "center" }}>Loading…</div>
+        : rows.length === 0 ? <div style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, padding: "30px 0", textAlign: "center" }}>No payouts match.</div>
+        : rows.map(r => (
+          <div key={r.payout_id} style={{ background: T.darkCard, borderRadius: 12, padding: 12, border: `1px solid ${T.charcoal}`, marginBottom: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div onClick={() => onViewUser && r.user_id && onViewUser(r.user_id)} style={{ width: 34, height: 34, borderRadius: "50%", background: T.charcoal, overflow: "hidden", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: onViewUser ? "pointer" : "default" }}>
+                {r.avatar_url ? <img src={txImg(r.avatar_url, 96)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontFamily: sans, fontSize: 12, fontWeight: 700, color: T.tertiary }}>{((r.full_name || r.handle || "?").charAt(0)).toUpperCase()}</span>}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.full_name || r.handle || "Deleted user"}{r.handle ? <span style={{ color: T.tertiary, fontWeight: 400 }}> @{r.handle}</span> : null}</div>
+                <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 2 }}>{r.paid_at ? new Date(r.paid_at).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : ""}{r.paid_by_handle || r.paid_by_name ? ` · by ${r.paid_by_handle ? "@" + r.paid_by_handle : r.paid_by_name}` : ""}</div>
+              </div>
+              <div style={{ textAlign: "right", flexShrink: 0 }}>
+                <div style={{ fontFamily: sans, fontSize: 15, color: T.green, fontWeight: 800 }}>{usd(r.amount_cents)}</div>
+                <div style={{ fontFamily: sans, fontSize: 8, fontWeight: 700, letterSpacing: 0.8, color: r.is_award ? T.copper : T.tertiary, marginTop: 2 }}>{methodLabel(r)}</div>
+              </div>
+            </div>
+            {(r.bounty_titles && r.bounty_titles.length > 0) && (
+              <div style={{ fontFamily: serif, fontSize: 12, color: T.warmStone, marginTop: 8, lineHeight: 1.4 }}>Cleared {r.submission_count} submission{r.submission_count === 1 ? "" : "s"}: {r.bounty_titles.join(" · ")}</div>
+            )}
+            {r.is_award && <div style={{ fontFamily: serif, fontSize: 12, color: T.warmStone, marginTop: 8 }}>Direct award — not tied to a bounty submission.</div>}
+            {(r.reference || r.notes) && (
+              <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, marginTop: 6, lineHeight: 1.4 }}>{r.reference ? `Ref: ${r.reference}` : ""}{r.reference && r.notes ? " · " : ""}{r.notes || ""}</div>
+            )}
+            {r.shopify_gift_card_id && <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, marginTop: 4 }}>Gift card #{String(r.shopify_gift_card_id).slice(-6)}</div>}
+          </div>
+        ))}
+      {hasMore && <button onClick={loadMore} disabled={loadingMore} style={{ width: "100%", padding: "11px", borderRadius: 8, background: "none", border: `1px solid ${T.charcoal}`, color: T.copper, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>{loadingMore ? "LOADING…" : "LOAD MORE"}</button>}
+    </div>
+  );
+}
+
 /* ─── AwardUserModal ─── issue a gift card (or record a manual payout) to
    ANY user for an admin-chosen amount, with no bounty involved. Search a
    user, type a dollar amount, submit. Routes through the same onIssuePayout
@@ -37836,7 +37987,7 @@ function BountyIssuePayoutModal({ row, method, onLoadPendingSubmissionsForUser, 
   );
 }
 
-function BountiesAdminScreen({ bounties, reviewQueue, onLoadReviewQueue, onBack, onOpenEditor, onNewBounty, onOpenReview, onLoadPayoutQueue, onLoadPendingSubmissionsForUser, onIssuePayout, onRefreshGiftCard, onLoadClaimants, onSearchUsers }) {
+function BountiesAdminScreen({ bounties, reviewQueue, onLoadReviewQueue, onBack, onOpenEditor, onNewBounty, onOpenReview, onLoadPayoutQueue, onLoadPendingSubmissionsForUser, onIssuePayout, onRefreshGiftCard, onLoadClaimants, onSearchUsers, onLoadPaidLedger, onLoadPaidLedgerTotals, onViewUser }) {
   const [tab, setTab] = useState("review"); // review | draft | open | completed | archived | payouts
   // Approved-submission map for the COMPLETED tab. Keyed by bounty_id →
   // array of winner rows ({user_id, handle, full_name, avatar_url,
@@ -37937,6 +38088,7 @@ function BountiesAdminScreen({ bounties, reviewQueue, onLoadReviewQueue, onBack,
   const TABS = [
     { key: "review", label: "REVIEW", count: counts.review, urgent: true },
     { key: "payouts", label: "PAYOUTS" },
+    { key: "ledger", label: "PAID LEDGER" },
     { key: "draft", label: "DRAFTS", count: counts.draft },
     { key: "open", label: "OPEN", count: counts.open },
     { key: "completed", label: "COMPLETED", count: counts.completed },
@@ -38029,7 +38181,10 @@ function BountiesAdminScreen({ bounties, reviewQueue, onLoadReviewQueue, onBack,
             onSearchUsers={onSearchUsers}
           />
         )}
-        {tab !== "review" && tab !== "payouts" && filtered.length === 0 && (
+        {tab === "ledger" && (
+          <BountyPaidLedger onLoadLedger={onLoadPaidLedger} onLoadTotals={onLoadPaidLedgerTotals} onSearchUsers={onSearchUsers} onViewUser={onViewUser} />
+        )}
+        {tab !== "review" && tab !== "payouts" && tab !== "ledger" && filtered.length === 0 && (
           <div style={{ padding: "40px 16px", textAlign: "center" }}>
             <span style={{ fontFamily: serif, fontSize: 13, color: T.tertiary, lineHeight: 1.6, display: "block" }}>
               {tab === "draft" ? "No drafts. Tap NEW to start one." :
@@ -55446,6 +55601,23 @@ export default function Trailhead() {
       return { ok: true, data: data || [] };
     } catch (e) { console.error("[loadAdminPayoutQueue] failed", e); return { error: "Network error" }; }
   };
+  // Paid ledger — every bounty_payouts row (gift card / manual / direct award)
+  // with recipient, payer, and the bounties cleared. Filters are server-side
+  // so totals and rows always agree.
+  const loadBountyPaidLedger = async ({ limit = 100, offset = 0, user_id = null, method = null, from = null, to = null, q = null } = {}) => {
+    try {
+      const { data, error } = await supabase.rpc("admin_bounty_paid_ledger", { p_limit: limit, p_offset: offset, p_user_id: user_id, p_method: method, p_from: from, p_to: to, p_q: q });
+      if (error) { console.error("[loadBountyPaidLedger]", error); return { error: error.message }; }
+      return { ok: true, data: data || [] };
+    } catch (e) { return { error: "Network error" }; }
+  };
+  const loadBountyPaidLedgerTotals = async ({ user_id = null, method = null, from = null, to = null, q = null } = {}) => {
+    try {
+      const { data, error } = await supabase.rpc("admin_bounty_paid_ledger_totals", { p_user_id: user_id, p_method: method, p_from: from, p_to: to, p_q: q });
+      if (error) { console.error("[loadBountyPaidLedgerTotals]", error); return { error: error.message }; }
+      return { ok: true, data: Array.isArray(data) ? data[0] : data };
+    } catch (e) { return { error: "Network error" }; }
+  };
   const loadPendingSubmissionsForUser = async (userId) => {
     try {
       const { data, error } = await supabase
@@ -62210,6 +62382,9 @@ export default function Trailhead() {
                       onRefreshGiftCard={refreshGiftCardBalance}
                       onLoadClaimants={loadBountyClaimants}
                       onSearchUsers={searchUsers}
+                      onLoadPaidLedger={loadBountyPaidLedger}
+                      onLoadPaidLedgerTotals={loadBountyPaidLedgerTotals}
+                      onViewUser={openUserProfile}
                     />)
                 : adminSubScreen === "partners"
                 ? (editingContentPartnerId !== null
