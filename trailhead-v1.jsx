@@ -45511,6 +45511,24 @@ function LoginScreen({ onLogin, onGoToSignup, onGuestEnter }) {
               <p style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, margin: "6px 0 0", opacity: 0.7 }}>Read-only. Sign in to post, like, comment, or view ranks.</p>
             </div>
           )}
+
+          {/* Store badges — web only (pointless inside the native app). The
+              Play badge appears once PLAY_STORE_URL is set. */}
+          {!(typeof isNativePlatform === "function" && isNativePlatform()) && (
+            <div style={{ textAlign: "center", marginTop: 22, paddingTop: 16, borderTop: `1px solid ${T.charcoal}` }}>
+              <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700, marginBottom: 10 }}>GET THE APP</div>
+              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <a href={APP_STORE_URL} target="_blank" rel="noopener noreferrer" style={{ display: "block", height: 40 }}>
+                  <img src="/app-store-badge.svg" alt="Download on the App Store" style={{ height: 40, width: "auto", display: "block" }} />
+                </a>
+                {PLAY_STORE_URL && (
+                  <a href={PLAY_STORE_URL} target="_blank" rel="noopener noreferrer" style={{ display: "block", height: 40 }}>
+                    <img src="/google-play-badge.png" alt="Get it on Google Play" style={{ height: 40, width: "auto", display: "block" }} />
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -48790,6 +48808,9 @@ const APP_STORE_ID = "6812875250";
 const APP_STORE_URL = APP_STORE_ID
   ? `https://apps.apple.com/app/id${APP_STORE_ID}`
   : "https://apps.apple.com/us/search?term=trailhub%20lone%20peak";
+// Google Play — set once the Android app is approved; the badge stays hidden
+// while empty. Will be https://play.google.com/store/apps/details?id=com.lonepeakoverland.trailhub
+const PLAY_STORE_URL = "";
 const TRAILHEAD_TOS_VERSION = "2026-05-20";
 const TRAILHEAD_TOS_BODY = `TRAILHUB TERMS OF SERVICE
 Last updated: May 2026
