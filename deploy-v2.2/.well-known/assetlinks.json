@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.lonepeakoverland.trailhub",
+      "sha256_cert_fingerprints": [
+        "B0:C5:37:63:1A:93:D7:04:7F:66:68:4A:2F:21:3A:1E:C6:4E:3E:ED:B1:39:75:CD:78:B1:59:4F:7D:0A:46:EE"
+      ]
+    }
+  }
+]
