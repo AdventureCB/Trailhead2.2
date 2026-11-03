@@ -8403,7 +8403,7 @@ function ForumUrlSectionEditor({ label, url, onChange, onRemove, onMoveUp, onMov
 const MEMBERS_ONLY_CHOICES = [[0, "Off — public"], [24, "24 hours"], [72, "3 days"], [168, "1 week"], [336, "2 weeks"], [720, "30 days"]];
 const POLL_CLOSE_CHOICES = [[0, "Never closes"], [24, "Closes in 1 day"], [72, "Closes in 3 days"], [168, "Closes in 1 week"], [336, "Closes in 2 weeks"], [720, "Closes in 30 days"]];
 const newPollOptionId = () => "o_" + Math.random().toString(36).slice(2, 8);
-function ForumPollSectionEditor({ question, options, multi, closeHours, closesAt, onChange, onRemove, onMoveUp, onMoveDown }) {
+function ForumPollSectionEditor({ question, options, multi, allowCustom, closeHours, closesAt, onChange, onRemove, onMoveUp, onMoveDown }) {
   const opts = Array.isArray(options) ? options : [];
   const field = { width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none" };
   const setOpt = (id, label) => onChange({ options: opts.map(o => o.id === id ? { ...o, label } : o) });
@@ -8436,6 +8436,9 @@ function ForumPollSectionEditor({ question, options, multi, closeHours, closesAt
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: sans, fontSize: 11, color: T.warmStone, cursor: "pointer" }}>
           <input type="checkbox" checked={!!multi} onChange={(e) => onChange({ multi: e.target.checked })} style={{ accentColor: T.copper }} /> Allow multiple answers
         </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: sans, fontSize: 11, color: T.warmStone, cursor: "pointer" }}>
+          <input type="checkbox" checked={!!allowCustom} onChange={(e) => onChange({ allowCustom: e.target.checked })} style={{ accentColor: T.copper }} /> Voters can add their own answer
+        </label>
         <select value={closeHours == null ? 0 : closeHours} onChange={(e) => onChange({ closeHours: Number(e.target.value) })} style={{ flex: 1, minWidth: 150, padding: "8px 10px", borderRadius: 8, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: sans, fontSize: 12 }}>
           {keepLabel && <option value={-1}>{keepLabel}</option>}
           {POLL_CLOSE_CHOICES.map(([h, l]) => <option key={h} value={h}>{l}</option>)}
@@ -8455,8 +8458,15 @@ function ForumPollCard({ threadId, poll, currentUserId, isGuest, onGuestTap, isA
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [peek, setPeek] = useState(false);
+  // Write-in answers: the RPC appends to the thread's section; keep a local
+  // copy so the new option shows immediately even before the thread prop
+  // refreshes via realtime.
+  const [extraOptions, setExtraOptions] = useState([]);
+  const [customText, setCustomText] = useState("");
+  const [customOpen, setCustomOpen] = useState(false);
   const pollId = poll.pollId;
-  const options = Array.isArray(poll.options) ? poll.options.filter(o => o && o.label) : [];
+  const baseOptions = Array.isArray(poll.options) ? poll.options.filter(o => o && o.label) : [];
+  const options = [...baseOptions, ...extraOptions.filter(e => !baseOptions.some(b => b.id === e.id))];
   const closed = !!(poll.closesAt && new Date(poll.closesAt).getTime() <= Date.now());
   useEffect(() => {
     let cancelled = false;
@@ -8518,6 +8528,27 @@ function ForumPollCard({ threadId, poll, currentUserId, isGuest, onGuestTap, isA
     }
     setBusy(false);
   };
+  const addCustom = async () => {
+    const label = customText.trim();
+    if (!label || busy) return;
+    if (isGuest || !currentUserId) { onGuestTap && onGuestTap(); return; }
+    setBusy(true);
+    try {
+      const { data, error } = await supabase.rpc("forum_poll_add_option", { p_thread_id: threadId, p_poll_id: pollId, p_label: label });
+      if (error) throw error;
+      const id = data && data.id;
+      if (!id) throw new Error("no id");
+      if (!options.some(o => o.id === id)) setExtraOptions(prev => [...prev, { id, label: data.label || label, custom: true }]);
+      setCustomText(""); setCustomOpen(false);
+      setBusy(false);
+      await vote(id);
+      return;
+    } catch (e) {
+      console.error("[forum_poll_add_option]", e);
+      try { window.dispatchEvent(new CustomEvent("trailhead:upload_rejected", { detail: { message: (e && e.message) || "Couldn't add your answer." } })); } catch (_) {}
+    }
+    setBusy(false);
+  };
   const closesLabel = poll.closesAt ? new Date(poll.closesAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : null;
   return (
     <div style={{ margin: "14px 0", padding: 14, borderRadius: 12, background: T.darkCard, border: `1px solid ${T.charcoal}` }}>
@@ -8537,11 +8568,25 @@ function ForumPollCard({ threadId, poll, currentUserId, isGuest, onGuestTap, isA
             <span style={{ position: "relative", display: "flex", flexShrink: 0 }}>
               {picked ? <CheckCircle size={16} color={T.copper} /> : <CircleDashed size={16} color={T.tertiary} />}
             </span>
-            <span style={{ position: "relative", flex: 1, fontFamily: serif, fontSize: 14, color: picked ? T.white : T.warmStone, lineHeight: 1.3 }}>{o.label}</span>
+            <span style={{ position: "relative", flex: 1, fontFamily: serif, fontSize: 14, color: picked ? T.white : T.warmStone, lineHeight: 1.3 }}>{o.label}{o.custom && <span style={{ marginLeft: 6, fontFamily: sans, fontSize: 8, fontWeight: 700, letterSpacing: 0.8, color: T.tertiary }}>WRITE-IN</span>}</span>
             {showResults && <span style={{ position: "relative", fontFamily: sans, fontSize: 12, fontWeight: 700, color: picked ? T.copper : T.tertiary, flexShrink: 0 }}>{pct}%</span>}
           </button>
         );
       })}
+      {poll.allowCustom && !closed && (
+        customOpen ? (
+          <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+            <input value={customText} onChange={e => setCustomText(e.target.value)} onKeyDown={e => { if (e.key === "Enter") addCustom(); }} maxLength={80} placeholder="Your answer…" autoFocus style={{ flex: 1, padding: "10px 12px", borderRadius: 8, background: T.darkBg, border: `1px solid ${T.copper}`, color: T.white, fontFamily: serif, fontSize: 14, outline: "none" }} />
+            <button onClick={addCustom} disabled={busy || !customText.trim()} style={{ padding: "0 14px", borderRadius: 8, background: customText.trim() ? T.copper : T.charcoal, border: "none", color: customText.trim() ? T.darkBg : T.tertiary, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer" }}>ADD</button>
+            <button onClick={() => { setCustomOpen(false); setCustomText(""); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex" }}><X size={14} color={T.tertiary} /></button>
+          </div>
+        ) : (
+          <button onClick={() => { if (isGuest || !currentUserId) { onGuestTap && onGuestTap(); return; } setCustomOpen(true); }} style={{ width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 10, padding: "11px 12px", marginBottom: 6, borderRadius: 8, background: "none", border: `1px dashed ${T.copper}60`, cursor: "pointer" }}>
+            <Plus size={16} color={T.copper} />
+            <span style={{ fontFamily: serif, fontSize: 14, color: T.copper }}>Add your own answer</span>
+          </button>
+        )
+      )}
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8, fontFamily: sans, fontSize: 11, color: T.tertiary }}>
         <span>{loaded ? `${voters} vote${voters === 1 ? "" : "s"}` : "…"}</span>
         {closesLabel && !closed && <span>· closes {closesLabel}</span>}
@@ -9183,7 +9228,7 @@ function ForumScreen({ pendingThread, onPendingHandled, onLoadThreadTeaser, pend
       ? thread.sections.map(s => (s && s.type === "url")
           ? { id: newSectionId(), type: "url", label: s.label || "", url: s.url || "" }
           : (s && s.type === "poll")
-          ? { id: newSectionId(), type: "poll", pollId: s.pollId || newSectionId(), question: s.question || "", options: Array.isArray(s.options) ? s.options.map(o => ({ id: o.id || newPollOptionId(), label: o.label || "" })) : [], multi: !!s.multi, closesAt: s.closesAt || null, closeHours: s.closesAt ? -1 : 0 }
+          ? { id: newSectionId(), type: "poll", pollId: s.pollId || newSectionId(), question: s.question || "", options: Array.isArray(s.options) ? s.options.map(o => ({ id: o.id || newPollOptionId(), label: o.label || "", custom: !!o.custom, added_by: o.added_by || null })) : [], multi: !!s.multi, allowCustom: !!s.allowCustom, closesAt: s.closesAt || null, closeHours: s.closesAt ? -1 : 0 }
           : { id: newSectionId(), subheading: s.subheading || "", body: s.body || "", videoUrl: s.videoUrl || "" })
       : [{ id: newSectionId(), subheading: "", body: thread.body || "" }];
     setEditSections(fromSections);
@@ -9220,16 +9265,16 @@ function ForumScreen({ pendingThread, onPendingHandled, onLoadThreadTeaser, pend
   const [ntInterestOverrides, setNtInterestOverrides] = useState({});
   const addUrlSection = () => setNtSections(prev => [...prev, { id: newSectionId(), type: "url", label: "", url: "" }]);
   const addEditUrlSection = () => setEditSections(prev => [...prev, { id: newSectionId(), type: "url", label: "", url: "" }]);
-  const newPollSection = () => ({ id: newSectionId(), type: "poll", pollId: "poll_" + Math.random().toString(36).slice(2, 10), question: "", options: [{ id: newPollOptionId(), label: "" }, { id: newPollOptionId(), label: "" }], multi: false, closesAt: null, closeHours: 0 });
+  const newPollSection = () => ({ id: newSectionId(), type: "poll", pollId: "poll_" + Math.random().toString(36).slice(2, 10), question: "", options: [{ id: newPollOptionId(), label: "" }, { id: newPollOptionId(), label: "" }], multi: false, allowCustom: false, closesAt: null, closeHours: 0 });
   const addPollSection = () => setNtSections(prev => [...prev, newPollSection()]);
   const addEditPollSection = () => setEditSections(prev => [...prev, newPollSection()]);
   // Editor poll → persisted section. Drops the poll when it's incomplete.
   const finalizePollSection = (s) => {
     const question = (s.question || "").trim();
-    const options = (Array.isArray(s.options) ? s.options : []).map(o => ({ id: o.id, label: (o.label || "").trim() })).filter(o => o.label);
+    const options = (Array.isArray(s.options) ? s.options : []).map(o => { const x = { id: o.id, label: (o.label || "").trim() }; if (o.custom) { x.custom = true; if (o.added_by) x.added_by = o.added_by; } return x; }).filter(o => o.label);
     if (!question || options.length < 2) return null;
     const closesAt = s.closeHours === -1 ? (s.closesAt || null) : (s.closeHours > 0 ? new Date(Date.now() + s.closeHours * 3600 * 1000).toISOString() : null);
-    return { type: "poll", pollId: s.pollId, question, options, multi: !!s.multi, closesAt };
+    return { type: "poll", pollId: s.pollId, question, options, multi: !!s.multi, allowCustom: !!s.allowCustom, closesAt };
   };
   const updateSection = (id, patch) => setNtSections(prev => prev.map(s => s.id === id ? { ...s, ...patch } : s));
   const addSection = () => setNtSections(prev => [...prev, { id: newSectionId(), subheading: "", body: "", videoUrl: "" }]);
@@ -9589,7 +9634,7 @@ function ForumScreen({ pendingThread, onPendingHandled, onLoadThreadTeaser, pend
               {ntSections.map((s, i) => s.type === "url" ? (
                 <ForumUrlSectionEditor key={s.id} label={s.label} url={s.url} onChange={(patch) => updateSection(s.id, patch)} onRemove={() => removeSection(s.id)} onMoveUp={i > 0 ? () => moveSection(s.id, -1) : null} onMoveDown={i < ntSections.length - 1 ? () => moveSection(s.id, 1) : null} />
               ) : s.type === "poll" ? (
-                <ForumPollSectionEditor key={s.id} question={s.question} options={s.options} multi={s.multi} closeHours={s.closeHours} closesAt={s.closesAt} onChange={(patch) => updateSection(s.id, patch)} onRemove={() => removeSection(s.id)} onMoveUp={i > 0 ? () => moveSection(s.id, -1) : null} onMoveDown={i < ntSections.length - 1 ? () => moveSection(s.id, 1) : null} />
+                <ForumPollSectionEditor key={s.id} question={s.question} options={s.options} multi={s.multi} allowCustom={s.allowCustom} closeHours={s.closeHours} closesAt={s.closesAt} onChange={(patch) => updateSection(s.id, patch)} onRemove={() => removeSection(s.id)} onMoveUp={i > 0 ? () => moveSection(s.id, -1) : null} onMoveDown={i < ntSections.length - 1 ? () => moveSection(s.id, 1) : null} />
               ) : (
                 <ForumSectionEditor
                   key={s.id}
@@ -10570,7 +10615,7 @@ function ForumScreen({ pendingThread, onPendingHandled, onLoadThreadTeaser, pend
                   {editSections.map((s, i) => s.type === "url" ? (
                     <ForumUrlSectionEditor key={s.id} label={s.label} url={s.url} onChange={(patch) => updateEditSection(s.id, patch)} onRemove={() => removeEditSection(s.id)} onMoveUp={i > 0 ? () => moveEditSection(s.id, -1) : null} onMoveDown={i < editSections.length - 1 ? () => moveEditSection(s.id, 1) : null} />
                   ) : s.type === "poll" ? (
-                    <ForumPollSectionEditor key={s.id} question={s.question} options={s.options} multi={s.multi} closeHours={s.closeHours} closesAt={s.closesAt} onChange={(patch) => updateEditSection(s.id, patch)} onRemove={() => removeEditSection(s.id)} onMoveUp={i > 0 ? () => moveEditSection(s.id, -1) : null} onMoveDown={i < editSections.length - 1 ? () => moveEditSection(s.id, 1) : null} />
+                    <ForumPollSectionEditor key={s.id} question={s.question} options={s.options} multi={s.multi} allowCustom={s.allowCustom} closeHours={s.closeHours} closesAt={s.closesAt} onChange={(patch) => updateEditSection(s.id, patch)} onRemove={() => removeEditSection(s.id)} onMoveUp={i > 0 ? () => moveEditSection(s.id, -1) : null} onMoveDown={i < editSections.length - 1 ? () => moveEditSection(s.id, 1) : null} />
                   ) : (
                     <ForumSectionEditor
                       key={s.id}
