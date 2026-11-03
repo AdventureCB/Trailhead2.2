@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { createPortal } from "react-dom";
 import { Heart, MessageCircle, MapPin, Clock, Mountain, ChevronRight, ChevronLeft, ChevronDown, Search, Plus, Home, Compass, Map, Wrench, Trophy, AlertTriangle, Navigation, Star, Share2, Bookmark, MoreHorizontal, MoreVertical, ArrowUp, ArrowDown, ArrowRight, Users, Radio, CloudSun, CheckCircle, Target, Gift, ChevronUp, ExternalLink, Lock, Globe, Shield, ShieldCheck, UserPlus, UserCheck, Settings, Camera, Eye, EyeOff, X, Bell, ThumbsUp, UserPlus as UserPlusIcon, AtSign, Mail, Send, Image, Smartphone, Trash2, Edit2, Edit3, Award, Zap, TrendingUp, Flame, DollarSign, Route, Video, Play, Maximize2, Minimize2, LogOut, Binoculars, Layers, Tent, BookOpen, Link2, PlusSquare, Disc, Cog, MoveVertical, CircleDashed, Anchor, Tag, Flag, FileText, ZoomIn, ZoomOut, Crop, BarChart3, RefreshCw, CloudOff } from "lucide-react";
 import { supabase, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "./supabase-client.js";
-import { registerNativePush, logoutNativePush, requestNativePushPermission, getNativePushPermission, getNativePushStatus, optInNativePush, isNativePlatform, getPlatform, openOAuthUrl, closeInAppBrowser, NATIVE_OAUTH_REDIRECT, signInWithApple } from "./native-bridge.js";
+import { registerNativePush, logoutNativePush, requestNativePushPermission, getNativePushPermission, getNativePushStatus, optInNativePush, setNativePushTags, isNativePlatform, getPlatform, openOAuthUrl, closeInAppBrowser, NATIVE_OAUTH_REDIRECT, signInWithApple } from "./native-bridge.js";
 
 // Sign in with Apple, web + native. Native: the ASAuthorization sheet → identity
 // token → signInWithIdToken (no browser). Web: the standard Apple OAuth redirect.
@@ -26247,6 +26247,7 @@ function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, init
               {prefToggle("Replies", "When someone replies to your threads", "replies", MessageCircle, T.copper)}
               {prefToggle("Follows", "When someone follows you or requests to follow", "follows", UserPlus, T.green)}
               {prefToggle("Mentions", "When someone mentions you in a post or comment", "mentions", AtSign, T.copper)}
+              {prefToggle("Tips & highlights", "Occasional tips, new features, and picks near you — a couple a week at most", "tips", Bell, T.copper)}
             </div>
             <div ref={pushToggleRef} style={{ marginTop: 16, background: T.darkCard, borderRadius: 12, padding: 16, border: pushToggleHighlight ? `2px solid ${T.red}` : "2px solid transparent", boxShadow: pushToggleHighlight ? `0 0 0 4px ${T.red}30` : "none", transition: "border 0.4s, box-shadow 0.4s" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -57346,7 +57347,7 @@ export default function Trailhead() {
   // subscription state in an effect below — if the user revoked
   // permission OR the subscription was wiped by the browser (clear-site-
   // data, PWA reinstall, etc.) we flip `push` back to false on next boot.
-  const NOTIF_PREFS_DEFAULT = { likes: true, comments: true, replies: true, follows: true, mentions: true, push: false };
+  const NOTIF_PREFS_DEFAULT = { likes: true, comments: true, replies: true, follows: true, mentions: true, tips: true, push: false };
   const [notifPrefs, setNotifPrefsState] = useState(() => {
     if (typeof localStorage === "undefined") return NOTIF_PREFS_DEFAULT;
     try {
@@ -57455,6 +57456,50 @@ export default function Trailhead() {
   // by the convoy_rsvps realtime subscription, and mutated optimistically by
   // setConvoyRsvp below. Keying by user_id (not handle) keeps renames safe.
   const [convoyRsvps, setConvoyRsvps] = useState({}); // { [postId]: { [userId]: { status, name, handle, avatarUrl, initial } } }
+  // ─── OneSignal segmentation tags (native only) ───
+  // Pushed whenever the inputs change (debounced) so segments + Journeys in
+  // the OneSignal dashboard can target real app state: rank, builds, trip
+  // reports, home state, convoys, interest lists, and the user's own
+  // "Tips & highlights" opt-in (notif_tips) which every lifecycle Journey
+  // should require. Device-level, so a shared phone follows the signed-in user.
+  const [myInterestSlugs, setMyInterestSlugs] = useState(null);
+  useEffect(() => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid || !(typeof isNativePlatform === "function" && isNativePlatform())) { setMyInterestSlugs(null); return; }
+    let cancelled = false;
+    supabase.from("interest_signups").select("list:interest_lists(slug)").eq("user_id", uid)
+      .then(({ data }) => { if (!cancelled) setMyInterestSlugs((data || []).map(r => r.list && r.list.slug).filter(Boolean)); }, () => { if (!cancelled) setMyInterestSlugs([]); });
+    return () => { cancelled = true; };
+  }, [supabaseSession && supabaseSession.user && supabaseSession.user.id, interestNav && interestNav.slug]);
+  const lastPushTagsRef = useRef("");
+  useEffect(() => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid || !currentProfile || !(typeof isNativePlatform === "function" && isNativePlatform())) return;
+    const published = (tripReports || []).filter(t => t && t.status === "published" && (t.kind || "report") === "report");
+    const latestTrip = published.slice().sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))[0];
+    const convoysJoined = Object.values(convoyRsvps || {}).filter(m => m && m[uid] && m[uid].status === "going").length;
+    const points = Number(currentProfile.points) || 0;
+    const tags = {
+      rank: (getUserRank(points) || {}).name || "Scout",
+      points: String(points),
+      role: currentProfile.role || "user",
+      is_ambassador: !!isAmbassador,
+      has_build: (userBuilds || []).length > 0,
+      builds: String((userBuilds || []).length),
+      trip_reports: String(published.length),
+      last_trip_at: latestTrip && latestTrip.created_at ? String(latestTrip.created_at).slice(0, 10) : null,
+      state: (latestTrip && latestTrip.state_code) || null,
+      convoys_joined: String(convoysJoined),
+      interest_lists: Array.isArray(myInterestSlugs) && myInterestSlugs.length ? myInterestSlugs.join(",") : null,
+      notif_tips: notifPrefs.tips !== false,
+      signup_date: supabaseSession.user.created_at ? String(supabaseSession.user.created_at).slice(0, 10) : null,
+      platform: typeof getPlatform === "function" ? getPlatform() : "native",
+    };
+    const key = JSON.stringify(tags);
+    if (key === lastPushTagsRef.current) return;
+    const t = setTimeout(() => { lastPushTagsRef.current = key; setNativePushTags(tags); }, 3000);
+    return () => clearTimeout(t);
+  }, [supabaseSession && supabaseSession.user && supabaseSession.user.id, currentProfile && currentProfile.points, currentProfile && currentProfile.role, isAmbassador, (userBuilds || []).length, (tripReports || []).length, convoyRsvps, myInterestSlugs, notifPrefs.tips]);
 
   // Recovery alerts are derived from the live posts feed (type="RECOVERY"
   // posts that aren't resolved yet). The posts table is the source of

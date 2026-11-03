@@ -345,6 +345,27 @@ export async function optInNativePush() {
   try { await OneSignal.User.pushSubscription.optIn(); return true; } catch (_) { return false; }
 }
 
+// Segmentation tags → OneSignal (native only). Values are stringified; null /
+// undefined keys are REMOVED so a tag never goes stale. The app computes the
+// set at root (rank, has_build, trip_reports, state, notif_tips, …) and
+// re-sends when it changes; OneSignal segments + Journeys key off these.
+export async function setNativePushTags(tags) {
+  if (!isNativePlatform() || !tags || typeof tags !== "object") return false;
+  initOneSignal();
+  let OneSignal = osApi();
+  for (let i = 0; !OneSignal && i < 20; i++) { await new Promise(r => setTimeout(r, 300)); OneSignal = osApi(); }
+  if (!OneSignal || !OneSignal.User) return false;
+  const add = {}, remove = [];
+  Object.keys(tags).forEach(k => {
+    const v = tags[k];
+    if (v === null || v === undefined || v === "") remove.push(k);
+    else add[k] = typeof v === "boolean" ? (v ? "true" : "false") : String(v);
+  });
+  try { if (Object.keys(add).length) OneSignal.User.addTags(add); } catch (_) { return false; }
+  try { if (remove.length) OneSignal.User.removeTags(remove); } catch (_) {}
+  return true;
+}
+
 // Bind this device's push identity to the Supabase user id via OneSignal's
 // External ID, so send-push can target `external_id` without us storing tokens.
 // Called from the app whenever the signed-in user is known. Polls for the
