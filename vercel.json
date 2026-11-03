@@ -76,6 +76,10 @@
       "destination": "/app.html"
     },
     {
+      "source": "/delete-account",
+      "destination": "/delete-account.html"
+    },
+    {
       "source": "/privacy",
       "destination": "/privacy.html"
     },

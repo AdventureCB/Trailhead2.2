@@ -3,11 +3,22 @@ import { createRoot } from "react-dom/client";
 import { createPortal } from "react-dom";
 import { Heart, MessageCircle, MapPin, Clock, Mountain, ChevronRight, ChevronLeft, ChevronDown, Search, Plus, Home, Compass, Map, Wrench, Trophy, AlertTriangle, Navigation, Star, Share2, Bookmark, MoreHorizontal, MoreVertical, ArrowUp, ArrowDown, ArrowRight, Users, Radio, CloudSun, CheckCircle, Target, Gift, ChevronUp, ExternalLink, Lock, Globe, Shield, ShieldCheck, UserPlus, UserCheck, Settings, Camera, Eye, EyeOff, X, Bell, ThumbsUp, UserPlus as UserPlusIcon, AtSign, Mail, Send, Image, Smartphone, Trash2, Edit2, Edit3, Award, Zap, TrendingUp, Flame, DollarSign, Route, Video, Play, Maximize2, Minimize2, LogOut, Binoculars, Layers, Tent, BookOpen, Link2, PlusSquare, Disc, Cog, MoveVertical, CircleDashed, Anchor, Tag, Flag, FileText, ZoomIn, ZoomOut, Crop, BarChart3, RefreshCw, CloudOff } from "lucide-react";
 import { supabase, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "./supabase-client.js";
-import { registerNativePush, logoutNativePush, requestNativePushPermission, isNativePlatform, openOAuthUrl, closeInAppBrowser, NATIVE_OAUTH_REDIRECT, signInWithApple } from "./native-bridge.js";
+import { registerNativePush, logoutNativePush, requestNativePushPermission, isNativePlatform, getPlatform, openOAuthUrl, closeInAppBrowser, NATIVE_OAUTH_REDIRECT, signInWithApple } from "./native-bridge.js";
 
 // Sign in with Apple, web + native. Native: the ASAuthorization sheet → identity
 // token → signInWithIdToken (no browser). Web: the standard Apple OAuth redirect.
 async function startAppleAuth() {
+  // Android: no native Apple sheet (the plugin is iOS-only) → same in-app
+  // browser OAuth + custom-scheme return that Google uses on native.
+  if (isNativePlatform() && getPlatform() !== "ios") {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "apple",
+      options: { redirectTo: NATIVE_OAUTH_REDIRECT, skipBrowserRedirect: true },
+    });
+    if (error) return { error };
+    if (data && data.url) { try { await openOAuthUrl(data.url); } catch (e) { return { error: e }; } }
+    return { error: null };
+  }
   if (isNativePlatform()) {
     const res = await signInWithApple();
     if (res.error) {

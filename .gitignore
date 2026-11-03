@@ -35,3 +35,7 @@ skills-lock.json
 *.code-workspace
 *.pages
 *.pen
+android/app/src/main/assets/public/   # copy of deploy-v2.2 written by `npx cap copy android`
+android/app/release/
+android/*.hprof
+android/.idea/
