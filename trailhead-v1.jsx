@@ -10484,8 +10484,10 @@ function ForumScreen({ pendingThread, onPendingHandled, onLoadThreadTeaser, pend
         {/* Edit thread overlay — mobile-friendly, constrained to app width */}
         {editingThreadId === selectedThread.id && (
           <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: T.darkBg, zIndex: 500, overflowY: "auto", display: "flex", flexDirection: "column" }}>
-            {/* Header */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", borderBottom: `1px solid ${T.charcoal}`, flexShrink: 0 }}>
+            {/* Header — this overlay covers the whole viewport (it's positioned
+                against the app shell, not the scroll area), so it needs the
+                notch / status-bar inset like every other full-screen overlay. */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", paddingTop: "max(14px, env(safe-area-inset-top, 0px))", borderBottom: `1px solid ${T.charcoal}`, flexShrink: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <button onClick={() => { setEditingThreadId(null); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" }}>
                   <X size={20} color={T.white} strokeWidth={1.5} />
