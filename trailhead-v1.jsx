@@ -4929,7 +4929,7 @@ function UnifiedNotifPanel({ onClose, onViewUser, onGoToPost, onGoToBuild, onGoT
           ) : notifs.map((n) => {
             const Icon = n.icon;
             return (
-              <div key={n.id} onClick={() => { if (n.type === "bug_report") { onGoToAdminBugs && onGoToAdminBugs(); } else if (n.type === "content_report") { onGoToAdminReports && onGoToAdminReports(); } else if (n.type === "forum_bot_draft") { onGoToAdminBotDrafts && onGoToAdminBotDrafts(); } else if (n.forumThreadId) { onGoToForumThread && onGoToForumThread(n.forumThreadId); } else if (n.tripId) { onGoToTrip && onGoToTrip(n.tripId); } else if (n.buildId) { onGoToBuild && onGoToBuild(n.buildId, n.target); } else if (n.postId) { onGoToPost && onGoToPost(n.postId); } }} style={{ display: "flex", gap: 10, padding: "12px 16px", borderBottom: `1px solid ${T.charcoal}22`, cursor: "pointer", transition: "background 0.15s", position: "relative" }} onMouseEnter={(e) => e.currentTarget.style.background = `${T.charcoal}` } onMouseLeave={(e) => e.currentTarget.style.background = "transparent" }>
+              <div key={n.id} onClick={() => { if (n.type === "tip") { onClose && onClose(); try { window.dispatchEvent(new CustomEvent("trailhead:deeplink", { detail: { url: (n.target && String(n.target).startsWith("/")) ? n.target : "/" } })); } catch (_) {} } else if (n.type === "bug_report") { onGoToAdminBugs && onGoToAdminBugs(); } else if (n.type === "content_report") { onGoToAdminReports && onGoToAdminReports(); } else if (n.type === "forum_bot_draft") { onGoToAdminBotDrafts && onGoToAdminBotDrafts(); } else if (n.forumThreadId) { onGoToForumThread && onGoToForumThread(n.forumThreadId); } else if (n.tripId) { onGoToTrip && onGoToTrip(n.tripId); } else if (n.buildId) { onGoToBuild && onGoToBuild(n.buildId, n.target); } else if (n.postId) { onGoToPost && onGoToPost(n.postId); } }} style={{ display: "flex", gap: 10, padding: "12px 16px", borderBottom: `1px solid ${T.charcoal}22`, cursor: "pointer", transition: "background 0.15s", position: "relative" }} onMouseEnter={(e) => e.currentTarget.style.background = `${T.charcoal}` } onMouseLeave={(e) => e.currentTarget.style.background = "transparent" }>
                 <div style={{ width: 32, height: 32, borderRadius: "50%", background: `${n.iconColor}18`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2 }}>
                   <Icon size={14} color={n.iconColor} strokeWidth={1.8} />
                 </div>
@@ -8863,25 +8863,39 @@ function ForumScreen({ pendingThread, onPendingHandled, onLoadThreadTeaser, pend
     const { error } = await supabase.from("forum_thread_subscriptions").upsert({ thread_id: selectedThread.id, user_id: currentUserId, muted: !next }, { onConflict: "thread_id,user_id" });
     if (error) { console.error("[thread sub]", error); setThreadSubscribed(!next); }
   };
-  // Subcategory follow (bell on the subcategory page) → forum_subcategory_follows.
-  const [followedSubs, setFollowedSubs] = useState(null); // Set of slugs | null = not loaded
+  // Subcategory follow (bell on the subcategory page). Two kinds of subs:
+  //   • normal — on when the user has an (unmuted) forum_subcategory_follows row
+  //   • default-notify (admin-flagged category, e.g. Top Secret) — on for
+  //     everyone unless they have a MUTED row; the bell writes that row.
+  const [followedSubs, setFollowedSubs] = useState(null); // Set of slugs with unmuted rows
+  const [mutedSubs, setMutedSubs] = useState(new Set());
+  const [defaultNotifySubs, setDefaultNotifySubs] = useState(new Set());
   useEffect(() => {
-    if (!currentUserId) { setFollowedSubs(null); return; }
     let cancelled = false;
-    supabase.from("forum_subcategory_follows").select("subcategory_slug").eq("user_id", currentUserId)
-      .then(({ data }) => { if (!cancelled) setFollowedSubs(new Set((data || []).map(r => r.subcategory_slug))); }, () => { if (!cancelled) setFollowedSubs(new Set()); });
+    supabase.rpc("forum_default_notify_subs").then(({ data }) => { if (!cancelled) setDefaultNotifySubs(new Set(Array.isArray(data) ? data.map(r => (typeof r === "string" ? r : r.forum_default_notify_subs)).filter(Boolean) : [])); }, () => {});
+    if (!currentUserId) { setFollowedSubs(null); setMutedSubs(new Set()); return () => { cancelled = true; }; }
+    supabase.from("forum_subcategory_follows").select("subcategory_slug, muted").eq("user_id", currentUserId)
+      .then(({ data }) => { if (cancelled) return; const rows = data || []; setFollowedSubs(new Set(rows.filter(r => !r.muted).map(r => r.subcategory_slug))); setMutedSubs(new Set(rows.filter(r => r.muted).map(r => r.subcategory_slug))); }, () => { if (!cancelled) setFollowedSubs(new Set()); });
     return () => { cancelled = true; };
   }, [currentUserId]);
+  const isSubFollowed = (slug) => defaultNotifySubs.has(slug) ? !mutedSubs.has(slug) : !!(followedSubs && followedSubs.has(slug));
   const toggleSubFollow = async (slug) => {
     if (!currentUserId) { onGuestTap && onGuestTap(); return; }
     if (!slug) return;
-    const on = !!(followedSubs && followedSubs.has(slug));
-    setFollowedSubs(prev => { const n = new Set(prev || []); if (on) n.delete(slug); else n.add(slug); return n; });
-    const q = on
-      ? supabase.from("forum_subcategory_follows").delete().eq("subcategory_slug", slug).eq("user_id", currentUserId)
-      : supabase.from("forum_subcategory_follows").insert({ subcategory_slug: slug, user_id: currentUserId });
-    const { error } = await q;
-    if (error) { console.error("[sub follow]", error); setFollowedSubs(prev => { const n = new Set(prev || []); if (on) n.add(slug); else n.delete(slug); return n; }); }
+    const on = isSubFollowed(slug);
+    const isDefault = defaultNotifySubs.has(slug);
+    // optimistic
+    if (isDefault) setMutedSubs(prev => { const n = new Set(prev); if (on) n.add(slug); else n.delete(slug); return n; });
+    else setFollowedSubs(prev => { const n = new Set(prev || []); if (on) n.delete(slug); else n.add(slug); return n; });
+    let error = null;
+    if (isDefault) ({ error } = await supabase.from("forum_subcategory_follows").upsert({ subcategory_slug: slug, user_id: currentUserId, muted: on }, { onConflict: "subcategory_slug,user_id" }));
+    else if (on) ({ error } = await supabase.from("forum_subcategory_follows").delete().eq("subcategory_slug", slug).eq("user_id", currentUserId));
+    else ({ error } = await supabase.from("forum_subcategory_follows").upsert({ subcategory_slug: slug, user_id: currentUserId, muted: false }, { onConflict: "subcategory_slug,user_id" }));
+    if (error) {
+      console.error("[sub follow]", error);
+      if (isDefault) setMutedSubs(prev => { const n = new Set(prev); if (on) n.delete(slug); else n.add(slug); return n; });
+      else setFollowedSubs(prev => { const n = new Set(prev || []); if (on) n.add(slug); else n.delete(slug); return n; });
+    }
   };
   // Admin/ambassador CRUD UI state — modals + dropdown menus for categories
   // and subcategories. `showCatModal` is { mode: "create" | "edit", cat? }
@@ -10721,7 +10735,7 @@ function ForumScreen({ pendingThread, onPendingHandled, onLoadThreadTeaser, pend
           </div>
           {(() => {
             const slug = selectedSub.slug || forumSlugify(selectedSub.name || "");
-            const on = !!(followedSubs && followedSubs.has(slug));
+            const on = isSubFollowed(slug);
             return (
               <button onClick={() => toggleSubFollow(slug)} title={on ? "Following — tap to stop notifications for new threads" : "Notify me about new threads here"} style={{ display: "flex", alignItems: "center", gap: 5, padding: "8px 10px", borderRadius: 8, background: on ? `${T.copper}22` : "none", border: `1px solid ${on ? T.copper : T.charcoal}`, cursor: "pointer", marginRight: 8 }}>
                 <Bell size={13} color={on ? T.copper : T.tertiary} fill={on ? T.copper : "none"} />
@@ -11055,13 +11069,14 @@ function ForumCategoryModal({ modal, onClose, onAdd, onUpdate, colorOptions, ico
   const [icon, setIcon] = useState(initial.icon || iconOptions[0].name);
   const [adminOnly, setAdminOnly] = useState(!!initial.adminOnlyThreads);
   const [ambassadorsOnly, setAmbassadorsOnly] = useState(initial.visibility === "ambassadors");
+  const [defaultNotify, setDefaultNotify] = useState(!!initial.defaultNotify);
   const [saving, setSaving] = useState(false);
   const submit = async () => {
     if (!name.trim()) return;
     setSaving(true);
     const fn = isEdit
-      ? () => onUpdate(initial.id, { name: name.trim(), color, icon, admin_only_threads: adminOnly, visibility: ambassadorsOnly ? "ambassadors" : "public" })
-      : () => onAdd({ name: name.trim(), color, icon, adminOnlyThreads: adminOnly, visibility: ambassadorsOnly ? "ambassadors" : "public" });
+      ? () => onUpdate(initial.id, { name: name.trim(), color, icon, admin_only_threads: adminOnly, visibility: ambassadorsOnly ? "ambassadors" : "public", default_notify: defaultNotify })
+      : () => onAdd({ name: name.trim(), color, icon, adminOnlyThreads: adminOnly, visibility: ambassadorsOnly ? "ambassadors" : "public", defaultNotify });
     const res = await fn();
     setSaving(false);
     if (res && res.error) { alert(res.error); return; }
@@ -11102,6 +11117,18 @@ function ForumCategoryModal({ modal, onClose, onAdd, onUpdate, colorOptions, ico
             </div>
             <span style={{ width: 36, height: 20, borderRadius: 10, background: adminOnly ? T.copper : T.charcoal, position: "relative", flexShrink: 0, transition: "background 120ms" }}>
               <span style={{ position: "absolute", top: 2, left: adminOnly ? 18 : 2, width: 16, height: 16, borderRadius: "50%", background: T.white, transition: "left 120ms" }} />
+            </span>
+          </button>
+        )}
+        {isAdmin && (
+          <button onClick={() => setDefaultNotify(v => !v)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", marginBottom: 16, borderRadius: 8, background: defaultNotify ? `${T.copper}20` : T.darkBg, border: `1px solid ${defaultNotify ? T.copper : T.charcoal}`, cursor: "pointer" }}>
+            <Bell size={14} color={defaultNotify ? T.copper : T.tertiary} style={{ flexShrink: 0 }} />
+            <div style={{ flex: 1, textAlign: "left" }}>
+              <div style={{ fontFamily: sans, fontSize: 11, color: defaultNotify ? T.copper : T.white, fontWeight: 700, letterSpacing: 0.5 }}>NOTIFY EVERYONE OF NEW THREADS</div>
+              <div style={{ fontFamily: serif, fontSize: 10, color: T.tertiary, lineHeight: 1.3, marginTop: 2 }}>Every member is notified of new threads in this category unless they mute it with the bell. Use sparingly.</div>
+            </div>
+            <span style={{ width: 36, height: 20, borderRadius: 10, background: defaultNotify ? T.copper : T.charcoal, position: "relative", flexShrink: 0, transition: "background 120ms" }}>
+              <span style={{ position: "absolute", top: 2, left: defaultNotify ? 18 : 2, width: 16, height: 16, borderRadius: "50%", background: T.white, transition: "left 120ms" }} />
             </span>
           </button>
         )}
@@ -41018,6 +41045,109 @@ function DemoBountyProgressScreen({ onBack, onLoad, onOpenReview, currentUserId,
   );
 }
 
+/* ─── LifecycleRulesPanel ─── Admin → Push: the server-side "journeys".
+   Rules live in lifecycle_rules; the nightly pg_cron job sends them as
+   type='tip' notifications with a 2-per-7-days cap + per-rule cooldown +
+   the user's Tips & highlights switch. Edit copy / delay / enabled here;
+   DRY RUN shows how many would go out right now; PREVIEW sends it to you. */
+function LifecycleRulesPanel() {
+  const [rules, setRules] = useState(null);
+  const [stats, setStats] = useState({});
+  const [drafts, setDrafts] = useState({});
+  const [busy, setBusy] = useState("");
+  const [msg, setMsg] = useState("");
+  const load = async () => {
+    const [{ data: r }, { data: st }] = await Promise.all([
+      supabase.from("lifecycle_rules").select("*").order("sort_order"),
+      supabase.rpc("admin_lifecycle_stats"),
+    ]);
+    setRules(r || []);
+    const m = {}; (st || []).forEach(x => { m[x.rule_key] = x; }); setStats(m);
+    const d = {}; (r || []).forEach(x => { d[x.key] = { title: x.title, body: x.body, url: x.url, delay_days: x.delay_days, cooldown_days: x.cooldown_days }; }); setDrafts(d);
+  };
+  useEffect(() => { load(); }, []);
+  const save = async (key, patch) => {
+    setBusy(key); setMsg("");
+    const { error } = await supabase.from("lifecycle_rules").update({ ...patch, updated_at: new Date().toISOString() }).eq("key", key);
+    setBusy("");
+    if (error) { setMsg(error.message); return; }
+    await load();
+  };
+  const dryRun = async () => {
+    setBusy("dry"); setMsg("");
+    const { data, error } = await supabase.rpc("admin_run_lifecycle_messages", { p_dry_run: true });
+    setBusy("");
+    if (error) { setMsg(error.message); return; }
+    setMsg("Would send now: " + Object.entries(data || {}).map(([k, v]) => `${k} ${v}`).join(" · ") + " (runs daily at 17:00 UTC)");
+  };
+  const runNow = async () => {
+    if (typeof confirm === "function" && !confirm("Send all enabled lifecycle messages now (instead of waiting for tonight's run)?")) return;
+    setBusy("run"); setMsg("");
+    const { data, error } = await supabase.rpc("admin_run_lifecycle_messages", { p_dry_run: false });
+    setBusy("");
+    if (error) { setMsg(error.message); return; }
+    setMsg("Sent: " + Object.entries(data || {}).map(([k, v]) => `${k} ${v}`).join(" · "));
+    load();
+  };
+  const preview = async (key) => {
+    setBusy("prev" + key); setMsg("");
+    const { error } = await supabase.rpc("admin_lifecycle_preview", { p_rule_key: key });
+    setBusy("");
+    setMsg(error ? error.message : "Preview sent to you.");
+  };
+  const inputStyle = { width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 6, background: T.darkBg, border: `1px solid ${T.charcoal}`, color: T.white, fontFamily: serif, fontSize: 13, outline: "none" };
+  const lbl = { fontFamily: sans, fontSize: 9, color: T.tertiary, letterSpacing: 1, fontWeight: 600, display: "block", marginBottom: 3 };
+  return (
+    <div style={{ background: T.darkCard, borderRadius: 12, padding: 14, border: `1px solid ${T.charcoal}` }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+        <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.5, fontWeight: 700 }}>LIFECYCLE MESSAGES</span>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button onClick={dryRun} disabled={!!busy} style={{ padding: "6px 10px", borderRadius: 6, background: "none", border: `1px solid ${T.copper}`, color: T.copper, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer" }}>{busy === "dry" ? "…" : "DRY RUN"}</button>
+          <button onClick={runNow} disabled={!!busy} style={{ padding: "6px 10px", borderRadius: 6, background: T.red, border: "none", color: T.white, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer" }}>{busy === "run" ? "…" : "RUN NOW"}</button>
+        </div>
+      </div>
+      <div style={{ fontFamily: serif, fontSize: 11, color: T.tertiary, lineHeight: 1.4, marginBottom: 10 }}>Runs nightly. Each person gets at most 2 of these per week, each rule at most once per cooldown, nothing within 3 h of another notification, and nothing if they turned off Tips & highlights. Web and app.</div>
+      {msg && <div style={{ fontFamily: sans, fontSize: 11, color: /^(Would|Sent|Preview)/.test(msg) ? T.green : T.red, marginBottom: 10, lineHeight: 1.4 }}>{msg}</div>}
+      {rules === null ? <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>Loading…</div>
+        : rules.length === 0 ? <div style={{ fontFamily: sans, fontSize: 11, color: T.red }}>No rules — run the lifecycle migration.</div>
+        : rules.map(r => {
+          const d = drafts[r.key] || {};
+          const st = stats[r.key] || {};
+          const dirty = d.title !== r.title || d.body !== r.body || d.url !== r.url || Number(d.delay_days) !== r.delay_days || Number(d.cooldown_days) !== r.cooldown_days;
+          const setD = (patch) => setDrafts(prev => ({ ...prev, [r.key]: { ...prev[r.key], ...patch } }));
+          return (
+            <div key={r.key} style={{ borderTop: `1px solid ${T.charcoal}`, padding: "12px 0" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                <div onClick={() => save(r.key, { enabled: !r.enabled })} style={{ width: 40, height: 22, borderRadius: 11, background: r.enabled ? T.green : T.charcoal, position: "relative", cursor: "pointer", flexShrink: 0 }}>
+                  <div style={{ width: 18, height: 18, borderRadius: "50%", background: T.white, position: "absolute", top: 2, left: r.enabled ? 20 : 2, transition: "left 0.15s" }} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 700 }}>{r.label}</div>
+                  <div style={{ fontFamily: serif, fontSize: 10, color: T.tertiary }}>{r.description}</div>
+                </div>
+                <div style={{ fontFamily: sans, fontSize: 9, color: T.tertiary, textAlign: "right", flexShrink: 0 }}>7d <span style={{ color: T.white }}>{st.sent_7d || 0}</span> · 30d <span style={{ color: T.white }}>{st.sent_30d || 0}</span><br />tapped <span style={{ color: T.white }}>{st.clicked_30d || 0}</span></div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                <div><label style={lbl}>DAYS (N)</label><input type="number" min={1} max={90} value={d.delay_days ?? ""} onChange={e => setD({ delay_days: e.target.value })} style={inputStyle} /></div>
+                <div><label style={lbl}>COOLDOWN DAYS</label><input type="number" min={1} max={365} value={d.cooldown_days ?? ""} onChange={e => setD({ cooldown_days: e.target.value })} style={inputStyle} /></div>
+              </div>
+              <label style={lbl}>TITLE</label>
+              <input value={d.title || ""} onChange={e => setD({ title: e.target.value })} maxLength={60} style={{ ...inputStyle, marginBottom: 8 }} />
+              <label style={lbl}>MESSAGE</label>
+              <textarea value={d.body || ""} onChange={e => setD({ body: e.target.value })} maxLength={240} rows={2} style={{ ...inputStyle, marginBottom: 8, resize: "vertical" }} />
+              <label style={lbl}>OPENS (PATH)</label>
+              <input value={d.url || ""} onChange={e => setD({ url: e.target.value })} placeholder="/builds" style={{ ...inputStyle, marginBottom: 8, fontFamily: "ui-monospace, Menlo, monospace", fontSize: 11 }} />
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={() => save(r.key, { title: d.title, body: d.body, url: d.url, delay_days: Math.max(1, parseInt(d.delay_days, 10) || r.delay_days), cooldown_days: Math.max(1, parseInt(d.cooldown_days, 10) || r.cooldown_days) })} disabled={!dirty || busy === r.key} style={{ flex: 1, padding: "8px", borderRadius: 6, background: dirty ? T.copper : T.charcoal, border: "none", color: dirty ? T.darkBg : T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.8, cursor: dirty ? "pointer" : "default" }}>{busy === r.key ? "…" : "SAVE"}</button>
+                <button onClick={() => preview(r.key)} disabled={!!busy} style={{ flex: 1, padding: "8px", borderRadius: 6, background: "none", border: `1px solid ${T.charcoal}`, color: T.tertiary, fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: 0.8, cursor: "pointer" }}>PREVIEW TO ME</button>
+              </div>
+            </div>
+          );
+        })}
+    </div>
+  );
+}
+
 function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserName, onBack, onViewUser, onOpenAdminEntity, initialTab, onInitialTabConsumed, hideTabBar, onAdminAddManualOrder }) {
   // "analytics" is a virtual hub key — it bundles overview/users/content
   // under one card. Translate to "overview" so the dashboard has a real
@@ -43569,6 +43699,7 @@ function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserNam
         )}
         {tab === "push" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <LifecycleRulesPanel />
             {sectionCard(<>
               {sectionTitle("SEND PUSH BROADCAST")}
               <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
@@ -49817,7 +49948,7 @@ function clientDataToDbBuild(data, userId) {
 // derived client-side from the type field.
 function dbNotifToBell(row) {
   if (!row) return null;
-  const iconMap = { forum_bot_draft: { icon: FileText, iconColor: T.copper }, follow_post: { icon: UserPlus, iconColor: T.green }, thread_reply: { icon: MessageCircle, iconColor: T.copper }, sub_thread: { icon: Bell, iconColor: T.copper }, like: { icon: Heart, iconColor: T.red }, comment: { icon: MessageCircle, iconColor: T.copper }, mention: { icon: AtSign, iconColor: T.copper }, reply: { icon: MessageCircle, iconColor: T.copper }, follow: { icon: UserPlus, iconColor: T.green }, rsvp: { icon: Users, iconColor: T.green }, role: { icon: Shield, iconColor: T.copper }, bug_fix: { icon: CheckCircle, iconColor: T.green }, bug_report: { icon: AlertTriangle, iconColor: T.red }, content_report: { icon: Flag, iconColor: T.red } };
+  const iconMap = { tip: { icon: Bell, iconColor: T.copper }, forum_bot_draft: { icon: FileText, iconColor: T.copper }, follow_post: { icon: UserPlus, iconColor: T.green }, thread_reply: { icon: MessageCircle, iconColor: T.copper }, sub_thread: { icon: Bell, iconColor: T.copper }, like: { icon: Heart, iconColor: T.red }, comment: { icon: MessageCircle, iconColor: T.copper }, mention: { icon: AtSign, iconColor: T.copper }, reply: { icon: MessageCircle, iconColor: T.copper }, follow: { icon: UserPlus, iconColor: T.green }, rsvp: { icon: Users, iconColor: T.green }, role: { icon: Shield, iconColor: T.copper }, bug_fix: { icon: CheckCircle, iconColor: T.green }, bug_report: { icon: AlertTriangle, iconColor: T.red }, content_report: { icon: Flag, iconColor: T.red } };
   const ic = iconMap[row.type] || { icon: Bell, iconColor: T.tertiary };
   return {
     id: row.id,
@@ -54094,6 +54225,7 @@ export default function Trailhead() {
       created_by: c.created_by,
       adminOnlyThreads: !!c.admin_only_threads,
       visibility: c.visibility || "public",
+      defaultNotify: !!c.default_notify,
       subs: (subsByCat[c.id] || []).map(s => ({
         id: s.id,
         name: s.name,
@@ -57510,6 +57642,16 @@ export default function Trailhead() {
       return next;
     });
   };
+  // "Tips & highlights" is enforced server-side by the lifecycle job
+  // (profiles.notify_tips), so mirror the local pref to the profile row.
+  useEffect(() => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) return;
+    const want = notifPrefs.tips !== false;
+    if (currentProfile && (currentProfile.notify_tips !== false) === want) return;
+    supabase.from("profiles").update({ notify_tips: want }).eq("id", uid).then(({ error }) => { if (error) console.warn("[notify_tips]", error); });
+    setCurrentProfile(prev => prev ? { ...prev, notify_tips: want } : prev);
+  }, [notifPrefs.tips, supabaseSession && supabaseSession.user && supabaseSession.user.id]);
   // Install/push prompt detection — placed AFTER both isGuest and
   // notifPrefs declarations to avoid TDZ in the deps array.
   //   1. Not standalone + iOS/Android → InstallPromptModal (3-day cooldown)
@@ -61438,7 +61580,7 @@ export default function Trailhead() {
   // Category CRUD — admin-only (RLS enforces, .select("id") returns zero
   // rows for non-admin so the client surfaces "blocked"). Slug auto-derived
   // from name via forumSlugify, with -2/-3 collision retry up to 5 tries.
-  const addForumCategory = async ({ name, color, icon, adminOnlyThreads, visibility }) => {
+  const addForumCategory = async ({ name, color, icon, adminOnlyThreads, visibility, defaultNotify }) => {
     if (!isAdmin) return { error: "Not authorized" };
     const baseSlug = forumSlugify(name || "");
     if (!baseSlug) return { error: "Name required" };
@@ -61447,7 +61589,7 @@ export default function Trailhead() {
     for (let i = 0; i < 5; i++) {
       const slug = i === 0 ? baseSlug : `${baseSlug}-${i + 1}`;
       const { data, error } = await supabase.from("forum_categories").insert({
-        slug, name, color: color || T.copper, icon: icon || "tag", sort_order: maxOrder + 1, created_by: uid, admin_only_threads: !!adminOnlyThreads, visibility: visibility === "ambassadors" ? "ambassadors" : "public",
+        slug, name, color: color || T.copper, icon: icon || "tag", sort_order: maxOrder + 1, created_by: uid, admin_only_threads: !!adminOnlyThreads, visibility: visibility === "ambassadors" ? "ambassadors" : "public", default_notify: !!defaultNotify,
       }).select("*").maybeSingle();
       if (!error && data) { setForumCategoryRows(prev => [...prev, data]); return { ok: true, row: data }; }
       if (error && !/duplicate/i.test(error.message || "")) return { error: error.message || "Insert failed" };
@@ -61457,7 +61599,7 @@ export default function Trailhead() {
   const updateForumCategory = async (id, patch) => {
     if (!isAdmin) return { error: "Not authorized" };
     if (!id) return { error: "Missing id" };
-    const allowed = ["name", "color", "icon", "sort_order", "admin_only_threads", "visibility"];
+    const allowed = ["name", "color", "icon", "sort_order", "admin_only_threads", "visibility", "default_notify"];
     const body = {};
     allowed.forEach(k => { if (k in patch) body[k] = patch[k]; });
     body.updated_at = new Date().toISOString();

@@ -170,7 +170,8 @@ async function buildNotifPayload(n: any) {
   // raffle_won stores the event slug in `target` (for routing), so don't
   // append it as a body suffix like the entity types do.
   const isRaffle = n.type === "raffle_won";
-  const target = (n.target && !isRaffle) ? `: "${n.target}"` : "";
+  const isTip = n.type === "tip";
+  const target = (n.target && !isRaffle && !isTip) ? `: "${n.target}"` : "";
   // Resolve the tap URL + preview image from whichever entity FK is set.
   // Mentions can carry post_id / forum_thread_id / build_id / gear_drop_id
   // depending on where the tag happened, so all four route to their exact
@@ -179,7 +180,9 @@ async function buildNotifPayload(n: any) {
   const isGearDrop = typeof n.type === "string" && n.type.startsWith("gear_drop_");
   let url = "/";
   let image: string | null = null;
-  if (isRaffle && n.target) {
+  if (n.type === "tip" && typeof n.target === "string" && n.target.startsWith("/")) {
+    url = n.target; // lifecycle messages carry their deep-link path in target
+  } else if (isRaffle && n.target) {
     url = `/win/${n.target}`;
   } else if (n.gear_drop_id) {
     const drop = await resolveGearDropPreview(n.gear_drop_id);
