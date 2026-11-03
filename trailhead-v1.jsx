@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { createPortal } from "react-dom";
 import { Heart, MessageCircle, MapPin, Clock, Mountain, ChevronRight, ChevronLeft, ChevronDown, Search, Plus, Home, Compass, Map, Wrench, Trophy, AlertTriangle, Navigation, Star, Share2, Bookmark, MoreHorizontal, MoreVertical, ArrowUp, ArrowDown, ArrowRight, Users, Radio, CloudSun, CheckCircle, Target, Gift, ChevronUp, ExternalLink, Lock, Globe, Shield, ShieldCheck, UserPlus, UserCheck, Settings, Camera, Eye, EyeOff, X, Bell, ThumbsUp, UserPlus as UserPlusIcon, AtSign, Mail, Send, Image, Smartphone, Trash2, Edit2, Edit3, Award, Zap, TrendingUp, Flame, DollarSign, Route, Video, Play, Maximize2, Minimize2, LogOut, Binoculars, Layers, Tent, BookOpen, Link2, PlusSquare, Disc, Cog, MoveVertical, CircleDashed, Anchor, Tag, Flag, FileText, ZoomIn, ZoomOut, Crop, BarChart3, RefreshCw, CloudOff } from "lucide-react";
 import { supabase, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "./supabase-client.js";
-import { registerNativePush, logoutNativePush, requestNativePushPermission, isNativePlatform, getPlatform, openOAuthUrl, closeInAppBrowser, NATIVE_OAUTH_REDIRECT, signInWithApple } from "./native-bridge.js";
+import { registerNativePush, logoutNativePush, requestNativePushPermission, getNativePushPermission, isNativePlatform, getPlatform, openOAuthUrl, closeInAppBrowser, NATIVE_OAUTH_REDIRECT, signInWithApple } from "./native-bridge.js";
 
 // Sign in with Apple, web + native. Native: the ASAuthorization sheet → identity
 // token → signInWithIdToken (no browser). Web: the standard Apple OAuth redirect.
@@ -49141,6 +49141,39 @@ function WelcomeStartModal({ onClose }) {
   );
 }
 
+/* ─── NativePushNudge ─── bottom sheet for signed-in users on the native app
+   who were never asked for notification permission (existing accounts skip
+   the onboarding wizard). ENABLE fires the OS prompt; NOT NOW snoozes it for
+   14 days (localStorage). Shown at most once per launch, after the app is
+   ready, never during the wizard. */
+const PUSH_NUDGE_KEY = "th_native_push_nudged_at";
+const PUSH_NUDGE_SNOOZE_MS = 14 * 86400000;
+function NativePushNudge({ onEnable, onDismiss }) {
+  const [busy, setBusy] = useState(false);
+  const enable = async () => {
+    if (busy) return;
+    setBusy(true);
+    try { await onEnable(); } catch (_) {}
+    setBusy(false);
+    onDismiss();
+  };
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 1150, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onDismiss}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, background: T.darkBg, borderRadius: "18px 18px 0 0", padding: "20px 20px calc(20px + env(safe-area-inset-bottom, 0px))", border: `1px solid ${T.charcoal}`, borderBottom: "none" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
+          <div style={{ width: 44, height: 44, borderRadius: "50%", background: `${T.red}15`, border: `2px solid ${T.red}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Bell size={20} color={T.red} strokeWidth={1.5} /></div>
+          <div>
+            <div style={{ fontFamily: sans, fontSize: 15, color: T.white, fontWeight: 800, letterSpacing: 0.5 }}>TURN ON NOTIFICATIONS</div>
+            <div style={{ fontFamily: serif, fontSize: 12, color: T.tertiary, lineHeight: 1.4 }}>Messages, convoy updates, replies, gear drops, and recovery requests near you.</div>
+          </div>
+        </div>
+        <button onClick={enable} disabled={busy} style={{ width: "100%", padding: "13px", borderRadius: 8, background: T.red, color: T.white, border: "none", fontFamily: sans, fontSize: 13, fontWeight: 800, letterSpacing: 1, cursor: "pointer", opacity: busy ? 0.7 : 1, marginTop: 6 }}>{busy ? "…" : "ENABLE"}</button>
+        <button onClick={onDismiss} style={{ width: "100%", padding: "10px", background: "none", border: "none", color: T.tertiary, fontFamily: sans, fontSize: 11, letterSpacing: 0.8, cursor: "pointer", marginTop: 4 }}>NOT NOW</button>
+      </div>
+    </div>
+  );
+}
+
 function EnablePushScreen({ onSubscribe, onSkip }) {
   const [subscribing, setSubscribing] = useState(false);
   const [error, setError] = useState("");
@@ -51792,6 +51825,34 @@ export default function Trailhead() {
   // Guests are only created by following a shared link without an active
   // session. Normal app use requires sign-in.
   const [isGuest, setIsGuest] = useState(!!initialSharedLink);
+  // Native: nudge signed-in users who were never asked for push permission
+  // (existing accounts never see the onboarding wizard's push step). Runs once
+  // per launch after the app is ready + in the "app" state; snoozed 14 days
+  // on NOT NOW; silent when permission is already granted or was denied at
+  // the OS level (the Settings toggle covers that path).
+  const [showPushNudge, setShowPushNudge] = useState(false);
+  const pushNudgeCheckedRef = useRef(false);
+  useEffect(() => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid || !appReady || authState !== "app" || isGuest || pushNudgeCheckedRef.current) return;
+    if (!(typeof isNativePlatform === "function" && isNativePlatform())) return;
+    pushNudgeCheckedRef.current = true;
+    let cancelled = false;
+    (async () => {
+      try {
+        const last = Number(localStorage.getItem(PUSH_NUDGE_KEY) || 0);
+        if (last && Date.now() - last < PUSH_NUDGE_SNOOZE_MS) return;
+      } catch (_) {}
+      const granted = await getNativePushPermission();
+      if (cancelled || granted !== false) return; // true = done; null = plugin not ready → try next launch
+      setTimeout(() => { if (!cancelled) setShowPushNudge(true); }, 2500); // let the first screen settle
+    })();
+    return () => { cancelled = true; };
+  }, [supabaseSession && supabaseSession.user && supabaseSession.user.id, appReady, authState, isGuest]);
+  const dismissPushNudge = () => {
+    setShowPushNudge(false);
+    try { localStorage.setItem(PUSH_NUDGE_KEY, String(Date.now())); } catch (_) {}
+  };
   const [showGuestPrompt, setShowGuestPrompt] = useState(false);
   // ─── Hydrate on entering the app after onboarding ──────────────────────
   // New OAuth/Apple users have no handle at SIGNED_IN time, so hydrateUserData
@@ -63349,6 +63410,9 @@ export default function Trailhead() {
           onLoadWinnerCode={loadRaffleWinnerCode}
           onGoSignUp={(prefill) => { setRafflePrefill(prefill || null); setAuthState("signup"); }}
         />
+      )}
+      {showPushNudge && (
+        <NativePushNudge onEnable={subscribeToPush} onDismiss={dismissPushNudge} />
       )}
       {interestNav && (
         <InterestListScreen

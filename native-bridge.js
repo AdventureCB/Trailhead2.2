@@ -301,6 +301,19 @@ export async function requestNativePushPermission() {
   } catch (e) { console.warn("[push] native permission request failed", e); return false; }
 }
 
+// Current OS notification permission on native: true / false, or null when
+// the plugin isn't ready (web always null). Lets the app decide whether to
+// nudge a signed-in user who was never asked (existing accounts skip the
+// onboarding wizard, so they'd otherwise show as "never prompted").
+export async function getNativePushPermission() {
+  if (!isNativePlatform()) return null;
+  initOneSignal();
+  let OneSignal = osApi();
+  for (let i = 0; !OneSignal && i < 20; i++) { await new Promise(r => setTimeout(r, 300)); OneSignal = osApi(); }
+  if (!OneSignal) return null;
+  try { return !!(await OneSignal.Notifications.getPermissionAsync()); } catch (_) { return null; }
+}
+
 // Bind this device's push identity to the Supabase user id via OneSignal's
 // External ID, so send-push can target `external_id` without us storing tokens.
 // Called from the app whenever the signed-in user is known. Polls for the
