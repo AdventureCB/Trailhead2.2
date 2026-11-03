@@ -58012,9 +58012,13 @@ export default function Trailhead() {
   const repairNativePush = async () => {
     const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
     if (!uid || !isNativePlatform()) return;
+    // No OS permission yet (fresh install) → ask first; iOS shows the system
+    // prompt, or (after a prior deny) OneSignal opens Settings for the app.
+    try { await requestNativePushPermission(); } catch (_) {}
     try { await optInNativePush(); } catch (_) {}
     registerNativePush(uid);
-    await new Promise(r => setTimeout(r, 800));
+    try { setNotifPrefs(prev => ({ ...prev, push: true })); } catch (_) {}
+    await new Promise(r => setTimeout(r, 1500)); // let the token register before the test fires
   };
   const sendTestPushNotification = async () => {
     const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
