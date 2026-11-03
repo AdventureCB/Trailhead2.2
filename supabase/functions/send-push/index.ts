@@ -193,6 +193,12 @@ async function buildNotifPayload(n: any) {
   } else if (n.build_id) {
     url = `/builds/${n.build_id}`;
     image = await resolveBuildHeroImage(n.build_id);
+  } else if (n.trip_id) {
+    try {
+      const { data: t } = await sb.from("trip_reports").select("slug, hero_img").eq("id", n.trip_id).maybeSingle();
+      if (t && t.slug) url = `/trips/${t.slug}`;
+      if (t && t.hero_img && String(t.hero_img).startsWith("http")) image = t.hero_img;
+    } catch (_) { /* non-fatal */ }
   }
   return {
     title,
@@ -201,7 +207,11 @@ async function buildNotifPayload(n: any) {
     badge: "/lone-peak-flag.png",
     image: image || undefined,
     // Tag dedupes spam: rapid likes on the same post collapse to one banner.
-    tag: isGearDrop && n.gear_drop_id
+    // Follow-post: one banner per author (a later post within the window
+    // replaces it); thread/sub notifications collapse per thread.
+    tag: n.type === "follow_post" && n.actor_id ? `follow_post:${n.actor_id}`
+      : (n.type === "thread_reply" || n.type === "sub_thread") && n.forum_thread_id ? `${n.type}:${n.forum_thread_id}`
+      : isGearDrop && n.gear_drop_id
       ? `gd:${n.gear_drop_id}:${n.type}`
       : n.post_id ? `post:${n.post_id}:${n.type}` : `notif:${n.id}`,
     data: { url, notifId: n.id, type: n.type },

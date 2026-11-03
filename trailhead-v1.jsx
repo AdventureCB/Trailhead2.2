@@ -4872,7 +4872,7 @@ function RecoveryNotifPanel({ onClose, onGoToRecovery, alerts, onDismiss, onClea
   );
 }
 
-function UnifiedNotifPanel({ onClose, onViewUser, onGoToPost, onGoToBuild, onGoToForumThread, onGoToAdminBugs, onGoToAdminReports, onGoToAdminBotDrafts, notifs, onDismissNotif, onClearNotifs, recoveryAlerts, onDismissAlert, onClearAlerts, onGoToRecovery, onOpenMap, onOpenDM, onRespondToRecovery, initialTab }) {
+function UnifiedNotifPanel({ onClose, onViewUser, onGoToPost, onGoToBuild, onGoToTrip, onGoToForumThread, onGoToAdminBugs, onGoToAdminReports, onGoToAdminBotDrafts, notifs, onDismissNotif, onClearNotifs, recoveryAlerts, onDismissAlert, onClearAlerts, onGoToRecovery, onOpenMap, onOpenDM, onRespondToRecovery, initialTab }) {
   const [tab, setTab] = useState(initialTab || "general");
   const urgencyColor = (u) => u === "HIGH" ? T.red : T.copper;
   const tabBtn = (key, label, count, color) => (
@@ -4929,7 +4929,7 @@ function UnifiedNotifPanel({ onClose, onViewUser, onGoToPost, onGoToBuild, onGoT
           ) : notifs.map((n) => {
             const Icon = n.icon;
             return (
-              <div key={n.id} onClick={() => { if (n.type === "bug_report") { onGoToAdminBugs && onGoToAdminBugs(); } else if (n.type === "content_report") { onGoToAdminReports && onGoToAdminReports(); } else if (n.type === "forum_bot_draft") { onGoToAdminBotDrafts && onGoToAdminBotDrafts(); } else if (n.forumThreadId) { onGoToForumThread && onGoToForumThread(n.forumThreadId); } else if (n.buildId) { onGoToBuild && onGoToBuild(n.buildId, n.target); } else if (n.postId) { onGoToPost && onGoToPost(n.postId); } }} style={{ display: "flex", gap: 10, padding: "12px 16px", borderBottom: `1px solid ${T.charcoal}22`, cursor: "pointer", transition: "background 0.15s", position: "relative" }} onMouseEnter={(e) => e.currentTarget.style.background = `${T.charcoal}` } onMouseLeave={(e) => e.currentTarget.style.background = "transparent" }>
+              <div key={n.id} onClick={() => { if (n.type === "bug_report") { onGoToAdminBugs && onGoToAdminBugs(); } else if (n.type === "content_report") { onGoToAdminReports && onGoToAdminReports(); } else if (n.type === "forum_bot_draft") { onGoToAdminBotDrafts && onGoToAdminBotDrafts(); } else if (n.forumThreadId) { onGoToForumThread && onGoToForumThread(n.forumThreadId); } else if (n.tripId) { onGoToTrip && onGoToTrip(n.tripId); } else if (n.buildId) { onGoToBuild && onGoToBuild(n.buildId, n.target); } else if (n.postId) { onGoToPost && onGoToPost(n.postId); } }} style={{ display: "flex", gap: 10, padding: "12px 16px", borderBottom: `1px solid ${T.charcoal}22`, cursor: "pointer", transition: "background 0.15s", position: "relative" }} onMouseEnter={(e) => e.currentTarget.style.background = `${T.charcoal}` } onMouseLeave={(e) => e.currentTarget.style.background = "transparent" }>
                 <div style={{ width: 32, height: 32, borderRadius: "50%", background: `${n.iconColor}18`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2 }}>
                   <Icon size={14} color={n.iconColor} strokeWidth={1.8} />
                 </div>
@@ -5007,7 +5007,7 @@ function UnifiedNotifPanel({ onClose, onViewUser, onGoToPost, onGoToBuild, onGoT
   );
 }
 
-function TopBar({ onProfile, onBack, showBack, title, onHome, onViewUser, onGoToPost, onGoToBuild, onGoToForumThread, onGoToRecovery, onGoToAdminBugs, onGoToAdminReports, onGoToAdminBotDrafts, onOpenMap, onSearch, onOpenDM, onRespondToRecovery, dmUnread, bellNotifs, onDismissNotif, onClearNotifs, profilePic, notifPrefs, recoveryAlerts, setRecoveryAlerts }) {
+function TopBar({ onProfile, onBack, showBack, title, onHome, onViewUser, onGoToPost, onGoToBuild, onGoToTrip, onGoToForumThread, onGoToRecovery, onGoToAdminBugs, onGoToAdminReports, onGoToAdminBotDrafts, onOpenMap, onSearch, onOpenDM, onRespondToRecovery, dmUnread, bellNotifs, onDismissNotif, onClearNotifs, profilePic, notifPrefs, recoveryAlerts, setRecoveryAlerts }) {
   const notifTypeMap = { like: "likes", comment: "comments", reply: "replies", follow: "follows", mention: "mentions" };
   const filteredNotifs = bellNotifs.filter(n => { const pref = notifTypeMap[n.type]; return !pref || (notifPrefs && notifPrefs[pref] !== false); });
   const [openPanel, setOpenPanel] = useState(null); // null | "notif"
@@ -5076,6 +5076,7 @@ function TopBar({ onProfile, onBack, showBack, title, onHome, onViewUser, onGoTo
           onViewUser={(u) => { setOpenPanel(null); onViewUser && onViewUser(u); }}
           onGoToPost={(postId) => { setOpenPanel(null); onGoToPost && onGoToPost(postId); }}
           onGoToBuild={(buildId, name) => { setOpenPanel(null); onGoToBuild && onGoToBuild(buildId, name); }}
+          onGoToTrip={(tripId) => { setOpenPanel(null); onGoToTrip && onGoToTrip(tripId); }}
           onGoToForumThread={(threadId) => { setOpenPanel(null); onGoToForumThread && onGoToForumThread(threadId); }}
           onGoToAdminBugs={() => { setOpenPanel(null); onGoToAdminBugs && onGoToAdminBugs(); }}
           onGoToAdminReports={() => { setOpenPanel(null); onGoToAdminReports && onGoToAdminReports(); }}
@@ -8800,6 +8801,43 @@ function ForumScreen({ pendingThread, onPendingHandled, onLoadThreadTeaser, pend
   const setSelectedCat = setSelectedCatRaw;
   const setSelectedSub = setSelectedSubRaw;
   const [selectedThread, setSelectedThread] = useState(null);
+  // Thread subscription (bell): row in forum_thread_subscriptions, `muted`
+  // flips with the bell. Authors + repliers are auto-subscribed server-side.
+  const [threadSubscribed, setThreadSubscribed] = useState(false);
+  useEffect(() => {
+    if (!selectedThread || !currentUserId) { setThreadSubscribed(false); return; }
+    let cancelled = false;
+    supabase.from("forum_thread_subscriptions").select("muted").eq("thread_id", selectedThread.id).eq("user_id", currentUserId).maybeSingle()
+      .then(({ data }) => { if (!cancelled) setThreadSubscribed(!!data && !data.muted); }, () => {});
+    return () => { cancelled = true; };
+  }, [selectedThread && selectedThread.id, currentUserId]);
+  const toggleThreadSubscription = async () => {
+    if (!selectedThread || !currentUserId) { onGuestTap && onGuestTap(); return; }
+    const next = !threadSubscribed;
+    setThreadSubscribed(next);
+    const { error } = await supabase.from("forum_thread_subscriptions").upsert({ thread_id: selectedThread.id, user_id: currentUserId, muted: !next }, { onConflict: "thread_id,user_id" });
+    if (error) { console.error("[thread sub]", error); setThreadSubscribed(!next); }
+  };
+  // Subcategory follow (bell on the subcategory page) → forum_subcategory_follows.
+  const [followedSubs, setFollowedSubs] = useState(null); // Set of slugs | null = not loaded
+  useEffect(() => {
+    if (!currentUserId) { setFollowedSubs(null); return; }
+    let cancelled = false;
+    supabase.from("forum_subcategory_follows").select("subcategory_slug").eq("user_id", currentUserId)
+      .then(({ data }) => { if (!cancelled) setFollowedSubs(new Set((data || []).map(r => r.subcategory_slug))); }, () => { if (!cancelled) setFollowedSubs(new Set()); });
+    return () => { cancelled = true; };
+  }, [currentUserId]);
+  const toggleSubFollow = async (slug) => {
+    if (!currentUserId) { onGuestTap && onGuestTap(); return; }
+    if (!slug) return;
+    const on = !!(followedSubs && followedSubs.has(slug));
+    setFollowedSubs(prev => { const n = new Set(prev || []); if (on) n.delete(slug); else n.add(slug); return n; });
+    const q = on
+      ? supabase.from("forum_subcategory_follows").delete().eq("subcategory_slug", slug).eq("user_id", currentUserId)
+      : supabase.from("forum_subcategory_follows").insert({ subcategory_slug: slug, user_id: currentUserId });
+    const { error } = await q;
+    if (error) { console.error("[sub follow]", error); setFollowedSubs(prev => { const n = new Set(prev || []); if (on) n.add(slug); else n.delete(slug); return n; }); }
+  };
   // Admin/ambassador CRUD UI state — modals + dropdown menus for categories
   // and subcategories. `showCatModal` is { mode: "create" | "edit", cat? }
   // and `showSubModal` is { mode: "create" | "edit", category_id?, sub? }.
@@ -10235,6 +10273,11 @@ function ForumScreen({ pendingThread, onPendingHandled, onLoadThreadTeaser, pend
               <Eye size={14} color={T.tertiary} />
               <span style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>{getViewCount(selectedThread)} views</span>
             </div>
+            {currentUserId && !isGuest && (
+              <button onClick={toggleThreadSubscription} title={threadSubscribed ? "Stop notifying me about replies" : "Notify me about replies"} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 8px" }}>
+                <Bell size={14} color={threadSubscribed ? T.copper : T.tertiary} strokeWidth={1.5} fill={threadSubscribed ? T.copper : "none"} />
+              </button>
+            )}
             {selectedThread.catVisibility !== "ambassadors" && (
             <button onClick={() => onOpenShareIntent && onOpenShareIntent({ kind: "forum", data: { id: selectedThread.id, threadId: selectedThread.id, title: selectedThread.title, body: selectedThread.body, author: selectedThread.author, forumCat: selectedCat?.name || "", forumSub: selectedSub?.name || "", subSlug: forumSlugify(selectedSub?.name || ""), slug: selectedThread.slug, image: (selectedThread.photos && selectedThread.photos[0]) || null, categorySlug: selectedThread.categorySlug || null, listingPrice: selectedThread.listingPrice != null ? selectedThread.listingPrice : null, listingCurrency: selectedThread.listingCurrency || "USD", listingStatus: selectedThread.listingStatus || "active", listingDetails: selectedThread.listingDetails || null, sharedFromOwnerHandle: (selectedThread.handle || "").replace(/^@/, "") || null, sharedFromOwnerName: selectedThread.author || null, sharedFromOwnerUserId: selectedThread.userId || null } })} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px", marginLeft: "auto" }}>
               <Share2 size={14} color={T.tertiary} strokeWidth={1.5} />
@@ -10629,6 +10672,16 @@ function ForumScreen({ pendingThread, onPendingHandled, onLoadThreadTeaser, pend
             <span style={{ fontFamily: sans, fontSize: 14, color: T.white, fontWeight: 700, display: "block" }}>{selectedSub.name}</span>
             <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary }}>{selectedCat.name}</span>
           </div>
+          {(() => {
+            const slug = selectedSub.slug || forumSlugify(selectedSub.name || "");
+            const on = !!(followedSubs && followedSubs.has(slug));
+            return (
+              <button onClick={() => toggleSubFollow(slug)} title={on ? "Following — tap to stop notifications for new threads" : "Notify me about new threads here"} style={{ display: "flex", alignItems: "center", gap: 5, padding: "8px 10px", borderRadius: 8, background: on ? `${T.copper}22` : "none", border: `1px solid ${on ? T.copper : T.charcoal}`, cursor: "pointer", marginRight: 8 }}>
+                <Bell size={13} color={on ? T.copper : T.tertiary} fill={on ? T.copper : "none"} />
+                <span style={{ fontFamily: sans, fontSize: 10, color: on ? T.copper : T.tertiary, fontWeight: 700, letterSpacing: 0.5 }}>{on ? "FOLLOWING" : "FOLLOW"}</span>
+              </button>
+            );
+          })()}
           {/* NEW hidden in admin-only categories for non-admins (RLS enforces
               too). A small lock chip explains the absence. */}
           {(isAdmin || !(selectedCat && selectedCat.adminOnlyThreads)) ? (
@@ -25973,7 +26026,7 @@ function BugReportForm({ currentUserId, currentUserHandle, onClose, onSubmitted 
 }
 
 /* ─── PROFILE SCREEN (Own Profile) ─── */
-function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, initialUserBio, initialIsPublic, onViewUser, onLogout, onOpenBlockedUsers, memberSince, userBuilds, onAddBuild, onUpdateBuild, onDeleteBuild, profilePic, onSetProfilePic, notifPrefs, onSetNotifPrefs, feedItems, onDeletePost, onEditPost, onUpdateConvoy, onGoToPost, myPoints: myPointsProp, onSaveProfile, followerCount, followingCount, convoyRsvps, onSubscribePush, onUnsubscribePush, onGetPushStatus, onSendTestPush, onRepairPush, renderFeedScopedTo, onViewBuild, savedRoutes, onUnsaveRoute, onStartNav, myTripPlans, onOpenTripPlan, onNewTripPlan, isAdmin, currentRole, savedTrips, onUnsaveTrip, onOpenSavedTrip, pendingScroll, onConsumePendingScroll, onOpenAdminDashboard, onOpenAmbassadorDashboard, onOpenContentPartnerDashboard, isContentPartner, isGravelGuide, onOpenFollowList }) {
+function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, initialUserBio, initialIsPublic, onViewUser, onLogout, onOpenBlockedUsers, memberSince, userBuilds, onAddBuild, onUpdateBuild, onDeleteBuild, profilePic, onSetProfilePic, notifPrefs, onSetNotifPrefs, notifChannels, onSetNotifChannel, feedItems, onDeletePost, onEditPost, onUpdateConvoy, onGoToPost, myPoints: myPointsProp, onSaveProfile, followerCount, followingCount, convoyRsvps, onSubscribePush, onUnsubscribePush, onGetPushStatus, onSendTestPush, onRepairPush, renderFeedScopedTo, onViewBuild, savedRoutes, onUnsaveRoute, onStartNav, myTripPlans, onOpenTripPlan, onNewTripPlan, isAdmin, currentRole, savedTrips, onUnsaveTrip, onOpenSavedTrip, pendingScroll, onConsumePendingScroll, onOpenAdminDashboard, onOpenAmbassadorDashboard, onOpenContentPartnerDashboard, isContentPartner, isGravelGuide, onOpenFollowList }) {
   const [isPublic, setIsPublic] = useState(initialIsPublic == null ? true : !!initialIsPublic);
   const [activeTab, setActiveTab] = useState("builds");
   const [activeBuild, setActiveBuild] = useState(0);
@@ -26248,6 +26301,30 @@ function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, init
               {prefToggle("Follows", "When someone follows you or requests to follow", "follows", UserPlus, T.green)}
               {prefToggle("Mentions", "When someone mentions you in a post or comment", "mentions", AtSign, T.copper)}
               {prefToggle("Tips & highlights", "Occasional tips, new features, and picks near you — a couple a week at most", "tips", Bell, T.copper)}
+            </div>
+            <div style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700, margin: "18px 0 8px" }}>FOLLOWING</div>
+            <div style={{ background: T.darkCard, borderRadius: 12, padding: "4px 16px 0" }}>
+              {[
+                ["notify_follow_posts", "Posts from people you follow", "New posts, trip reports, and builds — at most one per person every 6 hours", UserPlus, T.green],
+                ["notify_thread_replies", "Threads you're in", "Replies in threads you started, replied to, or subscribed to with the bell", MessageCircle, T.copper],
+                ["notify_sub_threads", "Forums you follow", "New threads in subcategories you follow", Bell, T.copper],
+              ].map(([key, label, desc, icon, color]) => {
+                const on = !notifChannels || notifChannels[key] !== false;
+                return (
+                  <div key={key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 0", borderBottom: `1px solid ${T.charcoal}` }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1 }}>
+                      {React.createElement(icon, { size: 16, color })}
+                      <div>
+                        <span style={{ fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 600, display: "block" }}>{label}</span>
+                        <span style={{ fontFamily: serif, fontSize: 11, color: T.tertiary }}>{desc}</span>
+                      </div>
+                    </div>
+                    <div onClick={() => onSetNotifChannel && onSetNotifChannel(key, !on)} style={{ width: 44, height: 24, borderRadius: 12, background: on ? T.green : T.charcoal, position: "relative", cursor: "pointer", transition: "background 0.2s", flexShrink: 0 }}>
+                      <div style={{ width: 20, height: 20, borderRadius: "50%", background: T.white, position: "absolute", top: 2, left: on ? 22 : 2, transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }} />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
             <div ref={pushToggleRef} style={{ marginTop: 16, background: T.darkCard, borderRadius: 12, padding: 16, border: pushToggleHighlight ? `2px solid ${T.red}` : "2px solid transparent", boxShadow: pushToggleHighlight ? `0 0 0 4px ${T.red}30` : "none", transition: "border 0.4s, box-shadow 0.4s" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -27356,6 +27433,22 @@ function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, isAdmin,
     if (isFollowing) onUnfollow && onUnfollow(resolvedTargetId);
     else onFollow && onFollow(resolvedTargetId, p.name);
   };
+  // Per-follow "notify me about their posts" (follows.notify_posts, default
+  // on). Read when following; the bell flips it.
+  const [followNotify, setFollowNotify] = useState(true);
+  useEffect(() => {
+    if (!isFollowing || !currentUserId || !resolvedTargetId) return;
+    let cancelled = false;
+    supabase.from("follows").select("notify_posts").eq("follower_id", currentUserId).eq("following_id", resolvedTargetId).maybeSingle()
+      .then(({ data }) => { if (!cancelled && data) setFollowNotify(data.notify_posts !== false); }, () => {});
+    return () => { cancelled = true; };
+  }, [isFollowing, currentUserId, resolvedTargetId]);
+  const toggleFollowNotify = async () => {
+    const next = !followNotify;
+    setFollowNotify(next);
+    const { error } = await supabase.from("follows").update({ notify_posts: next }).eq("follower_id", currentUserId).eq("following_id", resolvedTargetId);
+    if (error) { console.error("[follow notify]", error); setFollowNotify(!next); }
+  };
 
   const tabs = ["builds", "trips", "activity"];
 
@@ -27474,6 +27567,11 @@ function OtherProfileScreen({ userId, onBack, onMessage, currentUserId, isAdmin,
           }}>
             {isFollowing ? <><UserCheck size={14} /> FOLLOWING</> : <><UserPlus size={14} /> FOLLOW</>}
           </button>
+          {isFollowing && canFollow && (
+            <button onClick={toggleFollowNotify} title={followNotify ? "Notifying you about new posts — tap to stop" : "Notify me about new posts"} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 40, height: 40, borderRadius: 8, marginLeft: 8, background: followNotify ? `${T.copper}22` : T.darkCard, border: `1px solid ${followNotify ? T.copper : T.charcoal}`, cursor: "pointer" }}>
+              <Bell size={16} color={followNotify ? T.copper : T.tertiary} fill={followNotify ? T.copper : "none"} strokeWidth={1.5} />
+            </button>
+          )}
           <button onClick={() => onMessage && onMessage(userId)} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "10px 24px", borderRadius: 8, cursor: "pointer", fontFamily: sans, fontSize: 12, fontWeight: 600, letterSpacing: 1, background: T.darkCard, border: `1px solid ${T.copper}40`, color: T.copper, transition: "all 0.2s" }}>
             <Mail size={14} /> MESSAGE
           </button>
@@ -49672,7 +49770,7 @@ function clientDataToDbBuild(data, userId) {
 // derived client-side from the type field.
 function dbNotifToBell(row) {
   if (!row) return null;
-  const iconMap = { forum_bot_draft: { icon: FileText, iconColor: T.copper }, like: { icon: Heart, iconColor: T.red }, comment: { icon: MessageCircle, iconColor: T.copper }, mention: { icon: AtSign, iconColor: T.copper }, reply: { icon: MessageCircle, iconColor: T.copper }, follow: { icon: UserPlus, iconColor: T.green }, rsvp: { icon: Users, iconColor: T.green }, role: { icon: Shield, iconColor: T.copper }, bug_fix: { icon: CheckCircle, iconColor: T.green }, bug_report: { icon: AlertTriangle, iconColor: T.red }, content_report: { icon: Flag, iconColor: T.red } };
+  const iconMap = { forum_bot_draft: { icon: FileText, iconColor: T.copper }, follow_post: { icon: UserPlus, iconColor: T.green }, thread_reply: { icon: MessageCircle, iconColor: T.copper }, sub_thread: { icon: Bell, iconColor: T.copper }, like: { icon: Heart, iconColor: T.red }, comment: { icon: MessageCircle, iconColor: T.copper }, mention: { icon: AtSign, iconColor: T.copper }, reply: { icon: MessageCircle, iconColor: T.copper }, follow: { icon: UserPlus, iconColor: T.green }, rsvp: { icon: Users, iconColor: T.green }, role: { icon: Shield, iconColor: T.copper }, bug_fix: { icon: CheckCircle, iconColor: T.green }, bug_report: { icon: AlertTriangle, iconColor: T.red }, content_report: { icon: Flag, iconColor: T.red } };
   const ic = iconMap[row.type] || { icon: Bell, iconColor: T.tertiary };
   return {
     id: row.id,
@@ -49684,6 +49782,7 @@ function dbNotifToBell(row) {
     postId: row.post_id || null,
     buildId: row.build_id || null,
     forumThreadId: row.forum_thread_id || null,
+    tripId: row.trip_id || null,
     time: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
     isRead: row.is_read || false,
     icon: ic.icon,
@@ -57456,50 +57555,6 @@ export default function Trailhead() {
   // by the convoy_rsvps realtime subscription, and mutated optimistically by
   // setConvoyRsvp below. Keying by user_id (not handle) keeps renames safe.
   const [convoyRsvps, setConvoyRsvps] = useState({}); // { [postId]: { [userId]: { status, name, handle, avatarUrl, initial } } }
-  // ─── OneSignal segmentation tags (native only) ───
-  // Pushed whenever the inputs change (debounced) so segments + Journeys in
-  // the OneSignal dashboard can target real app state: rank, builds, trip
-  // reports, home state, convoys, interest lists, and the user's own
-  // "Tips & highlights" opt-in (notif_tips) which every lifecycle Journey
-  // should require. Device-level, so a shared phone follows the signed-in user.
-  const [myInterestSlugs, setMyInterestSlugs] = useState(null);
-  useEffect(() => {
-    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
-    if (!uid || !(typeof isNativePlatform === "function" && isNativePlatform())) { setMyInterestSlugs(null); return; }
-    let cancelled = false;
-    supabase.from("interest_signups").select("list:interest_lists(slug)").eq("user_id", uid)
-      .then(({ data }) => { if (!cancelled) setMyInterestSlugs((data || []).map(r => r.list && r.list.slug).filter(Boolean)); }, () => { if (!cancelled) setMyInterestSlugs([]); });
-    return () => { cancelled = true; };
-  }, [supabaseSession && supabaseSession.user && supabaseSession.user.id, interestNav && interestNav.slug]);
-  const lastPushTagsRef = useRef("");
-  useEffect(() => {
-    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
-    if (!uid || !currentProfile || !(typeof isNativePlatform === "function" && isNativePlatform())) return;
-    const published = (tripReports || []).filter(t => t && t.status === "published" && (t.kind || "report") === "report");
-    const latestTrip = published.slice().sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))[0];
-    const convoysJoined = Object.values(convoyRsvps || {}).filter(m => m && m[uid] && m[uid].status === "going").length;
-    const points = Number(currentProfile.points) || 0;
-    const tags = {
-      rank: (getUserRank(points) || {}).name || "Scout",
-      points: String(points),
-      role: currentProfile.role || "user",
-      is_ambassador: !!isAmbassador,
-      has_build: (userBuilds || []).length > 0,
-      builds: String((userBuilds || []).length),
-      trip_reports: String(published.length),
-      last_trip_at: latestTrip && latestTrip.created_at ? String(latestTrip.created_at).slice(0, 10) : null,
-      state: (latestTrip && latestTrip.state_code) || null,
-      convoys_joined: String(convoysJoined),
-      interest_lists: Array.isArray(myInterestSlugs) && myInterestSlugs.length ? myInterestSlugs.join(",") : null,
-      notif_tips: notifPrefs.tips !== false,
-      signup_date: supabaseSession.user.created_at ? String(supabaseSession.user.created_at).slice(0, 10) : null,
-      platform: typeof getPlatform === "function" ? getPlatform() : "native",
-    };
-    const key = JSON.stringify(tags);
-    if (key === lastPushTagsRef.current) return;
-    const t = setTimeout(() => { lastPushTagsRef.current = key; setNativePushTags(tags); }, 3000);
-    return () => clearTimeout(t);
-  }, [supabaseSession && supabaseSession.user && supabaseSession.user.id, currentProfile && currentProfile.points, currentProfile && currentProfile.role, isAmbassador, (userBuilds || []).length, (tripReports || []).length, convoyRsvps, myInterestSlugs, notifPrefs.tips]);
 
   // Recovery alerts are derived from the live posts feed (type="RECOVERY"
   // posts that aren't resolved yet). The posts table is the source of
@@ -58065,6 +58120,21 @@ export default function Trailhead() {
     try { setNotifPrefs(prev => ({ ...prev, push: true })); } catch (_) {}
     await new Promise(r => setTimeout(r, 1500)); // let the token register before the test fires
   };
+  // Server-enforced notification channels (profiles.notify_*): the DB
+  // triggers for follow-post / thread-reply / sub-thread read these, so the
+  // switch actually stops the push, not just the bell.
+  const notifChannels = {
+    notify_follow_posts: !(currentProfile && currentProfile.notify_follow_posts === false),
+    notify_thread_replies: !(currentProfile && currentProfile.notify_thread_replies === false),
+    notify_sub_threads: !(currentProfile && currentProfile.notify_sub_threads === false),
+  };
+  const setNotifChannel = async (key, value) => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid || !["notify_follow_posts", "notify_thread_replies", "notify_sub_threads"].includes(key)) return;
+    setCurrentProfile(prev => prev ? { ...prev, [key]: !!value } : prev);
+    const { error } = await supabase.from("profiles").update({ [key]: !!value }).eq("id", uid);
+    if (error) console.error("[notif channel]", error);
+  };
   const sendTestPushNotification = async () => {
     const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
     if (!uid) return { error: "Not signed in" };
@@ -58582,6 +58652,55 @@ export default function Trailhead() {
   const [followingIds, setFollowingIds] = useState(new Set());
   const [myFollowerCount, setMyFollowerCount] = useState(0);
   const [myFollowingCount, setMyFollowingCount] = useState(0);
+  // ─── OneSignal segmentation tags (native only) ───
+  // Pushed whenever the inputs change (debounced) so segments + Journeys in
+  // the OneSignal dashboard can target real app state: rank, builds, trip
+  // reports, home state, convoys, interest lists, and the user's own
+  // "Tips & highlights" opt-in (notif_tips) which every lifecycle Journey
+  // should require. Device-level, so a shared phone follows the signed-in user.
+  const [myInterestSlugs, setMyInterestSlugs] = useState(null);
+  useEffect(() => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid || !(typeof isNativePlatform === "function" && isNativePlatform())) { setMyInterestSlugs(null); return; }
+    let cancelled = false;
+    supabase.from("interest_signups").select("list:interest_lists(slug)").eq("user_id", uid)
+      .then(({ data }) => { if (!cancelled) setMyInterestSlugs((data || []).map(r => r.list && r.list.slug).filter(Boolean)); }, () => { if (!cancelled) setMyInterestSlugs([]); });
+    return () => { cancelled = true; };
+  }, [supabaseSession && supabaseSession.user && supabaseSession.user.id, interestNav && interestNav.slug]);
+  const lastPushTagsRef = useRef("");
+  useEffect(() => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid || !currentProfile || !(typeof isNativePlatform === "function" && isNativePlatform())) return;
+    const published = (tripReports || []).filter(t => t && t.status === "published" && (t.kind || "report") === "report");
+    const latestTrip = published.slice().sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))[0];
+    const convoysJoined = Object.values(convoyRsvps || {}).filter(m => m && m[uid] && m[uid].status === "going").length;
+    const points = Number(currentProfile.points) || 0;
+    const tags = {
+      rank: (getUserRank(points) || {}).name || "Scout",
+      points: String(points),
+      role: currentProfile.role || "user",
+      is_ambassador: !!isAmbassador,
+      has_build: (userBuilds || []).length > 0,
+      builds: String((userBuilds || []).length),
+      trip_reports: String(published.length),
+      last_trip_at: latestTrip && latestTrip.created_at ? String(latestTrip.created_at).slice(0, 10) : null,
+      state: (latestTrip && latestTrip.state_code) || null,
+      convoys_joined: String(convoysJoined),
+      interest_lists: Array.isArray(myInterestSlugs) && myInterestSlugs.length ? myInterestSlugs.join(",") : null,
+      notif_tips: notifPrefs.tips !== false,
+      followers: String(myFollowerCount || 0),
+      following: String(myFollowingCount || 0),
+      threads_posted: String((forumThreads || []).filter(t => t && t.userId === uid).length),
+      gear_drops_joined: String(Object.keys(myGearDropRuns || {}).length),
+      member_days: supabaseSession.user.created_at ? String(Math.max(0, Math.floor((Date.now() - new Date(supabaseSession.user.created_at).getTime()) / 86400000))) : null,
+      signup_date: supabaseSession.user.created_at ? String(supabaseSession.user.created_at).slice(0, 10) : null,
+      platform: typeof getPlatform === "function" ? getPlatform() : "native",
+    };
+    const key = JSON.stringify(tags);
+    if (key === lastPushTagsRef.current) return;
+    const t = setTimeout(() => { lastPushTagsRef.current = key; setNativePushTags(tags); }, 3000);
+    return () => clearTimeout(t);
+  }, [supabaseSession && supabaseSession.user && supabaseSession.user.id, currentProfile && currentProfile.points, currentProfile && currentProfile.role, isAmbassador, (userBuilds || []).length, (tripReports || []).length, convoyRsvps, myInterestSlugs, notifPrefs.tips, myFollowerCount, myFollowingCount, (forumThreads || []).length, Object.keys(myGearDropRuns || {}).length]);
   // Profile rows for users I follow — resolved lazily the first time a UI
   // surface needs them (e.g. convoy invite dropdown). Cached for the
   // session; a follow/unfollow patches the array in place so the cache
@@ -62449,6 +62568,7 @@ export default function Trailhead() {
         onHome={() => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); setShowDM(false); setShowGlobalSearch(false); setScreen("feed"); if (typeof window !== "undefined" && window.location.pathname !== "/") window.history.pushState({}, "", "/"); }}
         onViewUser={openUserProfile}
         onGoToPost={(postId) => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("feed"); setPendingPostNav(postId); }}
+        onGoToTrip={(tripId) => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); setDetailTripId(tripId); }}
         onGoToBuild={(buildId, name) => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("builds"); setPendingBuildNav({ rawId: buildId, name: name || "" }); }}
         onGoToForumThread={(threadId) => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("forum"); openForumThreadById(threadId); }}
         onGoToRecovery={() => { setShowRecovery(true); setProfileStack([]); }}
@@ -62504,7 +62624,7 @@ export default function Trailhead() {
           isOtherProfile ? (
             <OtherProfileScreen userId={profileStack[1]} onBack={goBack} onMessage={(user) => openDM(user)} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} onAdminUpdateUserRole={adminUpdateUserRole} onAdminDeclineAmbassador={adminDeclineAmbassadorRequest} onAdminToggleModerator={adminToggleUserModerator} onAdminToggleBetaTester={adminToggleUserBetaTester} onAdminToggleContentPartner={adminToggleUserContentPartner} onAdminToggleGravelGuide={adminToggleUserGravelGuide} onAdminViewAsAmbassador={adminViewAsAmbassador} onReportContent={requireAuth(openContentReport)} followingIds={followingIds} onFollow={requireAuth(followUser)} onUnfollow={requireAuth(unfollowUser)} blockedIds={blockedIds} onBlock={requireAuth(blockUser)} onUnblock={requireAuth(unblockUser)} fetchFollowCounts={fetchFollowCounts} onOpenFollowList={requireAuth(openFollowList)} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} allBuilds={allBuilds} onLoadAllBuilds={loadAllBuildsOnce} onlineUserIds={onlineUserIds} allTripPlans={allTripPlans} allTripReports={allTripReports} onOpenTripPlan={(id) => setDetailTripId(id)} />
           ) : (
-            <ProfileScreen memberSince={(() => { const d = (supabaseSession && supabaseSession.user && supabaseSession.user.created_at) || (currentProfile && currentProfile.created_at); if (!d) return null; const dt = new Date(d); return isNaN(dt.getTime()) ? null : dt.toLocaleString("en-US", { month: "short", year: "numeric" }); })()} onOpenBlockedUsers={() => setShowBlockedUsers(true)} onOpenFollowList={openFollowList} onOpenAdminDashboard={() => { setProfileStack([]); setScreen("admin"); if (typeof window !== "undefined") window.history.pushState({}, "", "/admin"); }} onOpenAmbassadorDashboard={() => { setProfileStack([]); setScreen("ambassador"); }} onOpenContentPartnerDashboard={() => setShowContentPartnerDashboard(true)} isContentPartner={isContentPartner} isGravelGuide={isGravelGuide} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} currentRole={currentRole} convoyRsvps={convoyRsvps} followerCount={myFollowerCount} followingCount={myFollowingCount} onSubscribePush={subscribeToPush} onUnsubscribePush={unsubscribeFromPush} onGetPushStatus={getNativePushStatus} onSendTestPush={sendTestPushNotification} onRepairPush={repairNativePush} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} savedRoutes={savedRoutes} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} savedTrips={(() => { const ids = savedTripIds || {}; const pool = [...(allTripReports || []), ...(allTripPlans || [])]; const seen = {}; const out = []; pool.forEach(t => { if (t && t.id && ids[t.id] && !seen[t.id]) { seen[t.id] = true; out.push(t); } }); return out; })()} onUnsaveTrip={requireAuth(toggleSaveTrip)} onOpenSavedTrip={(t) => { if (!t) return; if (t.slug) setPendingTripNav(t.slug); else setDetailTripId(t.id); }} pendingScroll={pendingProfileScroll} onConsumePendingScroll={() => setPendingProfileScroll(null)} onStartNav={(route) => setActiveNavRoute(route)} myTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} onNewTripPlan={requireAuth(() => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("routes"); enterPlanBuilder(); })} initialUserName={(currentProfile && currentProfile.full_name) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name) || null} initialUserHandle={(currentProfile && currentProfile.handle) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle) || null} initialUserBio={currentProfile ? currentProfile.bio : null} initialIsPublic={currentProfile ? currentProfile.is_public : null} onSaveProfile={saveProfile} onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={deleteBuild} profilePic={profilePic} onSetProfilePic={requestProfilePicCrop} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => deletePost(id)} onEditPost={(id, newText) => updatePost(id, { title: newText })} onUpdateConvoy={(convoyId, updates) => {
+            <ProfileScreen memberSince={(() => { const d = (supabaseSession && supabaseSession.user && supabaseSession.user.created_at) || (currentProfile && currentProfile.created_at); if (!d) return null; const dt = new Date(d); return isNaN(dt.getTime()) ? null : dt.toLocaleString("en-US", { month: "short", year: "numeric" }); })()} onOpenBlockedUsers={() => setShowBlockedUsers(true)} onOpenFollowList={openFollowList} onOpenAdminDashboard={() => { setProfileStack([]); setScreen("admin"); if (typeof window !== "undefined") window.history.pushState({}, "", "/admin"); }} onOpenAmbassadorDashboard={() => { setProfileStack([]); setScreen("ambassador"); }} onOpenContentPartnerDashboard={() => setShowContentPartnerDashboard(true)} isContentPartner={isContentPartner} isGravelGuide={isGravelGuide} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} currentRole={currentRole} convoyRsvps={convoyRsvps} followerCount={myFollowerCount} followingCount={myFollowingCount} onSubscribePush={subscribeToPush} onUnsubscribePush={unsubscribeFromPush} notifChannels={notifChannels} onSetNotifChannel={setNotifChannel} onGetPushStatus={getNativePushStatus} onSendTestPush={sendTestPushNotification} onRepairPush={repairNativePush} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} savedRoutes={savedRoutes} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} savedTrips={(() => { const ids = savedTripIds || {}; const pool = [...(allTripReports || []), ...(allTripPlans || [])]; const seen = {}; const out = []; pool.forEach(t => { if (t && t.id && ids[t.id] && !seen[t.id]) { seen[t.id] = true; out.push(t); } }); return out; })()} onUnsaveTrip={requireAuth(toggleSaveTrip)} onOpenSavedTrip={(t) => { if (!t) return; if (t.slug) setPendingTripNav(t.slug); else setDetailTripId(t.id); }} pendingScroll={pendingProfileScroll} onConsumePendingScroll={() => setPendingProfileScroll(null)} onStartNav={(route) => setActiveNavRoute(route)} myTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} onNewTripPlan={requireAuth(() => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("routes"); enterPlanBuilder(); })} initialUserName={(currentProfile && currentProfile.full_name) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name) || null} initialUserHandle={(currentProfile && currentProfile.handle) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle) || null} initialUserBio={currentProfile ? currentProfile.bio : null} initialIsPublic={currentProfile ? currentProfile.is_public : null} onSaveProfile={saveProfile} onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={deleteBuild} profilePic={profilePic} onSetProfilePic={requestProfilePicCrop} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => deletePost(id)} onEditPost={(id, newText) => updatePost(id, { title: newText })} onUpdateConvoy={(convoyId, updates) => {
               updatePost(convoyId, updates);
               // DM going/maybe responders that the convoy was updated.
               const convoy = feedItemsRef.current.find(p => p.id === convoyId);
