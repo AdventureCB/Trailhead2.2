@@ -314,6 +314,37 @@ export async function getNativePushPermission() {
   try { return !!(await OneSignal.Notifications.getPermissionAsync()); } catch (_) { return null; }
 }
 
+// Diagnostic snapshot of this device's push state — shown in Profile →
+// Settings → Notifications so "I'm not getting pushes" can be pinned down
+// without the dashboard: OS permission, whether the OneSignal subscription is
+// opted in, its id, and the External ID it's bound to (should equal the user id).
+export async function getNativePushStatus() {
+  if (!isNativePlatform()) return null;
+  initOneSignal();
+  let OneSignal = osApi();
+  for (let i = 0; !OneSignal && i < 20; i++) { await new Promise(r => setTimeout(r, 300)); OneSignal = osApi(); }
+  if (!OneSignal) return { ready: false };
+  const out = { ready: true, permission: null, optedIn: null, subscriptionId: null, externalId: null, onesignalId: null };
+  try { out.permission = !!(await OneSignal.Notifications.getPermissionAsync()); } catch (_) {}
+  try { const ps = OneSignal.User && OneSignal.User.pushSubscription; if (ps) {
+    try { out.optedIn = typeof ps.getOptedInAsync === "function" ? await ps.getOptedInAsync() : (ps.optedIn ?? null); } catch (_) {}
+    try { out.subscriptionId = typeof ps.getIdAsync === "function" ? await ps.getIdAsync() : (ps.id ?? null); } catch (_) {}
+  } } catch (_) {}
+  try { out.externalId = typeof OneSignal.User.getExternalId === "function" ? await OneSignal.User.getExternalId() : null; } catch (_) {}
+  try { out.onesignalId = typeof OneSignal.User.getOnesignalId === "function" ? await OneSignal.User.getOnesignalId() : null; } catch (_) {}
+  return out;
+}
+
+// Force the OneSignal subscription on (after OS permission exists). Needed
+// when the user granted permission from iOS Settings AFTER a denial — the SDK
+// keeps the subscription opted-out until told otherwise.
+export async function optInNativePush() {
+  if (!isNativePlatform()) return false;
+  const OneSignal = osApi();
+  if (!OneSignal) return false;
+  try { await OneSignal.User.pushSubscription.optIn(); return true; } catch (_) { return false; }
+}
+
 // Bind this device's push identity to the Supabase user id via OneSignal's
 // External ID, so send-push can target `external_id` without us storing tokens.
 // Called from the app whenever the signed-in user is known. Polls for the

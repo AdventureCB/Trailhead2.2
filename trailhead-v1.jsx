@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { createPortal } from "react-dom";
 import { Heart, MessageCircle, MapPin, Clock, Mountain, ChevronRight, ChevronLeft, ChevronDown, Search, Plus, Home, Compass, Map, Wrench, Trophy, AlertTriangle, Navigation, Star, Share2, Bookmark, MoreHorizontal, MoreVertical, ArrowUp, ArrowDown, ArrowRight, Users, Radio, CloudSun, CheckCircle, Target, Gift, ChevronUp, ExternalLink, Lock, Globe, Shield, ShieldCheck, UserPlus, UserCheck, Settings, Camera, Eye, EyeOff, X, Bell, ThumbsUp, UserPlus as UserPlusIcon, AtSign, Mail, Send, Image, Smartphone, Trash2, Edit2, Edit3, Award, Zap, TrendingUp, Flame, DollarSign, Route, Video, Play, Maximize2, Minimize2, LogOut, Binoculars, Layers, Tent, BookOpen, Link2, PlusSquare, Disc, Cog, MoveVertical, CircleDashed, Anchor, Tag, Flag, FileText, ZoomIn, ZoomOut, Crop, BarChart3, RefreshCw, CloudOff } from "lucide-react";
 import { supabase, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "./supabase-client.js";
-import { registerNativePush, logoutNativePush, requestNativePushPermission, getNativePushPermission, isNativePlatform, getPlatform, openOAuthUrl, closeInAppBrowser, NATIVE_OAUTH_REDIRECT, signInWithApple } from "./native-bridge.js";
+import { registerNativePush, logoutNativePush, requestNativePushPermission, getNativePushPermission, getNativePushStatus, optInNativePush, isNativePlatform, getPlatform, openOAuthUrl, closeInAppBrowser, NATIVE_OAUTH_REDIRECT, signInWithApple } from "./native-bridge.js";
 
 // Sign in with Apple, web + native. Native: the ASAuthorization sheet → identity
 // token → signInWithIdToken (no browser). Web: the standard Apple OAuth redirect.
@@ -25973,7 +25973,7 @@ function BugReportForm({ currentUserId, currentUserHandle, onClose, onSubmitted 
 }
 
 /* ─── PROFILE SCREEN (Own Profile) ─── */
-function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, initialUserBio, initialIsPublic, onViewUser, onLogout, onOpenBlockedUsers, memberSince, userBuilds, onAddBuild, onUpdateBuild, onDeleteBuild, profilePic, onSetProfilePic, notifPrefs, onSetNotifPrefs, feedItems, onDeletePost, onEditPost, onUpdateConvoy, onGoToPost, myPoints: myPointsProp, onSaveProfile, followerCount, followingCount, convoyRsvps, onSubscribePush, onUnsubscribePush, renderFeedScopedTo, onViewBuild, savedRoutes, onUnsaveRoute, onStartNav, myTripPlans, onOpenTripPlan, onNewTripPlan, isAdmin, currentRole, savedTrips, onUnsaveTrip, onOpenSavedTrip, pendingScroll, onConsumePendingScroll, onOpenAdminDashboard, onOpenAmbassadorDashboard, onOpenContentPartnerDashboard, isContentPartner, isGravelGuide, onOpenFollowList }) {
+function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, initialUserBio, initialIsPublic, onViewUser, onLogout, onOpenBlockedUsers, memberSince, userBuilds, onAddBuild, onUpdateBuild, onDeleteBuild, profilePic, onSetProfilePic, notifPrefs, onSetNotifPrefs, feedItems, onDeletePost, onEditPost, onUpdateConvoy, onGoToPost, myPoints: myPointsProp, onSaveProfile, followerCount, followingCount, convoyRsvps, onSubscribePush, onUnsubscribePush, onGetPushStatus, onSendTestPush, onRepairPush, renderFeedScopedTo, onViewBuild, savedRoutes, onUnsaveRoute, onStartNav, myTripPlans, onOpenTripPlan, onNewTripPlan, isAdmin, currentRole, savedTrips, onUnsaveTrip, onOpenSavedTrip, pendingScroll, onConsumePendingScroll, onOpenAdminDashboard, onOpenAmbassadorDashboard, onOpenContentPartnerDashboard, isContentPartner, isGravelGuide, onOpenFollowList }) {
   const [isPublic, setIsPublic] = useState(initialIsPublic == null ? true : !!initialIsPublic);
   const [activeTab, setActiveTab] = useState("builds");
   const [activeBuild, setActiveBuild] = useState(0);
@@ -26276,6 +26276,7 @@ function ProfileScreen({ currentUserId, initialUserName, initialUserHandle, init
                 </div>
               </div>
             </div>
+            <PushDiagnosticsCard currentUserId={currentUserId} onGetStatus={onGetPushStatus || (async () => null)} onSendTest={onSendTestPush || (async () => ({ error: "unavailable" }))} onRepair={onRepairPush || (async () => {})} />
             <div style={{ marginTop: 16, background: T.darkCard, borderRadius: 12, padding: 16 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <div>
@@ -49221,6 +49222,53 @@ function NativePushNudge({ onEnable, onDismiss }) {
   );
 }
 
+/* ─── PushDiagnosticsCard ─── native-only card in Profile → Settings →
+   Notifications: shows this device's push state (OS permission, OneSignal
+   subscription opted-in + id, External ID binding) and a SEND TEST button
+   that runs the real pipeline (notifications insert → DB trigger → send-push
+   → OneSignal). Makes "I'm not getting pushes" diagnosable from the phone. */
+function PushDiagnosticsCard({ currentUserId, onGetStatus, onSendTest, onRepair }) {
+  const [status, setStatus] = useState(null);
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  const refresh = async () => { try { setStatus(await onGetStatus()); } catch (_) { setStatus({ ready: false }); } };
+  useEffect(() => { refresh(); }, []);
+  if (!(typeof isNativePlatform === "function" && isNativePlatform())) return null;
+  const row = (l, v, ok) => (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "6px 0", borderBottom: `1px solid ${T.charcoal}` }}>
+      <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1 }}>{l}</span>
+      <span style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 10, color: ok === false ? T.red : ok === true ? T.green : T.white, textAlign: "right", wordBreak: "break-all" }}>{v}</span>
+    </div>
+  );
+  const boundOk = status && status.externalId ? status.externalId === currentUserId : null;
+  const test = async () => {
+    setBusy(true); setMsg("");
+    try { await onRepair(); } catch (_) {}
+    const r = await onSendTest();
+    setBusy(false);
+    setMsg(r && r.error ? r.error : "Sent. It should arrive within ~10 seconds — if the bell shows it but no banner appears, the problem is on the OneSignal/APNs side.");
+    refresh();
+  };
+  return (
+    <div style={{ marginTop: 16, background: T.darkCard, borderRadius: 12, padding: 16 }}>
+      <div style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.5, fontWeight: 700, marginBottom: 8 }}>PUSH DIAGNOSTICS (THIS DEVICE)</div>
+      {status === null ? <div style={{ fontFamily: sans, fontSize: 11, color: T.tertiary }}>Checking…</div>
+        : !status.ready ? <div style={{ fontFamily: sans, fontSize: 11, color: T.red }}>Push plugin not loaded.</div>
+        : (<>
+          {row("OS PERMISSION", status.permission === null ? "unknown" : status.permission ? "granted" : "not granted", status.permission)}
+          {row("SUBSCRIPTION", status.optedIn === null ? "unknown" : status.optedIn ? "opted in" : "opted out", status.optedIn)}
+          {row("SUBSCRIPTION ID", status.subscriptionId || "none", !!status.subscriptionId)}
+          {row("BOUND TO ACCOUNT", status.externalId ? (boundOk ? "yes" : "wrong account") : "no", boundOk)}
+        </>)}
+      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+        <button onClick={refresh} style={{ flex: 1, padding: "10px", borderRadius: 8, background: "none", border: `1px solid ${T.charcoal}`, color: T.tertiary, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>REFRESH</button>
+        <button onClick={test} disabled={busy} style={{ flex: 1, padding: "10px", borderRadius: 8, background: T.copper, border: "none", color: T.darkBg, fontFamily: sans, fontSize: 11, fontWeight: 700, letterSpacing: 1, cursor: "pointer", opacity: busy ? 0.7 : 1 }}>{busy ? "SENDING…" : "SEND TEST"}</button>
+      </div>
+      {msg && <div style={{ fontFamily: serif, fontSize: 11, color: /^Sent/.test(msg) ? T.green : T.red, marginTop: 10, lineHeight: 1.4 }}>{msg}</div>}
+    </div>
+  );
+}
+
 function EnablePushScreen({ onSubscribe, onSkip }) {
   const [subscribing, setSubscribing] = useState(false);
   const [error, setError] = useState("");
@@ -57959,6 +58007,25 @@ export default function Trailhead() {
   // endpoint (so re-subscribing on the same device updates instead of adding
   // duplicate rows). Returns true on success, false if the user denied
   // permission or push isn't supported.
+  // Diagnostics: re-bind this device (opt in + External ID) and send a real
+  // notification to self through the normal pipeline.
+  const repairNativePush = async () => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid || !isNativePlatform()) return;
+    try { await optInNativePush(); } catch (_) {}
+    registerNativePush(uid);
+    await new Promise(r => setTimeout(r, 800));
+  };
+  const sendTestPushNotification = async () => {
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    if (!uid) return { error: "Not signed in" };
+    const name = (currentProfile && currentProfile.full_name) || "Trailhub";
+    const { error } = await supabase.from("notifications").insert({
+      user_id: uid, actor_id: uid, actor_name: name, type: "mention",
+      text: "sent a test notification — push is working on this device", target: "Trailhub",
+    });
+    return error ? { error: error.message } : { ok: true };
+  };
   const subscribeToPush = async () => {
     const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
     if (!uid) return false;
@@ -57966,7 +58033,7 @@ export default function Trailhead() {
     // on grant, bind this device to the user so send-push can target them.
     if (isNativePlatform()) {
       const ok = await requestNativePushPermission();
-      if (ok) registerNativePush(uid);
+      if (ok) { try { await optInNativePush(); } catch (_) {} registerNativePush(uid); }
       return ok;
     }
     if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
@@ -62388,7 +62455,7 @@ export default function Trailhead() {
           isOtherProfile ? (
             <OtherProfileScreen userId={profileStack[1]} onBack={goBack} onMessage={(user) => openDM(user)} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} onAdminUpdateUserRole={adminUpdateUserRole} onAdminDeclineAmbassador={adminDeclineAmbassadorRequest} onAdminToggleModerator={adminToggleUserModerator} onAdminToggleBetaTester={adminToggleUserBetaTester} onAdminToggleContentPartner={adminToggleUserContentPartner} onAdminToggleGravelGuide={adminToggleUserGravelGuide} onAdminViewAsAmbassador={adminViewAsAmbassador} onReportContent={requireAuth(openContentReport)} followingIds={followingIds} onFollow={requireAuth(followUser)} onUnfollow={requireAuth(unfollowUser)} blockedIds={blockedIds} onBlock={requireAuth(blockUser)} onUnblock={requireAuth(unblockUser)} fetchFollowCounts={fetchFollowCounts} onOpenFollowList={requireAuth(openFollowList)} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} allBuilds={allBuilds} onLoadAllBuilds={loadAllBuildsOnce} onlineUserIds={onlineUserIds} allTripPlans={allTripPlans} allTripReports={allTripReports} onOpenTripPlan={(id) => setDetailTripId(id)} />
           ) : (
-            <ProfileScreen memberSince={(() => { const d = (supabaseSession && supabaseSession.user && supabaseSession.user.created_at) || (currentProfile && currentProfile.created_at); if (!d) return null; const dt = new Date(d); return isNaN(dt.getTime()) ? null : dt.toLocaleString("en-US", { month: "short", year: "numeric" }); })()} onOpenBlockedUsers={() => setShowBlockedUsers(true)} onOpenFollowList={openFollowList} onOpenAdminDashboard={() => { setProfileStack([]); setScreen("admin"); if (typeof window !== "undefined") window.history.pushState({}, "", "/admin"); }} onOpenAmbassadorDashboard={() => { setProfileStack([]); setScreen("ambassador"); }} onOpenContentPartnerDashboard={() => setShowContentPartnerDashboard(true)} isContentPartner={isContentPartner} isGravelGuide={isGravelGuide} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} currentRole={currentRole} convoyRsvps={convoyRsvps} followerCount={myFollowerCount} followingCount={myFollowingCount} onSubscribePush={subscribeToPush} onUnsubscribePush={unsubscribeFromPush} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} savedRoutes={savedRoutes} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} savedTrips={(() => { const ids = savedTripIds || {}; const pool = [...(allTripReports || []), ...(allTripPlans || [])]; const seen = {}; const out = []; pool.forEach(t => { if (t && t.id && ids[t.id] && !seen[t.id]) { seen[t.id] = true; out.push(t); } }); return out; })()} onUnsaveTrip={requireAuth(toggleSaveTrip)} onOpenSavedTrip={(t) => { if (!t) return; if (t.slug) setPendingTripNav(t.slug); else setDetailTripId(t.id); }} pendingScroll={pendingProfileScroll} onConsumePendingScroll={() => setPendingProfileScroll(null)} onStartNav={(route) => setActiveNavRoute(route)} myTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} onNewTripPlan={requireAuth(() => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("routes"); enterPlanBuilder(); })} initialUserName={(currentProfile && currentProfile.full_name) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name) || null} initialUserHandle={(currentProfile && currentProfile.handle) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle) || null} initialUserBio={currentProfile ? currentProfile.bio : null} initialIsPublic={currentProfile ? currentProfile.is_public : null} onSaveProfile={saveProfile} onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={deleteBuild} profilePic={profilePic} onSetProfilePic={requestProfilePicCrop} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => deletePost(id)} onEditPost={(id, newText) => updatePost(id, { title: newText })} onUpdateConvoy={(convoyId, updates) => {
+            <ProfileScreen memberSince={(() => { const d = (supabaseSession && supabaseSession.user && supabaseSession.user.created_at) || (currentProfile && currentProfile.created_at); if (!d) return null; const dt = new Date(d); return isNaN(dt.getTime()) ? null : dt.toLocaleString("en-US", { month: "short", year: "numeric" }); })()} onOpenBlockedUsers={() => setShowBlockedUsers(true)} onOpenFollowList={openFollowList} onOpenAdminDashboard={() => { setProfileStack([]); setScreen("admin"); if (typeof window !== "undefined") window.history.pushState({}, "", "/admin"); }} onOpenAmbassadorDashboard={() => { setProfileStack([]); setScreen("ambassador"); }} onOpenContentPartnerDashboard={() => setShowContentPartnerDashboard(true)} isContentPartner={isContentPartner} isGravelGuide={isGravelGuide} currentUserId={supabaseSession && supabaseSession.user && supabaseSession.user.id} isAdmin={isAdmin} currentRole={currentRole} convoyRsvps={convoyRsvps} followerCount={myFollowerCount} followingCount={myFollowingCount} onSubscribePush={subscribeToPush} onUnsubscribePush={unsubscribeFromPush} onGetPushStatus={getNativePushStatus} onSendTestPush={sendTestPushNotification} onRepairPush={repairNativePush} renderFeedScopedTo={renderFeedScopedTo} onViewBuild={handleViewBuild} savedRoutes={savedRoutes} onUnsaveRoute={requireAuth((routeId) => setSavedRoutes(prev => prev.filter(r => r.id !== routeId && r.name !== routeId)))} savedTrips={(() => { const ids = savedTripIds || {}; const pool = [...(allTripReports || []), ...(allTripPlans || [])]; const seen = {}; const out = []; pool.forEach(t => { if (t && t.id && ids[t.id] && !seen[t.id]) { seen[t.id] = true; out.push(t); } }); return out; })()} onUnsaveTrip={requireAuth(toggleSaveTrip)} onOpenSavedTrip={(t) => { if (!t) return; if (t.slug) setPendingTripNav(t.slug); else setDetailTripId(t.id); }} pendingScroll={pendingProfileScroll} onConsumePendingScroll={() => setPendingProfileScroll(null)} onStartNav={(route) => setActiveNavRoute(route)} myTripPlans={allTripPlans} onOpenTripPlan={(id) => setDetailTripId(id)} onNewTripPlan={requireAuth(() => { setProfileStack([]); setShowRecovery(false); setShowCompose(false); setScreen("routes"); enterPlanBuilder(); })} initialUserName={(currentProfile && currentProfile.full_name) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.full_name) || null} initialUserHandle={(currentProfile && currentProfile.handle) || (supabaseSession && supabaseSession.user && supabaseSession.user.user_metadata && supabaseSession.user.user_metadata.handle) || null} initialUserBio={currentProfile ? currentProfile.bio : null} initialIsPublic={currentProfile ? currentProfile.is_public : null} onSaveProfile={saveProfile} onViewUser={openUserProfile} onLogout={async () => { try { await supabase.auth.signOut(); } catch (e) {} setAuthState("login"); setProfileStack([]); }} userBuilds={userBuilds} onAddBuild={addBuild} onUpdateBuild={updateBuild} onDeleteBuild={deleteBuild} profilePic={profilePic} onSetProfilePic={requestProfilePicCrop} notifPrefs={notifPrefs} onSetNotifPrefs={setNotifPrefs} feedItems={feedItems} onDeletePost={(id) => deletePost(id)} onEditPost={(id, newText) => updatePost(id, { title: newText })} onUpdateConvoy={(convoyId, updates) => {
               updatePost(convoyId, updates);
               // DM going/maybe responders that the convoy was updated.
               const convoy = feedItemsRef.current.find(p => p.id === convoyId);
