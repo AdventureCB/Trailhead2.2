@@ -49474,6 +49474,92 @@ function WelcomeStartModal({ onClose }) {
   );
 }
 
+/* ─── usePullToRefresh ─── one gesture for every scrolling screen. Listens
+   on the document: a downward drag that starts while the nearest scrollable
+   ancestor is at scrollTop 0 becomes a "pull"; past the threshold on release
+   it calls onRefresh. The caller renders <PullToRefreshPill> from the
+   returned state. Touch-only (phones / native shell); desktop has reload. */
+const PTR_THRESHOLD = 72;
+function usePullToRefresh(enabled, onRefresh) {
+  const [pull, setPull] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const startRef = useRef(null); // { y, el } | null
+  const refreshingRef = useRef(false);
+  const cbRef = useRef(onRefresh); cbRef.current = onRefresh; // latest callback without re-binding listeners
+  useEffect(() => {
+    if (!enabled || typeof document === "undefined") return;
+    const scrollable = (node) => {
+      let el = node;
+      while (el && el !== document.body) {
+        try {
+          const st = getComputedStyle(el);
+          if ((st.overflowY === "auto" || st.overflowY === "scroll") && el.scrollHeight > el.clientHeight) return el;
+        } catch (_) {}
+        el = el.parentElement;
+      }
+      return document.scrollingElement || document.documentElement;
+    };
+    const onStart = (e) => {
+      if (refreshingRef.current || !e.touches || e.touches.length !== 1) { startRef.current = null; return; }
+      const t = e.target;
+      // Don't hijack maps, sliders, inputs, or anything already fixed on screen.
+      if (t && t.closest && t.closest(".mapboxgl-map, .maplibregl-map, input, textarea, [contenteditable], [data-no-ptr]")) { startRef.current = null; return; }
+      const el = scrollable(t);
+      if (!el || el.scrollTop > 0) { startRef.current = null; return; }
+      startRef.current = { y: e.touches[0].clientY, el };
+    };
+    const onMove = (e) => {
+      const st = startRef.current;
+      if (!st || !e.touches || e.touches.length !== 1) return;
+      if (st.el.scrollTop > 0) { startRef.current = null; setPull(0); return; }
+      const dy = e.touches[0].clientY - st.y;
+      if (dy <= 0) { setPull(0); return; }
+      // Rubber-band: diminishing pull so it feels native.
+      setPull(Math.min(140, Math.round(dy * 0.55)));
+    };
+    const onEnd = async () => {
+      const st = startRef.current;
+      startRef.current = null;
+      setPull(prev => {
+        if (st && prev >= PTR_THRESHOLD && !refreshingRef.current) {
+          refreshingRef.current = true;
+          setRefreshing(true);
+          Promise.resolve().then(() => cbRef.current && cbRef.current()).catch(() => {}).finally(() => {
+            setTimeout(() => { refreshingRef.current = false; setRefreshing(false); }, 400);
+          });
+        }
+        return 0;
+      });
+    };
+    document.addEventListener("touchstart", onStart, { passive: true });
+    document.addEventListener("touchmove", onMove, { passive: true });
+    document.addEventListener("touchend", onEnd, { passive: true });
+    document.addEventListener("touchcancel", onEnd, { passive: true });
+    return () => {
+      document.removeEventListener("touchstart", onStart);
+      document.removeEventListener("touchmove", onMove);
+      document.removeEventListener("touchend", onEnd);
+      document.removeEventListener("touchcancel", onEnd);
+    };
+  }, [enabled]);
+  return { pull, refreshing };
+}
+function PullToRefreshPill({ pull, refreshing }) {
+  const show = refreshing || pull > 8;
+  if (!show) return null;
+  const armed = refreshing || pull >= PTR_THRESHOLD;
+  const y = refreshing ? 18 : Math.min(18, pull - 8);
+  return (
+    <div style={{ position: "fixed", left: 0, right: 0, top: `calc(env(safe-area-inset-top, 0px) + 56px)`, zIndex: 1300, display: "flex", justifyContent: "center", pointerEvents: "none" }}>
+      <div style={{ transform: `translateY(${y}px)`, opacity: Math.min(1, (pull + (refreshing ? 100 : 0)) / 40), transition: refreshing ? "transform 150ms" : "none", display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 20, background: T.darkCard, border: `1px solid ${armed ? T.copper : T.charcoal}`, boxShadow: "0 4px 14px rgba(0,0,0,0.4)" }}>
+        <span style={{ width: 14, height: 14, borderRadius: "50%", border: `2px solid ${T.copper}`, borderTopColor: "transparent", display: "inline-block", animation: refreshing ? "th-ptr-spin 0.8s linear infinite" : "none", transform: refreshing ? "none" : `rotate(${Math.min(360, pull * 4)}deg)` }} />
+        <span style={{ fontFamily: sans, fontSize: 10, letterSpacing: 1, fontWeight: 700, color: armed ? T.copper : T.tertiary }}>{refreshing ? "REFRESHING" : armed ? "RELEASE TO REFRESH" : "PULL TO REFRESH"}</span>
+      </div>
+      <style>{`@keyframes th-ptr-spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
 /* ─── NativePushNudge ─── bottom sheet for signed-in users on the native app
    who were never asked for notification permission (existing accounts skip
    the onboarding wizard). ENABLE fires the OS prompt; NOT NOW snoozes it for
@@ -62068,6 +62154,94 @@ export default function Trailhead() {
     }
   };
 
+  // ─── refreshLatest ─── what pull-to-refresh and resume-from-background
+  // call: re-fetch the newest posts + their likes/comments, the bell, forum
+  // threads/likes, and replies for any thread already opened. Realtime
+  // normally keeps all of this live, but iOS drops the socket after a while
+  // in the background and events from that window are gone for good.
+  const refreshLatestRef = useRef(0);
+  const refreshLatest = async () => {
+    const now = Date.now();
+    if (now - refreshLatestRef.current < 3000) return; // double-trigger guard
+    refreshLatestRef.current = now;
+    const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
+    try {
+      const { data: postRows } = await supabase.from("posts").select("*").is("hidden_at", null).order("created_at", { ascending: false }).limit(30);
+      const rows = Array.isArray(postRows) ? postRows : [];
+      if (rows.length) {
+        const authorIds = Array.from(new Set(rows.map(r => r.user_id).filter(Boolean)));
+        const authorsById = {};
+        if (currentProfile && uid) authorsById[uid] = currentProfile;
+        const others = authorIds.filter(id => id !== uid);
+        if (others.length) {
+          const { data: profs } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").in("id", others);
+          (profs || []).forEach(p => { authorsById[p.id] = p; });
+        }
+        const mapped = rows.map(r => dbRowToFeedItem(r, authorsById[r.user_id] || null));
+        const ids = new Set(mapped.map(p => p.id));
+        setFeedItems(prev => [...mapped, ...(prev || []).filter(p => !ids.has(p.id))]);
+      }
+      // Engagement for everything currently on screen (top 60 to bound the IN list).
+      const loadedIds = Array.from(new Set([...(rows.map(r => r.id)), ...((feedItemsRef.current || []).slice(0, 60).map(p => p.id))])).filter(Boolean);
+      if (loadedIds.length) {
+        const postLikeCounts = {}, postCommentCounts = {}, commentLikeCounts = {};
+        const { data: likeRows } = await supabase.from("post_likes").select("post_id, user_id").in("post_id", loadedIds);
+        const mine = {};
+        (likeRows || []).forEach(r => { postLikeCounts[r.post_id] = (postLikeCounts[r.post_id] || 0) + 1; if (r.user_id === uid) mine[r.post_id] = true; });
+        if (uid) setLikedPostIds(prev => { const n = { ...prev }; loadedIds.forEach(id => { delete n[id]; }); return { ...n, ...mine }; });
+        const { data: commentRows } = await supabase.from("post_comments").select("*").in("post_id", loadedIds).order("created_at", { ascending: true });
+        const cRows = Array.isArray(commentRows) ? commentRows : [];
+        const commenterIds = Array.from(new Set(cRows.map(r => r.user_id).filter(Boolean)));
+        const profilesById = {};
+        if (commenterIds.length) {
+          const { data: profs } = await supabase.from("profiles").select("id, full_name, handle, avatar_url").in("id", commenterIds);
+          (profs || []).forEach(p => { profilesById[p.id] = p; });
+        }
+        const commentIds = cRows.map(r => r.id);
+        const mineComments = {};
+        if (commentIds.length) {
+          const { data: cl } = await supabase.from("post_comment_likes").select("comment_id, user_id").in("comment_id", commentIds);
+          (cl || []).forEach(r => { commentLikeCounts[r.comment_id] = (commentLikeCounts[r.comment_id] || 0) + 1; if (r.user_id === uid) mineComments[r.comment_id] = true; });
+          if (uid) setLikedCommentIds(prev => ({ ...prev, ...mineComments }));
+        }
+        const grouped = {};
+        loadedIds.forEach(id => { grouped[id] = []; });
+        cRows.forEach(r => { postCommentCounts[r.post_id] = (postCommentCounts[r.post_id] || 0) + 1; const c = dbRowToComment(r, profilesById[r.user_id]); if (c) { c.likes = commentLikeCounts[r.id] || 0; (grouped[r.post_id] = grouped[r.post_id] || []).push(c); } });
+        setPostComments(prev => ({ ...prev, ...grouped }));
+        setFeedItems(prev => prev.map(p => loadedIds.includes(p.id) ? { ...p, likes: postLikeCounts[p.id] || 0, comments: postCommentCounts[p.id] || 0 } : p));
+      }
+    } catch (e) { console.warn("[refresh] feed", e); }
+    try {
+      if (uid) {
+        const { data: notifRows } = await supabase.from("notifications").select("*").eq("user_id", uid).order("created_at", { ascending: false }).limit(50);
+        if (Array.isArray(notifRows)) setBellNotifs(notifRows.map(dbNotifToBell).filter(Boolean));
+      }
+    } catch (e) { console.warn("[refresh] notifications", e); }
+    try {
+      await hydrateForumThreads();
+      await hydrateForumLikes();
+      const opened = Object.keys(forumReplies || {});
+      for (const tid of opened.slice(0, 10)) { forumRepliesLoadedRef.current[tid] = false; await loadForumReplies(tid); }
+    } catch (e) { console.warn("[refresh] forum", e); }
+  };
+  // Pull-to-refresh on touch devices, everywhere the app scrolls.
+  const ptr = usePullToRefresh(authState === "app" && appReady, refreshLatest);
+  // Resume from background: after ≥ 45 s hidden, refresh once. Covers the
+  // iOS-killed-the-socket case without hammering on quick app switches.
+  const hiddenAtRef = useRef(0);
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const onVis = () => {
+      if (document.visibilityState === "hidden") { hiddenAtRef.current = Date.now(); return; }
+      if (document.visibilityState === "visible" && hiddenAtRef.current && Date.now() - hiddenAtRef.current > 45000 && authState === "app") {
+        hiddenAtRef.current = 0;
+        refreshLatest();
+      }
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [authState, supabaseSession && supabaseSession.user && supabaseSession.user.id]);
+
   // Toggle a thread like. Optimistic + DB write, mirrors toggleBuildLike.
   const toggleForumThreadLike = async (threadId) => {
     const uid = supabaseSession && supabaseSession.user && supabaseSession.user.id;
@@ -63892,6 +64066,7 @@ export default function Trailhead() {
           onGoSignUp={(prefill) => { setRafflePrefill(prefill || null); setAuthState("signup"); }}
         />
       )}
+      <PullToRefreshPill pull={ptr.pull} refreshing={ptr.refreshing} />
       {showPushNudge && (
         <NativePushNudge onEnable={subscribeToPush} onDismiss={dismissPushNudge} />
       )}
