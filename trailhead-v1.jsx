@@ -49114,7 +49114,7 @@ const APP_STORE_URL = APP_STORE_ID
   : "https://apps.apple.com/us/search?term=trailhub%20lone%20peak";
 // Google Play — set once the Android app is approved; the badge stays hidden
 // while empty. Will be https://play.google.com/store/apps/details?id=com.lonepeakoverland.trailhub
-const PLAY_STORE_URL = "";
+const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.lonepeakoverland.trailhub";
 const TRAILHEAD_TOS_VERSION = "2026-05-20";
 const TRAILHEAD_TOS_BODY = `TRAILHUB TERMS OF SERVICE
 Last updated: May 2026
@@ -49279,8 +49279,8 @@ function InstallPWAScreen({ onContinue, onSkip }) {
         <div style={{ width: 64, height: 64, borderRadius: "50%", background: `${T.green}15`, border: `2px solid ${T.green}`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
           <Smartphone size={28} color={T.green} strokeWidth={1.5} />
         </div>
-        <h2 style={{ fontFamily: sans, fontSize: 22, color: T.white, margin: "0 0 8px", fontWeight: 700, letterSpacing: 0.5, textAlign: "center" }}>{isIOS ? "GET THE APP" : "SAVE AS APP"}</h2>
-        <p style={{ fontFamily: serif, fontSize: 14, color: T.tertiary, textAlign: "center", margin: "0 0 24px", lineHeight: 1.6 }}>{isIOS ? "Push notifications, offline maps, and faster loads — Trailhub works best as the app." : "Install Trailhub on your home screen to get push notifications, faster loads, and a full-screen experience."}</p>
+        <h2 style={{ fontFamily: sans, fontSize: 22, color: T.white, margin: "0 0 8px", fontWeight: 700, letterSpacing: 0.5, textAlign: "center" }}>{isMobile ? "GET THE APP" : "SAVE AS APP"}</h2>
+        <p style={{ fontFamily: serif, fontSize: 14, color: T.tertiary, textAlign: "center", margin: "0 0 24px", lineHeight: 1.6 }}>{isMobile ? "Push notifications, offline maps, and faster loads — Trailhub works best as the app." : "Install Trailhub on your home screen to get push notifications, faster loads, and a full-screen experience."}</p>
         {isIOS ? (
           // iPhone: the App Store app is now the primary path (approved
           // Oct 2026). Add-to-Home-Screen stays available as a fallback.
@@ -49300,14 +49300,22 @@ function InstallPWAScreen({ onContinue, onSkip }) {
             </details>
           </div>
         ) : (
-          <div style={{ background: T.darkCard, borderRadius: 12, padding: 18, border: `1px solid ${T.charcoal}`, marginBottom: 18 }}>
-            <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.5, fontWeight: 700, display: "block", marginBottom: 12 }}>ON ANDROID (CHROME / EDGE)</span>
-            <ol style={{ margin: 0, paddingLeft: 20, fontFamily: serif, fontSize: 14, color: T.white, lineHeight: 1.8 }}>
-              <li>Tap the <strong style={{ color: T.copper }}>⋮ menu</strong> in the top-right corner of Chrome</li>
-              <li>Tap <strong style={{ color: T.copper }}>Install app</strong> (or "Add to Home screen")</li>
-              <li>Tap <strong style={{ color: T.copper }}>Install</strong> to confirm</li>
-              <li>Open Trailhub from your home screen — you'll be prompted to enable push notifications next</li>
-            </ol>
+          // Android: Google Play app is the primary path (published Nov 2026);
+          // Chrome's install-as-PWA stays as the fallback.
+          <div style={{ background: T.darkCard, borderRadius: 12, padding: 18, border: `1px solid ${T.copper}60`, marginBottom: 18 }}>
+            <span style={{ fontFamily: sans, fontSize: 10, color: T.copper, letterSpacing: 1.5, fontWeight: 700, display: "block", marginBottom: 10 }}>ON ANDROID</span>
+            <p style={{ fontFamily: serif, fontSize: 14, color: T.white, lineHeight: 1.6, margin: "0 0 14px" }}>Trailhub is on Google Play — get the app for offline maps, push notifications, and the full-screen experience. Sign in with the account you just created.</p>
+            <a href={PLAY_STORE_URL} target="_blank" rel="noopener noreferrer" style={{ display: "block", width: 200, margin: "0 auto 12px" }}>
+              <img src="/google-play-badge.png" alt="Get it on Google Play" style={{ width: "100%", height: "auto", display: "block" }} />
+            </a>
+            <details style={{ marginTop: 6 }}>
+              <summary style={{ fontFamily: sans, fontSize: 11, color: T.tertiary, letterSpacing: 0.5, cursor: "pointer", listStyle: "none", textAlign: "center" }}>Prefer the browser? Install from Chrome instead ▾</summary>
+              <ol style={{ margin: "10px 0 0", paddingLeft: 20, fontFamily: serif, fontSize: 13, color: T.white, lineHeight: 1.8 }}>
+                <li>Tap the <strong style={{ color: T.copper }}>⋮ menu</strong> in the top-right corner of Chrome</li>
+                <li>Tap <strong style={{ color: T.copper }}>Install app</strong> (or "Add to Home screen"), then <strong style={{ color: T.copper }}>Install</strong></li>
+                <li>Open Trailhub from your home screen</li>
+              </ol>
+            </details>
           </div>
         )}
         <button onClick={onContinue} style={{ width: "100%", padding: "14px 16px", borderRadius: 8, background: T.red, border: "none", cursor: "pointer", fontFamily: sans, fontSize: 13, color: T.white, fontWeight: 700, letterSpacing: 1.5, marginBottom: 10 }}>I'VE INSTALLED IT</button>
