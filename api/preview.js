@@ -752,12 +752,8 @@ async function resolveEntity(type, id) {
           imageAlt: "",
         };
       }
-      return {
-        title: "Forum Thread · Trailhub",
-        description: "Join the conversation on the Trailhub community forum.",
-        image: null,
-        imageAlt: "",
-      };
+      // No such thread (deleted / bad slug / restricted) → real 404.
+      return null;
     }
     // Hero image — first photo if available. Body is stored as HTML; strip
     // tags + collapse whitespace for the meta description (160 chars).
@@ -2060,7 +2056,7 @@ module.exports = async function handler(req, res) {
         itemListElement: threads.map((t, i) => ({
           "@type": "ListItem",
           position: i + 1,
-          url: `${origin}/forum/${meta.article.subInfo.slug || sub}/${t.slug || ""}`.replace(/\/$/, ""),
+          url: `${origin}/forum/${meta.article.subInfo.slug || ((req.query && req.query.sub) || "")}/${t.slug || ""}`.replace(/\/$/, ""),
           name: t.title || "Thread",
         })),
       },
