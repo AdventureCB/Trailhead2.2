@@ -76,20 +76,20 @@ module.exports = async function handler(req, res) {
   // are already DB-driven below so renames/additions propagate next request.
   const [forumSubcategories, forumThreads, tripReports, builds, campingSpots, profiles, posts, gearDrops] = await Promise.all([
     supabaseFetch("forum_subcategories", "select=slug,updated_at,created_at&order=sort_order.asc&limit=2000"),
-    supabaseFetch("forum_threads", "select=slug,subcategory_slug,updated_at,created_at&order=updated_at.desc&limit=10000"),
-    supabaseFetch("trip_reports", "status=eq.published&select=slug,updated_at,created_at,kind,visibility&order=updated_at.desc&limit=10000"),
-    supabaseFetch("builds", "select=id,updated_at,created_at&order=updated_at.desc&limit=10000"),
-    supabaseFetch("camping_spots", "visibility=eq.public&select=id,updated_at,created_at&order=updated_at.desc&limit=10000"),
+    supabaseFetch("forum_threads", "select=slug,subcategory_slug,user_id,updated_at,created_at&order=updated_at.desc&limit=10000"),
+    supabaseFetch("trip_reports", "status=eq.published&select=slug,user_id,updated_at,created_at,kind,visibility&order=updated_at.desc&limit=10000"),
+    supabaseFetch("builds", "select=id,user_id,updated_at,created_at&order=updated_at.desc&limit=10000"),
+    supabaseFetch("camping_spots", "visibility=eq.public&select=id,user_id,description,photos,photo_url,updated_at,created_at&order=updated_at.desc&limit=10000"),
     // Public profiles with a handle set. Each becomes a /users/<handle>
     // E-E-A-T hub page linking to all the user's content. Filter
     // is_public=true so private accounts stay out of search results.
-    supabaseFetch("profiles", "is_public=eq.true&handle=not.is.null&select=handle,updated_at,created_at&order=updated_at.desc&limit=10000"),
+    supabaseFetch("profiles", "is_public=eq.true&handle=not.is.null&select=id,handle,updated_at,created_at&order=updated_at.desc&limit=10000"),
     // Feed posts (POST / PHOTOS / ROUTES / BUILDS / CONVOYS) — every one
     // gets a /post/:id URL that api/preview.js SSRs with OG + JSON-LD.
     // Posts are public by design (no visibility column). Cap matches the
     // others; if Trailhead ever blows past 50K total URLs we'll need to
     // split into a sitemap index.
-    supabaseFetch("posts", "select=id,updated_at,created_at&order=updated_at.desc&limit=10000"),
+    supabaseFetch("posts", "select=user_id,id,updated_at,created_at&order=updated_at.desc&limit=10000"),
     // Gear drops — sponsored events. Drafts are filtered out at the
     // query layer so they never leak into the sitemap.
     supabaseFetch("gear_drops", "status=neq.draft&slug=not.is.null&select=slug,updated_at,created_at,status&order=updated_at.desc&limit=2000"),
@@ -112,9 +112,21 @@ module.exports = async function handler(req, res) {
   urls.push(urlEntry(`${origin}/spots`, now, "daily", "0.8"));
 
   // Forum subcategory landing pages — each is its own topical hub.
+  // Indexes for the thin-page rules above.
+  const threadCountBySub = {}; const latestThreadBySub = {};
+  (forumThreads || []).forEach(t => {
+    threadCountBySub[t.subcategory_slug] = (threadCountBySub[t.subcategory_slug] || 0) + 1;
+    const lm = t.updated_at || t.created_at;
+    if (lm && (!latestThreadBySub[t.subcategory_slug] || lm > latestThreadBySub[t.subcategory_slug])) latestThreadBySub[t.subcategory_slug] = lm;
+  });
+  const contentAuthors = new Set();
+  [...(builds || []), ...(tripReports || []), ...(forumThreads || []), ...(campingSpots || []), ...(posts || [])].forEach(r => { if (r && r.user_id) contentAuthors.add(r.user_id); });
+
   forumSubcategories.forEach(sub => {
     if (!sub || !sub.slug) return;
-    const lastmod = sub.updated_at || sub.created_at || now;
+    // Empty categories are noindex until they have a thread — keep them out.
+    if (!(threadCountBySub[sub.slug] > 0)) return;
+    const lastmod = latestThreadBySub[sub.slug] || sub.updated_at || sub.created_at || now;
     urls.push(urlEntry(`${origin}/forum/${sub.slug}`, lastmod, "daily", "0.7"));
   });
 
@@ -146,6 +158,9 @@ module.exports = async function handler(req, res) {
   // Camping spots — public visibility only.
   campingSpots.forEach(row => {
     if (!row || !row.id) return;
+    // Thin spots (no notes, no photos) are noindex — leave them out.
+    const hasPhotos = (Array.isArray(row.photos) && row.photos.length > 0) || !!row.photo_url;
+    if (!String(row.description || "").trim() && !hasPhotos) return;
     const lastmod = row.updated_at || row.created_at || now;
     urls.push(urlEntry(`${origin}/spots/${row.id}`, lastmod, "monthly", "0.6"));
   });
@@ -165,6 +180,8 @@ module.exports = async function handler(req, res) {
   // each profile is a dense internal-link node.
   profiles.forEach(row => {
     if (!row || !row.handle) return;
+    // Profiles with nothing public (no build / trip / thread / spot / post) are noindex — leave them out.
+    if (!contentAuthors.has(row.id)) return;
     const lastmod = row.updated_at || row.created_at || now;
     urls.push(urlEntry(`${origin}/users/${row.handle}`, lastmod, "weekly", "0.7"));
   });

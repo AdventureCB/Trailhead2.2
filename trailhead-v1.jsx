@@ -9921,7 +9921,7 @@ function ForumScreen({ pendingThread, onPendingHandled, onLoadThreadTeaser, pend
       const showShare = forumShareMenu === shareKey;
       const replyTargetIdx = typeof rootParentIdx === "number" ? rootParentIdx : idx;
       return (
-        <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 6 }}>
+        <div id={replyId ? `comment-${replyId}` : undefined} style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 6 }}>
           <button onClick={() => toggleReplyHeart(replyId)} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px 4px 0" }}>
             <Heart size={12} color={liked ? T.red : T.tertiary} strokeWidth={1.5} fill={liked ? T.red : "none"} />
             {likes > 0 && <span style={{ fontFamily: sans, fontSize: 10, color: liked ? T.red : T.tertiary }}>{likes}</span>}
@@ -49753,6 +49753,19 @@ const __INITIAL_RECOVERY = (function() {
     const h = (typeof window !== "undefined" && window.location && window.location.hash) || "";
     return /(^#|&)type=recovery(&|$)/.test(h);
   } catch (e) { return false; }
+})();
+// Soft-404 guard: the SPA catch-all serves index.html (HTTP 200) for ANY
+// path. For paths that aren't app routes, flag noindex in the rendered DOM
+// so Google drops them instead of indexing the shell as a duplicate of "/".
+// (Entity routes — threads, builds, spots, users… — get real 404s from
+// api/preview.js when the row doesn't exist.)
+(function () {
+  try {
+    const path = (typeof window !== "undefined" && window.location && window.location.pathname) || "/";
+    if (path === "/" || /^\/(admin|forum|builds|trips|plans|spots|dm|win|interest|drops|post|users|hq|bounties|r|app|privacy|delete-account|ambassador)(\/|$)/.test(path)) return;
+    const m = document.createElement("meta"); m.name = "robots"; m.content = "noindex, follow";
+    document.head.appendChild(m);
+  } catch (e) {}
 })();
 const __INITIAL_SHARED_LINK = (function() {
   try {

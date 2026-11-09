@@ -175,7 +175,7 @@ function buildForumThreadSSR(article, canonicalUrl, origin) {
             ? `<img src="${raAvatar}" alt="${raName}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;" />`
             : `<div style="width:32px;height:32px;border-radius:50%;background:#C49A6C;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><span style="font-family:'Trebuchet MS',sans-serif;font-size:13px;font-weight:700;color:#fff;">${escapeHtml(raInitial)}</span></div>`;
           return `
-            <article style="display:flex;gap:12px;padding:14px 0;border-bottom:1px solid #2A2A28;${indent}">
+            <article id="comment-${escapeHtml(String(r.id || ""))}" style="display:flex;gap:12px;padding:14px 0;border-bottom:1px solid #2A2A28;${indent}">
               ${raAvatarBlock}
               <div style="flex:1;min-width:0;">
                 <div style="font-family:'Trebuchet MS',sans-serif;font-size:12px;margin-bottom:4px;color:#8B7D6B;">
@@ -873,14 +873,11 @@ async function resolveEntity(type, id) {
   if (type === "forum-sub") {
     const subInfo = FORUM_SUB_TO_INFO[id];
     if (!subInfo) {
-      // Unknown subcategory slug — return brand default rather than 404
-      // so legacy /forum/<timestamp-id> URLs degrade gracefully.
-      return {
-        title: "Forum · Trailhub",
-        description: "Join the conversation on the Trailhub community forum.",
-        image: null,
-        imageAlt: "",
-      };
+      // Not a subcategory. If it's a THREAD slug (old /forum/<slug> links and
+      // the category ItemList bug), 308 to the canonical thread URL; else 404.
+      const t = await supabaseFetch("forum_threads", `slug=eq.${encodeURIComponent(id)}&select=slug,subcategory_slug&limit=1`);
+      if (t && t.slug && t.subcategory_slug) return { redirect: `/forum/${t.subcategory_slug}/${t.slug}` };
+      return null;
     }
     // Pull recent threads in this subcategory (up to 50) for the SSR list.
     const threadRows = await supabaseFetchAll(
@@ -903,6 +900,8 @@ async function resolveEntity(type, id) {
       description: `${threadRows.length} thread${threadRows.length === 1 ? "" : "s"} on ${subInfo.name.toLowerCase()} in the Trailhub overlanding community forum.`,
       image: null,
       imageAlt: "",
+      // Empty categories stay out of the index until they have a thread.
+      noindex: !threadRows || threadRows.length === 0,
       jsonLd: {
         kind: "CollectionPage",
         subInfo,
@@ -1807,13 +1806,28 @@ module.exports = async function handler(req, res) {
   const canonicalUrl = `${proto}://${host}${prettyPath}`;
 
   let meta = DEFAULT_META;
+  let notFound = false;
   if (type) {
     // For forum threads the lookup key is the slug, not id. For forum-sub
     // it's the subcategory slug passed as `sub`.
     const lookupId = type === "forum-thread" ? slug : (type === "forum-sub" ? sub : (type === "user" ? handle : id));
     const data = await resolveEntity(type, lookupId);
+    if (data && data.redirect) { res.setHeader("Cache-Control", "public, s-maxage=300"); res.redirect(308, `${proto}://${host}${data.redirect}`); return; }
     if (data) meta = data;
+    // Entity routes that resolve to nothing (deleted thread, bad slug,
+    // unknown user) are REAL 404s + noindex — not the app shell with the
+    // homepage canonical (that was indexing as duplicate / soft-404).
+    else if (type !== "hq" && !/-index$/.test(type)) notFound = true;
   }
+  // Thin pages stay out of the index until they have content: empty forum
+  // categories, profiles with nothing posted, spots with no notes or photos.
+  const userEmpty = type === "user" && meta.jsonLd && meta.jsonLd.contentCounts
+    && Object.values(meta.jsonLd.contentCounts).reduce((a, b) => a + (Number(b) || 0), 0) === 0;
+  const spotEmpty = type === "spot" && meta.jsonLd && meta.jsonLd.kind === "CampingSpot"
+    && !String(meta.jsonLd.description || "").trim()
+    && !(Array.isArray(meta.jsonLd.photos) && meta.jsonLd.photos.length > 0);
+  const noindex = notFound || !!meta.noindex || !!userEmpty || !!spotEmpty;
+  if (notFound) meta = { ...DEFAULT_META, title: "Not found · Trailhub", description: "This page doesn't exist or was removed." };
 
   // Article-specific OG tags get emitted when we have an article payload
   // (currently forum threads). Section is the human-readable subcategory
@@ -1908,9 +1922,9 @@ module.exports = async function handler(req, res) {
         position: i + 1,
         name: it.name,
         // Schema.org BreadcrumbList: item is required for all but the last
-        // entry. We emit URLs when we have them; omit `item` for entries
-        // without a target.
-        item: it.url || undefined,
+        // entry. Object form carries the name too, so a renderer that reads
+        // item.name never shows "Unnamed item".
+        item: it.url ? { "@id": it.url, name: it.name } : undefined,
       }).filter(([, v]) => v !== undefined))),
     };
     breadcrumbLdTag = `<script type="application/ld+json">${JSON.stringify(breadcrumb).replace(/</g, "\\u003c")}</script>`;
@@ -1938,6 +1952,8 @@ module.exports = async function handler(req, res) {
     const commentList = Array.isArray(meta.jsonLd.replies) && meta.jsonLd.replies.length > 0
       ? meta.jsonLd.replies.slice(0, 50).map(r => Object.fromEntries(Object.entries({
           "@type": "Comment",
+          "@id": r.id ? `${canonicalUrl}#comment-${r.id}` : undefined,
+          url: r.id ? `${canonicalUrl}#comment-${r.id}` : undefined,
           text: (r.body || "").slice(0, 2000),
           datePublished: r.createdAt || undefined,
           author: personLd(r.author),
@@ -2009,6 +2025,7 @@ module.exports = async function handler(req, res) {
         "@type": "DiscussionForumPosting",
         headline: meta.jsonLd.title,
         articleBody: (meta.jsonLd.body || "").slice(0, 5000),
+        text: (meta.jsonLd.body || "").slice(0, 5000),
         datePublished: meta.jsonLd.createdAt || undefined,
         dateModified: meta.jsonLd.modifiedAt || meta.jsonLd.createdAt || undefined,
         url: canonicalUrl,
@@ -2043,7 +2060,7 @@ module.exports = async function handler(req, res) {
         itemListElement: threads.map((t, i) => ({
           "@type": "ListItem",
           position: i + 1,
-          url: `${origin}/forum/${meta.article.subInfo.slug || ""}/${t.slug || ""}`.replace(/\/$/, ""),
+          url: `${origin}/forum/${meta.article.subInfo.slug || sub}/${t.slug || ""}`.replace(/\/$/, ""),
           name: t.title || "Thread",
         })),
       },
@@ -2325,9 +2342,16 @@ module.exports = async function handler(req, res) {
   // every shared link fell back to the generic Trailhub logo + tagline.
   // We only strip when we're about to replace them with entity-specific
   // versions (which is always the case in the injection path below).
-  html = html.replace(/\s*<meta\s+(?:property|name)="(?:og:[a-z:_]+|twitter:[a-z:_]+|description|keywords)"[^>]*>\s*/gi, "");
+  html = html.replace(/\s*<meta\s+(?:property|name)="(?:og:[a-z:_]+|twitter:[a-z:_]+|description|keywords|robots)"[^>]*>\s*/gi, "");
+  // …and the shell's homepage canonical, so every URL ends up with exactly
+  // ONE self-referencing canonical (two conflicting ones → Google picks the
+  // homepage or ignores both).
+  html = html.replace(/\s*<link\s+rel="canonical"[^>]*>\s*/gi, "");
+  const robotsTag = noindex
+    ? `<meta name="robots" content="noindex, follow">`
+    : `<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">`;
   // Inject canonical link + BreadcrumbList + entity JSON-LD just before </head>.
-  const headInjections = [canonicalTag, tags, breadcrumbLdTag, jsonLdTag].filter(Boolean).join("\n");
+  const headInjections = [robotsTag, notFound ? "" : canonicalTag, tags, notFound ? "" : breadcrumbLdTag, notFound ? "" : jsonLdTag].filter(Boolean).join("\n");
   html = html.replace("</head>", `${headInjections}\n</head>`);
   // SSR article: inject the article HTML into the SPA root div so crawlers
   // see real content in the initial HTML response (not "Loading Trailhub").
@@ -2368,6 +2392,6 @@ module.exports = async function handler(req, res) {
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   // Short edge cache so updated entities propagate within minutes.
   // Twitter/Facebook cache aggressively on their side regardless.
-  res.setHeader("Cache-Control", "public, s-maxage=300, stale-while-revalidate=600");
-  res.status(200).send(html);
+  res.setHeader("Cache-Control", notFound ? "public, s-maxage=60" : "public, s-maxage=300, stale-while-revalidate=600");
+  res.status(notFound ? 404 : 200).send(html);
 };

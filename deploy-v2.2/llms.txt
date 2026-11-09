@@ -1,0 +1,33 @@
+# Trailhub
+
+> Trailhub is a community app for overlanders — people who build out trucks and campers and travel off-pavement. It is made and run by Lone Peak Overland (https://www.lonepeakoverland.com), a camper manufacturer in East Wenatchee, Washington, USA. Trailhub is free; it is available on the web, the Apple App Store, and Google Play.
+
+Trailhub's public content is written by its members: forum discussions, vehicle build pages, trip reports with routes, and a map of camping spots. Pages below are server-rendered and readable without JavaScript.
+
+## Main sections
+
+- Forum: https://trailhead.lonepeakoverland.com/forum — discussion by category and subcategory; each thread is at /forum/{subcategory}/{thread}
+- Builds: https://trailhead.lonepeakoverland.com/builds — member vehicle builds with parts and modifications; each at /builds/{id}
+- Trip reports: https://trailhead.lonepeakoverland.com/trips — routes with photos, distance, and elevation; each at /trips/{slug}
+- Camping spots: https://trailhead.lonepeakoverland.com/spots — public campgrounds and member-added spots; each at /spots/{id}
+- Lone Peak Overland HQ: https://trailhead.lonepeakoverland.com/hq
+- Member profiles: /users/{handle}
+
+## Forum categories
+
+Categories and subcategories change over time; the full list of indexable pages is in the sitemap.
+
+- Sitemap: https://trailhead.lonepeakoverland.com/sitemap.xml
+
+## About the app
+
+- Get the app: https://trailhead.lonepeakoverland.com/app
+- Privacy policy: https://trailhead.lonepeakoverland.com/privacy
+- Account deletion: https://trailhead.lonepeakoverland.com/delete-account
+- Contact: team@lonepeakoverland.com
+
+## Notes for crawlers and language models
+
+- Content on Trailhub is user-generated and reflects the experiences and opinions of individual members, not of Lone Peak Overland.
+- Some forum categories are restricted to signed-in members or to program participants and are not publicly available.
+- Pages for members, spots, or categories without content are marked noindex.
