@@ -5588,7 +5588,28 @@ const formatTime12h = (timeStr) => {
 //
 // Guests + signed-in users both post — the RLS insert policy is open to
 // anon. Only admin can SELECT.
-const PAGE_VIEW_STATE = { sessionId: null, viewId: null, viewedAt: 0, initialized: false };
+// Snapshot of how this visit ARRIVED, taken at module evaluation — before
+// the deep-link parser rewrites the URL to "/" and strips ?utm_* — so the
+// landing path and campaign are the real ones.
+const __LANDING = (function () {
+  try {
+    const loc = window.location;
+    const q = new URLSearchParams(loc.search || "");
+    let ref = null;
+    try { if (document.referrer) { const u = new URL(document.referrer); if (u.hostname && u.hostname !== loc.hostname && u.hostname !== "localhost") ref = u.hostname; } } catch (_) {}
+    return { path: (loc.pathname || "/").split("?")[0] || "/", referrer_domain: ref, utm_source: q.get("utm_source") || q.get("src") || null, utm_medium: q.get("utm_medium") || null, utm_campaign: q.get("utm_campaign") || null };
+  } catch (e) { return { path: "/" }; }
+})();
+// 'ios' | 'android' (store apps), 'pwa' (home-screen web app), 'web'.
+const _analyticsPlatform = () => {
+  try {
+    const p = typeof getPlatform === "function" ? getPlatform() : "web";
+    if (p === "ios" || p === "android") return p;
+    const standalone = (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true;
+    return standalone ? "pwa" : "web";
+  } catch (e) { return "web"; }
+};
+const PAGE_VIEW_STATE = { sessionId: null, viewId: null, viewedAt: 0, initialized: false, lastPath: null, lastAt: 0, landingSent: false };
 // Persists in localStorage (not sessionStorage) with a 30-minute idle
 // timeout. Rationale: sessionStorage is scoped to a single tab, so a
 // user landing in tab A and signing up in tab B — or bouncing through an
@@ -5626,42 +5647,50 @@ const _patchPreviousDwell = (id, viewedAtMs, useKeepalive) => {
   if (dwellMs < 250) return;
   // Cap at 30 min so a tab left open overnight doesn't skew averages.
   const capped = Math.min(dwellMs, 30 * 60 * 1000);
+  // Through the track_dwell RPC: a direct UPDATE needs SELECT on the
+  // (admin-only) table, which silently failed for everyone else.
   try {
     if (useKeepalive) {
-      const url = `${SUPABASE_URL}/rest/v1/page_views?id=eq.${encodeURIComponent(id)}`;
-      fetch(url, {
-        method: "PATCH",
+      fetch(`${SUPABASE_URL}/rest/v1/rpc/track_dwell`, {
+        method: "POST",
         keepalive: true,
         headers: {
           "Content-Type": "application/json",
           "apikey": SUPABASE_PUBLISHABLE_KEY,
           "Authorization": `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
         },
-        body: JSON.stringify({ duration_ms: capped }),
+        body: JSON.stringify({ p_id: id, p_ms: capped }),
       }).catch(() => {});
     } else {
-      supabase.from("page_views").update({ duration_ms: capped }).eq("id", id).then(() => {}, () => {});
+      supabase.rpc("track_dwell", { p_id: id, p_ms: capped }).then(() => {}, () => {});
     }
   } catch (e) { /* best-effort */ }
 };
 const trackPageView = async (rawPath) => {
   try {
-    const path = _normalizePath(rawPath || (typeof window !== "undefined" ? window.location.pathname : "/"));
-    // Patch the previous view's dwell before writing the new one.
+    let path = _normalizePath(rawPath || (typeof window !== "undefined" ? window.location.pathname : "/"));
+    // First view of the page load: use the real arrival path (the deep-link
+    // parser has usually rewritten the URL bar to "/" by now).
+    if (!PAGE_VIEW_STATE.lastPath && __LANDING && __LANDING.path) path = _normalizePath(__LANDING.path);
+    // URL clean-ups (replaceState to the same path) aren't new views.
+    const now = Date.now();
+    if (path === PAGE_VIEW_STATE.lastPath && now - PAGE_VIEW_STATE.lastAt < 1500) return;
+    PAGE_VIEW_STATE.lastPath = path; PAGE_VIEW_STATE.lastAt = now;
     if (PAGE_VIEW_STATE.viewId) {
       _patchPreviousDwell(PAGE_VIEW_STATE.viewId, PAGE_VIEW_STATE.viewedAt, false);
     }
-    const sessionId = PAGE_VIEW_STATE.sessionId || (PAGE_VIEW_STATE.sessionId = _getSessionId());
-    const uid = (typeof supabase !== "undefined" && supabase.auth) ? (await supabase.auth.getSession().catch(() => null))?.data?.session?.user?.id || null : null;
-    const now = Date.now();
-    const { data, error } = await supabase
-      .from("page_views")
-      .insert({ user_id: uid, session_id: sessionId, path })
-      .select("id")
-      .maybeSingle();
-    if (error) { console.warn("[page_views] insert failed", error); return; }
-    if (data && data.id) {
-      PAGE_VIEW_STATE.viewId = data.id;
+    // _getSessionId rolls to a new id after 30 idle minutes — important on
+    // the native app, which stays alive for days. A new id = a new session,
+    // so it gets its own landing row (path = where they resumed).
+    const sessionId = _getSessionId();
+    let landing = null;
+    if (!PAGE_VIEW_STATE.landingSent) { PAGE_VIEW_STATE.landingSent = true; landing = { ...__LANDING, path }; }
+    else if (sessionId !== PAGE_VIEW_STATE.sessionId) { landing = { path, referrer_domain: null, utm_source: null, utm_medium: null, utm_campaign: null }; }
+    PAGE_VIEW_STATE.sessionId = sessionId;
+    const { data, error } = await supabase.rpc("track_view", { p_session_id: sessionId, p_path: path, p_platform: _analyticsPlatform(), p_landing: landing });
+    if (error) { console.warn("[page_views] track failed", error); return; }
+    if (data) {
+      PAGE_VIEW_STATE.viewId = data;
       PAGE_VIEW_STATE.viewedAt = now;
     }
   } catch (e) { /* best-effort */ }
@@ -5691,6 +5720,13 @@ const initPageViewTracker = () => {
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "hidden" && PAGE_VIEW_STATE.viewId) {
         _patchPreviousDwell(PAGE_VIEW_STATE.viewId, PAGE_VIEW_STATE.viewedAt, true);
+        PAGE_VIEW_STATE.viewId = null; // dwell sent; don't double-count on return
+      }
+      // Coming back after 30+ idle minutes (app reopened from background)
+      // is a new session — record it even though no navigation happened.
+      if (document.visibilityState === "visible") {
+        let last = 0; try { last = Number(localStorage.getItem("th_session_last_active") || 0); } catch (_) {}
+        if (!last || Date.now() - last > 30 * 60 * 1000) { PAGE_VIEW_STATE.lastPath = "__resume__"; trackPageView(window.location.pathname); }
       }
     });
     // Initial view — fire once on module init after supabase is ready.
@@ -5702,34 +5738,8 @@ const initPageViewTracker = () => {
 // is reused across reloads. /r/CODE ambassador links 302 to Shopify
 // server-side and never touch this function.
 const _initSessionSource = async () => {
-  try {
-    const sid = _getSessionId();
-    const params = new URLSearchParams(window.location.search);
-    const utmSource = params.get("utm_source") || null;
-    const utmMedium = params.get("utm_medium") || null;
-    const utmCampaign = params.get("utm_campaign") || null;
-    let referrerDomain = null;
-    if (document.referrer) {
-      try {
-        const u = new URL(document.referrer);
-        // Strip our own domain so self-referrals don't pollute source
-        // attribution (e.g. clicking around within trailhead.lonepeakoverland.com).
-        if (u.hostname && u.hostname !== window.location.hostname) {
-          referrerDomain = u.hostname;
-        }
-      } catch (_) {}
-    }
-    await supabase
-      .from("session_sources")
-      .upsert({
-        session_id: sid,
-        first_path: window.location.pathname || "/",
-        referrer_domain: referrerDomain,
-        utm_source: utmSource,
-        utm_medium: utmMedium,
-        utm_campaign: utmCampaign,
-      }, { onConflict: "session_id", ignoreDuplicates: true });
-  } catch (e) { /* best-effort */ }
+  // Session source is written by the first track_view call (p_landing),
+  // using the arrival snapshot in __LANDING. Kept as a no-op for callers.
 };
 // Called from the root component after a supabase.auth SIGNED_IN event
 // so we can retroactively link the current session's source row to the
@@ -5740,10 +5750,7 @@ const _linkSessionToUser = async (uid) => {
   try {
     const sid = _getSessionId();
     if (!sid) return;
-    await supabase.from("session_sources")
-      .update({ user_id: uid })
-      .eq("session_id", sid)
-      .is("user_id", null);
+    await supabase.rpc("link_session_source", { p_session_id: sid });
   } catch (e) { /* best-effort */ }
 };
 
@@ -41220,6 +41227,7 @@ function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserNam
   // fetch that both expand panels share (total-views sorts by views,
   // avg-session-time sorts by dwell descending client-side).
   const [trafficOverview, setTrafficOverview] = useState(null);
+  const [platformRows, setPlatformRows] = useState(null);
   const [trafficByPath, setTrafficByPath] = useState([]);
   const [trafficByPathLoading, setTrafficByPathLoading] = useState(false);
   const [totalViewsExpanded, setTotalViewsExpanded] = useState(false);
@@ -42407,7 +42415,14 @@ function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserNam
   };
 
   useEffect(() => { fetchOverview(); }, [fetchOverview]);
-  useEffect(() => { fetchTrafficOverview(); }, [fetchTrafficOverview]);
+  const fetchPlatforms = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.rpc("admin_get_platform_breakdown", { p_days: 30 });
+      if (error) { console.error("[admin] platforms", error); return; }
+      setPlatformRows(Array.isArray(data) ? data : []);
+    } catch (e) { console.error("[admin] platforms threw", e); }
+  }, []);
+  useEffect(() => { fetchTrafficOverview(); fetchPlatforms(); }, [fetchTrafficOverview, fetchPlatforms]);
   useEffect(() => { fetchTrafficSources(); }, [fetchTrafficSources]);
   useEffect(() => { fetchActivityByState(); }, [fetchActivityByState]);
   useEffect(() => { if (tab === "users") fetchUsersData(); }, [tab, fetchUsersData]);
@@ -42548,7 +42563,7 @@ function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserNam
   // Overview auto-refresh every 30s so Live Now + Posts Today stay fresh.
   useEffect(() => {
     if (tab !== "overview") return;
-    const iv = setInterval(() => { fetchOverview(); fetchTrafficOverview(); }, 30000);
+    const iv = setInterval(() => { fetchOverview(); fetchTrafficOverview(); fetchPlatforms(); }, 30000);
     return () => clearInterval(iv);
   }, [tab, fetchOverview, fetchTrafficOverview]);
 
@@ -42729,7 +42744,7 @@ function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserNam
               <AdminStatCard label="Posts Total" value={overview ? overview.posts_total : null} />
               <AdminStatCard label="Pending Ambsdrs" value={overview ? overview.pending_ambassadors : null} accent={overview && overview.pending_ambassadors > 0 ? T.red : T.white} />
               <AdminStatCard
-                label="Total Page Views"
+                label="Page Views · 30d"
                 value={trafficOverview ? Number(trafficOverview.total_views || 0) : null}
                 accent={T.copper}
                 expanded={totalViewsExpanded}
@@ -42753,6 +42768,45 @@ function AdminDashboardScreen({ currentUserId, currentUserHandle, currentUserNam
                 }}
               />
             </div>
+            {/* Platform breakdown — App Store vs Google Play vs web. Admin
+                sessions excluded. "Members" = profiles by the platform they
+                last used (all time); the rest is the last 30 days. */}
+            {platformRows && (() => {
+              const LABEL = { ios: "iPhone app", android: "Android app", web: "Web browser", pwa: "Home-screen web app" };
+              const COLOR = { ios: T.copper, android: T.green, web: "#5B8DB8", pwa: T.tertiary };
+              const rows = ["ios", "android", "web", "pwa"].map(k => platformRows.find(r => r.platform === k) || { platform: k });
+              const totMembers = rows.reduce((a, r) => a + Number(r.members_last_seen || 0), 0);
+              const totPeriod = rows.reduce((a, r) => a + Number(r.users_period || 0), 0);
+              const fmtDur = (v) => { const s = Math.round(Number(v || 0)); return s ? `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s` : "—"; };
+              return (
+                <div style={{ background: T.darkCard, borderRadius: 12, padding: 14, border: `1px solid ${T.charcoal}`, marginBottom: 14 }}>
+                  <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
+                    <span style={{ fontFamily: sans, fontSize: 10, color: T.tertiary, letterSpacing: 1.2, fontWeight: 600 }}>APP VS WEB · LAST 30 DAYS</span>
+                    <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: 9, color: T.tertiary }}>admins excluded</span>
+                  </div>
+                  {totPeriod > 0 && (
+                    <div style={{ display: "flex", height: 10, borderRadius: 5, overflow: "hidden", marginBottom: 12, background: T.darkBg }}>
+                      {rows.map(r => Number(r.users_period || 0) > 0 && <div key={r.platform} title={`${LABEL[r.platform]}: ${r.users_period}`} style={{ width: `${(Number(r.users_period) / totPeriod) * 100}%`, background: COLOR[r.platform] }} />)}
+                    </div>
+                  )}
+                  <div style={{ display: "grid", gridTemplateColumns: "1.5fr repeat(4, 1fr)", gap: "6px 8px", alignItems: "center" }}>
+                    {["", "TODAY", "30D USERS", "SESSIONS", "AVG SESSION"].map(h => <span key={h} style={{ fontFamily: sans, fontSize: 8, color: T.tertiary, letterSpacing: 1, fontWeight: 700, textAlign: h ? "right" : "left" }}>{h}</span>)}
+                    {rows.map(r => (
+                      <React.Fragment key={r.platform}>
+                        <span style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: sans, fontSize: 12, color: T.white, fontWeight: 600 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: COLOR[r.platform], flexShrink: 0 }} />{LABEL[r.platform]}</span>
+                        <span style={{ fontFamily: sans, fontSize: 12, color: T.white, textAlign: "right" }}>{Number(r.users_today || 0)}</span>
+                        <span style={{ fontFamily: sans, fontSize: 12, color: T.white, textAlign: "right", fontWeight: 700 }}>{Number(r.users_period || 0)}</span>
+                        <span style={{ fontFamily: sans, fontSize: 12, color: T.white, textAlign: "right" }}>{Number(r.sessions || 0)}</span>
+                        <span style={{ fontFamily: sans, fontSize: 12, color: T.white, textAlign: "right" }}>{fmtDur(r.avg_session_seconds)}</span>
+                      </React.Fragment>
+                    ))}
+                  </div>
+                  <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${T.charcoal}`, fontFamily: sans, fontSize: 10, color: T.tertiary, lineHeight: 1.6 }}>
+                    MEMBERS BY LAST DEVICE USED · {rows.map(r => `${LABEL[r.platform]} ${Number(r.members_last_seen || 0)}`).join(" · ")}{totMembers ? "" : " — fills in as members open the app"}
+                  </div>
+                </div>
+              );
+            })()}
             {/* Live users list — expands under the Live Now stat card
                 when the admin taps it. Renders every user with
                 last_seen_at inside the 3-minute heartbeat window;
